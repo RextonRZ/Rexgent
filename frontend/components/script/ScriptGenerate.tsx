@@ -42,6 +42,7 @@ export function ScriptGenerate({ projectId, onSuccess }: ScriptGenerateProps) {
   const [tone, setTone] = useState("dramatic");
   const [episodeCount, setEpisodeCount] = useState(1);
   const [targetLength, setTargetLength] = useState(5);
+  const [language, setLanguage] = useState("en");
   const generateScript = useGenerateScript();
 
   const handleGenerate = async () => {
@@ -52,6 +53,7 @@ export function ScriptGenerate({ projectId, onSuccess }: ScriptGenerateProps) {
       tone,
       episode_count: episodeCount,
       target_length: targetLength,
+      language,
     });
     onSuccess(result);
   };
@@ -85,6 +87,20 @@ export function ScriptGenerate({ projectId, onSuccess }: ScriptGenerateProps) {
               onChange={(e) => setTone(e.target.value)}
               placeholder="dramatic, dark, lighthearted..."
             />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label>Language</Label>
+            <Select value={language} onValueChange={(v) => v && setLanguage(v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="zh">中文</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div>

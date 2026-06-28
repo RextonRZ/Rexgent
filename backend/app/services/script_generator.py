@@ -1,5 +1,6 @@
 from app.services.qwen_client import QwenClient
 from app.services.prompt_loader import load_prompt
+from app.services.language import language_instruction
 from app.config import get_settings
 
 
@@ -7,6 +8,10 @@ class ScriptGenerator:
     def __init__(self):
         self.qwen = QwenClient(get_settings())
         self.prompt_template = load_prompt("script_generate.txt")
+
+    @staticmethod
+    def language_instruction(language: str) -> str:
+        return language_instruction(language)
 
     async def generate(
         self,
@@ -16,6 +21,7 @@ class ScriptGenerator:
         episode_count: int = 1,
         target_length: int = 5,
         notes: str = "",
+        language: str = "en",
     ) -> str:
         user_prompt = self.prompt_template.format(
             genre=genre,
@@ -25,6 +31,7 @@ class ScriptGenerator:
             target_length=target_length,
             notes=notes or "None",
         )
+        user_prompt += self.language_instruction(language)
         messages = [
             {"role": "user", "content": user_prompt},
         ]

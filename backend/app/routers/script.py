@@ -95,10 +95,11 @@ async def generate_script(
         episode_count=request.episode_count,
         target_length=request.target_length,
         notes=request.notes or "",
+        language=request.language,
     )
 
     structurer = ScriptStructurer()
-    structured = await structurer.structure(raw_text)
+    structured = await structurer.structure(raw_text, language=request.language)
 
     script = Script(
         project_id=request.project_id,

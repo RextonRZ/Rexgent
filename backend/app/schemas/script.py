@@ -44,6 +44,7 @@ class ScriptGenerateRequest(BaseModel):
     episode_count: int = 1
     target_length: int = 5
     notes: Optional[str] = None
+    language: str = "en"
 
 
 class ScriptGenerateResponse(BaseModel):
