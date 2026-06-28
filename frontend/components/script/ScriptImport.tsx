@@ -10,6 +10,7 @@ interface ScriptImportProps {
   projectId: string;
   onSuccess: (data: {
     script_id: string;
+    raw_text: string;
     structured_json: Record<string, unknown>;
     characters_mentioned: string[];
   }) => void;

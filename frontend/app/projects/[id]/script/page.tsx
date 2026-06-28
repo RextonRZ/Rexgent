@@ -37,7 +37,10 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
             <ScriptImport
               projectId={params.id}
               onSuccess={(data) =>
-                setScriptData({ script_id: data.script_id, raw_text: "" })
+                setScriptData({
+                  script_id: data.script_id,
+                  raw_text: data.raw_text,
+                })
               }
             />
           </TabsContent>

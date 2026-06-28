@@ -1,3 +1,4 @@
+import re
 import json
 import asyncio
 import logging
@@ -56,7 +57,6 @@ class QwenClient:
             cleaned = cleaned[:-3]
         cleaned = cleaned.strip()
         # Handle trailing commas (common LLM issue)
-        import re
         cleaned = re.sub(r',\s*}', '}', cleaned)
         cleaned = re.sub(r',\s*]', ']', cleaned)
         return json.loads(cleaned)
@@ -82,6 +82,10 @@ class QwenClient:
                 logger.warning(f"Qwen VL attempt {attempt + 1} failed: {e}. Retrying in {wait}s...")
                 await asyncio.sleep(wait)
 
+    # NOTE: Video endpoints are built from the OpenAI-compatible base URL.
+    # When real Qwen Cloud keys are available (File 14 testing), confirm the
+    # actual Wan/HappyHorse async endpoint paths and model IDs against the
+    # DashScope docs and adjust the URL/payload here if needed.
     async def generate_video_wan(
         self,
         prompt: str,

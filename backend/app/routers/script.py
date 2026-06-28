@@ -35,6 +35,7 @@ async def parse_script(
         structured_json=structured,
     )
     db.add(script)
+    db.flush()  # assign script.id before creating scenes
 
     for scene_data in structured.get("scenes", []):
         scene = Scene(
@@ -57,6 +58,7 @@ async def parse_script(
 
     return ScriptParseResponse(
         script_id=script.id,
+        raw_text=raw_text,
         structured_json=structured,
         characters_mentioned=structured.get("characters_mentioned", []),
     )
@@ -90,6 +92,7 @@ async def generate_script(
         structured_json=structured,
     )
     db.add(script)
+    db.flush()  # assign script.id before creating scenes
 
     for scene_data in structured.get("scenes", []):
         scene = Scene(

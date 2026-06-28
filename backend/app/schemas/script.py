@@ -31,6 +31,7 @@ class SceneResponse(BaseModel):
 
 class ScriptParseResponse(BaseModel):
     script_id: UUID
+    raw_text: str
     structured_json: dict[str, Any]
     characters_mentioned: list[str]
 
