@@ -25,7 +25,8 @@ export function MBTIBadge({ type, confidence }: MBTIBadgeProps) {
         </TooltipTrigger>
         <TooltipContent>
           <p className="text-xs max-w-48">
-            MBTI type inferred from dialogue patterns and character actions
+            For fun only — MBTI is inferred from dialogue patterns, not a
+            clinical assessment.
           </p>
         </TooltipContent>
       </Tooltip>

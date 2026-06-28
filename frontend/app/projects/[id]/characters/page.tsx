@@ -26,6 +26,7 @@ export default function CharactersPage({
 
   const [selectedEdge, setSelectedEdge] =
     useState<CharacterRelationship | null>(null);
+  const [inferMbti, setInferMbti] = useState(false);
 
   const characters = data?.characters || [];
 
@@ -39,9 +40,19 @@ export default function CharactersPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Characters</h1>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={inferMbti}
+              onChange={(e) => setInferMbti(e.target.checked)}
+            />
+            Infer MBTI (for fun)
+          </label>
           <Button
-            onClick={() => extractCharacters.mutate(params.id)}
+            onClick={() =>
+              extractCharacters.mutate({ projectId: params.id, inferMbti })
+            }
             disabled={extractCharacters.isPending}
           >
             {extractCharacters.isPending

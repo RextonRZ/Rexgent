@@ -37,22 +37,27 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
     if not script or not script.structured_json:
         raise HTTPException(status_code=404, detail="Script not found or not structured")
 
+    # MBTI is a "for fun" extra — off by default so it does not burn Qwen-Max tokens.
+    infer_mbti = bool(request.get("infer_mbti", False))
+
     extractor = CharacterExtractor()
     characters_data = await extractor.extract(script.structured_json)
 
-    inferrer = MBTIInferrer()
+    inferrer = MBTIInferrer() if infer_mbti else None
     created = []
 
     # Replace any previously extracted characters for this project.
     db.query(Character).filter(Character.project_id == script.project_id).delete()
 
     for char_data in characters_data:
-        mbti_result = await inferrer.infer(
-            character_name=char_data.get("name", "Unknown"),
-            dialogue_samples=char_data.get("key_dialogue_samples", []),
-            personality_summary=char_data.get("personality_summary", ""),
-            actions_summary=", ".join(char_data.get("relationships", [])),
-        )
+        mbti_result = {}
+        if inferrer is not None:
+            mbti_result = await inferrer.infer(
+                character_name=char_data.get("name", "Unknown"),
+                dialogue_samples=char_data.get("key_dialogue_samples", []),
+                personality_summary=char_data.get("personality_summary", ""),
+                actions_summary=", ".join(char_data.get("relationships", [])),
+            )
 
         character = Character(
             project_id=script.project_id,

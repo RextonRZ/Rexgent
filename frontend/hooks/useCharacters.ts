@@ -16,9 +16,16 @@ export function useCharacters(projectId: string) {
 export function useExtractCharacters() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (projectId: string) => {
+    mutationFn: async ({
+      projectId,
+      inferMbti = false,
+    }: {
+      projectId: string;
+      inferMbti?: boolean;
+    }) => {
       const { data } = await api.post("/api/characters/extract", {
         project_id: projectId,
+        infer_mbti: inferMbti,
       });
       return data;
     },
