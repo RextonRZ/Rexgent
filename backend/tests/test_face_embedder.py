@@ -4,56 +4,45 @@ from app.services.face_embedder import FaceEmbedder
 
 
 @pytest.mark.asyncio
-async def test_extract_embedding_returns_structured_data():
+async def test_extract_returns_vector_and_description():
     embedder = FaceEmbedder.__new__(FaceEmbedder)
     embedder.qwen = MagicMock()
     embedder.qwen.chat_vision_json = AsyncMock(return_value={
-        "face_description": "sharp cheekbones, almond eyes, strong jaw",
-        "distinctive_features": ["silver earring", "small scar on chin"],
-        "embedding_keywords": ["sharp cheekbones", "almond eyes", "strong jaw", "short black hair"],
+        "face_description": "sharp cheekbones, almond eyes",
+        "embedding_keywords": ["sharp cheekbones", "short black hair"],
     })
+    embedder.model = MagicMock()
+    embedder.model.embed = MagicMock(return_value=[0.1] * 512)
 
-    result = await embedder.extract_embedding("https://example.com/face.jpg")
-    assert "face_description" in result
-    assert len(result["embedding_keywords"]) > 0
+    result = await embedder.extract(image_bytes=b"fakejpg", image_url="https://x/y.jpg")
+    assert len(result["vector"]) == 512
+    assert "sharp cheekbones" in result["description"]["face_description"]
 
 
 @pytest.mark.asyncio
-async def test_extract_embedding_handles_non_dict():
+async def test_extract_no_face_returns_none_vector():
+    embedder = FaceEmbedder.__new__(FaceEmbedder)
+    embedder.qwen = MagicMock()
+    embedder.qwen.chat_vision_json = AsyncMock(return_value={"face_description": "no face"})
+    embedder.model = MagicMock()
+    embedder.model.embed = MagicMock(return_value=None)
+
+    result = await embedder.extract(image_bytes=b"x", image_url="https://x/y.jpg")
+    assert result["vector"] is None
+
+
+@pytest.mark.asyncio
+async def test_extract_handles_non_dict_description():
     embedder = FaceEmbedder.__new__(FaceEmbedder)
     embedder.qwen = MagicMock()
     embedder.qwen.chat_vision_json = AsyncMock(return_value=["bad"])
+    embedder.model = MagicMock()
+    embedder.model.embed = MagicMock(return_value=[0.2] * 512)
 
-    result = await embedder.extract_embedding("https://example.com/face.jpg")
-    assert result["embedding_keywords"] == []
-
-
-@pytest.mark.asyncio
-async def test_compare_faces_returns_score():
-    embedder = FaceEmbedder.__new__(FaceEmbedder)
-    embedder.qwen = MagicMock()
-    embedder.qwen.chat_vision_json = AsyncMock(return_value={
-        "similarity_score": 0.85,
-        "matching_features": ["cheekbones", "hair style"],
-        "missing_features": [],
-    })
-
-    score = await embedder.compare_faces(
-        stored_embedding={"embedding_keywords": ["sharp cheekbones", "short black hair"]},
-        frame_url="https://example.com/frame.jpg",
-    )
-    assert 0.0 <= score <= 1.0
-    assert score == 0.85
+    result = await embedder.extract(image_bytes=b"x", image_url="https://x/y.jpg")
+    assert result["description"]["embedding_keywords"] == []
 
 
-@pytest.mark.asyncio
-async def test_compare_faces_handles_bad_score():
-    embedder = FaceEmbedder.__new__(FaceEmbedder)
-    embedder.qwen = MagicMock()
-    embedder.qwen.chat_vision_json = AsyncMock(return_value={"similarity_score": "not a number"})
-
-    score = await embedder.compare_faces(
-        stored_embedding={"embedding_keywords": ["x"]},
-        frame_url="https://example.com/frame.jpg",
-    )
-    assert score == 0.5
+def test_compare_vectors_uses_cosine():
+    score = FaceEmbedder.compare_vectors([1.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    assert abs(score - 1.0) < 1e-6
