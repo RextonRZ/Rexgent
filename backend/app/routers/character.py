@@ -11,6 +11,7 @@ from app.services.mbti_inferrer import MBTIInferrer
 from app.services.face_embedder import FaceEmbedder
 from app.services.appearance_generator import AppearanceGenerator
 from app.services.oss_manager import OSSManager
+from app.graph.sync import sync_characters
 
 router = APIRouter(prefix="/api/characters", tags=["characters"])
 
@@ -72,6 +73,8 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
     db.commit()
     for c in created:
         db.refresh(c)
+
+    sync_characters(str(script.project_id), created, script.structured_json)
 
     return {"characters": [CharacterResponse.model_validate(c) for c in created]}
 

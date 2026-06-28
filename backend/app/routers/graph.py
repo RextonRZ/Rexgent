@@ -6,6 +6,7 @@ from app.models.script import Script, Scene
 from app.models.character import Character
 from app.models.relationship import CharacterRelationship
 from app.services.relationship_builder import RelationshipBuilder
+from app.graph.sync import sync_relationships
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
@@ -86,6 +87,9 @@ async def build_relationship_graph(request: dict, db: Session = Depends(get_db))
     db.commit()
     for r in created:
         db.refresh(r)
+
+    name_by_id = {str(c.id): c.name for c in characters}
+    sync_relationships(str(script.project_id), created, name_by_id)
 
     return {"relationships": [_serialize_rel(r) for r in created]}
 

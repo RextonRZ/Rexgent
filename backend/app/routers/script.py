@@ -16,6 +16,7 @@ from app.schemas.script import (
 from app.services.script_parser import ScriptParser
 from app.services.script_structurer import ScriptStructurer
 from app.services.script_generator import ScriptGenerator
+from app.graph.sync import sync_scenes
 from app.mcp_tools.plot_gap_detector import PlotGapDetector
 from app.mcp_tools.ending_engine import EndingEngine
 from app.mcp_tools.narrative_judge import NarrativeJudge
@@ -66,6 +67,8 @@ async def parse_script(
 
     db.commit()
     db.refresh(script)
+
+    sync_scenes(str(script.project_id), structured)
 
     return ScriptParseResponse(
         script_id=script.id,
@@ -125,6 +128,8 @@ async def generate_script(
     project.premise = request.premise
     db.commit()
     db.refresh(script)
+
+    sync_scenes(str(script.project_id), structured)
 
     return ScriptGenerateResponse(
         script_id=script.id,
