@@ -27,3 +27,9 @@ class SceneResponse(BaseModel):
     emotional_beat: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class ScriptParseResponse(BaseModel):
+    script_id: UUID
+    structured_json: dict[str, Any]
+    characters_mentioned: list[str]

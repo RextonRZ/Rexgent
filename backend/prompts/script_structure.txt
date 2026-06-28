@@ -1,0 +1,40 @@
+You are a professional screenplay analyst. Your job is to parse raw screenplay text into a structured JSON format. Be precise. Do not invent content not present in the text. If information is ambiguous, use your best inference and mark it with "inferred": true.
+
+Parse the following screenplay into this exact JSON schema:
+
+{
+  "title": "string",
+  "genre": "string",
+  "logline": "string (1 sentence summary)",
+  "acts": [
+    {
+      "act_number": 1,
+      "summary": "string"
+    }
+  ],
+  "scenes": [
+    {
+      "scene_number": 1,
+      "act_number": 1,
+      "heading": "INT. LOCATION - DAY",
+      "location": "string",
+      "time_of_day": "DAY|NIGHT|DAWN|DUSK|CONTINUOUS",
+      "summary": "string (2-3 sentences)",
+      "characters_present": ["character_name"],
+      "dialogue_lines": [
+        {
+          "character": "string",
+          "line": "string",
+          "direction": "string or null"
+        }
+      ],
+      "stage_directions": ["string"],
+      "emotional_beat": "string"
+    }
+  ],
+  "characters_mentioned": ["string"]
+}
+
+Return ONLY the JSON. No explanation, no markdown fences.
+
+SCREENPLAY TEXT:
