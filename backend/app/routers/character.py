@@ -1,12 +1,16 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.config import get_settings
 from app.models.script import Script
 from app.models.character import Character
 from app.schemas.character import CharacterCreate, CharacterResponse
 from app.services.character_extractor import CharacterExtractor
 from app.services.mbti_inferrer import MBTIInferrer
+from app.services.face_embedder import FaceEmbedder
+from app.services.appearance_generator import AppearanceGenerator
+from app.services.oss_manager import OSSManager
 
 router = APIRouter(prefix="/api/characters", tags=["characters"])
 
@@ -111,3 +115,60 @@ async def update_character(character_id: str, updates: dict, db: Session = Depen
     db.commit()
     db.refresh(character)
     return character
+
+
+@router.post("/{character_id}/face", response_model=CharacterResponse)
+async def upload_face(
+    character_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    character = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    content = await file.read()
+    oss = OSSManager(get_settings())
+    oss_key = oss.get_project_path(
+        str(character.project_id), f"characters/{character_id}", "reference.jpg"
+    )
+    image_url = oss.upload_bytes(content, oss_key, content_type="image/jpeg")
+
+    embedder = FaceEmbedder()
+    embedding = await embedder.extract_embedding(image_url)
+
+    character.reference_image_url = image_url
+    character.face_embedding = embedding
+    character.face_keywords = embedding.get("embedding_keywords", [])
+    character.visual_description = embedding.get("face_description", "")
+    db.commit()
+    db.refresh(character)
+
+    return character
+
+
+@router.post("/{character_id}/generate-appearance")
+async def generate_appearance(character_id: str, db: Session = Depends(get_db)):
+    character = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    generator = AppearanceGenerator()
+    appearance = await generator.generate(
+        character_name=character.name,
+        role=character.role or "SUPPORTING",
+        personality=character.personality_summary or "",
+        mbti=character.mbti or "",
+        physical_desc=character.physical_description or "",
+    )
+
+    character.visual_description = appearance.get("full_description", "")
+    character.video_prompt_fragment = appearance.get("video_prompt_fragment", "")
+    character.face_keywords = appearance.get("face_keywords", [])
+    db.commit()
+    db.refresh(character)
+
+    return {
+        "character": CharacterResponse.model_validate(character),
+        "appearance": appearance,
+    }

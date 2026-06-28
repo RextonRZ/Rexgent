@@ -48,18 +48,7 @@ class QwenClient:
         max_tokens: int = 4096,
     ) -> dict | list:
         content = await self.chat(messages, model, temperature, max_tokens)
-        cleaned = content.strip()
-        if cleaned.startswith("```json"):
-            cleaned = cleaned[7:]
-        if cleaned.startswith("```"):
-            cleaned = cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-        # Handle trailing commas (common LLM issue)
-        cleaned = re.sub(r',\s*}', '}', cleaned)
-        cleaned = re.sub(r',\s*]', ']', cleaned)
-        return json.loads(cleaned)
+        return self._parse_json(content)
 
     async def chat_vision(
         self,
@@ -81,6 +70,29 @@ class QwenClient:
                 wait = 2 ** attempt
                 logger.warning(f"Qwen VL attempt {attempt + 1} failed: {e}. Retrying in {wait}s...")
                 await asyncio.sleep(wait)
+
+    @staticmethod
+    def _parse_json(content: str) -> dict | list:
+        cleaned = content.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        if cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+        cleaned = re.sub(r',\s*}', '}', cleaned)
+        cleaned = re.sub(r',\s*]', ']', cleaned)
+        return json.loads(cleaned)
+
+    async def chat_vision_json(
+        self,
+        messages: list[dict],
+        model: str = "qwen-vl-max",
+        max_tokens: int = 2048,
+    ) -> dict | list:
+        content = await self.chat_vision(messages, model, max_tokens)
+        return self._parse_json(content)
 
     # NOTE: Video endpoints are built from the OpenAI-compatible base URL.
     # When real Qwen Cloud keys are available (File 14 testing), confirm the

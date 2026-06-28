@@ -3,6 +3,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MBTIBadge } from "./MBTIBadge";
+import { FaceUpload } from "./FaceUpload";
+import { AppearanceGenerator } from "./AppearanceGenerator";
 import type { Character } from "@/lib/types";
 
 const ROLE_COLORS: Record<string, string> = {
@@ -71,10 +73,15 @@ export function CharacterCard({ character }: { character: Character }) {
             <span>{character.emotional_arc.end}</span>
           </div>
         )}
-        <div className="h-20 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
-          {character.reference_image_url
-            ? "Reference image set"
-            : "No reference image — add in Face step"}
+        <div className="pt-1 space-y-2">
+          <FaceUpload
+            characterId={character.id}
+            hasReference={!!character.reference_image_url}
+          />
+          <AppearanceGenerator
+            characterId={character.id}
+            visualDescription={character.visual_description}
+          />
         </div>
       </CardContent>
     </Card>
