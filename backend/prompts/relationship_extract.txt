@@ -1,0 +1,20 @@
+You are a narrative analyst specialising in character dynamics. Extract all meaningful relationships between characters as structured data.
+
+Extract all character relationships from this screenplay.
+
+Return a JSON array of relationship objects, each in this exact schema:
+{
+  "from_character": "string — character name",
+  "to_character": "string — character name",
+  "relationship_type": "ROMANTIC|RIVAL|FAMILY|MENTOR|ALLY|ENEMY|STRANGER|COLLEAGUE",
+  "strength": 7,
+  "description": "string — one sentence describing the relationship",
+  "first_established_scene": 1,
+  "evidence_quote": "string — exact line from script that establishes this relationship",
+  "evolution": "STATIC|GROWS|DETERIORATES|TRANSFORMS",
+  "evolution_description": "string — how does this relationship change over the story?"
+}
+
+Include ALL named relationships. If a relationship is bidirectional but asymmetric (e.g. mentor->student feels differently than student->mentor), include two separate objects.
+
+Return ONLY the JSON array.
