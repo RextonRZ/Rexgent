@@ -105,22 +105,27 @@ export function ScriptGenerate({ projectId, onSuccess }: ScriptGenerateProps) {
             <Input
               type="number"
               min={1}
-              max={3}
+              max={20}
               value={episodeCount}
               onChange={(e) => setEpisodeCount(Number(e.target.value))}
             />
           </div>
           <div>
-            <Label>Target Length (min)</Label>
+            <Label>Target Length (min/ep)</Label>
             <Input
               type="number"
               min={1}
-              max={15}
+              max={30}
               value={targetLength}
               onChange={(e) => setTargetLength(Number(e.target.value))}
             />
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Write as many episodes as you like — scripting is cheap. The token
+          budget governs how much video you render later, not how much you
+          write.
+        </p>
         <Button
           onClick={handleGenerate}
           disabled={!premise || generateScript.isPending}
