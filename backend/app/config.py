@@ -13,6 +13,15 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production"
     environment: str = "development"
 
+    # Neo4j (narrative graph)
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "rexgent_dev"
+
+    # Qwen-Max token cost (USD per 1k tokens) — for budget accounting
+    qwen_max_input_cost_per_1k: float = 0.0016
+    qwen_max_output_cost_per_1k: float = 0.0064
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
