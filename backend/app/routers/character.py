@@ -135,12 +135,14 @@ async def upload_face(
     image_url = oss.upload_bytes(content, oss_key, content_type="image/jpeg")
 
     embedder = FaceEmbedder()
-    embedding = await embedder.extract_embedding(image_url)
+    result = await embedder.extract(image_bytes=content, image_url=image_url)
+    description = result["description"]
 
     character.reference_image_url = image_url
-    character.face_embedding = embedding
-    character.face_keywords = embedding.get("embedding_keywords", [])
-    character.visual_description = embedding.get("face_description", "")
+    character.face_vector = result["vector"]            # real ArcFace vector (or None)
+    character.face_embedding = description              # Qwen-VL text description
+    character.face_keywords = description.get("embedding_keywords", [])
+    character.visual_description = description.get("face_description", "")
     db.commit()
     db.refresh(character)
 

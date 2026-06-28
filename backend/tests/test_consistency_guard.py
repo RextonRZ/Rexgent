@@ -3,66 +3,67 @@ from unittest.mock import AsyncMock, MagicMock
 from app.mcp_tools.consistency_guard import ConsistencyGuard
 
 
-def make_guard(score):
+def make_guard(frame_score, diagnosis=None):
     guard = ConsistencyGuard.__new__(ConsistencyGuard)
-    guard.face_embedder = MagicMock()
-    guard.face_embedder.compare_faces = AsyncMock(return_value=score)
+    guard.embedder = MagicMock()
+    guard.embedder.model = MagicMock()
+    guard.embedder.model.embed = MagicMock(return_value=[0.5] * 512)
+    guard.embedder.compare_vectors = MagicMock(return_value=frame_score)
+    guard.qwen = MagicMock()
+    guard.qwen.chat_vision_json = AsyncMock(return_value=diagnosis or {
+        "reason": "lighting obscured the face", "suggested_change": "brighten key light"
+    })
+    guard._sample = MagicMock(return_value=[b"f1", b"f2", b"f3"])
     return guard
 
 
 @pytest.mark.asyncio
-async def test_validate_passes_above_threshold():
+async def test_pass_above_threshold():
     guard = make_guard(0.88)
     result = await guard.validate(
-        frame_urls=["https://example.com/f1.jpg", "https://example.com/f2.jpg", "https://example.com/f3.jpg"],
-        expected_characters=[{"name": "Yuki", "face_embedding": {"embedding_keywords": ["sharp cheekbones"]}, "face_keywords": ["sharp cheekbones"]}],
-        threshold=0.75,
+        clip_url="http://x/c.mp4", duration=5,
+        expected_characters=[{"name": "Yuki", "face_vector": [0.5] * 512}],
+        threshold=0.6,
     )
     assert result["overall_pass"] is True
     assert result["recommendation"] == "APPROVE"
+    assert result["diagnosis"] is None
 
 
 @pytest.mark.asyncio
-async def test_validate_retry_stronger_face():
-    guard = make_guard(0.68)
+async def test_fail_triggers_vlm_diagnosis():
+    guard = make_guard(0.30, diagnosis={"reason": "wrong hairstyle", "suggested_change": "use short black hair"})
     result = await guard.validate(
-        frame_urls=["https://example.com/f1.jpg"],
-        expected_characters=[{"name": "Yuki", "face_embedding": {}, "face_keywords": []}],
-        threshold=0.75,
+        clip_url="http://x/c.mp4", duration=5,
+        expected_characters=[{"name": "Yuki", "face_vector": [0.5] * 512}],
+        threshold=0.6,
     )
     assert result["overall_pass"] is False
-    assert result["recommendation"] == "RETRY_STRONGER_FACE"
+    assert result["recommendation"] == "RETRY_TARGETED"
+    assert result["diagnosis"]["suggested_change"] == "use short black hair"
+    assert "short black hair" in result["retry_instruction"]
 
 
 @pytest.mark.asyncio
-async def test_validate_retry_same_prompt():
-    guard = make_guard(0.50)
+async def test_character_without_vector_skipped():
+    guard = make_guard(0.9)
     result = await guard.validate(
-        frame_urls=["https://example.com/f1.jpg"],
-        expected_characters=[{"name": "Yuki", "face_embedding": {}, "face_keywords": []}],
-        threshold=0.75,
+        clip_url="http://x/c.mp4", duration=5,
+        expected_characters=[{"name": "NoRef", "face_vector": None}],
+        threshold=0.6,
     )
-    assert result["recommendation"] == "RETRY_SAME_PROMPT"
-
-
-@pytest.mark.asyncio
-async def test_validate_manual_review():
-    guard = make_guard(0.30)
-    result = await guard.validate(
-        frame_urls=["https://example.com/f1.jpg"],
-        expected_characters=[{"name": "Yuki", "face_embedding": {}, "face_keywords": []}],
-        threshold=0.75,
-    )
-    assert result["recommendation"] == "MANUAL_REVIEW"
-
-
-@pytest.mark.asyncio
-async def test_validate_no_characters_passes():
-    guard = make_guard(0.0)
-    result = await guard.validate(
-        frame_urls=["https://example.com/f1.jpg"],
-        expected_characters=[],
-        threshold=0.75,
-    )
+    assert result["character_results"][0]["detected"] is False
+    # Unverifiable does not block overall pass.
     assert result["overall_pass"] is True
-    assert result["recommendation"] == "APPROVE"
+
+
+@pytest.mark.asyncio
+async def test_diagnosis_fallback_on_bad_response():
+    guard = make_guard(0.20, diagnosis=["not a dict"])
+    result = await guard.validate(
+        clip_url="http://x/c.mp4", duration=5,
+        expected_characters=[{"name": "Yuki", "face_vector": [0.5] * 512}],
+        threshold=0.6,
+    )
+    assert result["overall_pass"] is False
+    assert result["diagnosis"]["reason"] == "unknown"
