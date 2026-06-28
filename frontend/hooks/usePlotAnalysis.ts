@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import api from "@/lib/api";
 import type { PlotFlag } from "@/lib/types";
+import type { JudgeResult } from "@/components/script/NarrativeJudgeReport";
 
 export interface EndingAlternative {
   id: string;
@@ -36,6 +37,17 @@ export function useAnalyzeScript() {
     mutationFn: async (scriptId: string) => {
       const { data } = await api.post<AnalysisResult>(
         `/api/script/${scriptId}/analyze`
+      );
+      return data;
+    },
+  });
+}
+
+export function useJudgeScript() {
+  return useMutation({
+    mutationFn: async (scriptId: string) => {
+      const { data } = await api.post<JudgeResult>(
+        `/api/script/${scriptId}/judge`
       );
       return data;
     },

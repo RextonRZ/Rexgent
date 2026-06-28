@@ -18,6 +18,7 @@ from app.services.script_structurer import ScriptStructurer
 from app.services.script_generator import ScriptGenerator
 from app.mcp_tools.plot_gap_detector import PlotGapDetector
 from app.mcp_tools.ending_engine import EndingEngine
+from app.mcp_tools.narrative_judge import NarrativeJudge
 
 router = APIRouter(prefix="/api/script", tags=["script"])
 
@@ -221,3 +222,15 @@ async def update_flag(flag_id: str, request: dict, db: Session = Depends(get_db)
         flag.status = new_status
     db.commit()
     return {"flag_id": str(flag.id), "status": flag.status}
+
+
+@router.post("/{script_id}/judge")
+async def judge_script(script_id: str, db: Session = Depends(get_db)):
+    script = db.query(Script).filter(Script.id == uuid.UUID(script_id)).first()
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    if not script.structured_json:
+        raise HTTPException(status_code=400, detail="Script has no structured data")
+
+    judge = NarrativeJudge()
+    return await judge.evaluate(script.structured_json)
