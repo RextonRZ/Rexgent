@@ -33,3 +33,24 @@ class ScriptParseResponse(BaseModel):
     script_id: UUID
     structured_json: dict[str, Any]
     characters_mentioned: list[str]
+
+
+class ScriptGenerateRequest(BaseModel):
+    project_id: UUID
+    genre: str
+    premise: str
+    tone: str = "dramatic"
+    episode_count: int = 1
+    target_length: int = 5
+    notes: Optional[str] = None
+
+
+class ScriptGenerateResponse(BaseModel):
+    script_id: UUID
+    raw_text: str
+    structured_json: dict[str, Any]
+    characters_mentioned: list[str]
+
+
+class ScriptUpdateRequest(BaseModel):
+    raw_text: Optional[str] = None
