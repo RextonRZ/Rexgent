@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, String, Text, Integer, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
+from pgvector.sqlalchemy import Vector
 from app.database import Base
 
 
@@ -21,7 +22,8 @@ class Character(Base):
     mbti_confidence = Column(Integer, nullable=True)
     speech_pattern = Column(String(100), nullable=True)
     emotional_arc = Column(JSONB, nullable=True)
-    face_embedding = Column(JSONB, nullable=True)
+    face_embedding = Column(JSONB, nullable=True)   # Qwen-VL text description (keywords/notes)
+    face_vector = Column(Vector(512), nullable=True)  # real ArcFace embedding
     reference_image_url = Column(String(500), nullable=True)
     visual_description = Column(Text, nullable=True)
     video_prompt_fragment = Column(Text, nullable=True)
