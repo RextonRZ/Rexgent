@@ -4,10 +4,20 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.project import Project
 from app.models.script import Script, Scene
-from app.schemas.script import ScriptResponse, ScriptParseResponse, ScriptGenerateRequest, ScriptGenerateResponse, ScriptUpdateRequest
+from app.models.plot_flag import PlotFlag
+from app.schemas.script import (
+    ScriptResponse,
+    ScriptParseResponse,
+    ScriptGenerateRequest,
+    ScriptGenerateResponse,
+    ScriptUpdateRequest,
+    ScriptAnalyzeResponse,
+)
 from app.services.script_parser import ScriptParser
 from app.services.script_structurer import ScriptStructurer
 from app.services.script_generator import ScriptGenerator
+from app.mcp_tools.plot_gap_detector import PlotGapDetector
+from app.mcp_tools.ending_engine import EndingEngine
 
 router = APIRouter(prefix="/api/script", tags=["script"])
 
@@ -148,3 +158,66 @@ async def update_script(
     db.commit()
     db.refresh(script)
     return script
+
+
+@router.post("/{script_id}/analyze", response_model=ScriptAnalyzeResponse)
+async def analyze_script(script_id: str, db: Session = Depends(get_db)):
+    script = db.query(Script).filter(Script.id == uuid.UUID(script_id)).first()
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    if not script.structured_json:
+        raise HTTPException(status_code=400, detail="Script has no structured data")
+
+    detector = PlotGapDetector()
+    gaps = await detector.detect(script.structured_json)
+
+    engine = EndingEngine()
+    ending = await engine.analyse(script.structured_json)
+
+    # Persist plot flags so they can be acknowledged/dismissed later.
+    # Re-running analysis replaces any previously stored flags for this script.
+    db.query(PlotFlag).filter(PlotFlag.script_id == script.id).delete()
+    saved_flags = []
+    for flag in gaps.get("flags", []):
+        db_flag = PlotFlag(
+            script_id=script.id,
+            flag_type=flag.get("flag_type", "PACING_ISSUE"),
+            severity=flag.get("severity", "MINOR"),
+            scene_number=flag.get("scene_number"),
+            description=flag.get("description", ""),
+            evidence=flag.get("evidence"),
+            suggestion=flag.get("suggestion"),
+            status="OPEN",
+        )
+        db.add(db_flag)
+        saved_flags.append(db_flag)
+    db.commit()
+
+    # Return flags with their real DB ids so the frontend can dismiss them.
+    gaps["flags"] = [
+        {
+            "id": str(f.id),
+            "flag_type": f.flag_type,
+            "severity": f.severity,
+            "scene_number": f.scene_number,
+            "description": f.description,
+            "evidence": f.evidence,
+            "suggestion": f.suggestion,
+            "status": f.status,
+        }
+        for f in saved_flags
+    ]
+
+    return ScriptAnalyzeResponse(plot_gaps=gaps, ending=ending)
+
+
+@router.patch("/flags/{flag_id}")
+async def update_flag(flag_id: str, request: dict, db: Session = Depends(get_db)):
+    flag = db.query(PlotFlag).filter(PlotFlag.id == uuid.UUID(flag_id)).first()
+    if not flag:
+        raise HTTPException(status_code=404, detail="Flag not found")
+    new_status = request.get("status")
+    if new_status in {"OPEN", "ACKNOWLEDGED", "FIXED", "DISMISSED"}:
+        flag.status = new_status
+    db.commit()
+    return {"flag_id": str(flag.id), "status": flag.status}

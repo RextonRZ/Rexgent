@@ -55,3 +55,15 @@ class ScriptGenerateResponse(BaseModel):
 
 class ScriptUpdateRequest(BaseModel):
     raw_text: Optional[str] = None
+
+
+class EndingAnalysisResponse(BaseModel):
+    has_complete_ending: bool
+    ending_quality: str
+    analysis: dict[str, Any]
+    alternatives: list[dict[str, Any]]
+
+
+class ScriptAnalyzeResponse(BaseModel):
+    plot_gaps: dict[str, Any]
+    ending: EndingAnalysisResponse
