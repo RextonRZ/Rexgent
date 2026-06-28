@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers.script import router as script_router
+from app.routers.character import router as character_router
 
 app = FastAPI(title="Rexgent", version="1.0.0", description="AI Drama Production Pipeline")
 
@@ -14,6 +15,7 @@ app.add_middleware(
 
 
 app.include_router(script_router)
+app.include_router(character_router)
 
 
 @app.get("/health")
