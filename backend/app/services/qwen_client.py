@@ -5,6 +5,7 @@ import logging
 import httpx
 from openai import AsyncOpenAI
 from app.config import Settings
+from app.services.usage_tracker import record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class QwenClient:
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
+                record_usage(getattr(response, "usage", None))
                 return response.choices[0].message.content
             except Exception as e:
                 if attempt == self.max_retries - 1:
@@ -74,6 +76,7 @@ class QwenClient:
                     messages=messages,
                     max_tokens=max_tokens,
                 )
+                record_usage(getattr(response, "usage", None))
                 return response.choices[0].message.content
             except Exception as e:
                 if attempt == self.max_retries - 1:
