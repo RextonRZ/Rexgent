@@ -38,8 +38,13 @@ export default function CharactersPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Characters</h1>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Characters</h1>
+          <p className="text-sm text-muted-foreground">
+            Build the cast and lock each face before generating.
+          </p>
+        </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
             <input

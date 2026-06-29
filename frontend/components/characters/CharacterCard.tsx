@@ -8,23 +8,38 @@ import { AppearanceGenerator } from "./AppearanceGenerator";
 import type { Character } from "@/lib/types";
 
 const ROLE_COLORS: Record<string, string> = {
-  PROTAGONIST: "bg-blue-500",
-  ANTAGONIST: "bg-red-500",
-  SUPPORTING: "bg-green-500",
-  MINOR: "bg-gray-400",
+  PROTAGONIST: "bg-primary/15 text-primary",
+  ANTAGONIST: "bg-bad/15 text-bad",
+  SUPPORTING: "bg-ok/15 text-ok",
+  MINOR: "bg-secondary text-muted-foreground",
 };
 
 export function CharacterCard({ character }: { character: Character }) {
+  const locked = !!character.reference_image_url;
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className="hover:border-primary/40 transition-colors">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-lg">{character.name}</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-lg">{character.name}</CardTitle>
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 ${
+                locked ? "bg-ok/15 text-ok" : "bg-secondary text-muted-foreground"
+              }`}
+              title={locked ? "Identity locked" : "No reference set"}
+            >
+              {locked ? "● locked" : "○ no ID"}
+            </span>
+          </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {character.role && (
-              <Badge className={ROLE_COLORS[character.role] || "bg-gray-400"}>
+              <span
+                className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${
+                  ROLE_COLORS[character.role] || "bg-secondary text-muted-foreground"
+                }`}
+              >
                 {character.role}
-              </Badge>
+              </span>
             )}
             <MBTIBadge
               type={character.mbti}
