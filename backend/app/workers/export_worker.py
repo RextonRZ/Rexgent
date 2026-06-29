@@ -13,6 +13,7 @@ from app.models.final_export import FinalExport
 from app.services.caption_generator import CaptionGenerator
 from app.services.production_report import build_report
 from app.services.oss_manager import OSSManager
+from app.services.usage_tracker import global_usage
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -64,12 +65,16 @@ def run_export(self, project_id: str, job_id: str):
             (datetime.now(timezone.utc) - job.created_at.replace(tzinfo=timezone.utc)).total_seconds() / 60
             if job.created_at else 0.0
         )
+        usage = global_usage().snapshot()
         report = build_report(
             project_id=project_id,
             clips=approved,
             duration_by_clip=duration_by_clip,
             total_retries=sum(c.retries for c in approved),
             wall_clock_minutes=wall_minutes,
+            llm_input_tokens=usage["input_tokens"],
+            llm_output_tokens=usage["output_tokens"],
+            llm_cost_usd=usage["cost_usd"],
         )
         report_path = os.path.join(tempfile.mkdtemp(), "production_report.json")
         with open(report_path, "w", encoding="utf-8") as f:

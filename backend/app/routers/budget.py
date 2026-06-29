@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models.script import Script, Scene
 from app.models.shot import Shot
 from app.mcp_tools.token_optimizer import TokenOptimizer
+from app.services.usage_tracker import global_usage
 
 router = APIRouter(prefix="/api/budget", tags=["budget"])
 
@@ -48,5 +49,14 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
         if tier:
             shot.quality_tier = tier
     db.commit()
+
+    # Qwen-Max LLM cost so far (this process) alongside projected video cost.
+    llm = global_usage().snapshot()
+    video_cost = result["video_cost_usd"]
+    grand_total = round(video_cost + llm["cost_usd"], 2)
+    result["llm"] = llm
+    result["llm_cost_usd"] = llm["cost_usd"]
+    result["grand_total_cost"] = grand_total
+    result["within_budget"] = grand_total <= budget
 
     return result

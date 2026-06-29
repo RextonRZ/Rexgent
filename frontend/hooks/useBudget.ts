@@ -22,6 +22,10 @@ export interface BudgetResult {
   total_estimated_cost: number;
   budget_remaining: number;
   optimisation_summary: string;
+  llm?: { input_tokens: number; output_tokens: number; cost_usd: number };
+  llm_cost_usd?: number;
+  grand_total_cost?: number;
+  within_budget?: boolean;
 }
 
 export function useCalculateBudget() {

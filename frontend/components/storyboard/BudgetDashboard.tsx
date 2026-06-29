@@ -8,11 +8,11 @@ import type { BudgetResult } from "@/hooks/useBudget";
 const VOUCHER = 40;
 
 export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
-  // Phase 5 of the architecture upgrade adds LLM token cost here too.
-  // For now this shows the video-generation cost against the $40 voucher.
-  const total = budget.total_estimated_cost;
+  const llmCost = budget.llm_cost_usd ?? 0;
+  const videoCost = budget.video_cost_usd;
+  const total = budget.grand_total_cost ?? budget.total_estimated_cost + llmCost;
   const pct = Math.min((total / VOUCHER) * 100, 100);
-  const over = total > budget.budget_available;
+  const over = total > VOUCHER;
 
   return (
     <Card>
@@ -28,18 +28,25 @@ export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
         <Progress value={pct} className={over ? "[&>div]:bg-destructive" : ""} />
         <div className="grid grid-cols-3 gap-2 text-sm">
           <div>
-            <p className="text-muted-foreground text-xs">Scenes</p>
-            <p className="font-medium">{budget.total_shots} shots</p>
+            <p className="text-muted-foreground text-xs">LLM (Qwen-Max)</p>
+            <p className="font-medium">${llmCost.toFixed(2)}</p>
           </div>
           <div>
             <p className="text-muted-foreground text-xs">Video</p>
-            <p className="font-medium">{budget.total_estimated_seconds}s</p>
+            <p className="font-medium">${videoCost.toFixed(2)}</p>
           </div>
           <div>
-            <p className="text-muted-foreground text-xs">Remaining</p>
-            <p className="font-medium">${budget.budget_remaining.toFixed(2)}</p>
+            <p className="text-muted-foreground text-xs">Total</p>
+            <p className="font-medium">${total.toFixed(2)}</p>
           </div>
         </div>
+        {budget.llm && (
+          <p className="text-xs text-muted-foreground">
+            {budget.llm.input_tokens.toLocaleString()} in /{" "}
+            {budget.llm.output_tokens.toLocaleString()} out tokens ·{" "}
+            {budget.total_shots} shots · {budget.total_estimated_seconds}s video
+          </p>
+        )}
         <div className="flex items-center gap-2 text-xs">
           <Badge className="bg-amber-500">{budget.wan_shots} Wan</Badge>
           <Badge className="bg-slate-400">
