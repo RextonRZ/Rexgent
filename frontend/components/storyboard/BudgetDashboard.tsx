@@ -1,8 +1,6 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import type { BudgetResult } from "@/hooks/useBudget";
 
 const VOUCHER = 40;
@@ -15,54 +13,74 @@ export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
   const over = total > VOUCHER;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>Token Budget</span>
-          <span className="text-sm font-normal">
-            ${total.toFixed(2)} / ${VOUCHER.toFixed(2)}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Progress value={pct} className={over ? "[&>div]:bg-destructive" : ""} />
-        <div className="grid grid-cols-3 gap-2 text-sm">
-          <div>
-            <p className="text-muted-foreground text-xs">LLM (Qwen-Max)</p>
-            <p className="font-medium">${llmCost.toFixed(2)}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground text-xs">Video</p>
-            <p className="font-medium">${videoCost.toFixed(2)}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground text-xs">Total</p>
-            <p className="font-medium">${total.toFixed(2)}</p>
-          </div>
-        </div>
-        {budget.llm && (
-          <p className="text-xs text-muted-foreground">
-            {budget.llm.input_tokens.toLocaleString()} in /{" "}
-            {budget.llm.output_tokens.toLocaleString()} out tokens ·{" "}
-            {budget.total_shots} shots · {budget.total_estimated_seconds}s video
+    <div className="glass rounded-xl p-5 space-y-4 sticky top-20">
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-widest text-muted-foreground">
+            Budget
           </p>
-        )}
-        <div className="flex items-center gap-2 text-xs">
-          <Badge className="bg-amber-500">{budget.wan_shots} Wan</Badge>
-          <Badge className="bg-slate-400">
-            {budget.happyhorse_shots} HappyHorse
-          </Badge>
+          <p className="text-3xl font-bold tabular-nums mt-1">
+            ${total.toFixed(2)}
+            <span className="text-base font-normal text-muted-foreground">
+              {" "}
+              / ${VOUCHER}
+            </span>
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {budget.optimisation_summary}
-        </p>
         {over && (
-          <p className="text-sm text-destructive font-medium">
-            ⚠ Projected cost exceeds available credit. Drop some shots to a
-            lower tier or shorten durations.
-          </p>
+          <span className="text-xs font-medium px-2 py-1 rounded-full bg-bad/15 text-bad">
+            over budget
+          </span>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      <div className="h-2.5 rounded-full bg-secondary overflow-hidden">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all",
+            over ? "bg-bad" : pct > 70 ? "bg-warn" : "bg-primary"
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <Stat label="LLM (Qwen-Max)" value={`$${llmCost.toFixed(2)}`} />
+        <Stat label="Video" value={`$${videoCost.toFixed(2)}`} />
+        <Stat label="Shots" value={`${budget.total_shots}`} />
+        <Stat label="Seconds" value={`${budget.total_estimated_seconds}s`} />
+      </div>
+
+      <div className="flex items-center gap-2 text-xs">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-wan/15 text-wan px-2 py-0.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-wan" />
+          {budget.wan_shots} Wan
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-hh/15 text-hh px-2 py-0.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-hh" />
+          {budget.happyhorse_shots} HappyHorse
+        </span>
+      </div>
+
+      <p className="text-xs text-muted-foreground border-t hairline pt-3">
+        {budget.optimisation_summary}
+      </p>
+
+      {budget.llm && (
+        <p className="text-[11px] text-muted-foreground">
+          {budget.llm.input_tokens.toLocaleString()} in /{" "}
+          {budget.llm.output_tokens.toLocaleString()} out tokens
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-background/40 p-2.5">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="font-semibold tabular-nums">{value}</p>
+    </div>
   );
 }

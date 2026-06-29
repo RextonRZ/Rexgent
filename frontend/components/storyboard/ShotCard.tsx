@@ -7,12 +7,6 @@ import { Button } from "@/components/ui/button";
 import { ShotEditor } from "./ShotEditor";
 import type { Shot } from "@/lib/types";
 
-const TIER_COLORS: Record<string, string> = {
-  wan: "bg-amber-500",
-  happyhorse: "bg-slate-400",
-  happyhorse_fast: "bg-slate-300",
-};
-
 export function ShotCard({ shot }: { shot: Shot }) {
   const [editing, setEditing] = useState(false);
 
@@ -20,8 +14,10 @@ export function ShotCard({ shot }: { shot: Shot }) {
     return <ShotEditor shot={shot} onClose={() => setEditing(false)} />;
   }
 
+  const isWan = shot.quality_tier === "wan";
+
   return (
-    <Card>
+    <Card className="border-l-2" style={{ borderLeftColor: isWan ? "hsl(38 92% 60%)" : "hsl(199 89% 60%)" }}>
       <CardContent className="pt-4 space-y-2 text-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 flex-wrap">
@@ -31,9 +27,15 @@ export function ShotCard({ shot }: { shot: Shot }) {
               <Badge variant="secondary">{shot.camera_movement}</Badge>
             )}
             {shot.quality_tier && (
-              <Badge className={TIER_COLORS[shot.quality_tier] || "bg-slate-400"}>
-                {shot.quality_tier === "wan" ? "Wan 2.7" : "HappyHorse"}
-              </Badge>
+              <span
+                className={
+                  isWan
+                    ? "inline-flex items-center gap-1 rounded-full bg-wan/15 text-wan px-2 py-0.5 text-[11px] font-medium"
+                    : "inline-flex items-center gap-1 rounded-full bg-hh/15 text-hh px-2 py-0.5 text-[11px] font-medium"
+                }
+              >
+                {isWan ? "Wan 2.7" : "HappyHorse"}
+              </span>
             )}
           </div>
           <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>

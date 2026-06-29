@@ -22,42 +22,61 @@ export default function StoryboardPage({
   const handleBudget = async () => {
     const result = await calculateBudget.mutateAsync(params.id);
     setBudget(result);
-    refetch(); // tiers were persisted onto shots
+    refetch();
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Storyboard</h1>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Storyboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Shot-by-shot breakdown and budget allocation.
+          </p>
+        </div>
         <div className="flex gap-2">
           <Button
             onClick={() => generateStoryboard.mutate(params.id)}
             disabled={generateStoryboard.isPending}
           >
-            {generateStoryboard.isPending
-              ? "Generating..."
-              : "Generate Storyboard"}
+            {generateStoryboard.isPending ? "Generating…" : "Generate storyboard"}
           </Button>
           <Button
             variant="secondary"
             onClick={handleBudget}
             disabled={calculateBudget.isPending}
           >
-            {calculateBudget.isPending ? "Allocating..." : "Calculate Budget"}
+            {calculateBudget.isPending ? "Allocating…" : "Allocate budget"}
           </Button>
         </div>
       </div>
+
       {generateStoryboard.isError && (
-        <p className="text-sm text-destructive">
+        <p className="text-sm text-bad">
           Error: {(generateStoryboard.error as Error).message}
         </p>
       )}
-      {budget && <BudgetDashboard budget={budget} />}
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading storyboard...</p>
-      ) : (
-        <StoryboardView scenes={scenes} />
-      )}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          {isLoading ? (
+            <p className="text-muted-foreground">Loading storyboard…</p>
+          ) : (
+            <StoryboardView scenes={scenes} />
+          )}
+        </div>
+        <div>
+          {budget ? (
+            <BudgetDashboard budget={budget} />
+          ) : (
+            <div className="glass rounded-xl p-5 text-sm text-muted-foreground sticky top-20">
+              Generate a storyboard, then{" "}
+              <span className="text-foreground font-medium">Allocate budget</span>{" "}
+              to see how the $40 voucher is spread across Wan and HappyHorse shots.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

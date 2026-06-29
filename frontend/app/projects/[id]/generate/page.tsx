@@ -10,9 +10,20 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Video Generation</h1>
-      <CostTracker />
-      <GenerationLauncher projectId={params.id} />
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Generate</h1>
+        <p className="text-sm text-muted-foreground">
+          Watch the studio render your drama, shot by shot.
+        </p>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <GenerationLauncher projectId={params.id} />
+        </div>
+        <CostTracker />
+      </div>
+
       <GenerationQueue />
     </div>
   );

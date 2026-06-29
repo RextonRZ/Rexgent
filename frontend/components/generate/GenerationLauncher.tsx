@@ -1,7 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useStartGeneration } from "@/hooks/useGeneration";
 import { useGenerationStore } from "@/stores/generationStore";
 
@@ -16,33 +15,32 @@ export function GenerationLauncher({ projectId }: { projectId: string }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Generate Video</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <p className="text-sm text-muted-foreground">
-          Dispatches every storyboard shot to Wan 2.7 / HappyHorse 1.1, validates
-          each clip with ConsistencyGuard, and self-corrects failures.
+    <div className="glass rounded-xl p-5 flex items-center justify-between gap-4 flex-wrap">
+      <div className="space-y-1">
+        <h2 className="font-semibold">Generate video</h2>
+        <p className="text-sm text-muted-foreground max-w-md">
+          Every shot is dispatched to Wan 2.7 / HappyHorse 1.1, verified against
+          each character&apos;s locked identity, and self-corrected on failure.
         </p>
-        <Button
-          onClick={handleStart}
-          disabled={startGeneration.isPending}
-          className="w-full"
-        >
-          {startGeneration.isPending ? "Starting..." : "Start Generation"}
-        </Button>
         {jobComplete && (
-          <p className="text-sm text-green-600 font-medium">
-            Generation complete. Head to the Edit step to review and refine.
+          <p className="text-sm text-ok font-medium">
+            ✓ Generation complete — review and refine in the Edit step.
           </p>
         )}
         {startGeneration.isError && (
-          <p className="text-sm text-destructive">
+          <p className="text-sm text-bad">
             {(startGeneration.error as Error).message}
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+      <Button
+        onClick={handleStart}
+        disabled={startGeneration.isPending}
+        size="lg"
+        className="glow shrink-0"
+      >
+        {startGeneration.isPending ? "Starting…" : "▶ Start generation"}
+      </Button>
+    </div>
   );
 }
