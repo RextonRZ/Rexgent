@@ -17,6 +17,7 @@ export interface AutoRunResult {
     happyhorse_shots?: number;
   } | null;
   job_id: string | null;
+  dispatched: boolean;
   revisions: number;
 }
 
@@ -27,6 +28,9 @@ export function useAutoRun() {
       premise: string;
       genre: string;
       language: string;
+      target_length?: number;
+      episode_count?: number;
+      dispatch_video?: boolean;
     }) => {
       const { data } = await api.post<AutoRunResult>("/api/agent/auto", params);
       return data;

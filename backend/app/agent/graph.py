@@ -33,7 +33,10 @@ def build_pipeline_graph(db=None):
             return state
         out = await pipeline_ops.generate_script_op(
             db, state["project_id"], state["premise"], state.get("genre", "drama"),
-            state.get("tone", "dramatic"), language=state.get("language", "en"),
+            state.get("tone", "dramatic"),
+            episode_count=state.get("episode_count", 1),
+            target_length=state.get("target_length", 5),
+            language=state.get("language", "en"),
         )
         state["script_id"] = out["script_id"]
         state["structured"] = out["structured"]
@@ -75,16 +78,21 @@ def build_pipeline_graph(db=None):
         return state
 
     async def n_generate_video(state: PipelineState) -> PipelineState:
-        _emit_node(state, "generate_video")
+        # Plan-only by default: build the script/cast/storyboard/budget but do
+        # NOT dispatch video (which spends the voucher) unless explicitly asked.
+        dispatch = bool(state.get("dispatch_video"))
+        _emit_node(state, "generate_video" if dispatch else "finalize")
         if db is None:
             return state
-        state["job_id"] = pipeline_ops.dispatch_generation_op(db, state["project_id"])
+        if dispatch:
+            state["job_id"] = pipeline_ops.dispatch_generation_op(db, state["project_id"])
         state["report"] = {
             "judgement": state.get("judgement"),
             "characters": len(state.get("characters", [])),
             "shots": len(state.get("shots", [])),
             "budget": state.get("budget"),
             "job_id": state.get("job_id"),
+            "dispatched": dispatch,
             "revisions": state.get("revise_count", 0),
         }
         return state

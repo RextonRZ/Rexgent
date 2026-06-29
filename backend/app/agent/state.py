@@ -7,6 +7,9 @@ class PipelineState(TypedDict, total=False):
     genre: str
     tone: str
     language: str            # "en" | "zh"
+    target_length: int       # minutes per episode
+    episode_count: int
+    dispatch_video: bool     # when False, plan only — do not spend the voucher
     script_id: str
     structured: dict[str, Any]
     judgement: dict[str, Any]

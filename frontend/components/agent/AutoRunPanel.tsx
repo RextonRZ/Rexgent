@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ const NODE_LABELS: Record<string, string> = {
   extract_characters: "Extracting characters",
   storyboard: "Storyboarding",
   budget: "Allocating budget",
+  finalize: "Finalizing plan",
   generate_video: "Dispatching video generation",
 };
 
@@ -36,13 +38,20 @@ export function AutoRunPanel({
   initialPremise?: string;
   initialGenre?: string;
 }) {
+  const router = useRouter();
   const [premise, setPremise] = useState(initialPremise);
   const [genre, setGenre] = useState(initialGenre || "sci-fi");
   const [language, setLanguage] = useState("en");
+  const [targetLength, setTargetLength] = useState(5);
+  const [episodeCount, setEpisodeCount] = useState(1);
   const [trace, setTrace] = useState<string[]>([]);
   const [result, setResult] = useState<AutoRunResult | null>(null);
   const [touched, setTouched] = useState(false);
   const autoRun = useAutoRun();
+
+  // Rough pre-flight scope estimate (the agent computes the real budget).
+  const estScenes = episodeCount * Math.max(2, Math.round(targetLength / 1.5));
+  const estShots = estScenes * 3;
 
   // The project premise arrives asynchronously; seed it once if the user
   // hasn't started editing.
@@ -74,6 +83,9 @@ export function AutoRunPanel({
       premise,
       genre,
       language,
+      target_length: targetLength,
+      episode_count: episodeCount,
+      dispatch_video: false, // plan only — the user spends on the Generate tab
     });
     setResult(res);
   };
@@ -86,8 +98,9 @@ export function AutoRunPanel({
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
           The agent autonomously writes the script, judges it (and self-corrects
-          if weak), extracts characters, storyboards, allocates the budget, and
-          kicks off video generation — no clicking through each step.
+          if weak), extracts characters, storyboards, and allocates the budget —
+          then hands you a plan to review. No voucher is spent until you start
+          generation on the Generate tab.
         </p>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -125,12 +138,54 @@ export function AutoRunPanel({
             rows={2}
           />
         </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Episodes</Label>
+            <Input
+              type="number"
+              min={1}
+              max={20}
+              value={episodeCount}
+              onChange={(e) =>
+                setEpisodeCount(Math.max(1, Number(e.target.value) || 1))
+              }
+            />
+          </div>
+          <div>
+            <Label>Target length (min/ep)</Label>
+            <Input
+              type="number"
+              min={1}
+              max={30}
+              value={targetLength}
+              onChange={(e) =>
+                setTargetLength(Math.max(1, Number(e.target.value) || 1))
+              }
+            />
+          </div>
+        </div>
+
+        <div className="rounded-lg border hairline bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+          <p>
+            <span className="text-foreground font-medium">Scope:</span> ≈{" "}
+            {estScenes} scenes · ~{estShots} shots at this length.
+          </p>
+          <p>
+            Scripting is cheap — your <span className="text-foreground">$40</span>{" "}
+            voucher caps how much <em>video</em> renders, not how long you write.
+            A bigger story renders as more, shorter shots; the agent tiers
+            premium generation to fit and tells you the real budget before you
+            spend.
+          </p>
+        </div>
+
         <Button
           onClick={handleRun}
           disabled={!premise || autoRun.isPending}
           className="w-full"
         >
-          {autoRun.isPending ? "Agent running..." : "Run Full Auto"}
+          {autoRun.isPending ? "Planning…" : "Plan my drama (no spend)"}
         </Button>
 
         {trace.length > 0 && (
@@ -147,8 +202,8 @@ export function AutoRunPanel({
         )}
 
         {result && (
-          <div className="border-t pt-3 text-sm space-y-1">
-            <p className="font-medium">Pipeline complete</p>
+          <div className="border-t pt-3 text-sm space-y-2">
+            <p className="font-medium">✓ Plan ready</p>
             {result.judgement && (
               <p>
                 Quality:{" "}
@@ -162,18 +217,27 @@ export function AutoRunPanel({
             </p>
             {result.budget && (
               <p>
-                Budget: $
-                {(result.budget.grand_total_cost ??
-                  result.budget.total_estimated_cost ??
-                  0).toFixed(2)}{" "}
+                Projected video budget:{" "}
+                <span className="text-foreground font-medium">
+                  $
+                  {(result.budget.grand_total_cost ??
+                    result.budget.total_estimated_cost ??
+                    0).toFixed(2)}
+                </span>{" "}
                 / $40 · {result.budget.wan_shots} Wan /{" "}
                 {result.budget.happyhorse_shots} HappyHorse
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Video generation dispatched — watch the Generate tab for live
-              progress.
+              Nothing spent yet. Review the script, cast and storyboard — then
+              generate when you&apos;re ready.
             </p>
+            <Button
+              onClick={() => router.push(`/projects/${projectId}/generate`)}
+              className="w-full glow"
+            >
+              Review &amp; generate →
+            </Button>
           </div>
         )}
       </CardContent>
