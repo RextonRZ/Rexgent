@@ -4,48 +4,50 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
-    --radius: 0.5rem;
+    /* Cinematic dark "AI film studio" — deep indigo-black canvas, violet accent */
+    --background: 250 24% 6%;
+    --foreground: 250 20% 96%;
+    --card: 250 22% 9%;
+    --card-foreground: 250 20% 96%;
+    --popover: 250 24% 8%;
+    --popover-foreground: 250 20% 96%;
+    --primary: 265 85% 66%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 250 16% 15%;
+    --secondary-foreground: 250 20% 96%;
+    --muted: 250 14% 13%;
+    --muted-foreground: 245 12% 62%;
+    --accent: 250 16% 16%;
+    --accent-foreground: 250 20% 96%;
+    --destructive: 0 72% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 250 16% 17%;
+    --input: 250 16% 17%;
+    --ring: 265 85% 66%;
+    --radius: 0.75rem;
   }
 
+  /* dark === root here; kept so components that toggle .dark still resolve */
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --background: 250 24% 6%;
+    --foreground: 250 20% 96%;
+    --card: 250 22% 9%;
+    --card-foreground: 250 20% 96%;
+    --popover: 250 24% 8%;
+    --popover-foreground: 250 20% 96%;
+    --primary: 265 85% 66%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 250 16% 15%;
+    --secondary-foreground: 250 20% 96%;
+    --muted: 250 14% 13%;
+    --muted-foreground: 245 12% 62%;
+    --accent: 250 16% 16%;
+    --accent-foreground: 250 20% 96%;
+    --destructive: 0 72% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 250 16% 17%;
+    --input: 250 16% 17%;
+    --ring: 265 85% 66%;
   }
 }
 
@@ -55,5 +57,31 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(60rem 60rem at 80% -10%, hsl(265 85% 40% / 0.10), transparent 60%),
+      radial-gradient(50rem 50rem at 0% 110%, hsl(200 80% 45% / 0.08), transparent 55%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  /* frosted panel */
+  .glass {
+    background: hsl(250 22% 11% / 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid hsl(250 16% 22% / 0.6);
+  }
+  /* subtle accent glow for hero elements */
+  .glow {
+    box-shadow: 0 0 0 1px hsl(265 85% 66% / 0.25), 0 8px 40px -8px hsl(265 85% 50% / 0.45);
+  }
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(265 90% 78%), hsl(200 90% 70%));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hairline {
+    border-color: hsl(250 16% 20% / 0.8);
   }
 }

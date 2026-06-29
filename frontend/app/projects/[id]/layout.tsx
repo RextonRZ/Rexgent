@@ -1,6 +1,8 @@
 "use client";
 
-import { ProjectNav } from "@/components/shared/ProjectNav";
+import Link from "next/link";
+import { PipelineNav } from "@/components/shared/PipelineNav";
+import { BudgetMeter } from "@/components/shared/BudgetMeter";
 
 export default function ProjectLayout({
   children,
@@ -11,15 +13,29 @@ export default function ProjectLayout({
 }) {
   return (
     <div className="min-h-screen">
-      <header className="border-b px-6 py-3">
-        <div className="flex items-center gap-6">
-          <span className="font-bold text-lg">Rexgent</span>
+      <header className="sticky top-0 z-40 glass border-b hairline">
+        <div className="mx-auto max-w-7xl px-4 h-14 flex items-center justify-between gap-4">
+          <Link
+            href="/"
+            className="flex items-center gap-2 shrink-0 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span className="text-base">←</span>
+            <span className="font-semibold text-foreground">Rexgent</span>
+          </Link>
+
+          <div className="hidden sm:block">
+            <PipelineNav projectId={params.id} />
+          </div>
+
+          <BudgetMeter projectId={params.id} />
+        </div>
+        {/* mobile pipeline nav */}
+        <div className="sm:hidden border-t hairline px-4 py-2 overflow-x-auto">
+          <PipelineNav projectId={params.id} />
         </div>
       </header>
-      <div className="px-6 pt-4">
-        <ProjectNav projectId={params.id} />
-        {children}
-      </div>
+
+      <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
     </div>
   );
 }

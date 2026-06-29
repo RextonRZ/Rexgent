@@ -48,6 +48,13 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Quality tiers
+        wan: "hsl(38 92% 60%)", // premium / Wan 2.7 (gold)
+        hh: "hsl(199 89% 60%)", // standard / HappyHorse (cyan)
+        // Pipeline / clip status
+        ok: "hsl(152 60% 50%)",
+        warn: "hsl(38 92% 60%)",
+        bad: "hsl(0 72% 60%)",
       },
       borderRadius: {
         lg: "var(--radius)",

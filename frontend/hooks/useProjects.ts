@@ -15,7 +15,11 @@ export function useProjects() {
 export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { title: string; genre?: string }) => {
+    mutationFn: async (params: {
+      title: string;
+      genre?: string;
+      premise?: string;
+    }) => {
       const { data } = await api.post<Project>("/api/projects", params);
       return data;
     },

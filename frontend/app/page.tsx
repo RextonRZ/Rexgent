@@ -1,70 +1,113 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { useProjects, useCreateProject } from "@/hooks/useProjects";
+import { NewProjectModal } from "@/components/home/NewProjectModal";
+import { useProjects } from "@/hooks/useProjects";
+import type { Project } from "@/lib/types";
+
+const STATUS_TONE: Record<string, string> = {
+  draft: "text-muted-foreground",
+  complete: "text-ok",
+};
 
 export default function HomePage() {
-  const router = useRouter();
   const { data } = useProjects();
-  const createProject = useCreateProject();
-  const [title, setTitle] = useState("");
-
-  const handleCreate = async () => {
-    const project = await createProject.mutateAsync({
-      title: title || "Untitled Drama",
-    });
-    router.push(`/projects/${project.id}/script`);
-  };
-
+  const [open, setOpen] = useState(false);
   const projects = data?.projects || [];
 
   return (
-    <main className="max-w-2xl mx-auto p-8 space-y-8">
-      <div className="text-center space-y-2">
-        <h1 className="text-4xl font-bold">Rexgent</h1>
-        <p className="text-muted-foreground">
-          Give me a story idea. I&apos;ll hand you back a short drama.
+    <main className="min-h-screen">
+      {/* top nav */}
+      <header className="border-b hairline">
+        <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
+          <span className="font-bold tracking-tight">Rexgent</span>
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            AI Showrunner · Qwen Cloud
+          </span>
+        </div>
+      </header>
+
+      {/* hero */}
+      <section className="mx-auto max-w-6xl px-6 pt-16 pb-10 text-center">
+        <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-3">
+          One premise. A whole drama.
         </p>
-      </div>
-
-      <Card>
-        <CardContent className="pt-6 flex gap-2">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="New project title"
-            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-          />
-          <Button onClick={handleCreate} disabled={createProject.isPending}>
-            {createProject.isPending ? "Creating..." : "New Project"}
+        <h1 className="text-4xl sm:text-6xl font-bold tracking-tight">
+          Direct films with a{" "}
+          <span className="text-gradient">crew of agents</span>.
+        </h1>
+        <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
+          Type a story idea. Rexgent writes it, casts it, storyboards it,
+          generates it, and hands you back a finished short drama — on budget.
+        </p>
+        <div className="mt-8 flex items-center justify-center gap-3">
+          <Button size="lg" className="glow" onClick={() => setOpen(true)}>
+            ⚡ Start a new drama
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      {projects.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-medium text-muted-foreground">
-            Your projects
-          </h2>
+      {/* projects */}
+      <section className="mx-auto max-w-6xl px-6 pb-24">
+        <h2 className="text-sm font-medium text-muted-foreground mb-4">
+          Your dramas
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <button
+            onClick={() => setOpen(true)}
+            className="group rounded-xl border border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all min-h-[160px] flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <span className="text-3xl">+</span>
+            <span className="text-sm font-medium">Start new project</span>
+            <span className="text-[11px]">Initialize AI Showrunner</span>
+          </button>
+
           {projects.map((p) => (
-            <Link key={p.id} href={`/projects/${p.id}/script`}>
-              <Card className="hover:shadow-md transition-shadow">
-                <CardContent className="py-3 flex items-center justify-between">
-                  <span className="font-medium">{p.title}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {p.genre || "—"}
-                  </span>
-                </CardContent>
-              </Card>
-            </Link>
+            <ProjectCard key={p.id} project={p} />
           ))}
         </div>
-      )}
+
+        {projects.length === 0 && (
+          <p className="text-center text-sm text-muted-foreground mt-10">
+            Your first drama is one idea away.
+          </p>
+        )}
+      </section>
+
+      <NewProjectModal open={open} onOpenChange={setOpen} />
     </main>
+  );
+}
+
+function ProjectCard({ project }: { project: Project }) {
+  return (
+    <Link href={`/projects/${project.id}/script`}>
+      <div className="group rounded-xl border hairline bg-card hover:border-primary/40 transition-all overflow-hidden min-h-[160px] flex flex-col">
+        <div className="relative h-24 bg-gradient-to-br from-primary/20 via-secondary to-hh/10 flex items-center justify-center">
+          <span className="text-[10px] uppercase tracking-widest text-foreground/70">
+            {project.genre || "drama"}
+          </span>
+        </div>
+        <div className="p-4 flex-1 flex flex-col justify-between">
+          <p className="font-medium line-clamp-2 text-sm">{project.title}</p>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                project.status === "complete" ? "bg-ok" : "bg-warn"
+              }`}
+            />
+            <span
+              className={`text-[11px] capitalize ${
+                STATUS_TONE[project.status] || "text-muted-foreground"
+              }`}
+            >
+              {project.status}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 }
