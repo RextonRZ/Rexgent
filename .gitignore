@@ -7,6 +7,7 @@ build/
 .eggs/
 *.egg
 .venv/
+.venv-mcp/
 venv/
 env/
 

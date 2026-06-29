@@ -210,6 +210,20 @@ SECRET_KEY=your_secret_key
 ENVIRONMENT=development
 ```
 
+### MCP Server (real Model Context Protocol)
+
+The 6 custom tools are also served over the **real MCP protocol** via the MCP Python SDK, so any MCP client (Claude Desktop, etc.) can discover and call them. The HTTP routes and the MCP server share **one tool registry** (`backend/app/mcp_tools/registry.py`) — one implementation, two transports.
+
+The MCP server runs in its own venv (the `mcp` SDK pins a starlette version that conflicts with FastAPI; MCP servers run as standalone processes anyway):
+
+```bash
+cd backend
+python -m venv .venv-mcp
+.venv-mcp/Scripts/activate          # Windows  (source .venv-mcp/bin/activate on macOS/Linux)
+pip install -r mcp_requirements.txt
+python mcp_server_entry.py          # serves 6 tools over MCP stdio
+```
+
 ---
 
 ## Project Structure

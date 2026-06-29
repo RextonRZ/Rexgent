@@ -18,9 +18,7 @@ from app.services.script_structurer import ScriptStructurer
 from app.services.script_generator import ScriptGenerator
 from app.services.guardrails import InputSanitizer
 from app.graph.sync import sync_scenes
-from app.mcp_tools.plot_gap_detector import PlotGapDetector
-from app.mcp_tools.ending_engine import EndingEngine
-from app.mcp_tools.narrative_judge import NarrativeJudge
+from app.mcp_tools.registry import get_tool
 
 router = APIRouter(prefix="/api/script", tags=["script"])
 
@@ -178,11 +176,9 @@ async def analyze_script(script_id: str, db: Session = Depends(get_db)):
     if not script.structured_json:
         raise HTTPException(status_code=400, detail="Script has no structured data")
 
-    detector = PlotGapDetector()
-    gaps = await detector.detect(script.structured_json)
-
-    engine = EndingEngine()
-    ending = await engine.analyse(script.structured_json)
+    # Call the shared tool registry — same code path the MCP server serves.
+    gaps = await get_tool("plot_gap_detector")({"script": script.structured_json})
+    ending = await get_tool("ending_engine")({"script": script.structured_json})
 
     # Persist plot flags so they can be acknowledged/dismissed later.
     # Re-running analysis replaces any previously stored flags for this script.
@@ -241,5 +237,4 @@ async def judge_script(script_id: str, db: Session = Depends(get_db)):
     if not script.structured_json:
         raise HTTPException(status_code=400, detail="Script has no structured data")
 
-    judge = NarrativeJudge()
-    return await judge.evaluate(script.structured_json)
+    return await get_tool("narrative_judge")({"script": script.structured_json})

@@ -1,0 +1,23 @@
+# Isolated deps for the standalone MCP server (mcp_server_entry.py).
+# Kept separate from requirements.txt because `mcp` pins a starlette version
+# that conflicts with FastAPI. The MCP server runs as its own process and does
+# not import FastAPI, so this venv is conflict-free.
+#
+# Setup:
+#   python -m venv .venv-mcp
+#   .venv-mcp/Scripts/activate   (Windows)   |   source .venv-mcp/bin/activate
+#   pip install -r mcp_requirements.txt
+#   python mcp_server_entry.py
+
+mcp>=1.1.0
+
+# Tool dependencies (the registry's 6 tools call these):
+openai>=1.50.0
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+oss2>=2.18.0
+httpx>=0.27.0
+numpy>=1.26.0
+Pillow>=10.4.0
+insightface>=0.7.3
+onnxruntime>=1.19.0
