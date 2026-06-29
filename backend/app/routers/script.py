@@ -16,6 +16,7 @@ from app.schemas.script import (
 from app.services.script_parser import ScriptParser
 from app.services.script_structurer import ScriptStructurer
 from app.services.script_generator import ScriptGenerator
+from app.services.guardrails import InputSanitizer
 from app.graph.sync import sync_scenes
 from app.mcp_tools.plot_gap_detector import PlotGapDetector
 from app.mcp_tools.ending_engine import EndingEngine
@@ -87,10 +88,12 @@ async def generate_script(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    clean_premise = InputSanitizer().sanitize(request.premise, max_length=300)
+
     generator = ScriptGenerator()
     raw_text = await generator.generate(
         genre=request.genre,
-        premise=request.premise,
+        premise=clean_premise,
         tone=request.tone,
         episode_count=request.episode_count,
         target_length=request.target_length,

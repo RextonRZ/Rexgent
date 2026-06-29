@@ -47,8 +47,19 @@ class QwenClient:
         temperature: float = 0.3,
         max_tokens: int = 4096,
     ) -> dict | list:
+        # Truncation guard: if the response is cut off, retry once with more tokens.
         content = await self.chat(messages, model, temperature, max_tokens)
+        if self._looks_truncated(content):
+            logger.warning("Truncated JSON response — retrying with larger max_tokens")
+            content = await self.chat(messages, model, temperature, max_tokens * 2)
         return self._parse_json(content)
+
+    @staticmethod
+    def _looks_truncated(raw: str) -> bool:
+        if not raw:
+            return False
+        s = raw.strip()
+        return (s.count("{") - s.count("}") > 0) or (s.count("[") - s.count("]") > 0)
 
     async def chat_vision(
         self,

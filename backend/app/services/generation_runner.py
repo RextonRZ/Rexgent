@@ -11,6 +11,7 @@ from app.services.qwen_client import QwenClient
 from app.services.oss_manager import OSSManager
 from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
 from app.mcp_tools.consistency_guard import ConsistencyGuard
+from app.services.guardrails import CostCircuitBreaker, PreGenerationValidator
 from app.websocket.emitter import emit
 from app.config import get_settings
 
@@ -30,7 +31,8 @@ class GenerationRunner:
         self.oss = OSSManager(settings)
         self.prompt_crafter = ScenePromptCraft()
         self.consistency_guard = ConsistencyGuard()
-        self.budget_ceiling = budget_usd * BUDGET_CEILING_PCT
+        self.breaker = CostCircuitBreaker(budget=budget_usd)
+        self.budget_ceiling = self.breaker.ceiling
 
     def _ordered_shots(self, project_id) -> list[Shot]:
         script = (
@@ -68,6 +70,26 @@ class GenerationRunner:
         shots = self._ordered_shots(job.project_id)
         characters = self.db.query(Character).filter(Character.project_id == job.project_id).all()
         char_by_name = {c.name: c for c in characters}
+
+        # Pre-flight: block generation if storyboard/characters are incomplete.
+        preflight = PreGenerationValidator().validate(
+            characters=[
+                {"name": c.name, "video_prompt_fragment": c.video_prompt_fragment,
+                 "visual_description": c.visual_description}
+                for c in characters
+            ],
+            shots=[
+                {"characters_in_frame": s.characters_in_frame,
+                 "estimated_duration_seconds": s.estimated_duration_seconds}
+                for s in shots
+            ],
+        )
+        if not preflight["pass"]:
+            job.status = "BLOCKED"
+            self.db.commit()
+            emit("job:blocked", {"job_id": str(job.id), "issues": preflight["issues"]},
+                 str(job.project_id))
+            return
 
         job.total_shots = len(shots)
         self.db.commit()

@@ -84,3 +84,18 @@ async def test_chat_vision_returns_content():
             messages=[{"role": "user", "content": [{"type": "text", "text": "Describe"}]}],
         )
         assert "cheekbones" in result
+
+
+@pytest.mark.asyncio
+async def test_chat_json_retries_on_truncation():
+    client = make_client()
+    truncated = MagicMock()
+    truncated.choices = [MagicMock()]
+    truncated.choices[0].message.content = '{"a": 1, "b": [1, 2'
+    full = MagicMock()
+    full.choices = [MagicMock()]
+    full.choices[0].message.content = '{"a": 1, "b": [1, 2]}'
+
+    with patch.object(client.client.chat.completions, "create", new_callable=AsyncMock, side_effect=[truncated, full]):
+        result = await client.chat_json(messages=[{"role": "user", "content": "x"}])
+        assert result == {"a": 1, "b": [1, 2]}

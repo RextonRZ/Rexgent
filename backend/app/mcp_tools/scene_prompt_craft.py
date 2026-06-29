@@ -1,6 +1,7 @@
 import json
 from app.services.qwen_client import QwenClient
 from app.services.prompt_loader import load_prompt
+from app.services.guardrails import PromptSanitizer
 from app.config import get_settings
 
 
@@ -47,4 +48,13 @@ class ScenePromptCraft:
         result = await self.qwen.chat_json(messages=messages, temperature=0.3)
         if not isinstance(result, dict):
             return {"prompt": "", "negative_prompt": "", "model_parameters": {}}
+
+        # Anti-hallucination guardrails: strip text/numbers/names, force negative prompt.
+        sanitizer = PromptSanitizer()
+        result["prompt"] = sanitizer.sanitize(
+            result.get("prompt", ""), character_names=list(character_visuals.keys())
+        )
+        result["negative_prompt"] = sanitizer.inject_negative_prompt(
+            result.get("negative_prompt", "")
+        )
         return result
