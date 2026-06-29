@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.routers.projects import router as projects_router
 from app.routers.script import router as script_router
 from app.routers.character import router as character_router
 from app.routers.graph import router as graph_router
@@ -21,6 +22,7 @@ app.add_middleware(
 )
 
 
+app.include_router(projects_router)
 app.include_router(script_router)
 app.include_router(character_router)
 app.include_router(graph_router)
