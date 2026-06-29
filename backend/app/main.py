@@ -10,6 +10,7 @@ from app.routers.generation import router as generation_router
 from app.routers.edit import router as edit_router
 from app.routers.export import router as export_router
 from app.routers.agent import router as agent_router
+from app.routers.auth import router as auth_router
 
 app = FastAPI(title="Rexgent", version="1.0.0", description="AI Drama Production Pipeline")
 
@@ -22,6 +23,7 @@ app.add_middleware(
 )
 
 
+app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(script_router)
 app.include_router(character_router)

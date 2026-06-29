@@ -9,9 +9,10 @@ from app.models.generated_clip import GeneratedClip
 from app.models.edit_flag import EditFlag
 from app.models.final_export import FinalExport
 from app.models.narrative_snapshot import NarrativeMemorySnapshot
+from app.models.user import User
 
 __all__ = [
     "Project", "Script", "Scene", "Character", "CharacterRelationship",
     "PlotFlag", "Shot", "GenerationJob", "GeneratedClip", "EditFlag",
-    "FinalExport", "NarrativeMemorySnapshot",
+    "FinalExport", "NarrativeMemorySnapshot", "User",
 ]

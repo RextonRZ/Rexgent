@@ -35,3 +35,7 @@ insightface>=0.7.3
 onnxruntime>=1.19.0
 # Token counting
 tiktoken>=0.8.0
+# Auth
+PyJWT>=2.9.0
+bcrypt>=4.2.0
+email-validator>=2.0.0
