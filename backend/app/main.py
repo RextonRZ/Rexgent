@@ -8,6 +8,7 @@ from app.routers.budget import router as budget_router
 from app.routers.generation import router as generation_router
 from app.routers.edit import router as edit_router
 from app.routers.export import router as export_router
+from app.routers.agent import router as agent_router
 
 app = FastAPI(title="Rexgent", version="1.0.0", description="AI Drama Production Pipeline")
 
@@ -28,6 +29,7 @@ app.include_router(budget_router)
 app.include_router(generation_router)
 app.include_router(edit_router)
 app.include_router(export_router)
+app.include_router(agent_router)
 
 
 @app.get("/health")

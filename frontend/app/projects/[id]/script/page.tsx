@@ -10,6 +10,7 @@ import {
   NarrativeJudgeReport,
   type JudgeResult,
 } from "@/components/script/NarrativeJudgeReport";
+import { AutoRunPanel } from "@/components/agent/AutoRunPanel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -65,11 +66,15 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
       <h1 className="text-2xl font-bold">Script</h1>
 
       {!scriptData ? (
-        <Tabs defaultValue="generate">
+        <Tabs defaultValue="auto">
           <TabsList>
+            <TabsTrigger value="auto">⚡ Full Auto</TabsTrigger>
             <TabsTrigger value="generate">Write from Scratch</TabsTrigger>
             <TabsTrigger value="import">Import Script</TabsTrigger>
           </TabsList>
+          <TabsContent value="auto">
+            <AutoRunPanel projectId={params.id} />
+          </TabsContent>
           <TabsContent value="generate">
             <ScriptGenerate
               projectId={params.id}
