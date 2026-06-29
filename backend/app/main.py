@@ -29,3 +29,10 @@ app.include_router(generation_router)
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "rexgent-backend"}
+
+
+# Socket.IO ASGI wrapper. Serve with: uvicorn app.main:socket_app
+import socketio  # noqa: E402
+from app.websocket.ws_manager import sio  # noqa: E402
+
+socket_app = socketio.ASGIApp(sio, other_asgi_app=app)

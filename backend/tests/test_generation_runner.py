@@ -1,7 +1,14 @@
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+import app.services.generation_runner as gr
 from app.services.generation_runner import GenerationRunner
+
+
+@pytest.fixture(autouse=True)
+def _no_ws(monkeypatch):
+    """Keep tests isolated from Redis/WebSocket."""
+    monkeypatch.setattr(gr, "emit", lambda *a, **k: None)
 
 
 def make_runner():
@@ -40,7 +47,7 @@ async def test_passing_clip_is_approved():
     runner.consistency_guard.validate = AsyncMock(return_value={
         "overall_pass": True, "overall_similarity": 0.9, "retry_instruction": None,
     })
-    job = SimpleNamespace(id="job1", actual_cost=0.0, completed_shots=0)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0)
 
     await runner._process_shot(job, make_shot(), {"Yuki": make_char()})
 
@@ -56,7 +63,7 @@ async def test_smart_retry_applies_diagnosis_then_passes():
         {"overall_pass": False, "overall_similarity": 0.3, "retry_instruction": "use short black hair"},
         {"overall_pass": True, "overall_similarity": 0.85, "retry_instruction": None},
     ])
-    job = SimpleNamespace(id="job1", actual_cost=0.0, completed_shots=0)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0)
 
     await runner._process_shot(job, make_shot(), {"Yuki": make_char()})
 
@@ -74,7 +81,7 @@ async def test_exhausted_retries_needs_review():
     runner.consistency_guard.validate = AsyncMock(return_value={
         "overall_pass": False, "overall_similarity": 0.2, "retry_instruction": "brighten",
     })
-    job = SimpleNamespace(id="job1", actual_cost=0.0, completed_shots=0)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0)
 
     await runner._process_shot(job, make_shot(), {"Yuki": make_char()})
 

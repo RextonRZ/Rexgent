@@ -11,6 +11,7 @@ from app.services.qwen_client import QwenClient
 from app.services.oss_manager import OSSManager
 from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
 from app.mcp_tools.consistency_guard import ConsistencyGuard
+from app.websocket.emitter import emit
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -71,16 +72,27 @@ class GenerationRunner:
         job.total_shots = len(shots)
         self.db.commit()
 
+        pid = str(job.project_id)
         for shot in shots:
             if job.actual_cost >= self.budget_ceiling:
                 job.status = "BUDGET_EXHAUSTED"
                 self.db.commit()
+                emit("job:budget_exhausted", {"job_id": str(job.id)}, pid)
                 return
             await self._process_shot(job, shot, char_by_name)
+            emit("cost:updated", {
+                "current_cost": round(job.actual_cost, 2),
+                "budget_remaining": round(self.budget_ceiling - job.actual_cost, 2),
+            }, pid)
 
         job.status = "COMPLETE"
         job.completed_at = datetime.now(timezone.utc)
         self.db.commit()
+        emit("job:completed", {
+            "job_id": str(job.id),
+            "total_clips": job.completed_shots,
+            "total_cost": round(job.actual_cost, 2),
+        }, pid)
 
     async def _process_shot(self, job: GenerationJob, shot: Shot, char_by_name: dict) -> None:
         in_frame = shot.characters_in_frame or []
@@ -119,9 +131,16 @@ class GenerationRunner:
 
         is_wan = shot.quality_tier == "wan"
         cost_per_sec = WAN_COST_PER_SEC if is_wan else HH_COST_PER_SEC
+        pid = str(job.project_id)
 
         for attempt in range(MAX_RETRIES + 1):
             try:
+                emit("clip:started", {
+                    "shot_id": str(shot.id),
+                    "model": shot.quality_tier or "happyhorse",
+                    "attempt": attempt,
+                    "estimated_seconds": shot.estimated_duration_seconds,
+                }, pid)
                 if is_wan:
                     task_id = await self.qwen.generate_video_wan(
                         prompt=prompt, duration=shot.estimated_duration_seconds
@@ -160,11 +179,19 @@ class GenerationRunner:
                 if passed:
                     job.completed_shots += 1
                     self.db.commit()
+                    emit("clip:completed", {
+                        "shot_id": str(shot.id), "clip_url": clip_url,
+                        "consistency_score": consistency_score, "status": "APPROVED",
+                    }, pid)
                     return
 
                 # Diagnosis-driven smart retry (Fix #6): apply the targeted change.
                 if attempt < MAX_RETRIES:
                     instruction = guard.get("retry_instruction") or "Emphasise facial features."
+                    emit("clip:retry", {
+                        "shot_id": str(shot.id), "retry_number": attempt + 1,
+                        "reason": instruction,
+                    }, pid)
                     prompt = f"{prompt}. {instruction}"
                     self.db.commit()
                     continue
@@ -173,6 +200,10 @@ class GenerationRunner:
                 clip.status = "NEEDS_REVIEW"
                 job.completed_shots += 1
                 self.db.commit()
+                emit("clip:completed", {
+                    "shot_id": str(shot.id), "clip_url": clip_url,
+                    "consistency_score": consistency_score, "status": "NEEDS_REVIEW",
+                }, pid)
                 return
 
             except Exception as e:  # noqa: BLE001
