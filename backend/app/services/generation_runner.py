@@ -18,9 +18,9 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
-WAN_COST_PER_SEC = 0.07
-HH_COST_PER_SEC = 0.05
-BUDGET_CEILING_PCT = 0.85  # cost circuit breaker (full version in File 18)
+WAN_COST_PER_SEC = 0.15   # real Wan2.7 pricing (high end)
+HH_COST_PER_SEC = 0.108   # real HappyHorse-1.1 pricing (high end)
+BUDGET_CEILING_PCT = 0.85  # cost circuit breaker
 
 
 class GenerationRunner:

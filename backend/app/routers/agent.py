@@ -30,10 +30,20 @@ async def run_auto(request: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="premise required")
 
     graph = build_pipeline_graph(db=db)
-    final_state = await graph.ainvoke({
-        "project_id": project_id, "premise": premise, "genre": genre,
-        "tone": tone, "language": language, "auto": True, "revise_count": 0,
-    })
+    try:
+        final_state = await graph.ainvoke({
+            "project_id": project_id, "premise": premise, "genre": genre,
+            "tone": tone, "language": language, "auto": True, "revise_count": 0,
+        })
+    except Exception as e:  # noqa: BLE001
+        msg = str(e)
+        if "invalid_api_key" in msg or "401" in msg:
+            raise HTTPException(
+                status_code=502,
+                detail="Qwen API key rejected. Check QWEN_API_KEY and QWEN_BASE_URL "
+                       "(international keys need the dashscope-intl endpoint).",
+            )
+        raise HTTPException(status_code=502, detail=f"Agent run failed: {msg}")
 
     return {
         "status": "complete",

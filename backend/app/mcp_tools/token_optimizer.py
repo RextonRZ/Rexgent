@@ -1,6 +1,8 @@
 class TokenOptimizer:
-    WAN_COST_PER_SEC = 0.07
-    HH_COST_PER_SEC = 0.05
+    # Real Qwen Cloud catalog pricing (conservative high end):
+    # Wan2.7 $0.10-0.15/sec, HappyHorse-1.1 $0.084-0.108/sec.
+    WAN_COST_PER_SEC = 0.15
+    HH_COST_PER_SEC = 0.108
     RESERVE_PCT = 0.15
 
     CLIMAX_WORDS = {
