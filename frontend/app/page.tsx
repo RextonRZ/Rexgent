@@ -1,113 +1,121 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { NewProjectModal } from "@/components/home/NewProjectModal";
-import { useProjects } from "@/hooks/useProjects";
-import type { Project } from "@/lib/types";
+import { useAuth } from "@/hooks/useAuth";
 
-const STATUS_TONE: Record<string, string> = {
-  draft: "text-muted-foreground",
-  complete: "text-ok",
-};
+const WOWS = [
+  {
+    k: "01",
+    title: "One premise → a whole drama",
+    body: "An autonomous agent writes the script, casts it, storyboards it, generates it, and reports back. You watch a studio work for you.",
+  },
+  {
+    k: "02",
+    title: "Faces that don't drift",
+    body: "Upload one reference photo. Every clip is verified frame-by-frame against a real facial embedding, with self-correcting retries.",
+  },
+  {
+    k: "03",
+    title: "The budget is a feature",
+    body: "A live meter spends premium generation only on the shots that matter — turning a hard limit into a smart allocator.",
+  },
+];
 
-export default function HomePage() {
-  const { data } = useProjects();
-  const [open, setOpen] = useState(false);
-  const projects = data?.projects || [];
+export default function LandingPage() {
+  const { isAuthenticated: authed } = useAuth();
+  // Persisted auth only resolves on the client; default to signed-out for SSR
+  // to avoid a hydration mismatch, then reveal the real state after mount.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const isAuthenticated = mounted && authed;
 
   return (
     <main className="min-h-screen">
-      {/* top nav */}
       <header className="border-b hairline">
         <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
           <span className="font-bold tracking-tight">Rexgent</span>
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            AI Showrunner · Qwen Cloud
-          </span>
+          <nav className="flex items-center gap-3">
+            {isAuthenticated ? (
+              <Link href="/projects">
+                <Button size="sm" className="glow">
+                  Your dramas →
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Sign in
+                </Link>
+                <Link href="/signup">
+                  <Button size="sm" className="glow">
+                    Get started
+                  </Button>
+                </Link>
+              </>
+            )}
+          </nav>
         </div>
       </header>
 
       {/* hero */}
-      <section className="mx-auto max-w-6xl px-6 pt-16 pb-10 text-center">
-        <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-3">
-          One premise. A whole drama.
+      <section className="mx-auto max-w-6xl px-6 pt-24 pb-16 text-center">
+        <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-4">
+          AI Showrunner · Qwen Cloud
         </p>
-        <h1 className="text-4xl sm:text-6xl font-bold tracking-tight">
-          Direct films with a{" "}
-          <span className="text-gradient">crew of agents</span>.
+        <h1 className="text-4xl sm:text-6xl font-bold tracking-tight max-w-3xl mx-auto">
+          Give me a story idea. I&apos;ll hand you back a{" "}
+          <span className="text-gradient">short drama</span>.
         </h1>
-        <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-          Type a story idea. Rexgent writes it, casts it, storyboards it,
-          generates it, and hands you back a finished short drama — on budget.
+        <p className="mt-5 text-muted-foreground max-w-xl mx-auto">
+          Rexgent writes it, casts it with locked facial identity, storyboards
+          it, generates the clips, and exports a captioned film — all on a fixed
+          budget you can watch in real time.
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">
-          <Button size="lg" className="glow" onClick={() => setOpen(true)}>
-            ⚡ Start a new drama
-          </Button>
+          <Link href={isAuthenticated ? "/projects" : "/signup"}>
+            <Button size="lg" className="glow">
+              ⚡ {isAuthenticated ? "Open your studio" : "Start directing free"}
+            </Button>
+          </Link>
+          {!isAuthenticated && (
+            <Link href="/login">
+              <Button size="lg" variant="outline">
+                Sign in
+              </Button>
+            </Link>
+          )}
         </div>
       </section>
 
-      {/* projects */}
-      <section className="mx-auto max-w-6xl px-6 pb-24">
-        <h2 className="text-sm font-medium text-muted-foreground mb-4">
-          Your dramas
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <button
-            onClick={() => setOpen(true)}
-            className="group rounded-xl border border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all min-h-[160px] flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
-          >
-            <span className="text-3xl">+</span>
-            <span className="text-sm font-medium">Start new project</span>
-            <span className="text-[11px]">Initialize AI Showrunner</span>
-          </button>
-
-          {projects.map((p) => (
-            <ProjectCard key={p.id} project={p} />
+      {/* wow moments */}
+      <section className="mx-auto max-w-6xl px-6 pb-28">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {WOWS.map((w) => (
+            <div
+              key={w.k}
+              className="rounded-xl border hairline bg-card p-6 hover:border-primary/40 transition-all"
+            >
+              <span className="text-xs font-mono text-primary/70">{w.k}</span>
+              <h3 className="mt-3 font-semibold">{w.title}</h3>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                {w.body}
+              </p>
+            </div>
           ))}
         </div>
-
-        {projects.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground mt-10">
-            Your first drama is one idea away.
-          </p>
-        )}
       </section>
 
-      <NewProjectModal open={open} onOpenChange={setOpen} />
+      <footer className="border-t hairline">
+        <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between text-xs text-muted-foreground">
+          <span>Rexgent — AI Drama Production</span>
+          <span>Built on Qwen Cloud · Alibaba Cloud</span>
+        </div>
+      </footer>
     </main>
-  );
-}
-
-function ProjectCard({ project }: { project: Project }) {
-  return (
-    <Link href={`/projects/${project.id}/script`}>
-      <div className="group rounded-xl border hairline bg-card hover:border-primary/40 transition-all overflow-hidden min-h-[160px] flex flex-col">
-        <div className="relative h-24 bg-gradient-to-br from-primary/20 via-secondary to-hh/10 flex items-center justify-center">
-          <span className="text-[10px] uppercase tracking-widest text-foreground/70">
-            {project.genre || "drama"}
-          </span>
-        </div>
-        <div className="p-4 flex-1 flex flex-col justify-between">
-          <p className="font-medium line-clamp-2 text-sm">{project.title}</p>
-          <div className="flex items-center gap-1.5 mt-2">
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                project.status === "complete" ? "bg-ok" : "bg-warn"
-              }`}
-            />
-            <span
-              className={`text-[11px] capitalize ${
-                STATUS_TONE[project.status] || "text-muted-foreground"
-              }`}
-            >
-              {project.status}
-            </span>
-          </div>
-        </div>
-      </div>
-    </Link>
   );
 }
