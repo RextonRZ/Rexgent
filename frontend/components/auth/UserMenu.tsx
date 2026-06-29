@@ -5,7 +5,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -32,14 +31,14 @@ export function UserMenu() {
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56 glass">
-        <DropdownMenuLabel className="font-normal">
+        <div className="px-1.5 py-1.5">
           <p className="text-sm font-medium truncate">
             {user?.full_name || "Director"}
           </p>
           <p className="text-xs text-muted-foreground truncate">
             {user?.email}
           </p>
-        </DropdownMenuLabel>
+        </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => router.push("/projects")}
