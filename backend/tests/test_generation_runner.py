@@ -38,6 +38,7 @@ def make_char():
     return SimpleNamespace(
         name="Yuki", face_vector=[0.1] * 512, video_prompt_fragment="young detective",
         visual_description="young detective", face_embedding={"embedding_keywords": ["sharp cheekbones"]},
+        reference_image_url=None,
     )
 
 

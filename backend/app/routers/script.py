@@ -97,6 +97,7 @@ async def generate_script(
         target_length=request.target_length,
         notes=request.notes or "",
         language=request.language,
+        model=request.model,
     )
 
     structurer = ScriptStructurer()

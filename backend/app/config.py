@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     qwen_api_key: str = ""
     qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    # DashScope native API (async video generation lives here, not on compatible-mode)
+    qwen_video_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
     oss_access_key_id: str = ""
     oss_access_key_secret: str = ""
     oss_bucket_name: str = "rexgent-assets"

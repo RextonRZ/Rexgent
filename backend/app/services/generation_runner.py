@@ -155,6 +155,10 @@ class GenerationRunner:
         cost_per_sec = WAN_COST_PER_SEC if is_wan else HH_COST_PER_SEC
         pid = str(job.project_id)
 
+        # Use a character reference image when available -> image/reference-to-video
+        # for far better face consistency (what ConsistencyGuard then verifies).
+        ref_image = next((c.reference_image_url for c in shot_chars if c.reference_image_url), None)
+
         for attempt in range(MAX_RETRIES + 1):
             try:
                 emit("clip:started", {
@@ -165,11 +169,14 @@ class GenerationRunner:
                 }, pid)
                 if is_wan:
                     task_id = await self.qwen.generate_video_wan(
-                        prompt=prompt, duration=shot.estimated_duration_seconds
+                        prompt=prompt, duration=shot.estimated_duration_seconds,
+                        reference_image_url=ref_image,
                     )
                 else:
                     task_id = await self.qwen.generate_video_happyhorse(
-                        prompt=prompt, duration=shot.estimated_duration_seconds, mode="t2v"
+                        prompt=prompt, duration=shot.estimated_duration_seconds,
+                        mode="r2v" if ref_image else "t2v",
+                        reference_image_url=ref_image,
                     )
                 clip_url = await self.qwen.poll_video_task(task_id)
 

@@ -26,6 +26,7 @@ export function useGenerateScript() {
       target_length?: number;
       notes?: string;
       language?: string;
+      model?: string;
     }) => {
       const { data } = await api.post("/api/script/generate", params);
       return data;

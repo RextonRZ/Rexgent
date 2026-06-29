@@ -45,6 +45,7 @@ class ScriptGenerateRequest(BaseModel):
     target_length: int = 5
     notes: Optional[str] = None
     language: str = "en"
+    model: str = "qwen-max"
 
 
 class ScriptGenerateResponse(BaseModel):

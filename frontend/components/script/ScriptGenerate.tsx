@@ -43,6 +43,7 @@ export function ScriptGenerate({ projectId, onSuccess }: ScriptGenerateProps) {
   const [episodeCount, setEpisodeCount] = useState(1);
   const [targetLength, setTargetLength] = useState(5);
   const [language, setLanguage] = useState("en");
+  const [model, setModel] = useState("qwen-max");
   const generateScript = useGenerateScript();
 
   const handleGenerate = async () => {
@@ -54,6 +55,7 @@ export function ScriptGenerate({ projectId, onSuccess }: ScriptGenerateProps) {
       episode_count: episodeCount,
       target_length: targetLength,
       language,
+      model,
     });
     onSuccess(result);
   };
@@ -99,6 +101,20 @@ export function ScriptGenerate({ projectId, onSuccess }: ScriptGenerateProps) {
               <SelectContent>
                 <SelectItem value="en">English</SelectItem>
                 <SelectItem value="zh">中文</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Model</Label>
+            <Select value={model} onValueChange={(v) => v && setModel(v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="qwen-max">Qwen-Max (best)</SelectItem>
+                <SelectItem value="qwen-plus">Qwen-Plus (balanced)</SelectItem>
+                <SelectItem value="qwen-flash">Qwen-Flash (fast/cheap)</SelectItem>
+                <SelectItem value="qwen3-max">Qwen3-Max (newest)</SelectItem>
               </SelectContent>
             </Select>
           </div>

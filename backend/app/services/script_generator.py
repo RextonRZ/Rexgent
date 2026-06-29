@@ -22,6 +22,7 @@ class ScriptGenerator:
         target_length: int = 5,
         notes: str = "",
         language: str = "en",
+        model: str = "qwen-max",
     ) -> str:
         user_prompt = self.prompt_template.format(
             genre=genre,
@@ -35,4 +36,4 @@ class ScriptGenerator:
         messages = [
             {"role": "user", "content": user_prompt},
         ]
-        return await self.qwen.chat(messages=messages, temperature=0.8, max_tokens=8192)
+        return await self.qwen.chat(messages=messages, model=model, temperature=0.8, max_tokens=8192)

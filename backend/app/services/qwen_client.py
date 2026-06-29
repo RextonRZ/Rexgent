@@ -16,6 +16,8 @@ class QwenClient:
             api_key=settings.qwen_api_key,
             base_url=settings.qwen_base_url,
         )
+        self.api_key = settings.qwen_api_key
+        self.video_base_url = settings.qwen_video_base_url.rstrip("/")
         self.max_retries = 3
 
     async def chat(
@@ -108,38 +110,19 @@ class QwenClient:
         content = await self.chat_vision(messages, model, max_tokens)
         return self._parse_json(content)
 
-    # NOTE: Video endpoints are built from the OpenAI-compatible base URL.
-    # When real Qwen Cloud keys are available (File 14 testing), confirm the
-    # actual Wan/HappyHorse async endpoint paths and model IDs against the
-    # DashScope docs and adjust the URL/payload here if needed.
-    async def generate_video_wan(
-        self,
-        prompt: str,
-        duration: int = 5,
-        reference_image_url: str | None = None,
-        first_frame_url: str | None = None,
-        last_frame_url: str | None = None,
-    ) -> str:
-        payload = {
-            "model": "wan2.1-t2v-plus",
-            "input": {
-                "prompt": prompt,
-                "duration": duration,
-                "resolution": "1080p",
-            },
-        }
-        if reference_image_url:
-            payload["input"]["reference_images"] = [reference_image_url]
-        if first_frame_url:
-            payload["input"]["first_frame"] = first_frame_url
-        if last_frame_url:
-            payload["input"]["last_frame"] = last_frame_url
+    # ── Video generation (DashScope native async API) ──────────────
+    # Endpoint: POST {video_base}/services/aigc/video-generation/video-synthesis
+    #           header X-DashScope-Async: enable -> returns output.task_id
+    # Poll:     GET  {video_base}/tasks/{task_id} -> output.task_status / video_url
+    VIDEO_PATH = "/services/aigc/video-generation/video-synthesis"
 
+    async def _dispatch_video(self, model: str, input_obj: dict, parameters: dict) -> str:
+        payload = {"model": model, "input": input_obj, "parameters": parameters}
         async with httpx.AsyncClient() as http:
             response = await http.post(
-                f"{self.client.base_url}".rstrip("/") + "/services/aigc/video-generation/generation",
+                self.video_base_url + self.VIDEO_PATH,
                 headers={
-                    "Authorization": f"Bearer {self.client.api_key}",
+                    "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                     "X-DashScope-Async": "enable",
                 },
@@ -148,6 +131,21 @@ class QwenClient:
             )
             response.raise_for_status()
             return response.json()["output"]["task_id"]
+
+    async def generate_video_wan(
+        self,
+        prompt: str,
+        duration: int = 5,
+        reference_image_url: str | None = None,
+        model: str | None = None,
+    ) -> str:
+        # wan2.7-t2v (text) or wan2.7-i2v (image-to-video when a reference image exists)
+        chosen = model or ("wan2.7-i2v" if reference_image_url else "wan2.7-t2v")
+        input_obj: dict = {"prompt": prompt}
+        if reference_image_url:
+            input_obj["img_url"] = reference_image_url
+        params = {"resolution": "1080P", "duration": duration}
+        return await self._dispatch_video(chosen, input_obj, params)
 
     async def generate_video_happyhorse(
         self,
@@ -157,59 +155,57 @@ class QwenClient:
         reference_image_url: str | None = None,
         source_video_url: str | None = None,
         edit_instruction: str | None = None,
+        model: str | None = None,
     ) -> str:
         model_map = {
             "t2v": "happyhorse-1.1-t2v",
             "i2v": "happyhorse-1.1-i2v",
-            "s2v": "happyhorse-1.1-s2v",
-            "v2v": "happyhorse-1.1-v2v",
+            "r2v": "happyhorse-1.1-r2v",          # reference-to-video (face consistency)
+            "v2v": "happyhorse-1.0-video-edit",   # video editing (regen loop)
+            "edit": "happyhorse-1.0-video-edit",
         }
-        payload = {
-            "model": model_map.get(mode, f"happyhorse-1.1-{mode}"),
-            "input": {
-                "prompt": prompt,
-                "duration": duration,
-                "resolution": "1080p",
-                "audio_mode": "auto",
-            },
-        }
+        chosen = model or model_map.get(mode, "happyhorse-1.1-t2v")
+        input_obj: dict = {"prompt": prompt}
         if reference_image_url:
-            payload["input"]["subject_image"] = reference_image_url
+            input_obj["img_url"] = reference_image_url
         if source_video_url:
-            payload["input"]["source_video"] = source_video_url
-        if edit_instruction:
-            payload["input"]["edit_instruction"] = edit_instruction
+            input_obj["video_url"] = source_video_url
+        params = {"resolution": "1080P", "duration": duration, "audio": True}
+        return await self._dispatch_video(chosen, input_obj, params)
 
-        async with httpx.AsyncClient() as http:
-            response = await http.post(
-                f"{self.client.base_url}".rstrip("/") + "/services/aigc/video-generation/generation",
-                headers={
-                    "Authorization": f"Bearer {self.client.api_key}",
-                    "Content-Type": "application/json",
-                    "X-DashScope-Async": "enable",
-                },
-                json=payload,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()["output"]["task_id"]
+    @staticmethod
+    def _extract_video_url(output: dict) -> str | None:
+        # DashScope returns the URL in one of a few shapes depending on model.
+        if output.get("video_url"):
+            return output["video_url"]
+        results = output.get("results")
+        if isinstance(results, dict) and results.get("video_url"):
+            return results["video_url"]
+        if isinstance(results, list) and results:
+            first = results[0]
+            if isinstance(first, dict):
+                return first.get("video_url") or first.get("url")
+        return None
 
-    async def poll_video_task(self, task_id: str, timeout: int = 300, interval: int = 5) -> str:
+    async def poll_video_task(self, task_id: str, timeout: int = 600, interval: int = 5) -> str:
         elapsed = 0
         async with httpx.AsyncClient() as http:
             while elapsed < timeout:
                 response = await http.get(
-                    f"{self.client.base_url}".rstrip("/") + f"/tasks/{task_id}",
-                    headers={"Authorization": f"Bearer {self.client.api_key}"},
+                    f"{self.video_base_url}/tasks/{task_id}",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
                     timeout=10.0,
                 )
                 response.raise_for_status()
-                data = response.json()
-                status = data["output"]["task_status"]
+                output = response.json().get("output", {})
+                status = output.get("task_status")
                 if status == "SUCCEEDED":
-                    return data["output"]["results"][0]["url"]
-                if status == "FAILED":
-                    raise RuntimeError(f"Video task {task_id} failed: {data['output'].get('message', 'unknown')}")
+                    url = self._extract_video_url(output)
+                    if not url:
+                        raise RuntimeError(f"Video task {task_id} succeeded but no URL in: {output}")
+                    return url
+                if status in ("FAILED", "CANCELED", "UNKNOWN"):
+                    raise RuntimeError(f"Video task {task_id} {status}: {output.get('message', 'unknown')}")
                 await asyncio.sleep(interval)
                 elapsed += interval
         raise TimeoutError(f"Video task {task_id} did not complete within {timeout}s")
