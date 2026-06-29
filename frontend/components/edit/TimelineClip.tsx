@@ -3,11 +3,11 @@
 import { cn } from "@/lib/utils";
 import type { GeneratedClip } from "@/lib/types";
 
-const STATUS_COLOR: Record<string, string> = {
-  APPROVED: "border-green-500",
-  NEEDS_REVIEW: "border-orange-500",
-  FAILED: "border-red-500",
-  PENDING_REVIEW: "border-blue-500",
+const STATUS_RING: Record<string, string> = {
+  APPROVED: "ring-ok/60",
+  NEEDS_REVIEW: "ring-warn/60",
+  FAILED: "ring-bad/60",
+  PENDING_REVIEW: "ring-hh/60",
 };
 
 export function TimelineClip({
@@ -19,29 +19,49 @@ export function TimelineClip({
   selected: boolean;
   onClick: () => void;
 }) {
+  const isWan = clip.model_used === "wan";
+  const match =
+    clip.consistency_score != null
+      ? Math.round(clip.consistency_score * 100)
+      : null;
+
   return (
     <button
       onClick={onClick}
       className={cn(
-        "shrink-0 w-40 border-2 rounded-lg p-2 text-left transition-colors",
-        STATUS_COLOR[clip.status] || "border-muted",
-        selected && "ring-2 ring-primary"
+        "shrink-0 w-40 rounded-lg overflow-hidden bg-card border hairline ring-1 ring-inset transition-all text-left",
+        STATUS_RING[clip.status] || "ring-border",
+        selected && "outline outline-2 outline-primary"
       )}
     >
-      {clip.url ? (
-        // eslint-disable-next-line jsx-a11y/media-has-caption
-        <video src={clip.url} className="w-full h-20 object-cover rounded" preload="metadata" />
-      ) : (
-        <div className="w-full h-20 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
-          no clip
-        </div>
-      )}
-      <div className="mt-1 flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">
-          {clip.model_used === "wan" ? "Wan" : "HH"}
+      <div className="relative h-20 bg-secondary">
+        {clip.url ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video
+            src={clip.url}
+            className="h-full w-full object-cover"
+            preload="metadata"
+          />
+        ) : (
+          <div className="h-full flex items-center justify-center text-[10px] text-muted-foreground">
+            no clip
+          </div>
+        )}
+        <span
+          className={cn(
+            "absolute top-1 left-1 rounded px-1 text-[9px] font-bold",
+            isWan ? "bg-wan/20 text-wan" : "bg-hh/20 text-hh"
+          )}
+        >
+          {isWan ? "WAN" : "HH"}
         </span>
-        {clip.consistency_score != null && (
-          <span>{(clip.consistency_score * 100).toFixed(0)}%</span>
+      </div>
+      <div className="px-2 py-1.5 flex items-center justify-between text-[11px]">
+        <span className="text-muted-foreground capitalize">
+          {clip.status.replace("_", " ").toLowerCase()}
+        </span>
+        {match != null && (
+          <span className={match >= 60 ? "text-ok" : "text-bad"}>{match}%</span>
         )}
       </div>
     </button>

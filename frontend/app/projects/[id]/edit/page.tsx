@@ -12,9 +12,18 @@ export default function EditPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Video Editor</h1>
-      <Timeline projectId={params.id} />
-      {selectedClip && (
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Edit</h1>
+        <p className="text-sm text-muted-foreground">
+          Review every clip; flag and regenerate anything that disappoints.
+        </p>
+      </div>
+
+      <div className="glass rounded-xl p-3">
+        <Timeline projectId={params.id} />
+      </div>
+
+      {selectedClip ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ClipViewer clip={selectedClip} />
           <FlagPanel
@@ -25,6 +34,10 @@ export default function EditPage({ params }: { params: { id: string } }) {
             }
           />
         </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Select a clip from the timeline to review or regenerate it.
+        </p>
       )}
     </div>
   );

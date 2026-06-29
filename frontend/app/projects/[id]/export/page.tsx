@@ -16,8 +16,13 @@ export default function ExportPage({ params }: { params: { id: string } }) {
   }, [params.id]);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Export</h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Export</h1>
+        <p className="text-sm text-muted-foreground">
+          Stitch the final film and prove the economics.
+        </p>
+      </div>
       <ExportPanel projectId={params.id} jobId={jobId} />
     </div>
   );
