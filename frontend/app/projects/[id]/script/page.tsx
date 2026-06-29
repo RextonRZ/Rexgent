@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useProject } from "@/hooks/useProjects";
 import { ScriptImport } from "@/components/script/ScriptImport";
 import { ScriptGenerate } from "@/components/script/ScriptGenerate";
 import { ScriptEditor } from "@/components/script/ScriptEditor";
@@ -21,6 +23,12 @@ import {
 } from "@/hooks/usePlotAnalysis";
 
 export default function ScriptPage({ params }: { params: { id: string } }) {
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode"); // "auto" | "guided" | null
+  const { data: project } = useProject(params.id);
+  const projectPremise = project?.premise ?? "";
+  const projectGenre = project?.genre ?? "";
+
   const [scriptData, setScriptData] = useState<{
     script_id: string;
     raw_text: string;
@@ -74,18 +82,24 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
 
       {!scriptData ? (
         <div className="max-w-3xl">
-          <Tabs defaultValue="auto">
+          <Tabs defaultValue={mode === "guided" ? "generate" : "auto"}>
             <TabsList>
               <TabsTrigger value="auto">⚡ Full Auto</TabsTrigger>
               <TabsTrigger value="generate">Write from Scratch</TabsTrigger>
               <TabsTrigger value="import">Import Script</TabsTrigger>
             </TabsList>
             <TabsContent value="auto">
-              <AutoRunPanel projectId={params.id} />
+              <AutoRunPanel
+                projectId={params.id}
+                initialPremise={projectPremise}
+                initialGenre={projectGenre}
+              />
             </TabsContent>
             <TabsContent value="generate">
               <ScriptGenerate
                 projectId={params.id}
+                initialPremise={projectPremise}
+                initialGenre={projectGenre}
                 onSuccess={(data) =>
                   setScriptData({
                     script_id: data.script_id,

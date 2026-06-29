@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ import { useGenerateScript } from "@/hooks/useScript";
 
 interface ScriptGenerateProps {
   projectId: string;
+  initialPremise?: string;
+  initialGenre?: string;
   onSuccess: (data: {
     script_id: string;
     raw_text: string;
@@ -36,10 +38,25 @@ const GENRES = [
   "fantasy",
 ];
 
-export function ScriptGenerate({ projectId, onSuccess }: ScriptGenerateProps) {
-  const [genre, setGenre] = useState("sci-fi");
-  const [premise, setPremise] = useState("");
+export function ScriptGenerate({
+  projectId,
+  initialPremise = "",
+  initialGenre = "",
+  onSuccess,
+}: ScriptGenerateProps) {
+  const [genre, setGenre] = useState(initialGenre || "sci-fi");
+  const [premise, setPremise] = useState(initialPremise);
   const [tone, setTone] = useState("dramatic");
+  const [touched, setTouched] = useState(false);
+
+  // Seed premise/genre from the project once they load (unless the user typed).
+  useEffect(() => {
+    if (initialPremise && !touched) setPremise(initialPremise);
+  }, [initialPremise, touched]);
+  useEffect(() => {
+    if (initialGenre && !touched) setGenre(initialGenre);
+  }, [initialGenre, touched]);
+
   const [episodeCount, setEpisodeCount] = useState(1);
   const [targetLength, setTargetLength] = useState(5);
   const [language, setLanguage] = useState("en");
@@ -69,7 +86,15 @@ export function ScriptGenerate({ projectId, onSuccess }: ScriptGenerateProps) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Label>Genre</Label>
-            <Select value={genre} onValueChange={(v) => v && setGenre(v)}>
+            <Select
+              value={genre}
+              onValueChange={(v) => {
+                if (v) {
+                  setTouched(true);
+                  setGenre(v);
+                }
+              }}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -123,7 +148,10 @@ export function ScriptGenerate({ projectId, onSuccess }: ScriptGenerateProps) {
           <Label>Premise (max 300 characters)</Label>
           <Textarea
             value={premise}
-            onChange={(e) => setPremise(e.target.value.slice(0, 300))}
+            onChange={(e) => {
+              setTouched(true);
+              setPremise(e.target.value.slice(0, 300));
+            }}
             placeholder="A detective in 2047 Tokyo discovers her partner is an AI."
             rows={3}
           />

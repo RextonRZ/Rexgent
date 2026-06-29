@@ -27,13 +27,32 @@ const NODE_LABELS: Record<string, string> = {
   generate_video: "Dispatching video generation",
 };
 
-export function AutoRunPanel({ projectId }: { projectId: string }) {
-  const [premise, setPremise] = useState("");
-  const [genre, setGenre] = useState("sci-fi");
+export function AutoRunPanel({
+  projectId,
+  initialPremise = "",
+  initialGenre = "sci-fi",
+}: {
+  projectId: string;
+  initialPremise?: string;
+  initialGenre?: string;
+}) {
+  const [premise, setPremise] = useState(initialPremise);
+  const [genre, setGenre] = useState(initialGenre || "sci-fi");
   const [language, setLanguage] = useState("en");
   const [trace, setTrace] = useState<string[]>([]);
   const [result, setResult] = useState<AutoRunResult | null>(null);
+  const [touched, setTouched] = useState(false);
   const autoRun = useAutoRun();
+
+  // The project premise arrives asynchronously; seed it once if the user
+  // hasn't started editing.
+  useEffect(() => {
+    if (initialPremise && !touched) setPremise(initialPremise);
+  }, [initialPremise, touched]);
+
+  useEffect(() => {
+    if (initialGenre && !touched) setGenre(initialGenre);
+  }, [initialGenre, touched]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -73,7 +92,13 @@ export function AutoRunPanel({ projectId }: { projectId: string }) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label>Genre</Label>
-            <Input value={genre} onChange={(e) => setGenre(e.target.value)} />
+            <Input
+              value={genre}
+              onChange={(e) => {
+                setTouched(true);
+                setGenre(e.target.value);
+              }}
+            />
           </div>
           <div>
             <Label>Language</Label>
@@ -92,7 +117,10 @@ export function AutoRunPanel({ projectId }: { projectId: string }) {
           <Label>Premise</Label>
           <Textarea
             value={premise}
-            onChange={(e) => setPremise(e.target.value.slice(0, 300))}
+            onChange={(e) => {
+              setTouched(true);
+              setPremise(e.target.value.slice(0, 300));
+            }}
             placeholder="A detective in 2047 Tokyo discovers her partner is an AI."
             rows={2}
           />
