@@ -7,6 +7,13 @@ celery_app = Celery(
     "rexgent",
     broker=settings.redis_url,
     backend=settings.redis_url,
+    # Import the modules that define @celery_app.task so the worker registers
+    # them. Without this the worker starts with an empty [tasks] list and
+    # discards run_generation_job as "unregistered".
+    include=[
+        "app.workers.generation_worker",
+        "app.workers.export_worker",
+    ],
 )
 
 celery_app.conf.update(
