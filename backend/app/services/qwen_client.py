@@ -116,6 +116,12 @@ class QwenClient:
     # Poll:     GET  {video_base}/tasks/{task_id} -> output.task_status / video_url
     VIDEO_PATH = "/services/aigc/video-generation/video-synthesis"
 
+    @staticmethod
+    def _reference_media(image_url: str) -> list[dict]:
+        # DashScope video-synthesis expects reference images under input.media
+        # as a list of typed objects (NOT input.img_url).
+        return [{"type": "reference_image", "url": image_url}]
+
     async def _dispatch_video(self, model: str, input_obj: dict, parameters: dict) -> str:
         payload = {"model": model, "input": input_obj, "parameters": parameters}
         async with httpx.AsyncClient() as http:
@@ -143,7 +149,7 @@ class QwenClient:
         chosen = model or ("wan2.7-i2v" if reference_image_url else "wan2.7-t2v")
         input_obj: dict = {"prompt": prompt}
         if reference_image_url:
-            input_obj["img_url"] = reference_image_url
+            input_obj["media"] = self._reference_media(reference_image_url)
         params = {"resolution": "1080P", "duration": duration}
         return await self._dispatch_video(chosen, input_obj, params)
 
@@ -167,10 +173,15 @@ class QwenClient:
         chosen = model or model_map.get(mode, "happyhorse-1.1-t2v")
         input_obj: dict = {"prompt": prompt}
         if reference_image_url:
-            input_obj["img_url"] = reference_image_url
+            input_obj["media"] = self._reference_media(reference_image_url)
         if source_video_url:
-            input_obj["video_url"] = source_video_url
-        params = {"resolution": "1080P", "duration": duration, "audio": True}
+            input_obj["media"] = [{"type": "reference_video", "url": source_video_url}]
+        params = {
+            "resolution": "1080P",
+            "duration": duration,
+            "prompt_extend": True,
+            "watermark": False,
+        }
         return await self._dispatch_video(chosen, input_obj, params)
 
     @staticmethod
