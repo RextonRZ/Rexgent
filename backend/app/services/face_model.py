@@ -10,7 +10,8 @@ EMBEDDING_DIM = 512  # ArcFace buffalo_l output dim
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
-    if not a or not b or len(a) != len(b):
+    # a/b may be numpy arrays (from pgvector) or lists; avoid bool(array).
+    if a is None or b is None or len(a) == 0 or len(b) == 0 or len(a) != len(b):
         return 0.0
     va, vb = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
     denom = float(np.linalg.norm(va) * np.linalg.norm(vb))
