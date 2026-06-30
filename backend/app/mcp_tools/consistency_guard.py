@@ -25,7 +25,7 @@ class ConsistencyGuard:
 
         for char in expected_characters:
             ref_vec = char.get("face_vector")
-            if not ref_vec:
+            if ref_vec is None or len(ref_vec) == 0:
                 character_results.append({
                     "character_name": char.get("name", "Unknown"),
                     "detected": False,

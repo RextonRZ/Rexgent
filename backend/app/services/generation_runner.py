@@ -182,7 +182,11 @@ class GenerationRunner:
 
                 job.actual_cost += cost_per_sec * shot.estimated_duration_seconds
 
-                if expected_characters and any(c["face_vector"] for c in expected_characters):
+                has_ref_vector = any(
+                    c["face_vector"] is not None and len(c["face_vector"]) > 0
+                    for c in expected_characters
+                )
+                if expected_characters and has_ref_vector:
                     guard = await self.consistency_guard.validate(
                         clip_url=clip_url,
                         duration=shot.estimated_duration_seconds,
