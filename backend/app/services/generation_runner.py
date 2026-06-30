@@ -17,10 +17,14 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 3
+MAX_RETRIES = 1           # at most one self-correcting re-render per shot (cost cap)
 WAN_COST_PER_SEC = 0.15   # real Wan2.7 pricing (high end)
 HH_COST_PER_SEC = 0.108   # real HappyHorse-1.1 pricing (high end)
 BUDGET_CEILING_PCT = 0.85  # cost circuit breaker
+# Cosine threshold for "same person". A real photo vs an AI-generated frame
+# tops out well below photo-to-photo (~0.5), so 0.6 was too strict and caused
+# needless re-renders. 0.4 still rejects a clearly-wrong face (<0.3).
+CONSISTENCY_THRESHOLD = 0.4
 
 
 class GenerationRunner:
@@ -191,6 +195,7 @@ class GenerationRunner:
                         clip_url=clip_url,
                         duration=shot.estimated_duration_seconds,
                         expected_characters=expected_characters,
+                        threshold=CONSISTENCY_THRESHOLD,
                     )
                     consistency_score = guard["overall_similarity"]
                     passed = guard["overall_pass"]
