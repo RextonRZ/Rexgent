@@ -18,13 +18,26 @@ class OSSManager:
         self.bucket_name = settings.oss_bucket_name
         self.endpoint = settings.oss_endpoint
 
+    # Reference images and generated clips must be fetchable by Qwen's servers
+    # (vision description + image-to-video) and shown in the browser. We try to
+    # mark each object public-read; if the bucket disallows per-object ACLs
+    # (Block Public Access), we fall back to a plain upload and rely on the
+    # bucket-level ACL instead.
+    _PUBLIC_READ = {"x-oss-object-acl": oss2.OBJECT_ACL_PUBLIC_READ}
+
     def upload_file(self, local_path: str, oss_key: str) -> str:
-        self.bucket.put_object_from_file(oss_key, local_path)
+        try:
+            self.bucket.put_object_from_file(oss_key, local_path, headers=dict(self._PUBLIC_READ))
+        except oss2.exceptions.AccessDenied:
+            self.bucket.put_object_from_file(oss_key, local_path)
         return self._build_url(oss_key)
 
     def upload_bytes(self, data: bytes, oss_key: str, content_type: str = "application/octet-stream") -> str:
-        headers = {"Content-Type": content_type}
-        self.bucket.put_object(oss_key, data, headers=headers)
+        base = {"Content-Type": content_type}
+        try:
+            self.bucket.put_object(oss_key, data, headers={**base, **self._PUBLIC_READ})
+        except oss2.exceptions.AccessDenied:
+            self.bucket.put_object(oss_key, data, headers=base)
         return self._build_url(oss_key)
 
     def download_file(self, oss_key: str, local_path: str) -> str:
