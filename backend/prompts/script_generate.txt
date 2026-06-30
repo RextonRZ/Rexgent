@@ -6,12 +6,12 @@ Genre: {genre}
 Premise: {premise}
 Tone: {tone}
 Number of episodes: {episode_count}
-Target length per episode: {target_length} minutes
+Target length per episode: {target_length} seconds
 Additional notes: {notes}
 
 Structure requirements:
 - Use standard screenplay format (INT./EXT. headings, character names in caps before dialogue)
-- Each episode should have 3-5 scenes
+- Match the number of scenes to the target length: roughly one short scene per 15 seconds (so a 30-second episode has about 2 scenes, a 300-second episode about 20). Use at least 1 scene. Keep a short drama tight — do not pad.
 - Every character introduced must serve the plot
 - End with a clear resolution unless multi-episode arc (in which case end on a compelling hook)
 - Dialogue should sound natural, not expository

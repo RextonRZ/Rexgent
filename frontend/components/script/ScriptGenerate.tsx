@@ -58,7 +58,7 @@ export function ScriptGenerate({
   }, [initialGenre, touched]);
 
   const [episodeCount, setEpisodeCount] = useState(1);
-  const [targetLength, setTargetLength] = useState(5);
+  const [targetLength, setTargetLength] = useState(30); // seconds
   const [language, setLanguage] = useState("en");
   const [model, setModel] = useState("qwen-max");
   const generateScript = useGenerateScript();
@@ -171,11 +171,12 @@ export function ScriptGenerate({
             />
           </div>
           <div>
-            <Label>Target Length (min/ep)</Label>
+            <Label>Target Length (sec/ep)</Label>
             <Input
               type="number"
-              min={1}
-              max={30}
+              min={10}
+              max={600}
+              step={5}
               value={targetLength}
               onChange={(e) => setTargetLength(Number(e.target.value))}
             />

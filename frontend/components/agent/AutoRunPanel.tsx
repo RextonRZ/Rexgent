@@ -42,7 +42,7 @@ export function AutoRunPanel({
   const [premise, setPremise] = useState(initialPremise);
   const [genre, setGenre] = useState(initialGenre || "sci-fi");
   const [language, setLanguage] = useState("en");
-  const [targetLength, setTargetLength] = useState(5);
+  const [targetLength, setTargetLength] = useState(30); // seconds
   const [episodeCount, setEpisodeCount] = useState(1);
   const [trace, setTrace] = useState<string[]>([]);
   const [result, setResult] = useState<AutoRunResult | null>(null);
@@ -50,7 +50,8 @@ export function AutoRunPanel({
   const autoRun = useAutoRun();
 
   // Rough pre-flight scope estimate (the agent computes the real budget).
-  const estScenes = episodeCount * Math.max(2, Math.round(targetLength / 1.5));
+  // ~1 short scene per 15s, ~3 shots per scene.
+  const estScenes = episodeCount * Math.max(1, Math.round(targetLength / 15));
   const estShots = estScenes * 3;
 
   // The project premise arrives asynchronously; seed it once if the user
@@ -153,14 +154,15 @@ export function AutoRunPanel({
             />
           </div>
           <div>
-            <Label>Target length (min/ep)</Label>
+            <Label>Target length (sec/ep)</Label>
             <Input
               type="number"
-              min={1}
-              max={30}
+              min={10}
+              max={600}
+              step={5}
               value={targetLength}
               onChange={(e) =>
-                setTargetLength(Math.max(1, Number(e.target.value) || 1))
+                setTargetLength(Math.max(10, Number(e.target.value) || 10))
               }
             />
           </div>

@@ -21,7 +21,7 @@ async def run_auto(request: dict, db: Session = Depends(get_db)):
     genre = request.get("genre", "drama")
     tone = request.get("tone", "dramatic")
     language = request.get("language", "en")
-    target_length = int(request.get("target_length", 5))
+    target_length = int(request.get("target_length", 30))  # seconds
     episode_count = int(request.get("episode_count", 1))
     # Plan-only unless the caller explicitly opts into spending the voucher.
     dispatch_video = bool(request.get("dispatch_video", False))

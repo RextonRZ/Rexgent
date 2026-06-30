@@ -35,7 +35,7 @@ def build_pipeline_graph(db=None):
             db, state["project_id"], state["premise"], state.get("genre", "drama"),
             state.get("tone", "dramatic"),
             episode_count=state.get("episode_count", 1),
-            target_length=state.get("target_length", 5),
+            target_length=state.get("target_length", 30),
             language=state.get("language", "en"),
         )
         state["script_id"] = out["script_id"]

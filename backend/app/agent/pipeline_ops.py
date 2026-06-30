@@ -43,7 +43,7 @@ def _persist_script(db: Session, project_id: str, raw_text: str, structured: dic
 
 async def generate_script_op(
     db: Session, project_id: str, premise: str, genre: str,
-    tone: str = "dramatic", episode_count: int = 1, target_length: int = 5,
+    tone: str = "dramatic", episode_count: int = 1, target_length: int = 30,
     language: str = "en",
 ) -> dict:
     clean_premise = InputSanitizer().sanitize(premise, max_length=300)

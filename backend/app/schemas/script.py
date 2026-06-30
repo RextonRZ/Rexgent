@@ -42,7 +42,7 @@ class ScriptGenerateRequest(BaseModel):
     premise: str
     tone: str = "dramatic"
     episode_count: int = 1
-    target_length: int = 5
+    target_length: int = 30  # seconds
     notes: Optional[str] = None
     language: str = "en"
     model: str = "qwen-max"
