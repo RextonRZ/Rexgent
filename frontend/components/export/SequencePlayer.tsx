@@ -20,11 +20,13 @@ export function SequencePlayer({
   index,
   onIndexChange,
   onDuration,
+  onProgress,
 }: {
   items: TimelineItem[];
   index: number;
   onIndexChange: (i: number) => void;
   onDuration?: (index: number, seconds: number) => void;
+  onProgress?: (index: number, currentTime: number) => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -57,7 +59,9 @@ export function SequencePlayer({
   };
 
   const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-    if (current && e.currentTarget.currentTime >= current.trimEnd) handleEnded();
+    const t = e.currentTarget.currentTime;
+    onProgress?.(safeIndex, t);
+    if (current && t >= current.trimEnd) handleEnded();
   };
 
   const togglePlay = () => {

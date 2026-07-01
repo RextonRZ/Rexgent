@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import { SequencePlayer, type TimelineItem } from "./SequencePlayer";
 import { ShotLibrary } from "./ShotLibrary";
 import { EditorTimeline } from "./EditorTimeline";
@@ -66,6 +65,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
 
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [selected, setSelected] = useState(0);
+  const [playhead, setPlayhead] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [audio, setAudio] = useState<AudioSettings>(EMPTY_AUDIO);
   const initialized = useRef(false);
@@ -147,14 +147,32 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     );
   };
 
-  const setTrim = (index: number, start: number, end: number) => {
+  const setTrimById = (clipId: string, start: number, end: number) => {
     setTimeline((t) =>
-      t.map((item, idx) =>
-        idx === index
+      t.map((item) =>
+        item.clipId === clipId
           ? { ...item, trimStart: start, trimEnd: end, trimmed: true }
           : item
       )
     );
+  };
+
+  const prefixSeconds = (i: number) =>
+    timeline.slice(0, i).reduce((s, it) => s + (it.trimEnd - it.trimStart), 0);
+
+  const selectClip = (i: number) => {
+    setSelected(i);
+    setPlayhead(prefixSeconds(i));
+  };
+
+  const handleProgress = (i: number, currentTime: number) => {
+    const cur = timeline[i];
+    if (!cur) return;
+    const within = Math.max(
+      0,
+      Math.min(currentTime - cur.trimStart, cur.trimEnd - cur.trimStart)
+    );
+    setPlayhead(prefixSeconds(i) + within);
   };
 
   const handleExport = async () => {
@@ -198,19 +216,14 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     <div className="space-y-4">
       {/* top: preview (left) + shot library (right) */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-3">
+        <div className="lg:col-span-2">
           <SequencePlayer
             items={timeline}
             index={selected}
-            onIndexChange={setSelected}
+            onIndexChange={selectClip}
             onDuration={handleDuration}
+            onProgress={handleProgress}
           />
-          {timeline[selected] ? (
-            <TrimControl
-              item={timeline[selected]}
-              onChange={(s, e) => setTrim(selected, s, e)}
-            />
-          ) : null}
         </div>
         <ShotLibrary
           scenes={scenes}
@@ -224,9 +237,11 @@ export function ExportEditor({ projectId }: { projectId: string }) {
       <EditorTimeline
         items={timeline}
         selectedIndex={selected}
-        onSelect={setSelected}
+        onSelect={selectClip}
         onReorder={setTimeline}
         onRemove={removeClip}
+        onTrim={setTrimById}
+        playheadSeconds={playhead}
       />
 
       {/* music track */}
@@ -299,37 +314,6 @@ export function ExportEditor({ projectId }: { projectId: string }) {
           </div>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function TrimControl({
-  item,
-  onChange,
-}: {
-  item: TimelineItem;
-  onChange: (start: number, end: number) => void;
-}) {
-  const dur = item.duration || 5;
-  return (
-    <div className="rounded-lg border hairline bg-card px-4 py-3">
-      <div className="flex items-center justify-between text-xs mb-2">
-        <span className="font-medium">✂️ Trim · {item.label}</span>
-        <span className="text-muted-foreground">
-          {item.trimStart.toFixed(1)}s – {item.trimEnd.toFixed(1)}s (
-          {(item.trimEnd - item.trimStart).toFixed(1)}s)
-        </span>
-      </div>
-      <Slider
-        value={[item.trimStart, item.trimEnd]}
-        min={0}
-        max={dur}
-        step={0.1}
-        onValueChange={(v) => {
-          const arr = Array.isArray(v) ? v : [0, dur];
-          onChange(Math.min(arr[0], arr[1]), Math.max(arr[0], arr[1]));
-        }}
-      />
     </div>
   );
 }
