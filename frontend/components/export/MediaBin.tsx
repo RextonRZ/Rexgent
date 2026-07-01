@@ -6,9 +6,12 @@ export interface MediaAsset {
   id: string;
   url: string;
   name: string;
+  type: "video" | "audio";
 }
 
-/** A media bin: import external video files (drop or browse) and add them to the cut. */
+export const ASSET_MIME = "application/x-rexgent-asset";
+
+/** A media bin: import external video + audio, then drag them onto the timeline. */
 export function MediaBin({
   media,
   onImport,
@@ -26,7 +29,7 @@ export function MediaBin({
   const importFiles = (files: FileList | null) => {
     if (!files) return;
     Array.from(files)
-      .filter((f) => f.type.startsWith("video/"))
+      .filter((f) => f.type.startsWith("video/") || f.type.startsWith("audio/"))
       .forEach(onImport);
   };
 
@@ -50,7 +53,7 @@ export function MediaBin({
         <div>
           <h2 className="text-sm font-medium">Media</h2>
           <p className="text-[11px] text-muted-foreground">
-            Drop your own video clips here, then add them to the cut
+            Drop your own video / audio here, then drag items onto the timeline
           </p>
         </div>
         <button
@@ -62,7 +65,7 @@ export function MediaBin({
         <input
           ref={inputRef}
           type="file"
-          accept="video/*"
+          accept="video/*,audio/*"
           multiple
           className="hidden"
           onChange={(e) => importFiles(e.target.files)}
@@ -71,25 +74,36 @@ export function MediaBin({
 
       {media.length === 0 ? (
         <div className="h-20 rounded-lg border border-dashed border-border flex items-center justify-center text-[11px] text-muted-foreground">
-          Drop video files here (mp4 / mov / webm)
+          Drop video (mp4 / mov / webm) or audio (mp3 / wav) files here
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {media.map((asset) => (
             <div
               key={asset.id}
-              className="rounded-lg border hairline bg-background/40 overflow-hidden"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(ASSET_MIME, JSON.stringify(asset));
+                e.dataTransfer.effectAllowed = "copy";
+              }}
+              className="rounded-lg border hairline bg-background/40 overflow-hidden cursor-grab active:cursor-grabbing"
             >
-              <video
-                src={`${asset.url}#t=0.1`}
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
-                onMouseLeave={(e) => e.currentTarget.pause()}
-                className="aspect-video w-full object-cover bg-black"
-              />
+              {asset.type === "video" ? (
+                <video
+                  src={`${asset.url}#t=0.1`}
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
+                  onMouseLeave={(e) => e.currentTarget.pause()}
+                  className="aspect-video w-full object-cover bg-black pointer-events-none"
+                />
+              ) : (
+                <div className="aspect-video w-full bg-hh/20 flex items-center justify-center text-2xl">
+                  🎵
+                </div>
+              )}
               <div className="p-1.5">
                 <p className="text-[10px] truncate" title={asset.name}>
                   {asset.name}
@@ -98,7 +112,7 @@ export function MediaBin({
                   onClick={() => onAdd(asset)}
                   className="mt-1 w-full rounded bg-primary/15 text-primary px-1.5 py-0.5 text-[10px] font-medium hover:bg-primary/25"
                 >
-                  + add to cut
+                  {asset.type === "video" ? "+ add to cut" : "+ set as music"}
                 </button>
               </div>
             </div>

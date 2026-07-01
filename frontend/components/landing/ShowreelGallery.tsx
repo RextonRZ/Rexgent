@@ -4,13 +4,14 @@ import { useEffect, useRef } from "react";
 
 // The shots not used in the hero — the rest of the EMBERWAKE reel.
 const REEL_CLIPS = [
-  "/clip2.mp4",
+  "/clip15.mp4",
+  "/clip13.mp4",
   "/clip3.mp4",
   "/clip4.mp4",
   "/clip6.mp4",
+  "/clip2.mp4",
   "/clip8.mp4",
   "/clip10.mp4",
-  "/clip11.mp4",
 ];
 
 /** A muted loop that only downloads + plays while it's on screen. */
