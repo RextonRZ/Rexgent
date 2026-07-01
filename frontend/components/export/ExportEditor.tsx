@@ -4,12 +4,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SequencePlayer, type TimelineItem } from "./SequencePlayer";
 import { ShotLibrary } from "./ShotLibrary";
-import { EditorTimeline } from "./EditorTimeline";
-import { MusicPanel, EMPTY_AUDIO, type AudioSettings } from "./MusicPanel";
+import {
+  EditorTimeline,
+  EMPTY_AUDIO,
+  type AudioSettings,
+} from "./EditorTimeline";
 import { useLatestJob } from "@/hooks/useGeneration";
 import { useLatestJobClips } from "@/hooks/useClips";
 import { useStoryboard } from "@/hooks/useStoryboard";
-import { useRenderExport, useExportDownload } from "@/hooks/useExport";
+import {
+  useRenderExport,
+  useExportDownload,
+  useUploadAudio,
+} from "@/hooks/useExport";
 import type { GeneratedClip } from "@/lib/types";
 
 /** All playable takes per shot, best first (APPROVED, then highest score). */
@@ -36,6 +43,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   const clipsQuery = useLatestJobClips(projectId);
   const render = useRenderExport();
   const download = useExportDownload(projectId);
+  const uploadAudio = useUploadAudio(projectId);
 
   // useLatestJob is enabled:false — pull it once on mount to get the job id.
   const refetchJob = latestJob.refetch;
@@ -175,6 +183,11 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     setPlayhead(prefixSeconds(i) + within);
   };
 
+  const handleAudioFile = async (file: File) => {
+    const res = await uploadAudio.mutateAsync(file);
+    setAudio({ ...audio, url: res.url, name: file.name });
+  };
+
   const handleExport = async () => {
     if (!jobId || timeline.length === 0) return;
     setRendering(true);
@@ -242,10 +255,11 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         onRemove={removeClip}
         onTrim={setTrimById}
         playheadSeconds={playhead}
+        audio={audio}
+        onAudioChange={setAudio}
+        onAudioFile={handleAudioFile}
+        audioUploading={uploadAudio.isPending}
       />
-
-      {/* music track */}
-      <MusicPanel projectId={projectId} audio={audio} onChange={setAudio} />
 
       {/* export bar */}
       <div className="rounded-xl border hairline glass p-4 flex flex-wrap items-center justify-between gap-4">

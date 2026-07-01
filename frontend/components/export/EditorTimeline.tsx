@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -15,11 +16,30 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Slider } from "@/components/ui/slider";
 import type { TimelineItem } from "./SequencePlayer";
 
 export const PX_PER_SEC = 80; // timeline scale
 const MIN_CLIP = 0.5; // shortest a clip can be trimmed to
 const FRAME_W = 64; // approx filmstrip frame width
+
+export interface AudioSettings {
+  url: string | null;
+  name: string;
+  volume: number; // 0..2 (1 = 100%)
+  fadeIn: number; // seconds
+}
+
+export const EMPTY_AUDIO: AudioSettings = {
+  url: null,
+  name: "",
+  volume: 1,
+  fadeIn: 0,
+};
+
+function num(v: number | readonly number[]): number {
+  return Array.isArray(v) ? v[0] : (v as number);
+}
 
 function fmt(sec: number) {
   const s = Math.max(0, Math.floor(sec));
@@ -115,14 +135,12 @@ function TimelineClip({
     >
       <Filmstrip item={item} width={width} />
 
-      {/* label bar */}
       <div className="absolute top-0 inset-x-0 h-4 bg-black/55 flex items-center px-1.5">
         <span className="truncate text-[9px] text-white/90">
           {order}. {item.label}
         </span>
       </div>
 
-      {/* trim handles */}
       <div
         onPointerDown={dragHandle("left")}
         className="absolute left-0 top-0 bottom-0 w-2.5 bg-white/80 cursor-ew-resize flex items-center justify-center opacity-70 hover:opacity-100"
@@ -138,7 +156,6 @@ function TimelineClip({
         <span className="h-6 w-0.5 bg-black/60" />
       </div>
 
-      {/* duration + remove */}
       <div className="absolute bottom-0 inset-x-0 h-4 bg-black/55 flex items-center justify-between px-1.5">
         <span className="text-[9px] text-white/80">
           {(item.trimEnd - item.trimStart).toFixed(1)}s
@@ -188,6 +205,10 @@ export function EditorTimeline({
   onRemove,
   onTrim,
   playheadSeconds,
+  audio,
+  onAudioChange,
+  onAudioFile,
+  audioUploading,
 }: {
   items: TimelineItem[];
   selectedIndex: number;
@@ -196,10 +217,16 @@ export function EditorTimeline({
   onRemove: (clipId: string) => void;
   onTrim: (clipId: string, start: number, end: number) => void;
   playheadSeconds: number;
+  audio: AudioSettings;
+  onAudioChange: (a: AudioSettings) => void;
+  onAudioFile: (file: File) => void;
+  audioUploading: boolean;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
@@ -210,18 +237,43 @@ export function EditorTimeline({
     }
   };
 
-  const totalSeconds = items.reduce(
-    (sum, i) => sum + (i.trimEnd - i.trimStart),
-    0
-  );
+  const totalSeconds = items.reduce((s, i) => s + (i.trimEnd - i.trimStart), 0);
+  const trackWidth = `${totalSeconds * PX_PER_SEC}px`;
+
+  const pickAudioFrom = (files: FileList | null) => {
+    const f = files ? Array.from(files).find((x) => x.type.startsWith("audio/")) : null;
+    if (f) onAudioFile(f);
+  };
 
   return (
-    <div className="rounded-xl border hairline bg-card p-3">
+    <div
+      className={`rounded-xl border bg-card p-3 transition-colors ${
+        dragOver ? "border-primary ring-1 ring-primary" : "hairline"
+      }`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        pickAudioFrom(e.dataTransfer.files);
+      }}
+    >
+      <input
+        ref={fileInput}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={(e) => pickAudioFrom(e.target.files)}
+      />
+
       <div className="flex items-center justify-between mb-3">
         <div>
           <h2 className="text-sm font-medium">Timeline</h2>
           <p className="text-[11px] text-muted-foreground">
-            Drag clips to reorder · drag the white edges to trim · ✕ to remove
+            Drag clips to reorder · drag the white edges to trim · drop music anywhere
           </p>
         </div>
         <span className="text-xs text-muted-foreground">
@@ -237,6 +289,8 @@ export function EditorTimeline({
         <div className="overflow-x-auto pb-2">
           <div className="relative inline-block min-w-full">
             <Ruler totalSeconds={totalSeconds} />
+
+            {/* video lane */}
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -262,13 +316,70 @@ export function EditorTimeline({
               </SortableContext>
             </DndContext>
 
-            {/* playhead */}
+            {/* audio lane */}
+            <div className="mt-1" style={{ width: trackWidth, minWidth: "100%" }}>
+              {audio.url ? (
+                <div className="relative h-10 rounded-md bg-hh/25 ring-1 ring-hh/50 overflow-hidden flex items-center px-2">
+                  <span className="text-[10px] text-white/90 truncate">
+                    🎵 {audio.name || "music"}
+                  </span>
+                  <button
+                    onClick={() => onAudioChange({ ...EMPTY_AUDIO })}
+                    className="absolute right-1 top-1 text-[10px] text-white/70 hover:text-bad"
+                    title="Remove music"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => fileInput.current?.click()}
+                  className="h-10 w-full rounded-md border border-dashed border-border text-[11px] text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors"
+                >
+                  {audioUploading ? "Uploading…" : "🎵 drop music here or click to add"}
+                </button>
+              )}
+            </div>
+
+            {/* playhead spans both lanes */}
             <div
               className="pointer-events-none absolute top-0 bottom-0 w-px bg-primary"
               style={{ left: `${playheadSeconds * PX_PER_SEC}px` }}
             >
               <span className="absolute -top-1 -left-1 h-2 w-2 rounded-full bg-primary" />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* audio controls */}
+      {audio.url && (
+        <div className="mt-3 flex flex-wrap items-center gap-5 border-t hairline pt-3">
+          <div className="flex items-center gap-2 w-52">
+            <span className="text-[11px] text-muted-foreground w-8">Vol</span>
+            <Slider
+              value={audio.volume}
+              min={0}
+              max={2}
+              step={0.05}
+              onValueChange={(v) => onAudioChange({ ...audio, volume: num(v) })}
+            />
+            <span className="text-[11px] w-10 text-right">
+              {Math.round(audio.volume * 100)}%
+            </span>
+          </div>
+          <div className="flex items-center gap-2 w-52">
+            <span className="text-[11px] text-muted-foreground w-8">Fade</span>
+            <Slider
+              value={audio.fadeIn}
+              min={0}
+              max={5}
+              step={0.5}
+              onValueChange={(v) => onAudioChange({ ...audio, fadeIn: num(v) })}
+            />
+            <span className="text-[11px] w-10 text-right">
+              {audio.fadeIn.toFixed(1)}s
+            </span>
           </div>
         </div>
       )}
