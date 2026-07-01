@@ -31,26 +31,26 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         if not job:
             return
 
-        trim_by_id: dict = {}
+        by_id = {
+            str(c.id): c
+            for c in db.query(GeneratedClip)
+            .filter(GeneratedClip.job_id == job.id, GeneratedClip.url.isnot(None))
+            .all()
+        }
+        # Ordered segments to stitch: each is {url, in, out, clip?}. A segment is
+        # either a generated clip (clip set) or an imported media URL (clip None).
+        resolved: list = []
         if clips:
-            # Editor supplied an explicit order + per-clip trim — honor it.
-            by_id = {
-                str(c.id): c
-                for c in db.query(GeneratedClip)
-                .filter(GeneratedClip.job_id == job.id, GeneratedClip.url.isnot(None))
-                .all()
-            }
-            clips_for_export = []
             for entry in clips:
-                cid = str(entry.get("id"))
-                if cid in by_id:
-                    clips_for_export.append(by_id[cid])
-                    trim_by_id[cid] = (entry.get("in"), entry.get("out"))
+                url = entry.get("url")
+                cid = entry.get("id")
+                if url:
+                    resolved.append({"url": url, "in": entry.get("in"), "out": entry.get("out"), "clip": None})
+                elif cid and str(cid) in by_id:
+                    c = by_id[str(cid)]
+                    resolved.append({"url": c.url, "in": entry.get("in"), "out": entry.get("out"), "clip": c})
         else:
-            # AI default: every shot that produced a playable clip belongs in
-            # the final cut — not just APPROVED. Retries create several rows per
-            # shot, so keep the best one per shot (prefer APPROVED, then highest
-            # consistency), in shot order.
+            # AI default: best clip per shot, in shot order, untrimmed.
             rows = (
                 db.query(GeneratedClip)
                 .filter(GeneratedClip.job_id == job.id, GeneratedClip.url.isnot(None))
@@ -65,10 +65,14 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 rank = (clip.status == "APPROVED", clip.consistency_score or 0.0)
                 if current is None or rank > (current.status == "APPROVED", current.consistency_score or 0.0):
                     best_by_shot[key] = clip
-            clips_for_export = list(best_by_shot.values())  # insertion order = shot order
+            for c in best_by_shot.values():
+                resolved.append({"url": c.url, "in": None, "out": None, "clip": c})
 
-        if not clips_for_export:
+        if not resolved:
             return
+
+        # Generated-clip subset drives captions + the production report.
+        clips_for_export = [r["clip"] for r in resolved if r["clip"]]
 
         oss = OSSManager(get_settings())
         caption_gen = CaptionGenerator()
@@ -114,24 +118,23 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         report_key = oss.get_project_path(project_id, "exports", "production_report.json")
         oss.upload_file(report_path, report_key)
 
-        # Download every clip and concatenate into one MP4 with FFmpeg,
-        # applying each clip's trim (inpoint/outpoint).
+        # Download every segment and concatenate into one MP4 with FFmpeg,
+        # applying each segment's trim (in/out).
         workdir = tempfile.mkdtemp()
         stitch_inputs = []
-        for i, clip in enumerate(clips_for_export):
-            local = os.path.join(workdir, f"clip_{i:03d}.mp4")
+        for i, seg in enumerate(resolved):
+            local = os.path.join(workdir, f"seg_{i:03d}.mp4")
             try:
-                resp = httpx.get(clip.url, timeout=120.0)
+                resp = httpx.get(seg["url"], timeout=180.0)
                 resp.raise_for_status()
                 with open(local, "wb") as fh:
                     fh.write(resp.content)
-                tin, tout = trim_by_id.get(str(clip.id), (None, None))
-                stitch_inputs.append({"path": local, "in": tin, "out": tout})
+                stitch_inputs.append({"path": local, "in": seg["in"], "out": seg["out"]})
             except Exception as e:  # noqa: BLE001
-                logger.warning(f"Export: could not download clip {clip.id}: {e}")
+                logger.warning(f"Export: could not download {seg['url']}: {e}")
 
         if not stitch_inputs:
-            logger.error("Export: no clips could be downloaded; aborting")
+            logger.error("Export: no segments could be downloaded; aborting")
             return
 
         stitcher = VideoStitcher()

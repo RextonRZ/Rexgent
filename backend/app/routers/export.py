@@ -24,16 +24,38 @@ async def upload_audio(project_id: str, file: UploadFile = File(...)):
     return {"url": url}
 
 
+@router.post("/{project_id}/media")
+async def upload_media(project_id: str, file: UploadFile = File(...)):
+    """Upload an external video clip to use in the cut; returns its public URL."""
+    content = await file.read()
+    ext = (file.filename or "clip.mp4").rsplit(".", 1)[-1].lower()
+    if ext not in {"mp4", "mov", "webm", "m4v"}:
+        ext = "mp4"
+    oss = OSSManager(get_settings())
+    key = oss.get_project_path(project_id, "media", f"{uuid.uuid4()}.{ext}")
+    url = oss.upload_bytes(content, key, content_type=file.content_type or "video/mp4")
+    return {"url": url}
+
+
 @router.post("/render")
 async def render_export(request: ExportRequest, db: Session = Depends(get_db)):
-    # Unified ordered clip list with per-clip trim.
+    # Unified ordered clip list: each entry is a generated clip (id) or an
+    # imported media URL, with per-clip trim.
     if request.clips:
         clips = [
-            {"id": str(c.clip_id), "in": c.trim_start, "out": c.trim_end}
+            {
+                "id": str(c.clip_id) if c.clip_id else None,
+                "url": c.url,
+                "in": c.trim_start,
+                "out": c.trim_end,
+            }
             for c in request.clips
         ]
     elif request.clip_ids:
-        clips = [{"id": str(cid), "in": 0.0, "out": None} for cid in request.clip_ids]
+        clips = [
+            {"id": str(cid), "url": None, "in": 0.0, "out": None}
+            for cid in request.clip_ids
+        ]
     else:
         clips = None
 

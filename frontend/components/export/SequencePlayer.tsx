@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 export interface TimelineItem {
-  clipId: string;
+  clipId: string; // generated clip id, or a synthetic id for imported media
   shotId: string;
   url: string;
   label: string;
@@ -12,6 +12,7 @@ export interface TimelineItem {
   trimStart: number;
   trimEnd: number;
   trimmed: boolean;
+  external?: boolean; // imported media (not a generated clip)
 }
 
 /** Plays the timeline clips back-to-back, respecting each clip's trim. */

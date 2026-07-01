@@ -24,7 +24,12 @@ export function useRenderExport() {
     }: {
       projectId: string;
       jobId: string;
-      clips?: { clip_id: string; trim_start: number; trim_end: number }[];
+      clips?: {
+        clip_id?: string;
+        url?: string;
+        trim_start: number;
+        trim_end: number;
+      }[];
       audioUrl?: string | null;
       audioVolume?: number;
       audioFadeIn?: number;
@@ -51,6 +56,21 @@ export function useUploadAudio(projectId: string) {
       form.append("file", file);
       const { data } = await api.post<{ url: string }>(
         `/api/export/${projectId}/audio`,
+        form,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      return data;
+    },
+  });
+}
+
+export function useUploadMedia(projectId: string) {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      const { data } = await api.post<{ url: string }>(
+        `/api/export/${projectId}/media`,
         form,
         { headers: { "Content-Type": "multipart/form-data" } }
       );

@@ -4,7 +4,8 @@ from typing import Optional, Any
 
 
 class ClipEdit(BaseModel):
-    clip_id: UUID
+    clip_id: Optional[UUID] = None  # a generated clip…
+    url: Optional[str] = None       # …or an imported external media URL
     trim_start: float = 0.0
     trim_end: Optional[float] = None  # None = to the end of the clip
 

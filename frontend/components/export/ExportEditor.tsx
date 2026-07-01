@@ -9,6 +9,7 @@ import {
   EMPTY_AUDIO,
   type AudioSettings,
 } from "./EditorTimeline";
+import { MediaBin, type MediaAsset } from "./MediaBin";
 import { useLatestJob } from "@/hooks/useGeneration";
 import { useLatestJobClips } from "@/hooks/useClips";
 import { useStoryboard } from "@/hooks/useStoryboard";
@@ -16,6 +17,7 @@ import {
   useRenderExport,
   useExportDownload,
   useUploadAudio,
+  useUploadMedia,
 } from "@/hooks/useExport";
 import type { GeneratedClip } from "@/lib/types";
 
@@ -44,6 +46,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   const render = useRenderExport();
   const download = useExportDownload(projectId);
   const uploadAudio = useUploadAudio(projectId);
+  const uploadMedia = useUploadMedia(projectId);
 
   // useLatestJob is enabled:false — pull it once on mount to get the job id.
   const refetchJob = latestJob.refetch;
@@ -76,6 +79,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   const [playhead, setPlayhead] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [audio, setAudio] = useState<AudioSettings>(EMPTY_AUDIO);
+  const [media, setMedia] = useState<MediaAsset[]>([]);
   const initialized = useRef(false);
 
   // AI default: pre-fill the timeline with every shot's clip, in order.
@@ -188,6 +192,32 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     setAudio({ ...audio, url: res.url, name: file.name });
   };
 
+  const handleImportMedia = async (file: File) => {
+    const res = await uploadMedia.mutateAsync(file);
+    setMedia((m) => [
+      ...m,
+      { id: crypto.randomUUID(), url: res.url, name: file.name },
+    ]);
+  };
+
+  const addMedia = (asset: MediaAsset) => {
+    setTimeline((t) => [
+      ...t,
+      {
+        clipId: asset.id,
+        shotId: asset.id,
+        url: asset.url,
+        label: asset.name.slice(0, 20),
+        score: null,
+        duration: 5,
+        trimStart: 0,
+        trimEnd: 5,
+        trimmed: false,
+        external: true,
+      },
+    ]);
+  };
+
   const handleExport = async () => {
     if (!jobId || timeline.length === 0) return;
     setRendering(true);
@@ -195,11 +225,11 @@ export function ExportEditor({ projectId }: { projectId: string }) {
       await render.mutateAsync({
         projectId,
         jobId,
-        clips: timeline.map((t) => ({
-          clip_id: t.clipId,
-          trim_start: t.trimStart,
-          trim_end: t.trimEnd,
-        })),
+        clips: timeline.map((t) =>
+          t.external
+            ? { url: t.url, trim_start: t.trimStart, trim_end: t.trimEnd }
+            : { clip_id: t.clipId, trim_start: t.trimStart, trim_end: t.trimEnd }
+        ),
         audioUrl: audio.url,
         audioVolume: audio.volume,
         audioFadeIn: audio.fadeIn,
@@ -245,6 +275,14 @@ export function ExportEditor({ projectId }: { projectId: string }) {
           onAdd={addClip}
         />
       </div>
+
+      {/* media bin */}
+      <MediaBin
+        media={media}
+        onImport={handleImportMedia}
+        onAdd={addMedia}
+        uploading={uploadMedia.isPending}
+      />
 
       {/* bottom: timeline */}
       <EditorTimeline

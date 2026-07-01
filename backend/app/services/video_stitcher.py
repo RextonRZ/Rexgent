@@ -4,32 +4,55 @@ import os
 
 
 class VideoStitcher:
-    def stitch(self, clips: list, output_path: str) -> str:
-        """Concatenate clips into one MP4 via FFmpeg's concat demuxer.
+    # Common canvas so clips of any source resolution concatenate cleanly.
+    _NORM_VF = (
+        "scale=1280:720:force_original_aspect_ratio=decrease,"
+        "pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=24,format=yuv420p"
+    )
 
-        `clips` is a list of either paths (str) or dicts
+    def stitch(self, clips: list, output_path: str) -> str:
+        """Concatenate clips into one MP4.
+
+        `clips` is a list of paths (str) or dicts
         {"path": str, "in": float|None, "out": float|None} for per-clip trim.
-        Re-encodes (instead of stream-copy) so clips that differ slightly still
-        join cleanly and trim points land accurately, and drops audio to avoid
-        stream-layout mismatches. Captions ship separately as an .srt.
+        Each clip is first normalised to a common 1280x720/24fps canvas (and
+        trimmed), so mixed-resolution / imported media join cleanly; the
+        normalised parts are then concatenated with a stream copy. Audio is
+        dropped (captions ship separately as an .srt; music is mixed later).
         """
+        norm_dir = tempfile.mkdtemp()
+        norm_paths = []
+        for i, clip in enumerate(clips):
+            if isinstance(clip, str):
+                path, tin, tout = clip, None, None
+            else:
+                path, tin, tout = clip.get("path"), clip.get("in"), clip.get("out")
+            norm = os.path.join(norm_dir, f"n{i:03d}.mp4")
+            cmd = ["ffmpeg", "-y"]
+            if tin:
+                cmd += ["-ss", f"{float(tin):.3f}"]
+            cmd += ["-i", path]
+            if tout is not None:
+                dur = float(tout) - float(tin or 0.0)
+                if dur > 0:
+                    cmd += ["-t", f"{dur:.3f}"]
+            cmd += [
+                "-vf", self._NORM_VF,
+                "-c:v", "libx264", "-crf", "20", "-an", norm,
+            ]
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            if proc.returncode != 0:
+                raise RuntimeError(f"ffmpeg normalise failed: {proc.stderr[-800:]}")
+            norm_paths.append(norm)
+
         list_file = tempfile.mktemp(suffix=".txt")
         with open(list_file, "w", encoding="utf-8") as f:
-            for clip in clips:
-                if isinstance(clip, str):
-                    path, tin, tout = clip, None, None
-                else:
-                    path, tin, tout = clip.get("path"), clip.get("in"), clip.get("out")
-                safe = path.replace("'", "'\\''")
+            for p in norm_paths:
+                safe = p.replace("'", "'\\''")
                 f.write(f"file '{safe}'\n")
-                if tin:
-                    f.write(f"inpoint {float(tin)}\n")
-                if tout:
-                    f.write(f"outpoint {float(tout)}\n")
         cmd = [
             "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file,
-            "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart", "-an", output_path,
+            "-c", "copy", "-movflags", "+faststart", output_path,
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         os.unlink(list_file)
