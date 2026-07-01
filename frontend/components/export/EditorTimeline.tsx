@@ -18,8 +18,12 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Slider } from "@/components/ui/slider";
 import type { TimelineItem } from "./SequencePlayer";
+import { ASSET_MIME, type MediaAsset } from "./MediaBin";
 
-export const PX_PER_SEC = 80; // timeline scale
+export const PX_PER_SEC = 80; // default timeline scale
+const ZOOM_MIN = 24;
+const ZOOM_MAX = 240;
+const ZOOM_STEP = 24;
 const MIN_CLIP = 0.5; // shortest a clip can be trimmed to
 const FRAME_W = 64; // approx filmstrip frame width
 
@@ -73,6 +77,7 @@ function TimelineClip({
   item,
   order,
   selected,
+  pxPerSec,
   onSelect,
   onRemove,
   onTrim,
@@ -80,13 +85,14 @@ function TimelineClip({
   item: TimelineItem;
   order: number;
   selected: boolean;
+  pxPerSec: number;
   onSelect: () => void;
   onRemove: () => void;
   onTrim: (clipId: string, start: number, end: number) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.clipId });
-  const width = (item.trimEnd - item.trimStart) * PX_PER_SEC;
+  const width = (item.trimEnd - item.trimStart) * pxPerSec;
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -102,7 +108,7 @@ function TimelineClip({
     const startStart = item.trimStart;
     const startEnd = item.trimEnd;
     const onMove = (ev: PointerEvent) => {
-      const delta = (ev.clientX - startX) / PX_PER_SEC;
+      const delta = (ev.clientX - startX) / pxPerSec;
       if (edge === "left") {
         const ns = Math.min(Math.max(0, startStart + delta), startEnd - MIN_CLIP);
         onTrim(item.clipId, ns, startEnd);
@@ -176,18 +182,24 @@ function TimelineClip({
   );
 }
 
-function Ruler({ totalSeconds }: { totalSeconds: number }) {
+function Ruler({
+  totalSeconds,
+  pxPerSec,
+}: {
+  totalSeconds: number;
+  pxPerSec: number;
+}) {
   const ticks = Math.ceil(totalSeconds) + 1;
   return (
     <div
       className="relative h-5 border-b hairline"
-      style={{ width: `${totalSeconds * PX_PER_SEC}px`, minWidth: "100%" }}
+      style={{ width: `${totalSeconds * pxPerSec}px`, minWidth: "100%" }}
     >
       {Array.from({ length: ticks }, (_, i) => (
         <div
           key={i}
           className="absolute top-0 bottom-0 flex items-start"
-          style={{ left: `${i * PX_PER_SEC}px` }}
+          style={{ left: `${i * pxPerSec}px` }}
         >
           <span className="h-2 w-px bg-border" />
           <span className="ml-1 text-[9px] text-muted-foreground">{fmt(i)}</span>
@@ -208,6 +220,7 @@ export function EditorTimeline({
   audio,
   onAudioChange,
   onAudioFile,
+  onDropAsset,
   audioUploading,
 }: {
   items: TimelineItem[];
@@ -220,6 +233,7 @@ export function EditorTimeline({
   audio: AudioSettings;
   onAudioChange: (a: AudioSettings) => void;
   onAudioFile: (file: File) => void;
+  onDropAsset: (asset: MediaAsset) => void;
   audioUploading: boolean;
 }) {
   const sensors = useSensors(
@@ -227,6 +241,7 @@ export function EditorTimeline({
   );
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [pxPerSec, setPxPerSec] = useState(PX_PER_SEC);
 
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
@@ -238,12 +253,32 @@ export function EditorTimeline({
   };
 
   const totalSeconds = items.reduce((s, i) => s + (i.trimEnd - i.trimStart), 0);
-  const trackWidth = `${totalSeconds * PX_PER_SEC}px`;
+  const trackWidth = `${totalSeconds * pxPerSec}px`;
 
   const pickAudioFrom = (files: FileList | null) => {
     const f = files ? Array.from(files).find((x) => x.type.startsWith("audio/")) : null;
     if (f) onAudioFile(f);
   };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const assetJson = e.dataTransfer.getData(ASSET_MIME);
+    if (assetJson) {
+      try {
+        onDropAsset(JSON.parse(assetJson) as MediaAsset);
+      } catch {
+        /* ignore malformed drops */
+      }
+      return;
+    }
+    pickAudioFrom(e.dataTransfer.files);
+  };
+
+  const zoom = (dir: -1 | 1) =>
+    setPxPerSec((p) =>
+      Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, p + dir * ZOOM_STEP))
+    );
 
   return (
     <div
@@ -255,11 +290,7 @@ export function EditorTimeline({
         setDragOver(true);
       }}
       onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragOver(false);
-        pickAudioFrom(e.dataTransfer.files);
-      }}
+      onDrop={handleDrop}
     >
       <input
         ref={fileInput}
@@ -276,9 +307,32 @@ export function EditorTimeline({
             Drag clips to reorder · drag the white edges to trim · drop music anywhere
           </p>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {items.length} clips · {totalSeconds.toFixed(1)}s
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {items.length} clips · {totalSeconds.toFixed(1)}s
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => zoom(-1)}
+              disabled={pxPerSec <= ZOOM_MIN}
+              className="h-6 w-6 rounded border hairline text-sm disabled:opacity-40 hover:bg-accent"
+              title="Zoom out"
+            >
+              −
+            </button>
+            <span className="text-[10px] text-muted-foreground w-8 text-center">
+              {Math.round((pxPerSec / PX_PER_SEC) * 100)}%
+            </span>
+            <button
+              onClick={() => zoom(1)}
+              disabled={pxPerSec >= ZOOM_MAX}
+              className="h-6 w-6 rounded border hairline text-sm disabled:opacity-40 hover:bg-accent"
+              title="Zoom in"
+            >
+              +
+            </button>
+          </div>
+        </div>
       </div>
 
       {items.length === 0 ? (
@@ -288,7 +342,7 @@ export function EditorTimeline({
       ) : (
         <div className="overflow-x-auto pb-2">
           <div className="relative inline-block min-w-full">
-            <Ruler totalSeconds={totalSeconds} />
+            <Ruler totalSeconds={totalSeconds} pxPerSec={pxPerSec} />
 
             {/* video lane */}
             <DndContext
@@ -307,6 +361,7 @@ export function EditorTimeline({
                       item={item}
                       order={i + 1}
                       selected={i === selectedIndex}
+                      pxPerSec={pxPerSec}
                       onSelect={() => onSelect(i)}
                       onRemove={() => onRemove(item.clipId)}
                       onTrim={onTrim}
@@ -344,7 +399,7 @@ export function EditorTimeline({
             {/* playhead spans both lanes */}
             <div
               className="pointer-events-none absolute top-0 bottom-0 w-px bg-primary"
-              style={{ left: `${playheadSeconds * PX_PER_SEC}px` }}
+              style={{ left: `${playheadSeconds * pxPerSec}px` }}
             >
               <span className="absolute -top-1 -left-1 h-2 w-2 rounded-full bg-primary" />
             </div>

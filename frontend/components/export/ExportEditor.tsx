@@ -193,11 +193,27 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   };
 
   const handleImportMedia = async (file: File) => {
-    const res = await uploadMedia.mutateAsync(file);
+    const isAudio = file.type.startsWith("audio/");
+    const res = isAudio
+      ? await uploadAudio.mutateAsync(file)
+      : await uploadMedia.mutateAsync(file);
     setMedia((m) => [
       ...m,
-      { id: crypto.randomUUID(), url: res.url, name: file.name },
+      {
+        id: crypto.randomUUID(),
+        url: res.url,
+        name: file.name,
+        type: isAudio ? "audio" : "video",
+      },
     ]);
+  };
+
+  const onAddAsset = (asset: MediaAsset) => {
+    if (asset.type === "audio") {
+      setAudio({ ...EMPTY_AUDIO, url: asset.url, name: asset.name });
+    } else {
+      addMedia(asset);
+    }
   };
 
   const addMedia = (asset: MediaAsset) => {
@@ -280,8 +296,8 @@ export function ExportEditor({ projectId }: { projectId: string }) {
       <MediaBin
         media={media}
         onImport={handleImportMedia}
-        onAdd={addMedia}
-        uploading={uploadMedia.isPending}
+        onAdd={onAddAsset}
+        uploading={uploadMedia.isPending || uploadAudio.isPending}
       />
 
       {/* bottom: timeline */}
@@ -296,6 +312,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         audio={audio}
         onAudioChange={setAudio}
         onAudioFile={handleAudioFile}
+        onDropAsset={onAddAsset}
         audioUploading={uploadAudio.isPending}
       />
 
