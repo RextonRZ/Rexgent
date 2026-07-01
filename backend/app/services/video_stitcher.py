@@ -4,18 +4,28 @@ import os
 
 
 class VideoStitcher:
-    def stitch(self, clip_paths: list[str], output_path: str) -> str:
+    def stitch(self, clips: list, output_path: str) -> str:
         """Concatenate clips into one MP4 via FFmpeg's concat demuxer.
 
+        `clips` is a list of either paths (str) or dicts
+        {"path": str, "in": float|None, "out": float|None} for per-clip trim.
         Re-encodes (instead of stream-copy) so clips that differ slightly still
-        join cleanly, and drops audio to avoid stream-layout mismatches between
-        clips. Captions ship separately as an .srt.
+        join cleanly and trim points land accurately, and drops audio to avoid
+        stream-layout mismatches. Captions ship separately as an .srt.
         """
         list_file = tempfile.mktemp(suffix=".txt")
         with open(list_file, "w", encoding="utf-8") as f:
-            for path in clip_paths:
+            for clip in clips:
+                if isinstance(clip, str):
+                    path, tin, tout = clip, None, None
+                else:
+                    path, tin, tout = clip.get("path"), clip.get("in"), clip.get("out")
                 safe = path.replace("'", "'\\''")
                 f.write(f"file '{safe}'\n")
+                if tin:
+                    f.write(f"inpoint {float(tin)}\n")
+                if tout:
+                    f.write(f"outpoint {float(tout)}\n")
         cmd = [
             "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file,
             "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p",

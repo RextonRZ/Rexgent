@@ -16,7 +16,7 @@ export function useRenderExport() {
     mutationFn: async ({
       projectId,
       jobId,
-      clipIds,
+      clips,
       audioUrl,
       audioVolume,
       audioFadeIn,
@@ -24,7 +24,7 @@ export function useRenderExport() {
     }: {
       projectId: string;
       jobId: string;
-      clipIds?: string[];
+      clips?: { clip_id: string; trim_start: number; trim_end: number }[];
       audioUrl?: string | null;
       audioVolume?: number;
       audioFadeIn?: number;
@@ -33,7 +33,7 @@ export function useRenderExport() {
       const { data } = await api.post("/api/export/render", {
         project_id: projectId,
         job_id: jobId,
-        clip_ids: clipIds,
+        clips,
         audio_url: audioUrl || null,
         audio_volume: audioVolume ?? 1.0,
         audio_fade_in: audioFadeIn ?? 0.0,

@@ -8,17 +8,23 @@ export interface TimelineItem {
   url: string;
   label: string;
   score: number | null;
+  duration: number; // seconds (defaults to 5 until metadata loads)
+  trimStart: number;
+  trimEnd: number;
+  trimmed: boolean;
 }
 
-/** Plays the timeline clips back-to-back, like a preview of the final cut. */
+/** Plays the timeline clips back-to-back, respecting each clip's trim. */
 export function SequencePlayer({
   items,
   index,
   onIndexChange,
+  onDuration,
 }: {
   items: TimelineItem[];
   index: number;
   onIndexChange: (i: number) => void;
+  onDuration?: (index: number, seconds: number) => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -26,12 +32,19 @@ export function SequencePlayer({
   const safeIndex = Math.min(index, Math.max(0, items.length - 1));
   const current = items[safeIndex];
 
-  // Load the current clip whenever the index (or its url) changes.
+  // Load the current clip whenever the index (or its url) changes, seeking to
+  // its in-point once metadata is ready.
   useEffect(() => {
     const v = ref.current;
     if (!v || !current) return;
     v.load();
-    if (playing) v.play().catch(() => {});
+    const onMeta = () => {
+      v.currentTime = current.trimStart || 0;
+      onDuration?.(safeIndex, v.duration);
+      if (playing) v.play().catch(() => {});
+    };
+    v.addEventListener("loadedmetadata", onMeta, { once: true });
+    return () => v.removeEventListener("loadedmetadata", onMeta);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safeIndex, current?.url]);
 
@@ -41,6 +54,10 @@ export function SequencePlayer({
     } else {
       setPlaying(false);
     }
+  };
+
+  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    if (current && e.currentTarget.currentTime >= current.trimEnd) handleEnded();
   };
 
   const togglePlay = () => {
@@ -70,6 +87,7 @@ export function SequencePlayer({
           ref={ref}
           className="h-full w-full object-contain"
           onEnded={handleEnded}
+          onTimeUpdate={handleTimeUpdate}
           onClick={togglePlay}
           playsInline
         >

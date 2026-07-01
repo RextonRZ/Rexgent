@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import { SequencePlayer, type TimelineItem } from "./SequencePlayer";
 import { ShotLibrary } from "./ShotLibrary";
 import { EditorTimeline } from "./EditorTimeline";
@@ -84,6 +85,10 @@ export function ExportEditor({ projectId }: { projectId: string }) {
             url: clip.url,
             label: shotLabel[shot.id] || `Shot ${shot.number}`,
             score: clip.consistency_score,
+            duration: 5,
+            trimStart: 0,
+            trimEnd: 5,
+            trimmed: false,
           });
         }
       }
@@ -112,6 +117,10 @@ export function ExportEditor({ projectId }: { projectId: string }) {
               url: clip.url!,
               label: shotLabel[clip.shot_id] || "Shot",
               score: clip.consistency_score,
+              duration: 5,
+              trimStart: 0,
+              trimEnd: 5,
+              trimmed: false,
             },
           ]
     );
@@ -122,6 +131,32 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     setSelected((s) => Math.max(0, s - 1));
   };
 
+  // Real clip duration from the preview; widen the out-point if untrimmed.
+  const handleDuration = (i: number, seconds: number) => {
+    if (!seconds || !isFinite(seconds)) return;
+    setTimeline((t) =>
+      t.map((item, idx) =>
+        idx === i
+          ? {
+              ...item,
+              duration: seconds,
+              trimEnd: item.trimmed ? Math.min(item.trimEnd, seconds) : seconds,
+            }
+          : item
+      )
+    );
+  };
+
+  const setTrim = (index: number, start: number, end: number) => {
+    setTimeline((t) =>
+      t.map((item, idx) =>
+        idx === index
+          ? { ...item, trimStart: start, trimEnd: end, trimmed: true }
+          : item
+      )
+    );
+  };
+
   const handleExport = async () => {
     if (!jobId || timeline.length === 0) return;
     setRendering(true);
@@ -129,7 +164,11 @@ export function ExportEditor({ projectId }: { projectId: string }) {
       await render.mutateAsync({
         projectId,
         jobId,
-        clipIds: timeline.map((t) => t.clipId),
+        clips: timeline.map((t) => ({
+          clip_id: t.clipId,
+          trim_start: t.trimStart,
+          trim_end: t.trimEnd,
+        })),
         audioUrl: audio.url,
         audioVolume: audio.volume,
         audioFadeIn: audio.fadeIn,
@@ -159,12 +198,19 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     <div className="space-y-4">
       {/* top: preview (left) + shot library (right) */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-3">
           <SequencePlayer
             items={timeline}
             index={selected}
             onIndexChange={setSelected}
+            onDuration={handleDuration}
           />
+          {timeline[selected] ? (
+            <TrimControl
+              item={timeline[selected]}
+              onChange={(s, e) => setTrim(selected, s, e)}
+            />
+          ) : null}
         </div>
         <ShotLibrary
           scenes={scenes}
@@ -253,6 +299,37 @@ export function ExportEditor({ projectId }: { projectId: string }) {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function TrimControl({
+  item,
+  onChange,
+}: {
+  item: TimelineItem;
+  onChange: (start: number, end: number) => void;
+}) {
+  const dur = item.duration || 5;
+  return (
+    <div className="rounded-lg border hairline bg-card px-4 py-3">
+      <div className="flex items-center justify-between text-xs mb-2">
+        <span className="font-medium">✂️ Trim · {item.label}</span>
+        <span className="text-muted-foreground">
+          {item.trimStart.toFixed(1)}s – {item.trimEnd.toFixed(1)}s (
+          {(item.trimEnd - item.trimStart).toFixed(1)}s)
+        </span>
+      </div>
+      <Slider
+        value={[item.trimStart, item.trimEnd]}
+        min={0}
+        max={dur}
+        step={0.1}
+        onValueChange={(v) => {
+          const arr = Array.isArray(v) ? v : [0, dur];
+          onChange(Math.min(arr[0], arr[1]), Math.max(arr[0], arr[1]));
+        }}
+      />
     </div>
   );
 }

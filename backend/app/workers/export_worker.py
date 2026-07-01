@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, name="run_export")
-def run_export(self, project_id: str, job_id: str, clip_ids: list | None = None,
+def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                audio: dict | None = None):
     SessionLocal = get_session_factory()
     db = SessionLocal()
@@ -31,15 +31,21 @@ def run_export(self, project_id: str, job_id: str, clip_ids: list | None = None,
         if not job:
             return
 
-        if clip_ids:
-            # Editor supplied an explicit order — honor it exactly.
+        trim_by_id: dict = {}
+        if clips:
+            # Editor supplied an explicit order + per-clip trim — honor it.
             by_id = {
                 str(c.id): c
                 for c in db.query(GeneratedClip)
                 .filter(GeneratedClip.job_id == job.id, GeneratedClip.url.isnot(None))
                 .all()
             }
-            clips_for_export = [by_id[str(cid)] for cid in clip_ids if str(cid) in by_id]
+            clips_for_export = []
+            for entry in clips:
+                cid = str(entry.get("id"))
+                if cid in by_id:
+                    clips_for_export.append(by_id[cid])
+                    trim_by_id[cid] = (entry.get("in"), entry.get("out"))
         else:
             # AI default: every shot that produced a playable clip belongs in
             # the final cut — not just APPROVED. Retries create several rows per
@@ -108,9 +114,10 @@ def run_export(self, project_id: str, job_id: str, clip_ids: list | None = None,
         report_key = oss.get_project_path(project_id, "exports", "production_report.json")
         oss.upload_file(report_path, report_key)
 
-        # Download every clip and concatenate into one MP4 with FFmpeg.
+        # Download every clip and concatenate into one MP4 with FFmpeg,
+        # applying each clip's trim (inpoint/outpoint).
         workdir = tempfile.mkdtemp()
-        clip_paths = []
+        stitch_inputs = []
         for i, clip in enumerate(clips_for_export):
             local = os.path.join(workdir, f"clip_{i:03d}.mp4")
             try:
@@ -118,17 +125,18 @@ def run_export(self, project_id: str, job_id: str, clip_ids: list | None = None,
                 resp.raise_for_status()
                 with open(local, "wb") as fh:
                     fh.write(resp.content)
-                clip_paths.append(local)
+                tin, tout = trim_by_id.get(str(clip.id), (None, None))
+                stitch_inputs.append({"path": local, "in": tin, "out": tout})
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: could not download clip {clip.id}: {e}")
 
-        if not clip_paths:
+        if not stitch_inputs:
             logger.error("Export: no clips could be downloaded; aborting")
             return
 
         stitcher = VideoStitcher()
         final_local = os.path.join(workdir, "final.mp4")
-        stitcher.stitch(clip_paths, final_local)
+        stitcher.stitch(stitch_inputs, final_local)
 
         # Optional music track: download and mix over the silent cut.
         if audio and audio.get("url"):

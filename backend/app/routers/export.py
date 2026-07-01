@@ -26,7 +26,17 @@ async def upload_audio(project_id: str, file: UploadFile = File(...)):
 
 @router.post("/render")
 async def render_export(request: ExportRequest, db: Session = Depends(get_db)):
-    clip_ids = [str(c) for c in request.clip_ids] if request.clip_ids else None
+    # Unified ordered clip list with per-clip trim.
+    if request.clips:
+        clips = [
+            {"id": str(c.clip_id), "in": c.trim_start, "out": c.trim_end}
+            for c in request.clips
+        ]
+    elif request.clip_ids:
+        clips = [{"id": str(cid), "in": 0.0, "out": None} for cid in request.clip_ids]
+    else:
+        clips = None
+
     audio = None
     if request.audio_url:
         audio = {
@@ -35,7 +45,7 @@ async def render_export(request: ExportRequest, db: Session = Depends(get_db)):
             "fade_in": request.audio_fade_in,
             "fade_out": request.audio_fade_out,
         }
-    run_export.delay(str(request.project_id), str(request.job_id), clip_ids, audio)
+    run_export.delay(str(request.project_id), str(request.job_id), clips, audio)
     return {"status": "rendering", "message": "Export job started"}
 
 

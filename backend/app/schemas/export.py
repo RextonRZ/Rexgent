@@ -3,12 +3,19 @@ from uuid import UUID
 from typing import Optional, Any
 
 
+class ClipEdit(BaseModel):
+    clip_id: UUID
+    trim_start: float = 0.0
+    trim_end: Optional[float] = None  # None = to the end of the clip
+
+
 class ExportRequest(BaseModel):
     project_id: UUID
     job_id: UUID
-    # Explicit clip order chosen in the editor; when omitted, the worker uses
-    # the AI default (best clip per shot, in shot order).
-    clip_ids: Optional[list[UUID]] = None
+    # Ordered clips with per-clip trim, chosen in the editor. When omitted the
+    # worker uses the AI default (best clip per shot, in shot order, untrimmed).
+    clips: Optional[list[ClipEdit]] = None
+    clip_ids: Optional[list[UUID]] = None  # legacy: order only, no trim
     # Optional music track mixed into the final render.
     audio_url: Optional[str] = None
     audio_volume: float = 1.0      # 1.0 = 100%
