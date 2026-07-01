@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { SequencePlayer, type TimelineItem } from "./SequencePlayer";
 import { ShotLibrary } from "./ShotLibrary";
 import { EditorTimeline } from "./EditorTimeline";
+import { MusicPanel, EMPTY_AUDIO, type AudioSettings } from "./MusicPanel";
 import { useLatestJob } from "@/hooks/useGeneration";
 import { useLatestJobClips } from "@/hooks/useClips";
 import { useStoryboard } from "@/hooks/useStoryboard";
@@ -65,6 +66,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [selected, setSelected] = useState(0);
   const [rendering, setRendering] = useState(false);
+  const [audio, setAudio] = useState<AudioSettings>(EMPTY_AUDIO);
   const initialized = useRef(false);
 
   // AI default: pre-fill the timeline with every shot's clip, in order.
@@ -128,6 +130,9 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         projectId,
         jobId,
         clipIds: timeline.map((t) => t.clipId),
+        audioUrl: audio.url,
+        audioVolume: audio.volume,
+        audioFadeIn: audio.fadeIn,
       });
       for (let i = 0; i < 60; i++) {
         await new Promise((r) => setTimeout(r, 3000));
@@ -177,6 +182,9 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         onReorder={setTimeline}
         onRemove={removeClip}
       />
+
+      {/* music track */}
+      <MusicPanel projectId={projectId} audio={audio} onChange={setAudio} />
 
       {/* export bar */}
       <div className="rounded-xl border hairline glass p-4 flex flex-wrap items-center justify-between gap-4">

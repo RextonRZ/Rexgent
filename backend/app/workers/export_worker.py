@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, name="run_export")
-def run_export(self, project_id: str, job_id: str, clip_ids: list | None = None):
+def run_export(self, project_id: str, job_id: str, clip_ids: list | None = None,
+               audio: dict | None = None):
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
@@ -125,8 +126,30 @@ def run_export(self, project_id: str, job_id: str, clip_ids: list | None = None)
             logger.error("Export: no clips could be downloaded; aborting")
             return
 
+        stitcher = VideoStitcher()
         final_local = os.path.join(workdir, "final.mp4")
-        VideoStitcher().stitch(clip_paths, final_local)
+        stitcher.stitch(clip_paths, final_local)
+
+        # Optional music track: download and mix over the silent cut.
+        if audio and audio.get("url"):
+            try:
+                ext = audio["url"].rsplit(".", 1)[-1].split("?")[0].lower() or "mp3"
+                music_local = os.path.join(workdir, f"music.{ext}")
+                a = httpx.get(audio["url"], timeout=120.0)
+                a.raise_for_status()
+                with open(music_local, "wb") as fh:
+                    fh.write(a.content)
+                mixed = os.path.join(workdir, "final_audio.mp4")
+                stitcher.add_audio(
+                    final_local, music_local, mixed,
+                    volume=float(audio.get("volume", 1.0)),
+                    fade_in=float(audio.get("fade_in", 0.0)),
+                    fade_out=float(audio.get("fade_out", 0.0)),
+                )
+                final_local = mixed
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Export: music mix skipped: {e}")
+
         final_key = oss.get_project_path(project_id, "exports", "final.mp4")
         final_url = oss.upload_file(final_local, final_key)
 
