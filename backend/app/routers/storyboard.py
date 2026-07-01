@@ -6,7 +6,7 @@ from app.models.script import Script, Scene
 from app.models.shot import Shot
 from app.models.character import Character
 from app.schemas.shot import ShotResponse
-from app.services.storyboard_generator import StoryboardGenerator
+from app.services.storyboard_generator import StoryboardGenerator, plan_shot_budget
 
 router = APIRouter(prefix="/api/storyboard", tags=["storyboard"])
 
@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/storyboard", tags=["storyboard"])
 async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
     project_id = request.get("project_id")
     script_id = request.get("script_id")
+    target_length = int(request.get("target_length", 30))  # seconds
 
     if script_id:
         script = db.query(Script).filter(Script.id == uuid.UUID(script_id)).first()
@@ -49,6 +50,7 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
     scene_ids = [s.id for s in scenes]
     db.query(Shot).filter(Shot.scene_id.in_(scene_ids)).delete(synchronize_session=False)
 
+    shots_per_scene, shot_seconds = plan_shot_budget(len(scenes), target_length)
     generator = StoryboardGenerator()
     all_shots = []
 
@@ -64,7 +66,10 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
             "emotional_beat": scene.emotional_beat,
         }
 
-        shots_data = await generator.generate_for_scene(scene_data, scene_chars)
+        shots_data = await generator.generate_for_scene(
+            scene_data, scene_chars,
+            max_shots=shots_per_scene, shot_seconds=shot_seconds,
+        )
 
         for shot_data in shots_data:
             shot = Shot(

@@ -12,7 +12,7 @@ from app.models.generation_job import GenerationJob
 from app.services.script_generator import ScriptGenerator
 from app.services.script_structurer import ScriptStructurer
 from app.services.character_extractor import CharacterExtractor
-from app.services.storyboard_generator import StoryboardGenerator
+from app.services.storyboard_generator import StoryboardGenerator, plan_shot_budget
 from app.services.guardrails import InputSanitizer
 from app.mcp_tools.token_optimizer import TokenOptimizer
 from app.graph.sync import sync_scenes, sync_characters
@@ -85,7 +85,7 @@ async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = 
     return [{"id": str(c.id), "name": c.name, "role": c.role} for c in created]
 
 
-async def generate_storyboard_op(db: Session, script_id: str) -> list[dict]:
+async def generate_storyboard_op(db: Session, script_id: str, target_length: int = 30) -> list[dict]:
     script = db.query(Script).filter(Script.id == uuid.UUID(script_id)).first()
     if not script:
         return []
@@ -96,6 +96,7 @@ async def generate_storyboard_op(db: Session, script_id: str) -> list[dict]:
     scene_ids = [s.id for s in scenes]
     db.query(Shot).filter(Shot.scene_id.in_(scene_ids)).delete(synchronize_session=False)
 
+    shots_per_scene, shot_seconds = plan_shot_budget(len(scenes), target_length)
     gen = StoryboardGenerator()
     created = []
     for scene in scenes:
@@ -104,6 +105,8 @@ async def generate_storyboard_op(db: Session, script_id: str) -> list[dict]:
             {"scene_number": scene.number, "heading": scene.heading,
              "description": scene.description, "emotional_beat": scene.emotional_beat},
             scene_chars,
+            max_shots=shots_per_scene,
+            shot_seconds=shot_seconds,
         )
         for sd in shots:
             shot = Shot(

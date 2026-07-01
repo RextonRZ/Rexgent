@@ -65,7 +65,9 @@ def build_pipeline_graph(db=None):
         _emit_node(state, "storyboard")
         if db is None:
             return state
-        state["shots"] = await pipeline_ops.generate_storyboard_op(db, state["script_id"])
+        state["shots"] = await pipeline_ops.generate_storyboard_op(
+            db, state["script_id"], target_length=state.get("target_length", 30)
+        )
         return state
 
     async def n_budget(state: PipelineState) -> PipelineState:
