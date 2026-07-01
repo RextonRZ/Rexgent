@@ -11,19 +11,22 @@ import { useStoryboard } from "@/hooks/useStoryboard";
 import { useRenderExport, useExportDownload } from "@/hooks/useExport";
 import type { GeneratedClip } from "@/lib/types";
 
-/** Pick the best clip per shot (prefer APPROVED, then highest score, must have a URL). */
-function buildClipByShot(clips: GeneratedClip[]): Record<string, GeneratedClip> {
-  const best: Record<string, GeneratedClip> = {};
+/** All playable takes per shot, best first (APPROVED, then highest score). */
+function buildClipsByShot(clips: GeneratedClip[]): Record<string, GeneratedClip[]> {
+  const byShot: Record<string, GeneratedClip[]> = {};
   for (const c of clips) {
     if (!c.url) continue;
-    const cur = best[c.shot_id];
-    const rank = (x: GeneratedClip): [number, number] => [
-      x.status === "APPROVED" ? 1 : 0,
-      x.consistency_score ?? 0,
-    ];
-    if (!cur || rank(c) > rank(cur)) best[c.shot_id] = c;
+    (byShot[c.shot_id] ??= []).push(c);
   }
-  return best;
+  for (const k in byShot) {
+    byShot[k].sort((a, b) => {
+      const ra = a.status === "APPROVED" ? 1 : 0;
+      const rb = b.status === "APPROVED" ? 1 : 0;
+      if (ra !== rb) return rb - ra;
+      return (b.consistency_score ?? 0) - (a.consistency_score ?? 0);
+    });
+  }
+  return byShot;
 }
 
 export function ExportEditor({ projectId }: { projectId: string }) {
@@ -43,7 +46,12 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   const scenes = storyboard.data?.scenes ?? [];
   const clips = clipsQuery.data?.clips ?? [];
 
-  const clipByShot = useMemo(() => buildClipByShot(clips), [clips]);
+  const clipsByShot = useMemo(() => buildClipsByShot(clips), [clips]);
+  const clipByShot = useMemo(() => {
+    const m: Record<string, GeneratedClip> = {};
+    for (const [shotId, takes] of Object.entries(clipsByShot)) m[shotId] = takes[0];
+    return m;
+  }, [clipsByShot]);
   const shotLabel = useMemo(() => {
     const m: Record<string, string> = {};
     scenes.forEach((s) =>
@@ -89,9 +97,8 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     [timeline]
   );
 
-  const addShot = (shotId: string) => {
-    const clip = clipByShot[shotId];
-    if (!clip?.url) return;
+  const addClip = (clip: GeneratedClip) => {
+    if (!clip.url) return;
     setTimeline((t) =>
       t.some((i) => i.clipId === clip.id)
         ? t
@@ -99,9 +106,9 @@ export function ExportEditor({ projectId }: { projectId: string }) {
             ...t,
             {
               clipId: clip.id,
-              shotId,
+              shotId: clip.shot_id,
               url: clip.url!,
-              label: shotLabel[shotId] || "Shot",
+              label: shotLabel[clip.shot_id] || "Shot",
               score: clip.consistency_score,
             },
           ]
@@ -156,9 +163,9 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         </div>
         <ShotLibrary
           scenes={scenes}
-          clipByShot={clipByShot}
+          clipsByShot={clipsByShot}
           inTimeline={inTimeline}
-          onAdd={addShot}
+          onAdd={addClip}
         />
       </div>
 

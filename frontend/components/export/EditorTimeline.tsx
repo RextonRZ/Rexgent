@@ -50,10 +50,10 @@ function SortableClip({
       }`}
     >
       <video
-        src={item.url}
+        src={`${item.url}#t=0.1`}
         muted
         playsInline
-        preload="none"
+        preload="metadata"
         className="aspect-video w-full object-cover pointer-events-none"
       />
       <div className="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white/90">
