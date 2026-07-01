@@ -3,8 +3,10 @@ import json
 import tempfile
 import os
 import logging
+import httpx
 from datetime import datetime, timezone
 from app.workers.celery_app import celery_app
+from app.services.video_stitcher import VideoStitcher
 from app.database import get_session_factory
 from app.models.generation_job import GenerationJob
 from app.models.generated_clip import GeneratedClip
@@ -28,14 +30,26 @@ def run_export(self, project_id: str, job_id: str):
         if not job:
             return
 
-        approved = (
+        # Every shot that produced a playable clip belongs in the final cut —
+        # not just APPROVED. Retries create several rows per shot, so keep the
+        # best one per shot (prefer APPROVED, then highest consistency), in
+        # shot order.
+        rows = (
             db.query(GeneratedClip)
-            .filter(GeneratedClip.job_id == job.id, GeneratedClip.status == "APPROVED")
+            .filter(GeneratedClip.job_id == job.id, GeneratedClip.url.isnot(None))
             .join(Shot, GeneratedClip.shot_id == Shot.id)
             .order_by(Shot.number)
             .all()
         )
-        if not approved:
+        best_by_shot: dict = {}
+        for clip in rows:
+            key = clip.shot_id
+            current = best_by_shot.get(key)
+            rank = (clip.status == "APPROVED", clip.consistency_score or 0.0)
+            if current is None or rank > (current.status == "APPROVED", current.consistency_score or 0.0):
+                best_by_shot[key] = clip
+        clips_for_export = list(best_by_shot.values())  # insertion order = shot order
+        if not clips_for_export:
             return
 
         oss = OSSManager(get_settings())
@@ -43,7 +57,7 @@ def run_export(self, project_id: str, job_id: str):
 
         clips_with_dialogue = []
         duration_by_clip = {}
-        for clip in approved:
+        for clip in clips_for_export:
             shot = db.query(Shot).filter(Shot.id == clip.shot_id).first()
             dur = shot.estimated_duration_seconds if shot else 5
             clips_with_dialogue.append({
@@ -68,9 +82,9 @@ def run_export(self, project_id: str, job_id: str):
         usage = global_usage().snapshot()
         report = build_report(
             project_id=project_id,
-            clips=approved,
+            clips=clips_for_export,
             duration_by_clip=duration_by_clip,
-            total_retries=sum(c.retries for c in approved),
+            total_retries=sum(c.retries for c in clips_for_export),
             wall_clock_minutes=wall_minutes,
             llm_input_tokens=usage["input_tokens"],
             llm_output_tokens=usage["output_tokens"],
@@ -82,9 +96,28 @@ def run_export(self, project_id: str, job_id: str):
         report_key = oss.get_project_path(project_id, "exports", "production_report.json")
         oss.upload_file(report_path, report_key)
 
-        # For the hackathon, the final stitched video uses the approved clip URLs.
-        # (Full FFmpeg concat runs when clips are downloaded locally.)
-        final_url = approved[0].url
+        # Download every clip and concatenate into one MP4 with FFmpeg.
+        workdir = tempfile.mkdtemp()
+        clip_paths = []
+        for i, clip in enumerate(clips_for_export):
+            local = os.path.join(workdir, f"clip_{i:03d}.mp4")
+            try:
+                resp = httpx.get(clip.url, timeout=120.0)
+                resp.raise_for_status()
+                with open(local, "wb") as fh:
+                    fh.write(resp.content)
+                clip_paths.append(local)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Export: could not download clip {clip.id}: {e}")
+
+        if not clip_paths:
+            logger.error("Export: no clips could be downloaded; aborting")
+            return
+
+        final_local = os.path.join(workdir, "final.mp4")
+        VideoStitcher().stitch(clip_paths, final_local)
+        final_key = oss.get_project_path(project_id, "exports", "final.mp4")
+        final_url = oss.upload_file(final_local, final_key)
 
         export = FinalExport(
             project_id=uuid.UUID(project_id),
