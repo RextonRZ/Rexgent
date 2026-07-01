@@ -16,13 +16,16 @@ export function useRenderExport() {
     mutationFn: async ({
       projectId,
       jobId,
+      clipIds,
     }: {
       projectId: string;
       jobId: string;
+      clipIds?: string[];
     }) => {
       const { data } = await api.post("/api/export/render", {
         project_id: projectId,
         job_id: jobId,
+        clip_ids: clipIds,
       });
       return data;
     },

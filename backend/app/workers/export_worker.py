@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, name="run_export")
-def run_export(self, project_id: str, job_id: str):
+def run_export(self, project_id: str, job_id: str, clip_ids: list | None = None):
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
@@ -30,25 +30,36 @@ def run_export(self, project_id: str, job_id: str):
         if not job:
             return
 
-        # Every shot that produced a playable clip belongs in the final cut —
-        # not just APPROVED. Retries create several rows per shot, so keep the
-        # best one per shot (prefer APPROVED, then highest consistency), in
-        # shot order.
-        rows = (
-            db.query(GeneratedClip)
-            .filter(GeneratedClip.job_id == job.id, GeneratedClip.url.isnot(None))
-            .join(Shot, GeneratedClip.shot_id == Shot.id)
-            .order_by(Shot.number)
-            .all()
-        )
-        best_by_shot: dict = {}
-        for clip in rows:
-            key = clip.shot_id
-            current = best_by_shot.get(key)
-            rank = (clip.status == "APPROVED", clip.consistency_score or 0.0)
-            if current is None or rank > (current.status == "APPROVED", current.consistency_score or 0.0):
-                best_by_shot[key] = clip
-        clips_for_export = list(best_by_shot.values())  # insertion order = shot order
+        if clip_ids:
+            # Editor supplied an explicit order — honor it exactly.
+            by_id = {
+                str(c.id): c
+                for c in db.query(GeneratedClip)
+                .filter(GeneratedClip.job_id == job.id, GeneratedClip.url.isnot(None))
+                .all()
+            }
+            clips_for_export = [by_id[str(cid)] for cid in clip_ids if str(cid) in by_id]
+        else:
+            # AI default: every shot that produced a playable clip belongs in
+            # the final cut — not just APPROVED. Retries create several rows per
+            # shot, so keep the best one per shot (prefer APPROVED, then highest
+            # consistency), in shot order.
+            rows = (
+                db.query(GeneratedClip)
+                .filter(GeneratedClip.job_id == job.id, GeneratedClip.url.isnot(None))
+                .join(Shot, GeneratedClip.shot_id == Shot.id)
+                .order_by(Shot.number)
+                .all()
+            )
+            best_by_shot: dict = {}
+            for clip in rows:
+                key = clip.shot_id
+                current = best_by_shot.get(key)
+                rank = (clip.status == "APPROVED", clip.consistency_score or 0.0)
+                if current is None or rank > (current.status == "APPROVED", current.consistency_score or 0.0):
+                    best_by_shot[key] = clip
+            clips_for_export = list(best_by_shot.values())  # insertion order = shot order
+
         if not clips_for_export:
             return
 

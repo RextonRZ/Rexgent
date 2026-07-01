@@ -6,6 +6,9 @@ from typing import Optional, Any
 class ExportRequest(BaseModel):
     project_id: UUID
     job_id: UUID
+    # Explicit clip order chosen in the editor; when omitted, the worker uses
+    # the AI default (best clip per shot, in shot order).
+    clip_ids: Optional[list[UUID]] = None
 
 
 class ExportResult(BaseModel):

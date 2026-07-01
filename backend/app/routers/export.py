@@ -11,7 +11,8 @@ router = APIRouter(prefix="/api/export", tags=["export"])
 
 @router.post("/render")
 async def render_export(request: ExportRequest, db: Session = Depends(get_db)):
-    run_export.delay(str(request.project_id), str(request.job_id))
+    clip_ids = [str(c) for c in request.clip_ids] if request.clip_ids else None
+    run_export.delay(str(request.project_id), str(request.job_id), clip_ids)
     return {"status": "rendering", "message": "Export job started"}
 
 
