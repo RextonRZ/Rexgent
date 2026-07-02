@@ -14,19 +14,20 @@ def test_priority_order_and_scene_costume():
         characters_in_frame=["Mia"], scene_number=2, bible=_bible(),
         prev_last_frame_url="prev", model_cap=9)
     urls = [m["url"] for m in stack]
-    # character (scene-2 dress) first, then style, then location, then chain
-    assert urls == ["mia_dress", "style", "loc2", "prev"]
+    # character (scene-2 dress) first, then the continuity frame, then location, then style
+    assert urls == ["mia_dress", "prev", "loc2", "style"]
 
 
-def test_cap_trims_from_bottom():
+def test_cap_trims_from_bottom_keeps_continuity():
     stack = build_reference_stack(
         characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
         prev_last_frame_url="prev", model_cap=2)
     urls = [m["url"] for m in stack]
-    assert urls == ["mia_uniform", "style"]  # location + chain dropped
+    # a tight cap keeps character + continuity frame; location + style dropped
+    assert urls == ["mia_uniform", "prev"]
 
 
-def test_chain_ignored_across_scene_boundary():
+def test_no_chain_entry_when_prev_none():
     stack = build_reference_stack(
         characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
         prev_last_frame_url=None, model_cap=9)

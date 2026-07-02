@@ -31,8 +31,6 @@ CONSISTENCY_THRESHOLD = 0.4
 
 
 class GenerationRunner:
-    _max_concurrency = 5
-
     def __init__(self, db: Session, budget_usd: float = 40.0):
         self.db = db
         settings = get_settings()
@@ -140,7 +138,7 @@ class GenerationRunner:
         self._cost_lock = asyncio.Lock()
         self._cancelled = False
 
-        await self._run_scenes_concurrently(scenes, bible)
+        await self._run_scenes_sequentially(scenes, bible)
 
         # Reconcile counters from the DB (per-scene sessions wrote clips + cost events
         # independently, so recompute authoritative totals here to avoid lost updates).
@@ -162,17 +160,16 @@ class GenerationRunner:
             "total_cost": round(job.actual_cost, 2),
         }, pid)
 
-    async def _run_scenes_concurrently(self, scenes, bible):
-        import asyncio
-        sem = asyncio.Semaphore(self._max_concurrency)
+    async def _run_scenes_sequentially(self, scenes, bible):
+        # Sequential so the last frame of each shot chains into the next — INCLUDING
+        # across scene boundaries — giving visual continuity between consecutive clips.
+        prev_last_frame = None
+        for scene in scenes:
+            if self._cancelled:
+                break
+            prev_last_frame = await self._run_scene(scene, bible, prev_last_frame)
 
-        async def guarded(scene):
-            async with sem:
-                await self._run_scene(scene, bible)
-
-        await asyncio.gather(*(guarded(s) for s in scenes))
-
-    async def _run_scene(self, scene, bible):
+    async def _run_scene(self, scene, bible, incoming_last_frame=None):
         from app.database import get_session_factory
         from app.services.cost_rates import video_cost
         from app.models.generation_job import GenerationJob
@@ -181,6 +178,7 @@ class GenerationRunner:
 
         SessionLocal = get_session_factory()
         db2 = SessionLocal()
+        prev_last_frame = incoming_last_frame
         try:
             # A scene-local runner sharing the stateless services but bound to db2,
             # so concurrent scenes never share a SQLAlchemy Session.
@@ -200,7 +198,6 @@ class GenerationRunner:
                             db2.query(Character).filter(Character.project_id == job2.project_id).all()}
             shots = db2.query(Shot).filter(Shot.scene_id == scene.id).order_by(Shot.number).all()
 
-            prev_last_frame = None
             for shot in shots:
                 if self._cancelled:
                     break
@@ -217,6 +214,7 @@ class GenerationRunner:
                     }, pid)
         finally:
             db2.close()
+        return prev_last_frame
 
     async def _craft_prompt(self, shot, char_by_name) -> str:
         in_frame = shot.characters_in_frame or []

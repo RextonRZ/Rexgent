@@ -107,23 +107,21 @@ async def test_hard_failure_retries_then_needs_review(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_scenes_run_under_semaphore():
-    import asyncio
+async def test_scenes_chain_last_frame_sequentially():
     from app.services.generation_runner import GenerationRunner
     runner = GenerationRunner.__new__(GenerationRunner)
-    runner._max_concurrency = 5
-    order = []
+    runner._cancelled = False
+    seen = []
 
-    async def fake_scene(scene, bible):
-        order.append(("start", scene))
-        await asyncio.sleep(0.01)
-        order.append(("end", scene))
+    async def fake_scene(scene, bible, incoming):
+        seen.append((scene, incoming))
+        return f"frame{scene}"
 
     runner._run_scene = fake_scene
-    await runner._run_scenes_concurrently(scenes=[1, 2, 3], bible={})
-    # with concurrency + a sleep, all three start before any ends
-    assert order[:3] == [("start", 1), ("start", 2), ("start", 3)]
-    assert len(order) == 6
+    await runner._run_scenes_sequentially(scenes=[1, 2, 3], bible={})
+    # scene 1 starts with no incoming frame; each later scene receives the previous
+    # scene's last frame — continuity chains across scene boundaries
+    assert seen == [(1, None), (2, "frame1"), (3, "frame2")]
 
 
 def test_load_bible_shapes_characters_and_locations():
