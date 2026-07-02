@@ -245,7 +245,13 @@ class QwenClient:
                 json=payload,
                 timeout=30.0,
             )
-            response.raise_for_status()
+            if response.status_code >= 400:
+                # Surface DashScope's actual error (model-not-found, bad param, etc.)
+                # instead of an opaque "400 Bad Request".
+                raise RuntimeError(
+                    f"DashScope image-synthesis {response.status_code} "
+                    f"for model '{model}': {response.text[:600]}"
+                )
             task_id = response.json()["output"]["task_id"]
         return await self._poll_image_task(task_id)
 
@@ -288,10 +294,12 @@ class QwenClient:
         size: str = "1024*1024",
     ) -> str:
         s = get_settings()
-        params: dict = {"size": size, "n": 1}
+        # wanx text2image: prompt + negative_prompt live in `input`; size/n/flags in `parameters`.
+        input_obj: dict = {"prompt": prompt}
         if negative_prompt:
-            params["negative_prompt"] = negative_prompt
-        return await self._dispatch_image(s.qwen_image_model, {"prompt": prompt}, params, s.qwen_image_path)
+            input_obj["negative_prompt"] = negative_prompt
+        params: dict = {"size": size, "n": 1, "prompt_extend": True, "watermark": False}
+        return await self._dispatch_image(s.qwen_image_model, input_obj, params, s.qwen_image_path)
 
     async def edit_image(
         self,
