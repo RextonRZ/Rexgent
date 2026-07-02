@@ -4,8 +4,7 @@ The llm_* fields are populated once token tracking lands (Phase 5); they
 default to 0 and the structure is already in place.
 """
 
-WAN_COST_PER_SEC = 0.07
-HH_COST_PER_SEC = 0.05
+from app.services.cost_rates import video_cost
 
 
 def build_report(
@@ -25,8 +24,10 @@ def build_report(
     hh_seconds = sum(duration_by_clip.get(str(c.id), 0) for c in hh_clips)
     total_seconds = wan_seconds + hh_seconds
 
-    video_cost = wan_seconds * WAN_COST_PER_SEC + hh_seconds * HH_COST_PER_SEC
-    grand_total = video_cost + llm_cost_usd
+    video_cost_usd = round(
+        sum(video_cost(duration_by_clip.get(str(c.id), 0), c.model_used) for c in clips), 2
+    )
+    grand_total = video_cost_usd + llm_cost_usd
 
     passed = sum(1 for c in clips if (c.consistency_score or 0) >= 0.6)
     pass_rate = round(passed / len(clips), 2) if clips else 1.0
@@ -42,7 +43,7 @@ def build_report(
         "happyhorse_clips": len(hh_clips),
         "happyhorse_seconds": hh_seconds,
         "llm_cost_usd": round(llm_cost_usd, 4),
-        "video_cost_usd": round(video_cost, 2),
+        "video_cost_usd": video_cost_usd,
         "grand_total_cost": round(grand_total, 2),
         "budget_usd": budget,
         "within_budget": grand_total <= budget,

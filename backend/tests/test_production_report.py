@@ -14,15 +14,15 @@ def test_report_sums_costs_and_within_budget():
         total_retries=1, wall_clock_minutes=12.5,
         llm_input_tokens=10000, llm_output_tokens=4000, llm_cost_usd=0.041,
     )
-    # wan 5s*0.07 + hh 4s*0.05 = 0.35 + 0.20 = 0.55 video, + 0.041 llm
-    assert report["video_cost_usd"] == 0.55
-    assert report["grand_total_cost"] == 0.59
+    # wan 5s*0.15 + hh 4s*0.108 = 0.75 + 0.432 = 1.18 video, + 0.041 llm
+    assert report["video_cost_usd"] == 1.18
+    assert report["grand_total_cost"] == 1.22
     assert report["within_budget"] is True
     assert report["total_clips"] == 2
 
 
 def test_report_flags_over_budget():
-    # 600s of Wan = $42 video -> over $40
+    # 600s of Wan = $90 video -> over $40
     clips = [_clip("a", "wan", 0.9)]
     durations = {"a": 600}
     report = build_report(
