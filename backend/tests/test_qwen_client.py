@@ -99,3 +99,19 @@ async def test_chat_json_retries_on_truncation():
     with patch.object(client.client.chat.completions, "create", new_callable=AsyncMock, side_effect=[truncated, full]):
         result = await client.chat_json(messages=[{"role": "user", "content": "x"}])
         assert result == {"a": 1, "b": [1, 2]}
+
+
+@pytest.mark.asyncio
+async def test_generate_image_returns_url(monkeypatch):
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    client = QwenClient(get_settings())
+
+    async def fake_dispatch(model, input_obj, parameters, path):
+        assert model == get_settings().qwen_image_model
+        assert input_obj["prompt"] == "a portrait"
+        return "https://oss/plate.png"
+
+    monkeypatch.setattr(client, "_dispatch_image", AsyncMock(side_effect=fake_dispatch))
+    url = await client.generate_image(prompt="a portrait")
+    assert url == "https://oss/plate.png"

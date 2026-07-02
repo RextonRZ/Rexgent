@@ -4,7 +4,7 @@ import asyncio
 import logging
 import httpx
 from openai import AsyncOpenAI
-from app.config import Settings
+from app.config import Settings, get_settings
 from app.services.usage_tracker import record_usage
 
 logger = logging.getLogger(__name__)
@@ -220,3 +220,78 @@ class QwenClient:
                 await asyncio.sleep(interval)
                 elapsed += interval
         raise TimeoutError(f"Video task {task_id} did not complete within {timeout}s")
+
+    # ── Image generation/editing (Production Bible plates) ─────────
+    # Endpoint: POST {video_base}{path} -> header X-DashScope-Async: enable
+    #           -> returns output.task_id
+    # Poll:     GET  {video_base}/tasks/{task_id} -> output.task_status / results
+    async def _dispatch_image(self, model: str, input_obj: dict, parameters: dict, path: str) -> str:
+        payload = {"model": model, "input": input_obj, "parameters": parameters}
+        async with httpx.AsyncClient() as http:
+            response = await http.post(
+                self.video_base_url + path,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "X-DashScope-Async": "enable",
+                },
+                json=payload,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            task_id = response.json()["output"]["task_id"]
+        return await self._poll_image_task(task_id)
+
+    @staticmethod
+    def _extract_image_url(output: dict) -> str | None:
+        results = output.get("results")
+        if isinstance(results, list) and results:
+            first = results[0]
+            if isinstance(first, dict):
+                return first.get("url")
+        return None
+
+    async def _poll_image_task(self, task_id: str, timeout: int = 300, interval: int = 4) -> str:
+        elapsed = 0
+        async with httpx.AsyncClient() as http:
+            while elapsed < timeout:
+                response = await http.get(
+                    f"{self.video_base_url}/tasks/{task_id}",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                output = response.json().get("output", {})
+                status = output.get("task_status")
+                if status == "SUCCEEDED":
+                    url = self._extract_image_url(output)
+                    if not url:
+                        raise RuntimeError(f"Image task {task_id} succeeded but no URL in: {output}")
+                    return url
+                if status in ("FAILED", "CANCELED", "UNKNOWN"):
+                    raise RuntimeError(f"Image task {task_id} {status}: {output.get('message', 'unknown')}")
+                await asyncio.sleep(interval)
+                elapsed += interval
+        raise TimeoutError(f"Image task {task_id} did not complete within {timeout}s")
+
+    async def generate_image(
+        self,
+        prompt: str,
+        negative_prompt: str | None = None,
+        size: str = "1024*1024",
+    ) -> str:
+        s = get_settings()
+        params: dict = {"size": size, "n": 1}
+        if negative_prompt:
+            params["negative_prompt"] = negative_prompt
+        return await self._dispatch_image(s.qwen_image_model, {"prompt": prompt}, params, s.qwen_image_path)
+
+    async def edit_image(
+        self,
+        prompt: str,
+        base_image_url: str,
+        size: str = "1024*1024",
+    ) -> str:
+        s = get_settings()
+        input_obj = {"prompt": prompt, "base_image_url": base_image_url}
+        return await self._dispatch_image(s.qwen_image_edit_model, input_obj, {"size": size, "n": 1}, s.qwen_image_path)

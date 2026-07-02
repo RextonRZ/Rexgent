@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     qwen_max_input_cost_per_1k: float = 0.0016
     qwen_max_output_cost_per_1k: float = 0.0064
 
+    # Production Bible: image generation/editing model IDs (DashScope native async API)
+    qwen_image_model: str = "qwen-image-max"
+    qwen_image_edit_model: str = "qwen-image-edit-max"
+    qwen_vl_continuity_model: str = "qwen3-vl-plus"
+    qwen_image_path: str = "/services/aigc/text2image/image-synthesis"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
