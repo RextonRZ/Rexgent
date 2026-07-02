@@ -16,6 +16,22 @@ from app.config import get_settings
 router = APIRouter(prefix="/api/casting", tags=["casting"])
 
 
+def _to_wav(data: bytes) -> bytes:
+    """Transcode arbitrary audio (e.g. browser webm/opus) to 16kHz mono WAV via
+    ffmpeg. Falls back to the original bytes if ffmpeg is unavailable."""
+    import subprocess
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-i", "pipe:0", "-f", "wav", "-ar", "16000", "-ac", "1", "pipe:1"],
+            input=data, capture_output=True, timeout=60,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            return proc.stdout
+    except Exception:  # noqa: BLE001
+        pass
+    return data
+
+
 def allocate_and_generate(db: Session, project_id: str) -> str:
     """Resume the pipeline after casting review: budget then dispatch generation."""
     from app.agent.pipeline_ops import allocate_budget_op, dispatch_generation_op
@@ -85,11 +101,17 @@ async def regenerate_variant(variant_id: str, db: Session = Depends(get_db)):
     if not v:
         raise HTTPException(status_code=404, detail="Variant not found")
     char = db.query(Character).filter(Character.id == v.character_id).first()
-    prompt = f"{char.visual_description or char.name}, wearing {v.outfit_description or ''}. clean portrait"
+    if char.reference_image_url:
+        prompt = (f"Keep this exact same person and face unchanged. Full-body shot, "
+                  f"wearing {v.outfit_description or ''}. neutral background")
+    else:
+        prompt = f"{char.visual_description or char.name}, full-body shot, wearing {v.outfit_description or ''}. neutral background"
     url, vector = await PlateGenerator().generate_and_store_plate(
-        str(char.project_id), "character", f"{char.name}_{v.label}", prompt)
+        str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
+        base_image_url=char.reference_image_url)
     v.plate_image_url, v.face_vector, v.plate_status = url, vector, "ai_generated"
-    if v.is_default:
+    # never clobber an uploaded face — only seed identity if none exists yet
+    if v.is_default and not char.reference_image_url:
         char.reference_image_url, char.face_vector = url, vector
     db.commit()
     return {"plate_image_url": url}
@@ -135,13 +157,19 @@ async def clone_voice(character_id: str, file: UploadFile = File(...), db: Sessi
     if not c:
         raise HTTPException(status_code=404, detail="Character not found")
     content = await file.read()
+    # Browser mic recordings arrive as webm/ogg — transcode to WAV (best effort) so
+    # enrollment gets a format it accepts. File uploads (wav/mp3) pass through.
+    ctype = (file.content_type or "audio/wav").lower()
+    if "wav" not in ctype and "mpeg" not in ctype and "mp3" not in ctype:
+        content = _to_wav(content)
+        ctype = "audio/wav"
     # keep the source sample so the clone can be re-enrolled/audited later
     oss = OSSManager(settings)
-    sample_key = oss.get_project_path(str(c.project_id), "voice_samples", f"{c.name}_sample")
-    sample_url = oss.upload_bytes(content, sample_key, content_type=file.content_type or "audio/wav")
+    sample_key = oss.get_project_path(str(c.project_id), "voice_samples", f"{c.name}_sample.wav")
+    sample_url = oss.upload_bytes(content, sample_key, content_type=ctype)
     try:
         voice = await QwenClient(settings).enroll_voice(
-            content, preferred_name=c.name, content_type=file.content_type or "audio/wav")
+            content, preferred_name=c.name, content_type=ctype)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Voice enrollment failed: {e}")
     c.voice_id, c.voice_model, c.voice_source = voice, settings.qwen_tts_cloned_model, "cloned"

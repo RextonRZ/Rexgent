@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   useSetPresetVoice,
@@ -9,8 +9,14 @@ import {
   PRESET_VOICES,
 } from "@/hooks/useCasting";
 
-/** Per-character voice: pick a preset timbre, or clone a custom voice from a
- *  short sample. Reflects the character's current voice + previews it. */
+/** A neutral passage (~15s of reading) to capture a clean voice sample. */
+const CLONE_PASSAGE =
+  "The morning light spilled across the quiet street as I walked, thinking about " +
+  "everything and nothing at once. I take a slow breath, and for a moment the whole " +
+  "world feels calm, steady, and completely mine.";
+
+/** Per-character voice: pick a preset timbre, or clone a custom voice by recording
+ *  a passage live (or uploading a sample). Reflects + previews the current voice. */
 export function VoiceRow({
   characterId,
   voiceId,
@@ -24,10 +30,22 @@ export function VoiceRow({
   const [mode, setMode] = useState<"preset" | "clone">(cloned ? "clone" : "preset");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+
   const fileRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const setPreset = useSetPresetVoice();
   const cloneVoice = useCloneVoice();
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   const handlePreview = async () => {
     setPreviewing(true);
@@ -38,6 +56,40 @@ export function VoiceRow({
     } finally {
       setPreviewing(false);
     }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = ["audio/webm", "audio/mp4", "audio/ogg"].find(
+        (m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)
+      );
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => {
+        if (e.data.size) chunksRef.current.push(e.data);
+      };
+      mr.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const type = mr.mimeType || "audio/webm";
+        const ext = type.includes("mp4") ? "mp4" : type.includes("ogg") ? "ogg" : "webm";
+        const file = new File(chunksRef.current, `sample.${ext}`, { type });
+        cloneVoice.mutate({ characterId, file });
+      };
+      mr.start();
+      recorderRef.current = mr;
+      setRecording(true);
+      setSeconds(0);
+      timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+    } catch {
+      /* mic denied / unavailable — the file upload path still works */
+    }
+  };
+
+  const stopRecording = () => {
+    recorderRef.current?.stop();
+    setRecording(false);
+    if (timerRef.current) clearInterval(timerRef.current);
   };
 
   const currentLabel = cloned
@@ -95,34 +147,57 @@ export function VoiceRow({
           ))}
         </select>
       ) : (
-        <div className="space-y-1">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="audio/*"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) cloneVoice.mutate({ characterId, file: f });
-            }}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={cloneVoice.isPending}
-            onClick={() => fileRef.current?.click()}
-            className="w-full"
-          >
-            {cloneVoice.isPending
-              ? "Cloning…"
-              : cloned
-              ? "Re-clone (upload new sample)"
-              : "Upload 5–20s sample to clone"}
-          </Button>
+        <div className="space-y-2">
+          <div className="rounded border border-border bg-background/60 p-2 text-[11px] leading-snug text-muted-foreground">
+            <span className="font-medium text-foreground/80">Read this aloud (~15s):</span>{" "}
+            “{CLONE_PASSAGE}”
+          </div>
+          <div className="flex items-center gap-2">
+            {!recording ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={startRecording}
+                disabled={cloneVoice.isPending}
+              >
+                🎙 Record
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" onClick={stopRecording} className="text-bad">
+                ■ Stop ({seconds}s)
+              </Button>
+            )}
+            <span className="text-[10px] text-muted-foreground">or</span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="audio/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) cloneVoice.mutate({ characterId, file: f });
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileRef.current?.click()}
+              disabled={cloneVoice.isPending}
+            >
+              Upload file
+            </Button>
+          </div>
+          {recording && (
+            <p className="text-[10px] text-primary">● Recording… read the passage, then Stop.</p>
+          )}
+          {cloneVoice.isPending && (
+            <p className="text-[10px] text-muted-foreground">Enrolling clone…</p>
+          )}
+          {cloned && !cloneVoice.isPending && (
+            <p className="text-[10px] text-ok">✓ Cloned voice active.</p>
+          )}
           {cloneVoice.isError && (
-            <p className="text-[10px] text-bad">
-              {(cloneVoice.error as Error).message}
-            </p>
+            <p className="text-[10px] text-bad">{(cloneVoice.error as Error).message}</p>
           )}
         </div>
       )}

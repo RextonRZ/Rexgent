@@ -314,11 +314,18 @@ class QwenClient:
         self,
         prompt: str,
         base_image_url: str,
-        size: str = "1024*1024",
+        size: str = "1280*1280",
+        negative_prompt: str | None = None,
     ) -> str:
+        # qwen-image-edit-max: same messages endpoint as wan2.6-t2i, but the user
+        # content carries the base image (to preserve identity) plus the edit text.
         s = get_settings()
-        input_obj = {"prompt": prompt, "base_image_url": base_image_url}
-        return await self._dispatch_image(s.qwen_image_edit_model, input_obj, {"size": size, "n": 1}, s.qwen_image_path)
+        input_obj = {"messages": [{"role": "user", "content": [
+            {"image": base_image_url}, {"text": prompt}]}]}
+        params: dict = {"size": size, "n": 1, "prompt_extend": True, "watermark": False}
+        if negative_prompt:
+            params["negative_prompt"] = negative_prompt
+        return await self._dispatch_image(s.qwen_image_edit_model, input_obj, params, s.qwen_image_path)
 
     # ── Voice design / enrollment / TTS synthesis ───────────────────
     # DashScope's exact voice/TTS request shapes are uncertain, so these are

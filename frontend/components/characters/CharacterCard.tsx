@@ -102,7 +102,20 @@ export function CharacterCard({
             <span>{character.emotional_arc.end}</span>
           </div>
         )}
-        <div className="pt-1 space-y-2">
+        {/* 1 · Face reference — the identity anchor (face only, no outfit) */}
+        <div className="pt-2 mt-1 border-t hairline space-y-2">
+          <div>
+            <p className="text-[11px] font-semibold text-primary/80">
+              1 · Face reference{" "}
+              <span className="font-normal text-muted-foreground">
+                — identity, face only
+              </span>
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Upload or generate the face. Outfits below are built on this exact
+              face.
+            </p>
+          </div>
           <FaceUpload
             characterId={character.id}
             hasReference={!!character.reference_image_url}
@@ -114,37 +127,49 @@ export function CharacterCard({
         </div>
 
         {casting && (
-          <div className="pt-2 mt-2 border-t hairline space-y-2">
-            <p className="text-[11px] font-semibold text-primary/80">
-              Wardrobe & voice
-            </p>
-            <VoiceRow
-              characterId={character.id}
-              voiceId={casting.voice_id}
-              voiceSource={casting.voice_source}
-            />
-            {casting.variants.length > 0 ? (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {casting.variants.map((variant) => (
-                  <PlateCard
-                    key={variant.id}
-                    imageUrl={variant.plate_image_url ?? undefined}
-                    label={variant.label + (variant.is_default ? " (default)" : "")}
-                    description={variant.outfit_description ?? undefined}
-                    status={variant.plate_status}
-                    onRegenerate={() => regenerateVariant.mutate(variant.id)}
-                    onUpload={(file) =>
-                      overrideVariant.mutate({ variantId: variant.id, file })
-                    }
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="text-[10px] text-muted-foreground">
-                No costume plates yet — run “Generate plates” above.
+          <>
+            {/* 2 · Costume plates — full outfits generated on top of the face */}
+            <div className="pt-2 mt-2 border-t hairline space-y-2">
+              <p className="text-[11px] font-semibold text-primary/80">
+                2 · Costume plates{" "}
+                <span className="font-normal text-muted-foreground">
+                  — outfits, same face
+                </span>
               </p>
-            )}
-          </div>
+              {casting.variants.length > 0 ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {casting.variants.map((variant) => (
+                    <PlateCard
+                      key={variant.id}
+                      imageUrl={variant.plate_image_url ?? undefined}
+                      label={variant.label + (variant.is_default ? " (default)" : "")}
+                      description={variant.outfit_description ?? undefined}
+                      status={variant.plate_status}
+                      onRegenerate={() => regenerateVariant.mutate(variant.id)}
+                      onUpload={(file) =>
+                        overrideVariant.mutate({ variantId: variant.id, file })
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">
+                  No costume plates yet — click{" "}
+                  <span className="text-primary">Generate Plates</span> above.
+                </p>
+              )}
+            </div>
+
+            {/* 3 · Voice */}
+            <div className="pt-2 mt-2 border-t hairline space-y-2">
+              <p className="text-[11px] font-semibold text-primary/80">3 · Voice</p>
+              <VoiceRow
+                characterId={character.id}
+                voiceId={casting.voice_id}
+                voiceSource={casting.voice_source}
+              />
+            </div>
+          </>
         )}
       </CardContent>
     </Card>
