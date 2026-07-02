@@ -18,7 +18,10 @@ def record(db, project_id, category, stage, unit, quantity, amount_usd, ref_id=N
                    unit=unit, quantity=quantity, amount_usd=amount_usd, ref_id=ref_id)
     db.add(ev)
     db.commit()
-    emit("cost:updated", aggregate(db, project_id), str(project_id))
+    # Distinct event name: the aggregate payload here differs from the generation
+    # runner's legacy `cost:updated` ({current_cost, budget_remaining}), which the
+    # old CostTracker/store still consume. Keep them separate to avoid shape clashes.
+    emit("ledger:updated", aggregate(db, project_id), str(project_id))
     return amount_usd
 
 

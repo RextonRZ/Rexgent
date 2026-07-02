@@ -28,7 +28,7 @@ export function useWebSocket(projectId: string) {
       })
     );
     socket.on("cost:updated", (d) =>
-      setCost(d.current_cost, d.budget_remaining)
+      setCost(d.current_cost ?? 0, d.budget_remaining ?? 40)
     );
     socket.on("job:completed", () => setComplete(true));
 

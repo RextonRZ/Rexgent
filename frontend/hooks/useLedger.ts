@@ -28,10 +28,10 @@ export function useLedger(projectId: string) {
     socket.emit("join_project", { project_id: projectId });
 
     const handler = (payload: Ledger) => setLive(payload);
-    socket.on("cost:updated", handler);
+    socket.on("ledger:updated", handler);
 
     return () => {
-      socket.off("cost:updated", handler);
+      socket.off("ledger:updated", handler);
       socket.disconnect();
     };
   }, [projectId]);
