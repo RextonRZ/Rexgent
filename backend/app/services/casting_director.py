@@ -33,13 +33,20 @@ async def style_from_request(qwen, prompt_template: str, free_text: str) -> dict
     return result if isinstance(result, dict) else {"style_tags": [], "prompt": free_text, "negative_prompt": ""}
 
 
-async def assign_voice(qwen, char) -> None:
+# qwen3-tts-flash preset voices — each character gets a distinct one.
+VOICE_POOL = ["Cherry", "Ethan", "Chelsie", "Serena", "Dylan", "Jada", "Sunny", "Aiden",
+              "Nofish", "Katerina", "Elias", "Jennifer", "Ryan", "Marcus", "Roy", "Peter"]
+
+
+def assign_voice(char, index: int = 0) -> None:
+    """Assign a preset TTS voice (qwen3-tts-flash timbre) to a character, by index
+    so each gets a different one. No API call — presets are just names."""
     if char.voice_id:
         return
     from app.config import get_settings
-    char.voice_id = await qwen.design_voice(char.visual_description or char.name or "neutral voice")
+    char.voice_id = VOICE_POOL[index % len(VOICE_POOL)]
     char.voice_model = get_settings().qwen_tts_designed_model
-    char.voice_source = "designed"
+    char.voice_source = "preset"
 
 
 class CastingDirector:
@@ -107,9 +114,9 @@ class CastingDirector:
                     c.plate_status = "ai_generated"
                 emit("casting.plate.completed", {"kind": "character", "key": f"{c.name}:{v['label']}", "index": idx, "total": total}, pid)
 
-        for c in characters:
+        for idx_v, c in enumerate(characters):
             emit("casting.voice.started", {"character": c.name}, pid)
-            await assign_voice(self.plates.qwen, c)
+            assign_voice(c, idx_v)
             emit("casting.voice.completed", {"character": c.name}, pid)
 
         self.db.commit()

@@ -38,7 +38,7 @@ class DialogueSynthesizer:
                 idx += 1
                 name = line.get("character")
                 voice = voice_by_name.get(name) or {}
-                vid = voice.get("voice_id") or "designed:narrator"
+                vid = voice.get("voice_id") or "Cherry"  # preset fallback for unknown speakers
                 emit("audio.tts.started", {"scene_number": scene["number"], "line_index": li,
                                            "index": idx, "total": total}, pid)
                 audio = await self.qwen.synthesize_speech(line.get("line", ""), vid, voice.get("voice_model"))

@@ -140,21 +140,33 @@ async def test_happyhorse_accepts_reference_list(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_synthesize_speech_posts_text_and_voice(monkeypatch):
+async def test_synthesize_speech_sdk_downloads_audio(monkeypatch):
     from app.services.qwen_client import QwenClient
     from app.config import get_settings
+    import app.services.qwen_client as qc
     client = QwenClient(get_settings())
     captured = {}
 
-    async def fake_post_bytes(path, payload):
-        captured.update(payload)
-        return b"RIFFxxxx"
+    class FakeOutput:
+        audio = {"url": "http://x/a.wav"}
 
-    monkeypatch.setattr(client, "_post_audio", AsyncMock(side_effect=fake_post_bytes))
-    audio = await client.synthesize_speech(text="hi", voice_id="v1", model="qwen3-tts-vd-realtime")
-    assert audio == b"RIFFxxxx"
-    assert captured["input"]["text"] == "hi"
-    assert captured["input"]["voice"] == "v1"
+    class FakeResp:
+        status_code = 200
+        output = FakeOutput()
+
+    from dashscope.audio.qwen_tts import SpeechSynthesizer
+
+    def fake_call(**kwargs):
+        captured.update(kwargs)
+        return FakeResp()
+
+    monkeypatch.setattr(SpeechSynthesizer, "call", staticmethod(fake_call))
+    monkeypatch.setattr(qc.httpx, "get", lambda url, timeout=60.0: type("R", (), {"content": b"WAVDATA"})())
+
+    audio = await client.synthesize_speech(text="hi", voice="Cherry")
+    assert audio == b"WAVDATA"
+    assert captured["text"] == "hi"
+    assert captured["voice"] == "Cherry"
 
 
 def test_extract_image_url_wan26_choices_shape():

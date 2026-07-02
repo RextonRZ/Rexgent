@@ -25,12 +25,15 @@ async def test_style_from_request_reframes_ip():
     assert "prompt" in out
 
 
-@pytest.mark.asyncio
-async def test_assign_voice_designs_when_missing():
-    from app.services.casting_director import assign_voice
-    from unittest.mock import AsyncMock, MagicMock
-    qwen = MagicMock(); qwen.design_voice = AsyncMock(return_value="designed:42")
-    char = MagicMock(); char.voice_id = None; char.visual_description = "gruff detective"
-    await assign_voice(qwen, char)
-    assert char.voice_id == "designed:42"
-    assert char.voice_source == "designed"
+def test_assign_voice_picks_preset():
+    from app.services.casting_director import assign_voice, VOICE_POOL
+    from unittest.mock import MagicMock
+    char = MagicMock(); char.voice_id = None
+    assign_voice(char, 0)
+    assert char.voice_id == VOICE_POOL[0]
+    assert char.voice_source == "preset"
+    # a second character (index 1) gets a different preset
+    char2 = MagicMock(); char2.voice_id = None
+    assign_voice(char2, 1)
+    assert char2.voice_id == VOICE_POOL[1]
+    assert char2.voice_id != char.voice_id

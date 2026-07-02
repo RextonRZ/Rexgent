@@ -113,28 +113,31 @@ async def override_variant(variant_id: str, file: UploadFile = File(...), db: Se
 
 
 @router.post("/character/{character_id}/voice/design")
-async def design_voice(character_id: str, description: str, db: Session = Depends(get_db)):
+def set_voice(character_id: str, voice: str = "Cherry", db: Session = Depends(get_db)):
+    """Pick a preset TTS voice (qwen3-tts-flash timbre) for the character."""
+    from app.services.casting_director import VOICE_POOL
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c:
         raise HTTPException(status_code=404, detail="Character not found")
-    q = QwenClient(get_settings())
-    c.voice_id = await q.design_voice(description)
-    c.voice_model, c.voice_source = get_settings().qwen_tts_designed_model, "designed"
+    c.voice_id = voice if voice in VOICE_POOL else "Cherry"
+    c.voice_model, c.voice_source = get_settings().qwen_tts_designed_model, "preset"
     db.commit()
     return {"voice_id": c.voice_id}
 
 
 @router.post("/character/{character_id}/voice/clone")
 async def clone_voice(character_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Voice cloning needs the realtime enrollment API (not enabled) — fall back to a preset."""
+    from app.services.casting_director import VOICE_POOL
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c:
         raise HTTPException(status_code=404, detail="Character not found")
-    content = await file.read()
-    q = QwenClient(get_settings())
-    c.voice_id = await q.enroll_voice(content)
-    c.voice_model, c.voice_source = get_settings().qwen_tts_cloned_model, "cloned"
+    await file.read()  # consume the upload
+    if not c.voice_id or c.voice_id not in VOICE_POOL:
+        c.voice_id = "Cherry"
+    c.voice_model, c.voice_source = get_settings().qwen_tts_designed_model, "preset"
     db.commit()
-    return {"voice_id": c.voice_id}
+    return {"voice_id": c.voice_id, "note": "cloning not enabled — using preset voice"}
 
 
 @router.post("/character/{character_id}/voice/preview")

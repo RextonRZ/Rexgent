@@ -324,49 +324,32 @@ class QwenClient:
     # DashScope's exact voice/TTS request shapes are uncertain, so these are
     # best-effort behind this interface: only this file changes if the real
     # API differs.
-    async def _post_audio(self, path: str, payload: dict) -> bytes:
-        async with httpx.AsyncClient() as http:
-            resp = await http.post(self.video_base_url + path,
-                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                json=payload, timeout=60.0)
-            resp.raise_for_status()
-            return resp.content
-
-    async def synthesize_speech(self, text: str, voice_id: str, model: str | None = None) -> bytes:
+    async def synthesize_speech(self, text: str, voice: str, model: str | None = None) -> bytes:
+        """Offline TTS via the DashScope SDK (qwen3-tts-flash). `voice` is a preset
+        timbre name (e.g. 'Cherry'). Returns synthesized audio bytes (WAV)."""
+        import asyncio
         s = get_settings()
-        payload = {"model": model or s.qwen_tts_designed_model,
-                   "input": {"text": text, "voice": voice_id},
-                   "parameters": {"format": "wav"}}
-        return await self._post_audio(s.qwen_tts_path, payload)
+        model = model or s.qwen_tts_designed_model
+        api_key, base = self.api_key, self.video_base_url
 
-    async def preview_voice(self, text: str, voice_id: str) -> bytes:
-        s = get_settings()
-        return await self.synthesize_speech(text, voice_id, model=s.qwen_tts_preview_model)
+        def _call() -> bytes:
+            import dashscope
+            from dashscope.audio.qwen_tts import SpeechSynthesizer
+            dashscope.base_http_api_url = base  # international endpoint
+            resp = SpeechSynthesizer.call(model=model, api_key=api_key, text=text, voice=voice)
+            if getattr(resp, "status_code", 200) != 200:
+                raise RuntimeError(
+                    f"TTS {getattr(resp, 'status_code', '?')}: {getattr(resp, 'message', '')}")
+            audio = resp.output.audio
+            url = audio.get("url") if isinstance(audio, dict) else getattr(audio, "url", None)
+            if url:
+                return httpx.get(url, timeout=60.0).content
+            data = audio.get("data") if isinstance(audio, dict) else getattr(audio, "data", None)
+            if data:
+                return base64.b64decode(data)
+            raise RuntimeError(f"TTS returned no audio: {resp.output}")
 
-    async def design_voice(self, description: str) -> str:
-        """Best-effort: request a designed voice, return its voice_id.
-        DashScope shape is uncertain; keep it behind this interface so only this
-        method changes if the real endpoint differs."""
-        s = get_settings()
-        payload = {"model": s.qwen_voice_design_model, "input": {"description": description}}
-        try:
-            async with httpx.AsyncClient() as http:
-                resp = await http.post(self.video_base_url + s.qwen_voice_enroll_path,
-                    headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                    json=payload, timeout=60.0)
-                resp.raise_for_status()
-                out = resp.json().get("output", {})
-                return out.get("voice_id") or out.get("id") or f"designed:{abs(hash(description)) % 10_000_000}"
-        except Exception:
-            return f"designed:{abs(hash(description)) % 10_000_000}"
+        return await asyncio.to_thread(_call)
 
-    async def enroll_voice(self, sample_bytes: bytes) -> str:
-        s = get_settings()
-        payload = {"model": s.qwen_voice_clone_model,
-                   "input": {"audio_b64": base64.b64encode(sample_bytes).decode()}}
-        async with httpx.AsyncClient() as http:
-            resp = await http.post(self.video_base_url + s.qwen_voice_enroll_path,
-                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                json=payload, timeout=60.0)
-            resp.raise_for_status()
-            return resp.json()["output"]["voice_id"]
+    async def preview_voice(self, text: str, voice: str) -> bytes:
+        return await self.synthesize_speech(text, voice, model=get_settings().qwen_tts_preview_model)

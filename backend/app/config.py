@@ -34,14 +34,13 @@ class Settings(BaseSettings):
     qwen_vl_continuity_model: str = "qwen3-vl-plus"
     qwen_image_path: str = "/services/aigc/image-generation/generation"
 
-    # Production Bible: voice design/enrollment + TTS synthesis model IDs
-    qwen_voice_design_model: str = "qwen-voice-design"
-    qwen_voice_clone_model: str = "qwen-voice-enrollment"
-    qwen_tts_designed_model: str = "qwen3-tts-vd-realtime"
-    qwen_tts_cloned_model: str = "qwen3-tts-vc-realtime"
+    # Production Bible: TTS synthesis.
+    # qwen3-tts-flash is the OFFLINE model (simple SDK call, 17 preset voices) — used for
+    # all dialogue + previews. The realtime vd/vc models need a WebSocket protocol + custom
+    # voice enrollment, which is out of scope; characters use preset voices instead.
+    qwen_tts_designed_model: str = "qwen3-tts-flash"
+    qwen_tts_cloned_model: str = "qwen3-tts-flash"
     qwen_tts_preview_model: str = "qwen3-tts-flash"
-    qwen_tts_path: str = "/services/aigc/text2speech/speech-synthesis"
-    qwen_voice_enroll_path: str = "/services/aigc/voice/enrollment"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
