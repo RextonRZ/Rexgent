@@ -8,6 +8,7 @@ import { CastingPanel } from "@/components/casting/CastingPanel";
 import { CostLedger } from "@/components/budget/CostLedger";
 import { AgentDecisionPanel } from "@/components/agents/AgentDecisionPanel";
 import { ClarificationModal } from "@/components/agents/ClarificationModal";
+import { NarrativeGraphView } from "@/components/agents/NarrativeGraphView";
 
 export default function GeneratePage({ params }: { params: { id: string } }) {
   useWebSocket(params.id);
@@ -40,6 +41,8 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
       </div>
 
       <GenerationQueue />
+
+      <NarrativeGraphView projectId={params.id} />
     </div>
   );
 }
