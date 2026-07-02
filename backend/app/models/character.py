@@ -25,6 +25,7 @@ class Character(Base):
     face_embedding = Column(JSONB, nullable=True)   # Qwen-VL text description (keywords/notes)
     face_vector = Column(Vector(512), nullable=True)  # real ArcFace embedding
     reference_image_url = Column(String(500), nullable=True)
+    plate_status = Column(String(20), default="ai_pending")
     visual_description = Column(Text, nullable=True)
     video_prompt_fragment = Column(Text, nullable=True)
     face_keywords = Column(JSONB, nullable=True)
