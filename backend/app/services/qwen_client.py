@@ -257,6 +257,15 @@ class QwenClient:
 
     @staticmethod
     def _extract_image_url(output: dict) -> str | None:
+        # Shape A — wan2.6-t2i (messages format): choices[].message.content[].image
+        choices = output.get("choices")
+        if isinstance(choices, list) and choices:
+            content = ((choices[0] or {}).get("message", {}) or {}).get("content", [])
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get("image"):
+                        return item["image"]
+        # Shape B — text2image/image-synthesis: results[].url
         results = output.get("results")
         if isinstance(results, list) and results:
             first = results[0]

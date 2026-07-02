@@ -155,3 +155,15 @@ async def test_synthesize_speech_posts_text_and_voice(monkeypatch):
     assert audio == b"RIFFxxxx"
     assert captured["input"]["text"] == "hi"
     assert captured["input"]["voice"] == "v1"
+
+
+def test_extract_image_url_wan26_choices_shape():
+    from app.services.qwen_client import QwenClient
+    out = {"choices": [{"message": {"content": [{"image": "https://x/y.png", "type": "image"}]}}]}
+    assert QwenClient._extract_image_url(out) == "https://x/y.png"
+
+
+def test_extract_image_url_results_shape():
+    from app.services.qwen_client import QwenClient
+    out = {"results": [{"url": "https://x/z.png"}]}
+    assert QwenClient._extract_image_url(out) == "https://x/z.png"
