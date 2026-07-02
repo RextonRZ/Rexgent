@@ -16,9 +16,26 @@ from app.services.caption_generator import CaptionGenerator
 from app.services.production_report import build_report
 from app.services.oss_manager import OSSManager
 from app.services.usage_tracker import global_usage
+from app.services.audio_timeline import scene_offsets, assemble_scene_segment
+from app.models.line_audio import LineAudio
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def build_dialogue_segments(line_rows, scene_numbers, shot_durations):
+    """Place per-line dialogue audio on the global timeline: group by scene, lay each
+    scene's lines back-to-back from that scene's offset. line_rows: dicts with
+    scene_number, line_index, audio_local, duration_seconds. Returns [{audio_path, start}]."""
+    offs = scene_offsets(scene_numbers, shot_durations)
+    by_scene: dict = {}
+    for r in sorted(line_rows, key=lambda x: (x["scene_number"], x["line_index"])):
+        by_scene.setdefault(r["scene_number"], []).append(
+            {"audio_path": r["audio_local"], "duration": r["duration_seconds"]})
+    segments = []
+    for n in scene_numbers:
+        segments += assemble_scene_segment(by_scene.get(n, []), offs.get(n, 0.0))
+    return segments
 
 
 @celery_app.task(bind=True, name="run_export")
@@ -141,25 +158,57 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         final_local = os.path.join(workdir, "final.mp4")
         stitcher.stitch(stitch_inputs, final_local)
 
-        # Optional music track: download and mix over the silent cut.
-        if audio and audio.get("url"):
-            try:
+        # Build the dialogue track (continuous per-scene segments at global offsets) +
+        # an optional BGM bed that ducks under speech, then mix onto the silent cut.
+        try:
+            from app.models.script import Script, Scene
+            from app.websocket.emitter import emit
+            script = (db.query(Script).filter(Script.project_id == uuid.UUID(project_id))
+                      .order_by(Script.created_at.desc()).first())
+            scene_numbers, shot_durations = [], {}
+            if script:
+                scenes = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
+                scene_numbers = [s.number for s in scenes]
+                for s in scenes:
+                    sh = db.query(Shot).filter(Shot.scene_id == s.id).order_by(Shot.number).all()
+                    shot_durations[s.number] = [x.estimated_duration_seconds for x in sh]
+            line_rows = []
+            for row in db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(project_id)).all():
+                if not row.audio_url:
+                    continue
+                lp = os.path.join(workdir, f"line_{row.scene_number}_{row.line_index}.wav")
+                try:
+                    lr = httpx.get(row.audio_url, timeout=120.0)
+                    lr.raise_for_status()
+                    with open(lp, "wb") as fh:
+                        fh.write(lr.content)
+                    line_rows.append({"scene_number": row.scene_number, "line_index": row.line_index,
+                                      "audio_local": lp, "duration_seconds": row.duration_seconds or 0.0})
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"Export: could not download line audio {row.audio_url}: {e}")
+            dialogue_segments = build_dialogue_segments(line_rows, scene_numbers, shot_durations)
+
+            bgm_local = None
+            if audio and audio.get("url"):
                 ext = audio["url"].rsplit(".", 1)[-1].split("?")[0].lower() or "mp3"
-                music_local = os.path.join(workdir, f"music.{ext}")
+                bgm_local = os.path.join(workdir, f"music.{ext}")
                 a = httpx.get(audio["url"], timeout=120.0)
                 a.raise_for_status()
-                with open(music_local, "wb") as fh:
+                with open(bgm_local, "wb") as fh:
                     fh.write(a.content)
+
+            if dialogue_segments or bgm_local:
+                emit("audio.mix.started", {}, project_id)
                 mixed = os.path.join(workdir, "final_audio.mp4")
-                stitcher.add_audio(
-                    final_local, music_local, mixed,
-                    volume=float(audio.get("volume", 1.0)),
-                    fade_in=float(audio.get("fade_in", 0.0)),
-                    fade_out=float(audio.get("fade_out", 0.0)),
+                stitcher.mix_tracks(
+                    final_local, dialogue_segments, bgm_local, mixed,
+                    bgm_volume=float(audio.get("volume", 0.3)) if audio else 0.3,
+                    duck=bool(audio.get("duck", True)) if audio else True,
                 )
                 final_local = mixed
-            except Exception as e:  # noqa: BLE001
-                logger.warning(f"Export: music mix skipped: {e}")
+                emit("audio.mix.completed", {}, project_id)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Export: audio mix skipped: {e}")
 
         final_key = oss.get_project_path(project_id, "exports", "final.mp4")
         final_url = oss.upload_file(final_local, final_key)

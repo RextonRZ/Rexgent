@@ -249,6 +249,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         audioUrl: audio.url,
         audioVolume: audio.volume,
         audioFadeIn: audio.fadeIn,
+        audioDuck: audio.duck,
       });
       for (let i = 0; i < 60; i++) {
         await new Promise((r) => setTimeout(r, 3000));

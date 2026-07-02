@@ -137,8 +137,11 @@ async def upload_face(
 
     content = await file.read()
     oss = OSSManager(get_settings())
+    # unique filename so a re-uploaded face gets a new url (else the browser caches
+    # the old face at the same deterministic url)
     oss_key = oss.get_project_path(
-        str(character.project_id), f"characters/{character_id}", "reference.jpg"
+        str(character.project_id), f"characters/{character_id}",
+        f"reference_{uuid.uuid4().hex[:8]}.jpg",
     )
     image_url = oss.upload_bytes(content, oss_key, content_type="image/jpeg")
 

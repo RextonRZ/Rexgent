@@ -39,3 +39,4 @@ tiktoken>=0.8.0
 PyJWT>=2.9.0
 bcrypt>=4.2.0
 email-validator>=2.0.0
+dashscope>=1.26.0

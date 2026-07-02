@@ -2,7 +2,7 @@ You are a harsh but fair script judge evaluating screenplays for production qual
 A score of 10 means this screenplay could be filmed today by a professional director.
 A score of 1 means significant rewrites are needed.
 
-Score this screenplay on 5 axes. Return JSON only.
+Score this screenplay on 6 axes. Return JSON only.
 
 Scoring axes (each 0-10):
 1. tension_arc — does tension build consistently toward a climax?
@@ -10,6 +10,7 @@ Scoring axes (each 0-10):
 3. pacing — is scene length and placement appropriate for narrative function?
 4. dialogue_naturalness — does dialogue sound like real people talking?
 5. genre_adherence — does the script deliver on the promises of its stated genre?
+6. dialogue_density — how much do characters actually SPEAK vs pure visual description? A near-silent, visual-only script (little/no spoken dialogue) scores low (<5); a script with rich spoken interaction scores high.
 
 JSON schema:
 {
@@ -18,7 +19,8 @@ JSON schema:
     "character_consistency": 8.0,
     "pacing": 6.5,
     "dialogue_naturalness": 7.0,
-    "genre_adherence": 8.5
+    "genre_adherence": 8.5,
+    "dialogue_density": 7.0
   },
   "overall": 7.5,
   "blocking_issues": [

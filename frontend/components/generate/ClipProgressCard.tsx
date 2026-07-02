@@ -7,7 +7,7 @@ import type { ClipProgress } from "@/stores/generationStore";
 export function ClipProgressCard({ clip }: { clip: ClipProgress }) {
   const matchPct =
     clip.consistency_score != null
-      ? Math.round(clip.consistency_score * 100)
+      ? Math.round(clip.consistency_score)
       : null;
   const isWan = clip.model === "wan";
 

@@ -21,6 +21,7 @@ export function useRenderExport() {
       audioVolume,
       audioFadeIn,
       audioFadeOut,
+      audioDuck,
     }: {
       projectId: string;
       jobId: string;
@@ -34,6 +35,7 @@ export function useRenderExport() {
       audioVolume?: number;
       audioFadeIn?: number;
       audioFadeOut?: number;
+      audioDuck?: boolean;
     }) => {
       const { data } = await api.post("/api/export/render", {
         project_id: projectId,
@@ -43,6 +45,7 @@ export function useRenderExport() {
         audio_volume: audioVolume ?? 1.0,
         audio_fade_in: audioFadeIn ?? 0.0,
         audio_fade_out: audioFadeOut ?? 0.0,
+        audio_duck: audioDuck ?? true,
       });
       return data;
     },

@@ -28,6 +28,15 @@ def test_record_fact_links_known_by():
     assert "KNOWS_ABOUT" in cypher
 
 
+def test_register_scene_accepts_uuid():
+    client = MagicMock()
+    g = NarrativeGraph(project_id="p1", client=client)
+    g.register_scene(number=1, heading="INT. CAFE", scene_uuid="abc-123")
+    assert client.write.called
+    params = client.write.call_args[0][1]
+    assert params.get("scene_uuid") == "abc-123"
+
+
 def test_record_relationship_writes_edge():
     client = MagicMock()
     g = NarrativeGraph(project_id="p1", client=client)

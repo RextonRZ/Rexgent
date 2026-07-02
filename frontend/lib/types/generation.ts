@@ -18,6 +18,7 @@ export interface GeneratedClip {
   prompt: string | null;
   url: string | null;
   consistency_score: number | null;
+  cost_usd?: number | null;
   status: ClipStatus;
   retries: number;
   created_at: string;

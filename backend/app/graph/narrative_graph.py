@@ -14,10 +14,10 @@ class NarrativeGraph:
             {"pid": self.project_id, "name": name, "role": role, "mbti": mbti, "vd": visual_description},
         )
 
-    def register_scene(self, number: int, heading: str = "") -> None:
+    def register_scene(self, number: int, heading: str = "", scene_uuid: str | None = None) -> None:
         self.client.write(
-            "MERGE (s:Scene {project_id:$pid, number:$number}) SET s.heading=$heading",
-            {"pid": self.project_id, "number": number, "heading": heading},
+            "MERGE (s:Scene {project_id:$pid, number:$number}) SET s.heading=$heading, s.scene_uuid=$scene_uuid",
+            {"pid": self.project_id, "number": number, "heading": heading, "scene_uuid": scene_uuid},
         )
 
     def link_appears_in(self, character: str, scene_number: int) -> None:

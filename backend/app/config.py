@@ -26,6 +26,26 @@ class Settings(BaseSettings):
     qwen_max_input_cost_per_1k: float = 0.0016
     qwen_max_output_cost_per_1k: float = 0.0064
 
+    # Production Bible: image generation/editing model IDs.
+    # wan2.6-t2i uses the image-generation/generation endpoint + a messages array
+    # (NOT the older text2image/image-synthesis prompt-string endpoint).
+    qwen_image_model: str = "wan2.6-t2i"
+    qwen_image_edit_model: str = "qwen-image-edit-max"
+    qwen_vl_continuity_model: str = "qwen3-vl-plus"
+    qwen_image_path: str = "/services/aigc/image-generation/generation"
+
+    # Production Bible: TTS synthesis.
+    # qwen3-tts-flash is the OFFLINE model (simple SDK call, preset voices) — the DEFAULT
+    # for dialogue + previews. Cloning is an EXTRA option: the user uploads a voice sample,
+    # we enrol a custom voice via qwen-voice-enrollment, then synthesize it through the
+    # qwen3-tts-vc-realtime WebSocket. A voice_model containing "realtime" routes to that path.
+    qwen_tts_designed_model: str = "qwen3-tts-flash"
+    qwen_tts_preview_model: str = "qwen3-tts-flash"
+    qwen_tts_cloned_model: str = "qwen3-tts-vc-realtime-2026-01-15"
+    qwen_voice_enroll_model: str = "qwen-voice-enrollment"
+    qwen_voice_enroll_path: str = "/services/audio/tts/customization"
+    qwen_tts_realtime_url: str = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

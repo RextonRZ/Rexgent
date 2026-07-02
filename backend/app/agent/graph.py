@@ -47,6 +47,12 @@ def build_pipeline_graph(db=None):
         if db is None:
             return state
         state["judgement"] = await NarrativeJudge().evaluate(state.get("structured", {}))
+        from app.agents.reporter import report_agent
+        j = state["judgement"]
+        report_agent(db, state["project_id"], agent="narrative_judge", stage="judge",
+                     decision=j.get("scores", {}),
+                     rationale=j.get("recommendation", ""),
+                     confidence=float(j.get("overall", 0)) / 10.0)
         return state
 
     async def n_revise(state: PipelineState) -> PipelineState:
@@ -61,6 +67,14 @@ def build_pipeline_graph(db=None):
         state["characters"] = await pipeline_ops.extract_characters_op(db, state["script_id"])
         return state
 
+    async def n_clarify(state: PipelineState) -> PipelineState:
+        _emit_node(state, "clarify")
+        if db is not None and state.get("project_id"):
+            from app.agent.pipeline_ops import clarify_op
+            out = await clarify_op(db, state["project_id"])
+            state["clarify_pause"] = out["pause"]
+        return state
+
     async def n_storyboard(state: PipelineState) -> PipelineState:
         _emit_node(state, "storyboard")
         if db is None:
@@ -68,6 +82,25 @@ def build_pipeline_graph(db=None):
         state["shots"] = await pipeline_ops.generate_storyboard_op(
             db, state["script_id"], target_length=state.get("target_length", 30)
         )
+        return state
+
+    async def n_casting(state: PipelineState) -> PipelineState:
+        _emit_node(state, "casting")
+        # Casting generates reference plates (real image-gen spend). In plan-only mode
+        # it is SKIPPED — the user runs casting via the reviewed Casting panel
+        # ("Generate plates" -> async casting worker). Only full-auto (dispatch_video)
+        # runs it inline here.
+        if db is not None and state.get("project_id") and state.get("dispatch_video"):
+            from app.agent.pipeline_ops import cast_bible_op
+            await cast_bible_op(db, state["project_id"])
+        return state
+
+    async def n_audio(state: PipelineState) -> PipelineState:
+        _emit_node(state, "audio")
+        # Dialogue synthesis (TTS spend) — same rule as casting: full-auto only.
+        if db is not None and state.get("project_id") and state.get("dispatch_video"):
+            from app.agent.pipeline_ops import synth_dialogue_op
+            await synth_dialogue_op(db, state["project_id"])
         return state
 
     async def n_budget(state: PipelineState) -> PipelineState:
@@ -104,7 +137,10 @@ def build_pipeline_graph(db=None):
     g.add_node("judge", n_judge)
     g.add_node("revise", n_revise)
     g.add_node("extract_characters", n_extract_characters)
+    g.add_node("clarify", n_clarify)
     g.add_node("storyboard", n_storyboard)
+    g.add_node("casting", n_casting)
+    g.add_node("audio", n_audio)
     g.add_node("budget", n_budget)
     g.add_node("generate_video", n_generate_video)
 
@@ -113,8 +149,13 @@ def build_pipeline_graph(db=None):
     g.add_conditional_edges("judge", route_after_judge,
                             {"revise": "revise", "extract_characters": "extract_characters"})
     g.add_edge("revise", "generate_script")  # self-correction loop
-    g.add_edge("extract_characters", "storyboard")
-    g.add_edge("storyboard", "budget")
+    g.add_edge("extract_characters", "clarify")
+    g.add_conditional_edges("clarify",
+        lambda s: "END" if s.get("clarify_pause") else "storyboard",
+        {"END": END, "storyboard": "storyboard"})
+    g.add_edge("storyboard", "casting")
+    g.add_edge("casting", "audio")
+    g.add_edge("audio", "budget")
     g.add_edge("budget", "generate_video")
     g.add_edge("generate_video", END)
     return g.compile()

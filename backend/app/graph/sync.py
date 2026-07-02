@@ -5,11 +5,17 @@ from app.graph.narrative_graph import NarrativeGraph
 logger = logging.getLogger(__name__)
 
 
-def sync_scenes(project_id: str, structured: dict) -> None:
+def sync_scenes(project_id: str, structured: dict, scene_uuids: dict | None = None) -> None:
     try:
         ng = NarrativeGraph(project_id=project_id)
+        scene_uuids = scene_uuids or {}
         for sc in structured.get("scenes", []):
-            ng.register_scene(number=sc.get("scene_number", 0), heading=sc.get("heading", ""))
+            number = sc.get("scene_number", 0)
+            ng.register_scene(
+                number=number,
+                heading=sc.get("heading", ""),
+                scene_uuid=scene_uuids.get(number),
+            )
     except Exception as e:  # noqa: BLE001
         logger.warning(f"Neo4j scene sync skipped: {e}")
 

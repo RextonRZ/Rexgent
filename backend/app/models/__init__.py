@@ -10,9 +10,17 @@ from app.models.edit_flag import EditFlag
 from app.models.final_export import FinalExport
 from app.models.narrative_snapshot import NarrativeMemorySnapshot
 from app.models.user import User
+from app.models.costume_variant import CostumeVariant
+from app.models.location_plate import LocationPlate
+from app.models.style_preset import StylePreset
+from app.models.line_audio import LineAudio
+from app.models.cost_event import CostEvent
+from app.models.agent_report import AgentReport
 
 __all__ = [
     "Project", "Script", "Scene", "Character", "CharacterRelationship",
     "PlotFlag", "Shot", "GenerationJob", "GeneratedClip", "EditFlag",
     "FinalExport", "NarrativeMemorySnapshot", "User",
+    "CostumeVariant", "LocationPlate", "StylePreset", "LineAudio",
+    "CostEvent", "AgentReport",
 ]

@@ -48,6 +48,7 @@ async def parse_script(
     db.add(script)
     db.flush()  # assign script.id before creating scenes
 
+    scene_uuids = {}
     for scene_data in structured.get("scenes", []):
         scene = Scene(
             script_id=script.id,
@@ -63,11 +64,12 @@ async def parse_script(
             stage_directions=scene_data.get("stage_directions", []),
         )
         db.add(scene)
+        scene_uuids[scene.number] = str(scene.id)
 
     db.commit()
     db.refresh(script)
 
-    sync_scenes(str(script.project_id), structured)
+    sync_scenes(str(script.project_id), structured, scene_uuids=scene_uuids)
 
     return ScriptParseResponse(
         script_id=script.id,
@@ -111,6 +113,7 @@ async def generate_script(
     db.add(script)
     db.flush()  # assign script.id before creating scenes
 
+    scene_uuids = {}
     for scene_data in structured.get("scenes", []):
         scene = Scene(
             script_id=script.id,
@@ -126,13 +129,14 @@ async def generate_script(
             stage_directions=scene_data.get("stage_directions", []),
         )
         db.add(scene)
+        scene_uuids[scene.number] = str(scene.id)
 
     project.genre = request.genre
     project.premise = request.premise
     db.commit()
     db.refresh(script)
 
-    sync_scenes(str(script.project_id), structured)
+    sync_scenes(str(script.project_id), structured, scene_uuids=scene_uuids)
 
     return ScriptGenerateResponse(
         script_id=script.id,

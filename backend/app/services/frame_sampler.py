@@ -27,3 +27,22 @@ def sample_frames(clip_path_or_url: str, duration: float, count: int = 3) -> lis
         except Exception:
             pass
     return frames
+
+
+def extract_last_frame(clip_url: str) -> bytes | None:
+    """Return the final frame of a clip as JPEG bytes (or None on failure)."""
+    out = tempfile.mktemp(suffix=".jpg")
+    cmd = [
+        "ffmpeg", "-y", "-sseof", "-0.1", "-i", clip_url,
+        "-vframes", "1", "-q:v", "2", out,
+    ]
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=20)
+        if os.path.exists(out):
+            with open(out, "rb") as f:
+                data = f.read()
+            os.unlink(out)
+            return data
+    except Exception:
+        pass
+    return None

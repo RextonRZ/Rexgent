@@ -66,6 +66,7 @@ async def render_export(request: ExportRequest, db: Session = Depends(get_db)):
             "volume": request.audio_volume,
             "fade_in": request.audio_fade_in,
             "fade_out": request.audio_fade_out,
+            "duck": request.audio_duck,
         }
     run_export.delay(str(request.project_id), str(request.job_id), clips, audio)
     return {"status": "rendering", "message": "Export job started"}

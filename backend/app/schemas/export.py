@@ -22,6 +22,7 @@ class ExportRequest(BaseModel):
     audio_volume: float = 1.0      # 1.0 = 100%
     audio_fade_in: float = 0.0     # seconds
     audio_fade_out: float = 0.0    # seconds
+    audio_duck: bool = True        # duck BGM under dialogue (sidechain compression)
 
 
 class ExportResult(BaseModel):

@@ -61,6 +61,26 @@ async def test_judge_major_rewrite_when_low_overall():
 
 
 @pytest.mark.asyncio
+async def test_low_dialogue_density_blocks():
+    judge = NarrativeJudge.__new__(NarrativeJudge)
+    judge.qwen = MagicMock()
+    judge.qwen.chat_json = AsyncMock(return_value={
+        "scores": {"tension_arc": 8.0, "character_consistency": 8.0, "pacing": 8.0,
+                   "dialogue_naturalness": 8.0, "genre_adherence": 8.0, "dialogue_density": 2.0},
+        "overall": 7.0,
+        "blocking_issues": [],
+        "top_strengths": [],
+        "top_weaknesses": ["Too visual, barely any spoken dialogue"],
+        "recommendation": "PROCEED",
+    })
+    judge.prompt_template = "placeholder"
+
+    result = await judge.evaluate(script_json={"scenes": []}, blocking_threshold=5.0)
+    assert any("dialogue_density" in b for b in result["blocking_issues"])
+    assert result["recommendation"] == "REVISE_FIRST"
+
+
+@pytest.mark.asyncio
 async def test_judge_handles_non_dict_response():
     judge = NarrativeJudge.__new__(NarrativeJudge)
     judge.qwen = MagicMock()

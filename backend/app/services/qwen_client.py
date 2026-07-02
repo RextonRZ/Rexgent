@@ -1,10 +1,11 @@
 import re
 import json
+import base64
 import asyncio
 import logging
 import httpx
 from openai import AsyncOpenAI
-from app.config import Settings
+from app.config import Settings, get_settings
 from app.services.usage_tracker import record_usage
 
 logger = logging.getLogger(__name__)
@@ -143,12 +144,15 @@ class QwenClient:
         prompt: str,
         duration: int = 5,
         reference_image_url: str | None = None,
+        reference_media: list[dict] | None = None,
         model: str | None = None,
     ) -> str:
         # wan2.7-t2v (text) or wan2.7-i2v (image-to-video when a reference image exists)
-        chosen = model or ("wan2.7-i2v" if reference_image_url else "wan2.7-t2v")
+        chosen = model or ("wan2.7-i2v" if (reference_media or reference_image_url) else "wan2.7-t2v")
         input_obj: dict = {"prompt": prompt}
-        if reference_image_url:
+        if reference_media:
+            input_obj["media"] = reference_media
+        elif reference_image_url:
             input_obj["media"] = self._reference_media(reference_image_url)
         params = {"resolution": "1080P", "duration": duration}
         return await self._dispatch_video(chosen, input_obj, params)
@@ -159,6 +163,7 @@ class QwenClient:
         duration: int = 5,
         mode: str = "t2v",
         reference_image_url: str | None = None,
+        reference_media: list[dict] | None = None,
         source_video_url: str | None = None,
         edit_instruction: str | None = None,
         model: str | None = None,
@@ -172,7 +177,9 @@ class QwenClient:
         }
         chosen = model or model_map.get(mode, "happyhorse-1.1-t2v")
         input_obj: dict = {"prompt": prompt}
-        if reference_image_url:
+        if reference_media:
+            input_obj["media"] = reference_media
+        elif reference_image_url:
             input_obj["media"] = self._reference_media(reference_image_url)
         if source_video_url:
             input_obj["media"] = [{"type": "reference_video", "url": source_video_url}]
@@ -220,3 +227,246 @@ class QwenClient:
                 await asyncio.sleep(interval)
                 elapsed += interval
         raise TimeoutError(f"Video task {task_id} did not complete within {timeout}s")
+
+    # ── Image generation/editing (Production Bible plates) ─────────
+    # Endpoint: POST {video_base}{path} -> header X-DashScope-Async: enable
+    #           -> returns output.task_id
+    # Poll:     GET  {video_base}/tasks/{task_id} -> output.task_status / results
+    async def _dispatch_image(self, model: str, input_obj: dict, parameters: dict, path: str) -> str:
+        payload = {"model": model, "input": input_obj, "parameters": parameters}
+        async with httpx.AsyncClient() as http:
+            response = await http.post(
+                self.video_base_url + path,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "X-DashScope-Async": "enable",
+                },
+                json=payload,
+                timeout=30.0,
+            )
+            if response.status_code >= 400:
+                # Surface DashScope's actual error (model-not-found, bad param, etc.)
+                # instead of an opaque "400 Bad Request".
+                raise RuntimeError(
+                    f"DashScope image-synthesis {response.status_code} "
+                    f"for model '{model}': {response.text[:600]}"
+                )
+            task_id = response.json()["output"]["task_id"]
+        return await self._poll_image_task(task_id)
+
+    @staticmethod
+    def _extract_image_url(output: dict) -> str | None:
+        # Shape A — wan2.6-t2i (messages format): choices[].message.content[].image
+        choices = output.get("choices")
+        if isinstance(choices, list) and choices:
+            content = ((choices[0] or {}).get("message", {}) or {}).get("content", [])
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get("image"):
+                        return item["image"]
+        # Shape B — text2image/image-synthesis: results[].url
+        results = output.get("results")
+        if isinstance(results, list) and results:
+            first = results[0]
+            if isinstance(first, dict):
+                return first.get("url")
+        return None
+
+    async def _poll_image_task(self, task_id: str, timeout: int = 300, interval: int = 4) -> str:
+        elapsed = 0
+        async with httpx.AsyncClient() as http:
+            while elapsed < timeout:
+                response = await http.get(
+                    f"{self.video_base_url}/tasks/{task_id}",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                output = response.json().get("output", {})
+                status = output.get("task_status")
+                if status == "SUCCEEDED":
+                    url = self._extract_image_url(output)
+                    if not url:
+                        raise RuntimeError(f"Image task {task_id} succeeded but no URL in: {output}")
+                    return url
+                if status in ("FAILED", "CANCELED", "UNKNOWN"):
+                    raise RuntimeError(f"Image task {task_id} {status}: {output.get('message', 'unknown')}")
+                await asyncio.sleep(interval)
+                elapsed += interval
+        raise TimeoutError(f"Image task {task_id} did not complete within {timeout}s")
+
+    async def generate_image(
+        self,
+        prompt: str,
+        negative_prompt: str | None = None,
+        size: str = "1280*1280",
+        prompt_extend: bool = True,
+    ) -> str:
+        s = get_settings()
+        # wan2.6-t2i: prompt goes in a messages array; size/n/negative_prompt/flags in parameters.
+        input_obj: dict = {"messages": [{"role": "user", "content": [{"text": prompt}]}]}
+        params: dict = {"size": size, "n": 1, "prompt_extend": prompt_extend, "watermark": False}
+        if negative_prompt:
+            params["negative_prompt"] = negative_prompt
+        return await self._dispatch_image(s.qwen_image_model, input_obj, params, s.qwen_image_path)
+
+    async def edit_image(
+        self,
+        prompt: str,
+        base_image_url: str,
+        size: str = "1280*1280",
+        negative_prompt: str | None = None,
+        prompt_extend: bool = True,
+    ) -> str:
+        # qwen-image-edit-max: same messages endpoint as wan2.6-t2i, but the user
+        # content carries the base image (to preserve identity) plus the edit text.
+        # prompt_extend is OFF for identity edits — expansion drifts the face.
+        s = get_settings()
+        input_obj = {"messages": [{"role": "user", "content": [
+            {"image": base_image_url}, {"text": prompt}]}]}
+        params: dict = {"size": size, "n": 1, "prompt_extend": prompt_extend, "watermark": False}
+        if negative_prompt:
+            params["negative_prompt"] = negative_prompt
+        return await self._dispatch_image(s.qwen_image_edit_model, input_obj, params, s.qwen_image_path)
+
+    # ── Voice design / enrollment / TTS synthesis ───────────────────
+    # DashScope's exact voice/TTS request shapes are uncertain, so these are
+    # best-effort behind this interface: only this file changes if the real
+    # API differs.
+    async def synthesize_speech(self, text: str, voice: str, model: str | None = None) -> bytes:
+        """TTS synthesis. Preset voices use the OFFLINE SDK (qwen3-tts-flash); cloned
+        voices route to the realtime vc WebSocket (any model containing 'realtime').
+        `voice` is a preset timbre name or an enrolled voice id. Returns WAV bytes."""
+        s = get_settings()
+        model = model or s.qwen_tts_designed_model
+        if "realtime" in model:
+            return await self.synthesize_speech_realtime(text, voice, model)
+
+        api_key, base = self.api_key, self.video_base_url
+
+        def _call() -> bytes:
+            import dashscope
+            from dashscope.audio.qwen_tts import SpeechSynthesizer
+            dashscope.base_http_api_url = base  # international endpoint
+            resp = SpeechSynthesizer.call(model=model, api_key=api_key, text=text, voice=voice)
+            if getattr(resp, "status_code", 200) != 200:
+                raise RuntimeError(
+                    f"TTS {getattr(resp, 'status_code', '?')}: {getattr(resp, 'message', '')}")
+            audio = resp.output.audio
+            url = audio.get("url") if isinstance(audio, dict) else getattr(audio, "url", None)
+            if url:
+                return httpx.get(url, timeout=60.0).content
+            data = audio.get("data") if isinstance(audio, dict) else getattr(audio, "data", None)
+            if data:
+                return base64.b64decode(data)
+            raise RuntimeError(f"TTS returned no audio: {resp.output}")
+
+        return await asyncio.to_thread(_call)
+
+    async def enroll_voice(self, sample_bytes: bytes, preferred_name: str,
+                           content_type: str = "audio/wav") -> str:
+        """Enrol a custom voice from a short sample via qwen-voice-enrollment.
+        Returns the enrolled voice id, usable with the qwen3-tts-vc-realtime model."""
+        s = get_settings()
+        name = re.sub(r"[^a-z0-9]", "", (preferred_name or "").lower())[:10] or "voice"
+        b64 = base64.b64encode(sample_bytes).decode()
+        payload = {
+            "model": s.qwen_voice_enroll_model,
+            "input": {
+                "action": "create",
+                "target_model": s.qwen_tts_cloned_model,
+                "preferred_name": name,
+                "audio": {"data": f"data:{content_type};base64,{b64}"},
+            },
+        }
+        async with httpx.AsyncClient() as http:
+            resp = await http.post(
+                self.video_base_url + s.qwen_voice_enroll_path,
+                headers={"Authorization": f"Bearer {self.api_key}",
+                         "Content-Type": "application/json"},
+                json=payload,
+                timeout=60.0,
+            )
+            if resp.status_code >= 400:
+                raise RuntimeError(f"Voice enrollment {resp.status_code}: {resp.text[:600]}")
+            output = resp.json().get("output", {})
+        voice = output.get("voice")
+        if not voice:
+            raise RuntimeError(f"Voice enrollment returned no voice: {output}")
+        return voice
+
+    async def synthesize_speech_realtime(self, text: str, voice: str,
+                                         model: str | None = None) -> bytes:
+        """TTS via the realtime vc WebSocket (qwen3-tts-vc-realtime). Accumulates the
+        base64 PCM deltas and wraps them into a 24kHz mono 16-bit WAV. Blocking SDK,
+        so it runs in a worker thread."""
+        s = get_settings()
+        model = model or s.qwen_tts_cloned_model
+        api_key, ws_url = self.api_key, s.qwen_tts_realtime_url
+
+        def _call() -> bytes:
+            import io
+            import wave
+            import threading
+            import dashscope
+            from dashscope.audio.qwen_tts_realtime import (
+                QwenTtsRealtime, QwenTtsRealtimeCallback, AudioFormat)
+
+            dashscope.api_key = api_key  # QwenTtsRealtime reads api_key at construction
+            chunks: list[bytes] = []
+            done = threading.Event()
+            error: dict = {}
+
+            class _CB(QwenTtsRealtimeCallback):
+                def on_open(self) -> None:
+                    pass
+
+                def on_close(self, close_status_code, close_msg) -> None:
+                    done.set()
+
+                def on_event(self, message: dict) -> None:
+                    try:
+                        etype = message.get("type")
+                        if etype == "response.audio.delta":
+                            b64 = message.get("delta") or message.get("audio")
+                            if b64:
+                                chunks.append(base64.b64decode(b64))
+                        elif etype in ("response.done", "session.finished"):
+                            done.set()
+                        elif etype == "error":
+                            error["msg"] = message.get("error") or message
+                            done.set()
+                    except Exception as e:  # noqa: BLE001
+                        error["msg"] = str(e)
+                        done.set()
+
+            tts = QwenTtsRealtime(model=model, callback=_CB(), url=ws_url)
+            tts.connect()
+            tts.update_session(voice=voice,
+                               response_format=AudioFormat.PCM_24000HZ_MONO_16BIT)
+            tts.append_text(text)
+            tts.finish()
+            done.wait(timeout=90)
+            try:
+                tts.close()
+            except Exception:  # noqa: BLE001
+                pass
+            if error:
+                raise RuntimeError(f"Realtime TTS error: {error['msg']}")
+            pcm = b"".join(chunks)
+            if not pcm:
+                raise RuntimeError("Realtime TTS returned no audio")
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(24000)
+                wav.writeframes(pcm)
+            return buf.getvalue()
+
+        return await asyncio.to_thread(_call)
+
+    async def preview_voice(self, text: str, voice: str, model: str | None = None) -> bytes:
+        # Preset voices preview through flash; cloned voices pass their realtime model.
+        return await self.synthesize_speech(text, voice, model or get_settings().qwen_tts_preview_model)

@@ -6,6 +6,7 @@ from app.models.script import Script, Scene
 from app.models.shot import Shot
 from app.mcp_tools.token_optimizer import TokenOptimizer
 from app.services.usage_tracker import global_usage
+from app.services.cost_ledger import aggregate
 
 router = APIRouter(prefix="/api/budget", tags=["budget"])
 
@@ -60,3 +61,8 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
     result["within_budget"] = grand_total <= budget
 
     return result
+
+
+@router.get("/ledger/{project_id}")
+def ledger(project_id: str, db: Session = Depends(get_db)):
+    return aggregate(db, project_id)

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 const VOUCHER = 40;
 
 export function CostTracker() {
-  const currentCost = useGenerationStore((s) => s.currentCost);
+  const currentCost = useGenerationStore((s) => s.currentCost) ?? 0;
   const pct = Math.min((currentCost / VOUCHER) * 100, 100);
   const tone = pct > 85 ? "bg-bad" : pct > 70 ? "bg-warn" : "bg-primary";
 

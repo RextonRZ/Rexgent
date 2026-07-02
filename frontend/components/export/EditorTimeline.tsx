@@ -32,6 +32,7 @@ export interface AudioSettings {
   name: string;
   volume: number; // 0..2 (1 = 100%)
   fadeIn: number; // seconds
+  duck: boolean; // duck music under dialogue
 }
 
 export const EMPTY_AUDIO: AudioSettings = {
@@ -39,6 +40,7 @@ export const EMPTY_AUDIO: AudioSettings = {
   name: "",
   volume: 1,
   fadeIn: 0,
+  duck: true,
 };
 
 function num(v: number | readonly number[]): number {
@@ -436,6 +438,15 @@ export function EditorTimeline({
               {audio.fadeIn.toFixed(1)}s
             </span>
           </div>
+          <label className="flex items-center gap-2 text-[11px] cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={audio.duck}
+              onChange={(e) => onAudioChange({ ...audio, duck: e.target.checked })}
+              className="h-3.5 w-3.5 rounded border-border accent-primary"
+            />
+            Duck under dialogue
+          </label>
         </div>
       )}
     </div>

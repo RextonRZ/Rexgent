@@ -13,6 +13,7 @@ celery_app = Celery(
     include=[
         "app.workers.generation_worker",
         "app.workers.export_worker",
+        "app.workers.casting_worker",
     ],
 )
 

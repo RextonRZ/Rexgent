@@ -25,11 +25,17 @@ class Character(Base):
     face_embedding = Column(JSONB, nullable=True)   # Qwen-VL text description (keywords/notes)
     face_vector = Column(Vector(512), nullable=True)  # real ArcFace embedding
     reference_image_url = Column(String(500), nullable=True)
+    plate_status = Column(String(20), default="ai_pending")
     visual_description = Column(Text, nullable=True)
     video_prompt_fragment = Column(Text, nullable=True)
     face_keywords = Column(JSONB, nullable=True)
+    voice_id = Column(String(255), nullable=True)
+    voice_model = Column(String(100), nullable=True)
+    voice_source = Column(String(20), nullable=True)   # designed | cloned
+    voice_sample_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project", back_populates="characters")
     relationships_from = relationship("CharacterRelationship", foreign_keys="CharacterRelationship.from_char_id", back_populates="from_character", cascade="all, delete-orphan")
     relationships_to = relationship("CharacterRelationship", foreign_keys="CharacterRelationship.to_char_id", back_populates="to_character", cascade="all, delete-orphan")
+    costume_variants = relationship("CostumeVariant", back_populates="character", cascade="all, delete-orphan")

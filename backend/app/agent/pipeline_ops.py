@@ -18,12 +18,13 @@ from app.mcp_tools.token_optimizer import TokenOptimizer
 from app.graph.sync import sync_scenes, sync_characters
 
 
-def _persist_script(db: Session, project_id: str, raw_text: str, structured: dict) -> Script:
+def _persist_script(db: Session, project_id: str, raw_text: str, structured: dict) -> tuple[Script, dict]:
     script = Script(project_id=uuid.UUID(project_id), raw_text=raw_text, structured_json=structured)
     db.add(script)
     db.flush()
+    scene_uuids: dict = {}
     for sc in structured.get("scenes", []):
-        db.add(Scene(
+        scene = Scene(
             script_id=script.id,
             number=sc.get("scene_number", 0),
             title=sc.get("heading", ""),
@@ -35,10 +36,12 @@ def _persist_script(db: Session, project_id: str, raw_text: str, structured: dic
             emotional_beat=sc.get("emotional_beat", ""),
             dialogue_json=sc.get("dialogue_lines", []),
             stage_directions=sc.get("stage_directions", []),
-        ))
+        )
+        db.add(scene)
+        scene_uuids[scene.number] = str(scene.id)
     db.commit()
     db.refresh(script)
-    return script
+    return script, scene_uuids
 
 
 async def generate_script_op(
@@ -46,22 +49,32 @@ async def generate_script_op(
     tone: str = "dramatic", episode_count: int = 1, target_length: int = 30,
     language: str = "en",
 ) -> dict:
-    clean_premise = InputSanitizer().sanitize(premise, max_length=300)
-    raw_text = await ScriptGenerator().generate(
-        genre=genre, premise=clean_premise, tone=tone,
-        episode_count=episode_count, target_length=target_length, language=language,
-    )
-    structured = await ScriptStructurer().structure(raw_text, language=language)
-    script = _persist_script(db, project_id, raw_text, structured)
-    sync_scenes(project_id, structured)
-    return {"script_id": str(script.id), "structured": structured}
+    from app.services.usage_tracker import current_project
+    _tok = current_project.set((str(project_id), db))
+    try:
+        clean_premise = InputSanitizer().sanitize(premise, max_length=300)
+        raw_text = await ScriptGenerator().generate(
+            genre=genre, premise=clean_premise, tone=tone,
+            episode_count=episode_count, target_length=target_length, language=language,
+        )
+        structured = await ScriptStructurer().structure(raw_text, language=language)
+        script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
+        sync_scenes(project_id, structured, scene_uuids=scene_uuids)
+        return {"script_id": str(script.id), "structured": structured}
+    finally:
+        current_project.reset(_tok)
 
 
 async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = False) -> list[dict]:
     script = db.query(Script).filter(Script.id == uuid.UUID(script_id)).first()
     if not script or not script.structured_json:
         return []
-    data = await CharacterExtractor().extract(script.structured_json)
+    from app.services.usage_tracker import current_project
+    _tok = current_project.set((str(script.project_id), db))
+    try:
+        data = await CharacterExtractor().extract(script.structured_json)
+    finally:
+        current_project.reset(_tok)
     db.query(Character).filter(Character.project_id == script.project_id).delete()
     created = []
     for cd in data:
@@ -99,28 +112,33 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
     shots_per_scene, shot_seconds = plan_shot_budget(len(scenes), target_length)
     gen = StoryboardGenerator()
     created = []
-    for scene in scenes:
-        scene_chars = [char_map.get(str(n).upper(), {"name": n}) for n in (scene.characters_json or [])]
-        shots = await gen.generate_for_scene(
-            {"scene_number": scene.number, "heading": scene.heading,
-             "description": scene.description, "emotional_beat": scene.emotional_beat},
-            scene_chars,
-            max_shots=shots_per_scene,
-            shot_seconds=shot_seconds,
-        )
-        for sd in shots:
-            shot = Shot(
-                scene_id=scene.id, number=sd.get("shot_number", 1),
-                shot_type=sd.get("shot_type"), camera_movement=sd.get("camera_movement"),
-                lighting=sd.get("lighting"), colour_mood=sd.get("colour_mood"),
-                action=sd.get("action"), dialogue=sd.get("dialogue"),
-                emotional_beat=sd.get("emotional_beat"),
-                estimated_duration_seconds=sd.get("estimated_duration_seconds", 5),
-                characters_in_frame=sd.get("characters_in_frame", []),
-                notes=sd.get("notes"),
+    from app.services.usage_tracker import current_project
+    _tok = current_project.set((str(script.project_id), db))
+    try:
+        for scene in scenes:
+            scene_chars = [char_map.get(str(n).upper(), {"name": n}) for n in (scene.characters_json or [])]
+            shots = await gen.generate_for_scene(
+                {"scene_number": scene.number, "heading": scene.heading,
+                 "description": scene.description, "emotional_beat": scene.emotional_beat},
+                scene_chars,
+                max_shots=shots_per_scene,
+                shot_seconds=shot_seconds,
             )
-            db.add(shot)
-            created.append(shot)
+            for sd in shots:
+                shot = Shot(
+                    scene_id=scene.id, number=sd.get("shot_number", 1),
+                    shot_type=sd.get("shot_type"), camera_movement=sd.get("camera_movement"),
+                    lighting=sd.get("lighting"), colour_mood=sd.get("colour_mood"),
+                    action=sd.get("action"), dialogue=sd.get("dialogue"),
+                    emotional_beat=sd.get("emotional_beat"),
+                    estimated_duration_seconds=sd.get("estimated_duration_seconds", 5),
+                    characters_in_frame=sd.get("characters_in_frame", []),
+                    notes=sd.get("notes"),
+                )
+                db.add(shot)
+                created.append(shot)
+    finally:
+        current_project.reset(_tok)
     db.commit()
     return [{"shot_id": str(s.id), "shot_type": s.shot_type,
              "emotional_beat": s.emotional_beat,
@@ -137,7 +155,66 @@ def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_u
         if shot:
             shot.quality_tier = tier
     db.commit()
+    from app.agents.reporter import report_agent
+    report_agent(db, project_id, agent="budget_allocator", stage="budget",
+                 decision={"wan": result.get("wan_shots"), "happyhorse": result.get("happyhorse_shots")}
+                         if isinstance(result, dict) else {},
+                 rationale="Allocated quality tiers under the cap", confidence=1.0)
     return result
+
+
+async def cast_bible_op(db: Session, project_id: str) -> dict:
+    from app.services.casting_director import CastingDirector
+    return await CastingDirector(db).cast_bible(project_id)
+
+
+async def synth_dialogue_op(db: Session, project_id: str) -> int:
+    from app.services.dialogue_synthesizer import DialogueSynthesizer
+    from app.models.script import Script, Scene
+    from app.models.character import Character
+    from app.models.line_audio import LineAudio
+    script = (db.query(Script).filter(Script.project_id == uuid.UUID(str(project_id)))
+              .order_by(Script.created_at.desc()).first())
+    if not script:
+        return 0
+    scenes = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
+    chars = db.query(Character).filter(Character.project_id == uuid.UUID(str(project_id))).all()
+    voice_by_name = {c.name: {"voice_id": c.voice_id, "voice_model": c.voice_model} for c in chars}
+    scene_dicts = [{"number": s.number, "dialogue_json": s.dialogue_json} for s in scenes]
+    rows = await DialogueSynthesizer(db).synthesize_lines(project_id, scene_dicts, voice_by_name)
+    db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(str(project_id))).delete()
+    for r in rows:
+        db.add(LineAudio(**r))
+    db.commit()
+    from app.agents.reporter import report_agent
+    report_agent(db, project_id, agent="audio_continuity", stage="audio",
+                 decision={"lines": len(rows)},
+                 rationale=f"Synthesized {len(rows)} dialogue lines", confidence=1.0)
+    return len(rows)
+
+
+async def clarify_op(db: Session, project_id: str) -> dict:
+    from app.agents.clarification_agent import ClarificationAgent, needs_pause
+    from app.agents.reporter import report_agent
+    from app.models.project import Project
+    from app.models.script import Script
+    from app.models.character import Character
+    from app.websocket.emitter import emit
+    script = (db.query(Script).filter(Script.project_id == uuid.UUID(str(project_id)))
+              .order_by(Script.created_at.desc()).first())
+    chars = db.query(Character).filter(Character.project_id == uuid.UUID(str(project_id))).all()
+    assessment = await ClarificationAgent().assess(
+        (script.structured_json if script else {}) or {},
+        [{"name": c.name, "physical_description": c.physical_description} for c in chars])
+    project = db.query(Project).filter(Project.id == uuid.UUID(str(project_id))).first()
+    pause = needs_pause(assessment, bool(project.auto_clarify) if project else False)
+    report_agent(db, project_id, agent="clarification", stage="clarify",
+                 decision=assessment,
+                 rationale=("awaiting user answers" if pause else "no blocking ambiguity / auto-assumed"),
+                 confidence=assessment.get("confidence", 1.0))
+    if pause:
+        emit("clarification.awaiting", {"questions": assessment["ambiguities"]}, str(project_id))
+    return {"pause": pause, "assessment": assessment}
 
 
 def dispatch_generation_op(db: Session, project_id: str) -> str:

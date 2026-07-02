@@ -2,10 +2,7 @@
 
 import type { SceneShots } from "@/hooks/useStoryboard";
 import type { GeneratedClip } from "@/lib/types";
-
-function pct(score: number | null) {
-  return score == null ? "—" : `${Math.round(score * 100)}%`;
-}
+import { ClipBadge } from "@/components/budget/ClipBadge";
 
 /** Right rail: scenes → shots (with description) → every generated take. */
 export function ShotLibrary({
@@ -63,7 +60,6 @@ export function ShotLibrary({
                   ) : (
                     takes.map((clip, i) => {
                       const added = inTimeline.has(clip.id);
-                      const verified = clip.status === "APPROVED";
                       return (
                         <div key={clip.id} className="space-y-1">
                           <div className="relative">
@@ -82,14 +78,11 @@ export function ShotLibrary({
                             <span className="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white/90">
                               Take {i + 1}
                             </span>
-                            <span
-                              className={`absolute top-1 right-1 rounded px-1.5 py-0.5 text-[10px] ${
-                                verified
-                                  ? "bg-ok/80 text-white"
-                                  : "bg-warn/80 text-black"
-                              }`}
-                            >
-                              ID {pct(clip.consistency_score)}
+                            <span className="absolute top-1 right-1">
+                              <ClipBadge
+                                continuityScore={clip.consistency_score}
+                                costUsd={clip.cost_usd}
+                              />
                             </span>
                           </div>
                           <button
