@@ -89,3 +89,22 @@ async def test_exhausted_retries_needs_review():
     final_clip = runner.db.add.call_args[0][0]
     assert final_clip.status == "NEEDS_REVIEW"
     assert job.completed_shots == 1
+
+
+def test_load_bible_shapes_characters_and_locations():
+    from app.services.generation_runner import GenerationRunner
+    runner = GenerationRunner.__new__(GenerationRunner)
+
+    class V: pass
+    v = V(); v.plate_image_url = "u"; v.scene_numbers = [1]; v.is_default = True
+
+    class C: pass
+    c = C(); c.name = "Mia"; c.costume_variants = [v]
+
+    class L: pass
+    l = L(); l.location_key = "cafe"; l.plate_image_url = "loc"; l.scene_numbers = [1]
+
+    bible = runner._shape_bible(characters=[c], locations=[l], style_url="style")
+    assert bible["characters"]["Mia"]["variants"][0]["plate_image_url"] == "u"
+    assert bible["location_by_scene"][1] == "loc"
+    assert bible["style_plate"] == "style"

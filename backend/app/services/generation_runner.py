@@ -38,6 +38,27 @@ class GenerationRunner:
         self.breaker = CostCircuitBreaker(budget=budget_usd)
         self.budget_ceiling = self.breaker.ceiling
 
+    @staticmethod
+    def _shape_bible(characters, locations, style_url):
+        chars = {}
+        for c in characters:
+            chars[c.name] = {"variants": [
+                {"plate_image_url": v.plate_image_url, "scene_numbers": v.scene_numbers or [],
+                 "is_default": v.is_default} for v in getattr(c, "costume_variants", [])]}
+        loc_by_scene = {}
+        for l in locations:
+            for n in (l.scene_numbers or []):
+                loc_by_scene[n] = l.plate_image_url
+        return {"characters": chars, "location_by_scene": loc_by_scene, "style_plate": style_url}
+
+    def _load_bible(self, project_id):
+        from app.models.location_plate import LocationPlate
+        from app.models.style_preset import StylePreset
+        characters = self.db.query(Character).filter(Character.project_id == project_id).all()
+        locations = self.db.query(LocationPlate).filter(LocationPlate.project_id == project_id).all()
+        style = self.db.query(StylePreset).filter(StylePreset.project_id == project_id).first()
+        return self._shape_bible(characters, locations, style.plate_image_url if style else None)
+
     def _ordered_shots(self, project_id) -> list[Shot]:
         script = (
             self.db.query(Script)
