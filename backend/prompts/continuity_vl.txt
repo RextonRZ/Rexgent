@@ -1,0 +1,4 @@
+Compare the GENERATED FRAME against the CHARACTER reference and the LOCATION reference.
+Score how well the outfit matches the character reference and how well the background matches
+the location reference. Return ONLY JSON:
+{"outfit_score": 0..1, "background_score": 0..1, "reason": str}
