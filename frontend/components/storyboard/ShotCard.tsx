@@ -5,14 +5,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ShotEditor } from "./ShotEditor";
+import { useDeleteShot } from "@/hooks/useStoryboard";
 import type { Shot } from "@/lib/types";
 
 export function ShotCard({ shot }: { shot: Shot }) {
   const [editing, setEditing] = useState(false);
+  const deleteShot = useDeleteShot();
 
   if (editing) {
     return <ShotEditor shot={shot} onClose={() => setEditing(false)} />;
   }
+
+  const handleDelete = () => {
+    if (window.confirm(`Delete shot ${shot.number}? This can't be undone.`)) {
+      deleteShot.mutate(shot.id);
+    }
+  };
 
   const isWan = shot.quality_tier === "wan";
 
@@ -38,9 +46,21 @@ export function ShotCard({ shot }: { shot: Shot }) {
               </span>
             )}
           </div>
-          <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-            Edit
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-bad hover:text-bad hover:bg-bad/10"
+              disabled={deleteShot.isPending}
+              onClick={handleDelete}
+              title="Delete this shot"
+            >
+              {deleteShot.isPending ? "…" : "Delete"}
+            </Button>
+          </div>
         </div>
         {shot.action && <p>{shot.action}</p>}
         {shot.dialogue && (

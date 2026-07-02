@@ -52,3 +52,16 @@ export function useUpdateShot() {
     },
   });
 }
+
+export function useDeleteShot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (shotId: string) => {
+      const { data } = await api.delete(`/api/storyboard/${shotId}`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["storyboard"] });
+    },
+  });
+}

@@ -138,3 +138,13 @@ async def update_shot(shot_id: str, updates: dict, db: Session = Depends(get_db)
     db.commit()
     db.refresh(shot)
     return shot
+
+
+@router.delete("/{shot_id}")
+async def delete_shot(shot_id: str, db: Session = Depends(get_db)):
+    shot = db.query(Shot).filter(Shot.id == uuid.UUID(shot_id)).first()
+    if not shot:
+        raise HTTPException(status_code=404, detail="Shot not found")
+    db.delete(shot)
+    db.commit()
+    return {"deleted": shot_id}
