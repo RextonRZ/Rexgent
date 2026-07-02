@@ -47,6 +47,13 @@ def allocate_and_generate(db: Session, project_id: str) -> str:
     return dispatch_generation_op(db, project_id)
 
 
+@router.get("/voices")
+def list_voices():
+    """The preset TTS voice catalog (id, gender, description) for the picker."""
+    from app.services.voice_catalog import VOICES
+    return VOICES
+
+
 @router.get("/{project_id}")
 def get_bible(project_id: str, db: Session = Depends(get_db)):
     pid = uuid.UUID(project_id)
@@ -138,11 +145,11 @@ async def override_variant(variant_id: str, file: UploadFile = File(...), db: Se
 @router.post("/character/{character_id}/voice/design")
 def set_voice(character_id: str, voice: str = "Cherry", db: Session = Depends(get_db)):
     """Pick a preset TTS voice (qwen3-tts-flash timbre) for the character."""
-    from app.services.casting_director import VOICE_POOL
+    from app.services.voice_catalog import ALL_IDS
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c:
         raise HTTPException(status_code=404, detail="Character not found")
-    c.voice_id = voice if voice in VOICE_POOL else "Cherry"
+    c.voice_id = voice if voice in ALL_IDS else "Cherry"
     c.voice_model, c.voice_source = get_settings().qwen_tts_designed_model, "preset"
     db.commit()
     return {"voice_id": c.voice_id}

@@ -25,15 +25,26 @@ async def test_style_from_request_reframes_ip():
     assert "prompt" in out
 
 
-def test_assign_voice_picks_preset():
-    from app.services.casting_director import assign_voice, VOICE_POOL
+def test_assign_voice_matches_gender():
+    from app.services.casting_director import assign_voice
+    from app.services.voice_catalog import FEMALE_DEFAULTS, MALE_DEFAULTS
     from unittest.mock import MagicMock
-    char = MagicMock(); char.voice_id = None
-    assign_voice(char, 0)
-    assert char.voice_id == VOICE_POOL[0]
-    assert char.voice_source == "preset"
-    # a second character (index 1) gets a different preset
-    char2 = MagicMock(); char2.voice_id = None
-    assign_voice(char2, 1)
-    assert char2.voice_id == VOICE_POOL[1]
-    assert char2.voice_id != char.voice_id
+    # female character gets a female preset
+    fem = MagicMock(); fem.voice_id = None; fem.gender = "Female"
+    assign_voice(fem, 0)
+    assert fem.voice_id in FEMALE_DEFAULTS
+    assert fem.voice_source == "preset"
+    # male character gets a male preset
+    male = MagicMock(); male.voice_id = None; male.gender = "male"
+    assign_voice(male, 0)
+    assert male.voice_id in MALE_DEFAULTS
+    # two same-gender characters get distinct presets (rotated by index)
+    f2 = MagicMock(); f2.voice_id = None; f2.gender = "woman"
+    assign_voice(f2, 1)
+    assert f2.voice_id in FEMALE_DEFAULTS and f2.voice_id != fem.voice_id
+
+
+def test_default_voice_unknown_gender_falls_back():
+    from app.services.voice_catalog import default_voice, FEMALE_DEFAULTS, MALE_DEFAULTS
+    v = default_voice(None, 0)
+    assert v in FEMALE_DEFAULTS + MALE_DEFAULTS

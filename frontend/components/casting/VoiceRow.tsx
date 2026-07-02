@@ -5,15 +5,13 @@ import { Button } from "@/components/ui/button";
 import {
   useSetPresetVoice,
   useCloneVoice,
+  useVoices,
   previewVoice,
-  PRESET_VOICES,
 } from "@/hooks/useCasting";
 
-/** A neutral passage (~15s of reading) to capture a clean voice sample. */
+/** A short neutral passage to read for a clean voice sample. */
 const CLONE_PASSAGE =
-  "The morning light spilled across the quiet street as I walked, thinking about " +
-  "everything and nothing at once. I take a slow breath, and for a moment the whole " +
-  "world feels calm, steady, and completely mine.";
+  "The morning light spilled across the quiet street as I walked, thinking about everything and nothing at once.";
 
 /** Per-character voice: pick a preset timbre, or clone a custom voice by recording
  *  a passage live (or uploading a sample). Reflects + previews the current voice. */
@@ -40,6 +38,10 @@ export function VoiceRow({
 
   const setPreset = useSetPresetVoice();
   const cloneVoice = useCloneVoice();
+  const { data: voices } = useVoices();
+
+  const femaleVoices = (voices ?? []).filter((v) => v.gender === "female");
+  const maleVoices = (voices ?? []).filter((v) => v.gender === "male");
 
   useEffect(() => {
     return () => {
@@ -140,11 +142,20 @@ export function VoiceRow({
           <option value="" disabled>
             {setPreset.isPending ? "Setting…" : "Choose a preset voice…"}
           </option>
-          {PRESET_VOICES.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
+          <optgroup label="Female">
+            {femaleVoices.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.id} — {v.desc}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Male">
+            {maleVoices.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.id} — {v.desc}
+              </option>
+            ))}
+          </optgroup>
         </select>
       ) : (
         <div className="space-y-2">

@@ -18,11 +18,23 @@ export interface CastingCharacter {
   variants: CostumeVariant[];
 }
 
-/** Preset TTS voices (qwen3-tts-flash timbres) — mirrors backend VOICE_POOL. */
-export const PRESET_VOICES = [
-  "Cherry", "Ethan", "Chelsie", "Serena", "Dylan", "Jada", "Sunny", "Aiden",
-  "Nofish", "Katerina", "Elias", "Jennifer", "Ryan", "Marcus", "Roy", "Peter",
-];
+export interface Voice {
+  id: string;
+  gender: string;
+  desc: string;
+}
+
+/** The official preset TTS voice catalog (served from the backend). */
+export function useVoices() {
+  return useQuery<Voice[]>({
+    queryKey: ["voices"],
+    queryFn: async () => {
+      const { data } = await api.get(`/api/casting/voices`);
+      return data;
+    },
+    staleTime: Infinity,
+  });
+}
 
 export interface LocationPlate {
   id: string;

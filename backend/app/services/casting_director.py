@@ -33,18 +33,20 @@ async def style_from_request(qwen, prompt_template: str, free_text: str) -> dict
     return result if isinstance(result, dict) else {"style_tags": [], "prompt": free_text, "negative_prompt": ""}
 
 
-# qwen3-tts-flash preset voices — each character gets a distinct one.
-VOICE_POOL = ["Cherry", "Ethan", "Chelsie", "Serena", "Dylan", "Jada", "Sunny", "Aiden",
-              "Nofish", "Katerina", "Elias", "Jennifer", "Ryan", "Marcus", "Roy", "Peter"]
+# Back-compat: a flat pool of clean general-purpose presets. The full catalog
+# (with gender + descriptions) lives in app.services.voice_catalog.
+from app.services.voice_catalog import FEMALE_DEFAULTS, MALE_DEFAULTS, default_voice
+VOICE_POOL = FEMALE_DEFAULTS + MALE_DEFAULTS
 
 
 def assign_voice(char, index: int = 0) -> None:
-    """Assign a preset TTS voice (qwen3-tts-flash timbre) to a character, by index
-    so each gets a different one. No API call — presets are just names."""
+    """Assign a preset TTS voice (qwen3-tts-flash timbre), matched to the
+    character's gender and rotated by index so each gets a distinct one.
+    No API call — presets are just names."""
     if char.voice_id:
         return
     from app.config import get_settings
-    char.voice_id = VOICE_POOL[index % len(VOICE_POOL)]
+    char.voice_id = default_voice(getattr(char, "gender", None), index)
     char.voice_model = get_settings().qwen_tts_designed_model
     char.voice_source = "preset"
 
