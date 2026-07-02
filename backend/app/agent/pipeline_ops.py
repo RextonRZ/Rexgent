@@ -176,7 +176,7 @@ async def synth_dialogue_op(db: Session, project_id: str) -> int:
     chars = db.query(Character).filter(Character.project_id == uuid.UUID(str(project_id))).all()
     voice_by_name = {c.name: {"voice_id": c.voice_id, "voice_model": c.voice_model} for c in chars}
     scene_dicts = [{"number": s.number, "dialogue_json": s.dialogue_json} for s in scenes]
-    rows = await DialogueSynthesizer().synthesize_lines(project_id, scene_dicts, voice_by_name)
+    rows = await DialogueSynthesizer(db).synthesize_lines(project_id, scene_dicts, voice_by_name)
     db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(str(project_id))).delete()
     for r in rows:
         db.add(LineAudio(**r))

@@ -7,8 +7,9 @@ from app.services.generation_runner import GenerationRunner
 
 @pytest.fixture(autouse=True)
 def _no_ws(monkeypatch):
-    """Keep tests isolated from Redis/WebSocket."""
+    """Keep tests isolated from Redis/WebSocket and the cost ledger's real DB aggregate."""
     monkeypatch.setattr(gr, "emit", lambda *a, **k: None)
+    monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.54)
 
 
 def make_runner():
@@ -59,6 +60,20 @@ async def test_passing_clip_is_approved(monkeypatch):
     assert added.status == "APPROVED"
     assert added.consistency_score == 82
     assert job.completed_shots == 1
+
+
+@pytest.mark.asyncio
+async def test_process_shot_records_video_cost(monkeypatch):
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 80, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    calls = {}
+    monkeypatch.setattr(gr, "record_video", lambda *a, **k: calls.setdefault("n", 0) or calls.update(n=calls.get("n", 0) + 1) or 0.54)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    await runner._process_shot(job, make_shot(), {"Yuki": make_char()}, BIBLE, 1, None)
+    assert calls.get("n") == 1
 
 
 @pytest.mark.asyncio

@@ -46,7 +46,7 @@ class CastingDirector:
     def __init__(self, db: Session):
         self.db = db
         self.planner = WardrobePlanner()
-        self.plates = PlateGenerator()
+        self.plates = PlateGenerator(self.db)
         self.style_prompt = load_prompt("style_plate.txt")
 
     async def cast_bible(self, project_id) -> dict:

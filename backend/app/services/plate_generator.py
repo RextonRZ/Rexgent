@@ -12,11 +12,12 @@ class PlateGenerator:
     and (for character plates) fed to the face embedder — no second fetch.
     """
 
-    def __init__(self):
+    def __init__(self, db=None):
         s = get_settings()
         self.qwen = QwenClient(s)
         self.oss = OSSManager(s)
         self.embedder = FaceEmbedder()
+        self.db = db
 
     @staticmethod
     def _fetch_bytes(url: str) -> bytes:
@@ -32,6 +33,10 @@ class PlateGenerator:
         content = self._fetch_bytes(raw_url)
         oss_key = self.oss.get_project_path(project_id, f"plates/{kind}", f"{key.replace(':', '_')}.png")
         oss_url = self.oss.upload_bytes(content, oss_key, content_type="image/png")
+
+        if getattr(self, "db", None) is not None:
+            from app.services.cost_ledger import record_image
+            record_image(self.db, project_id, 1, stage="casting")
 
         vector = None
         if kind == "character":

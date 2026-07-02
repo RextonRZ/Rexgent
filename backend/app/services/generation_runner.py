@@ -13,6 +13,7 @@ from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
 from app.services.guardrails import CostCircuitBreaker, PreGenerationValidator
 from app.services.reference_stack import build_reference_stack
 from app.services.frame_sampler import extract_last_frame
+from app.services.cost_ledger import record_video
 from app.websocket.emitter import emit
 from app.config import get_settings
 
@@ -189,7 +190,6 @@ class GenerationRunner:
         ref_stack = build_reference_stack(
             characters_in_frame=in_frame, scene_number=scene_number, bible=bible,
             prev_last_frame_url=prev_last_frame_url, model_cap=model_cap)
-        cost_per_sec = WAN_COST_PER_SEC if is_wan else HH_COST_PER_SEC
 
         emit("generation.shot.started", {"scene_number": scene_number,
              "shot_number": shot.number, "index": job.completed_shots + 1,
@@ -207,7 +207,6 @@ class GenerationRunner:
                         prompt=prompt, duration=shot.estimated_duration_seconds,
                         mode="r2v" if ref_stack else "t2v", reference_media=ref_stack or None)
                 clip_url = await self.qwen.poll_video_task(task_id)
-                job.actual_cost += cost_per_sec * shot.estimated_duration_seconds
 
                 emit("continuity.scoring.started", {"shot_id": str(shot.id)}, pid)
                 guard = await self.continuity.validate(
@@ -226,6 +225,9 @@ class GenerationRunner:
                 self.db.add(clip)
                 job.completed_shots += 1
                 self.db.commit()
+                amt = record_video(self.db, str(job.project_id), shot.estimated_duration_seconds,
+                                   shot.quality_tier or "happyhorse", ref_id=str(clip.id))
+                job.actual_cost += amt
                 if status == "NEEDS_REVIEW":
                     emit("continuity.flagged", {"shot_id": str(shot.id),
                          "continuity_score": guard["continuity_score"]}, pid)

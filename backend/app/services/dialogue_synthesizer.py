@@ -23,10 +23,11 @@ def probe_duration(audio_bytes: bytes) -> float:
 
 
 class DialogueSynthesizer:
-    def __init__(self):
+    def __init__(self, db=None):
         s = get_settings()
         self.qwen = QwenClient(s)
         self.oss = OSSManager(s)
+        self.db = db
 
     async def synthesize_lines(self, project_id, scenes, voice_by_name) -> list[dict]:
         pid = str(project_id)
@@ -46,6 +47,9 @@ class DialogueSynthesizer:
                 rows.append({"project_id": project_id, "scene_number": scene["number"], "line_index": li,
                              "character_name": name, "text": line.get("line", ""), "voice_id": vid,
                              "audio_url": url, "duration_seconds": probe_duration(audio)})
+                if getattr(self, "db", None) is not None:
+                    from app.services.cost_ledger import record_tts
+                    record_tts(self.db, project_id, len(line.get("line", "")))
                 emit("audio.tts.completed", {"scene_number": scene["number"], "line_index": li,
                                              "index": idx, "total": total}, pid)
         return rows
