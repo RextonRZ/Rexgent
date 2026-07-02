@@ -9,6 +9,7 @@ Rules you ALWAYS follow:
 6. Use present tense, active voice.
 7. Include the emotional tone.
 8. End with duration in seconds.
+9. NEVER focus on or close up on a photograph, portrait, ID, or screen showing a specific person — describe the environment or the live subject instead.
 
 You will be given shot data, character visual descriptions (use these, NOT names), the target model, and duration.
 
