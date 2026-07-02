@@ -8,7 +8,7 @@ from app.models.costume_variant import CostumeVariant
 from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
 from app.services.plate_generator import (PlateGenerator, character_plate_prompt,
-                                          subject_descriptor, CHAR_PLATE_NEGATIVE, DEFAULT_OUTFIT)
+                                          subject_descriptor, CHAR_PLATE_NEGATIVE)
 from app.services.oss_manager import OSSManager
 from app.services.face_embedder import FaceEmbedder
 from app.services.qwen_client import QwenClient
@@ -162,7 +162,7 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
                 .order_by(CostumeVariant.is_default.desc()).all())
     if not variants:
         v = CostumeVariant(character_id=c.id, label="default",
-                           outfit_description=DEFAULT_OUTFIT,
+                           outfit_description="",
                            is_default=True, plate_status="ai_pending", scene_numbers=[])
         db.add(v)
         db.flush()

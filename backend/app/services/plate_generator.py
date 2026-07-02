@@ -23,32 +23,41 @@ def subject_descriptor(gender: str | None = None, age: str | None = None,
     """A concise 'who this is' phrase so plates stay CHARACTER-SPECIFIC even if the
     face-edit path can't run — otherwise two characters collapse into the same
     generic person. Uses gender/age/appearance, never the character's name (a name
-    isn't visual)."""
+    isn't visual). When gender is unknown (e.g. a pet or a child) we lean on the
+    appearance so a dog stays a dog rather than becoming 'a person'."""
     from app.services.voice_catalog import gender_bucket
     b = gender_bucket(gender)
-    lead = "a woman" if b == "female" else "a man" if b == "male" else "a person"
-    if age:
+    lead = "a woman" if b == "female" else "a man" if b == "male" else ""
+    if lead and age:
         lead = f"{lead} around {age}"
     appearance = (appearance or "").strip()
+    if len(appearance) > 220:  # keep the face from being drowned by a paragraph
+        appearance = appearance[:220].rsplit(" ", 1)[0] + "…"
     if appearance:
-        if len(appearance) > 220:  # keep the face from being drowned by a paragraph
-            appearance = appearance[:220].rsplit(" ", 1)[0] + "…"
-        return f"{lead}, {appearance}"
-    return lead
+        return f"{lead}, {appearance}" if lead else appearance
+    return lead or "a person"
 
 
-def character_plate_prompt(has_face: bool, subject: str, outfit: str) -> str:
-    """A costume-plate prompt tuned for FACE consistency AND a single subject: a
-    waist-up studio shot (face stays large) of ONE person on a plain backdrop.
-    `subject` describes who the character is (gender/age/appearance) so even the
-    text-to-image fallback stays character-specific. outfit should be clothing only."""
-    frame = ("Solo studio costume-reference photo of ONE person alone, no other people, "
-             "waist-up medium portrait facing forward, plain seamless neutral backdrop, "
+def character_plate_prompt(has_face: bool, subject: str, outfit: str = "") -> str:
+    """A costume-plate prompt tuned for identity + a single subject: a waist-up studio
+    shot (face stays large) of ONE subject on a plain backdrop. `subject` is who they
+    are (gender/age/appearance). When `outfit` is empty we KEEP the reference's own
+    clothing instead of imposing a generic outfit — so each character keeps their real
+    look (and a dog/child isn't forced into an adult t-shirt)."""
+    frame = ("Solo studio costume-reference photo of ONE subject alone, no other people, "
+             "waist-up medium shot facing forward, plain seamless neutral backdrop, "
              "soft even lighting. Ignore any location, action or scene — plain background only.")
+    outfit = (outfit or "").strip()
     if has_face:
-        return (f"The exact same person as the reference image ({subject}) — keep the identical "
-                f"face and hair, do not change the face. Wearing {outfit}. {frame}")
-    return f"{subject}. Wearing {outfit}. {frame}"
+        if outfit:
+            return (f"The exact same subject as the reference image ({subject}) — keep the "
+                    f"identical face and hair. Wearing {outfit}. {frame}")
+        # no story costume: preserve the reference's own clothing too
+        return (f"The exact same subject as the reference image ({subject}) — keep the identical "
+                f"face, hair and the same clothing as the reference. {frame}")
+    if outfit:
+        return f"{subject}, wearing {outfit}. {frame}"
+    return f"{subject}. {frame}"
 
 
 class PlateGenerator:

@@ -8,7 +8,7 @@ from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
 from app.services.wardrobe_planner import WardrobePlanner
 from app.services.plate_generator import (PlateGenerator, character_plate_prompt,
-                                          subject_descriptor, CHAR_PLATE_NEGATIVE, DEFAULT_OUTFIT)
+                                          subject_descriptor, CHAR_PLATE_NEGATIVE)
 from app.services.prompt_loader import load_prompt
 from app.websocket.emitter import emit
 
@@ -97,7 +97,7 @@ class CastingDirector:
             emit("casting.plate.completed", {"kind": "location", "key": loc["location_key"], "index": idx, "total": total}, pid)
 
         for c in characters:
-            variants = plan.get(c.name) or [{"label": "default", "outfit_description": DEFAULT_OUTFIT,
+            variants = plan.get(c.name) or [{"label": "default", "outfit_description": "",
                                              "scene_numbers": []}]
             for i, v in enumerate(variants):
                 idx += 1
