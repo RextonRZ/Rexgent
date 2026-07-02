@@ -33,3 +33,4 @@ class Character(Base):
     project = relationship("Project", back_populates="characters")
     relationships_from = relationship("CharacterRelationship", foreign_keys="CharacterRelationship.from_char_id", back_populates="from_character", cascade="all, delete-orphan")
     relationships_to = relationship("CharacterRelationship", foreign_keys="CharacterRelationship.to_char_id", back_populates="to_character", cascade="all, delete-orphan")
+    costume_variants = relationship("CostumeVariant", back_populates="character", cascade="all, delete-orphan")
