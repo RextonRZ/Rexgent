@@ -15,6 +15,14 @@ def test_graph_compiles_with_nodes():
         assert n in nodes
 
 
+def test_casting_node_in_graph():
+    from app.agent.graph import build_pipeline_graph
+    # Builds without error and includes the casting stage between storyboard and budget.
+    g = build_pipeline_graph(db=None)
+    node_names = set(g.get_graph().nodes.keys())
+    assert "casting" in node_names
+
+
 def test_judge_gate_branches():
     assert route_after_judge({"judgement": {"recommendation": "REVISE_FIRST"}, "revise_count": 0}) == "revise"
     assert route_after_judge({"judgement": {"recommendation": "PROCEED"}}) == "extract_characters"

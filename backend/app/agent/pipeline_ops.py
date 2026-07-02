@@ -140,6 +140,11 @@ def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_u
     return result
 
 
+async def cast_bible_op(db: Session, project_id: str) -> dict:
+    from app.services.casting_director import CastingDirector
+    return await CastingDirector(db).cast_bible(project_id)
+
+
 def dispatch_generation_op(db: Session, project_id: str) -> str:
     job = GenerationJob(project_id=uuid.UUID(project_id))
     db.add(job)
