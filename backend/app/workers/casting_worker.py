@@ -11,5 +11,7 @@ def run_casting_job(self, project_id: str):
     db = SessionLocal()
     try:
         asyncio.run(CastingDirector(db).cast_bible(uuid.UUID(project_id)))
+        from app.agent.pipeline_ops import synth_dialogue_op
+        asyncio.run(synth_dialogue_op(db, project_id))
     finally:
         db.close()

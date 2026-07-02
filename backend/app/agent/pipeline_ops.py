@@ -148,6 +148,27 @@ async def cast_bible_op(db: Session, project_id: str) -> dict:
     return await CastingDirector(db).cast_bible(project_id)
 
 
+async def synth_dialogue_op(db: Session, project_id: str) -> int:
+    from app.services.dialogue_synthesizer import DialogueSynthesizer
+    from app.models.script import Script, Scene
+    from app.models.character import Character
+    from app.models.line_audio import LineAudio
+    script = (db.query(Script).filter(Script.project_id == uuid.UUID(str(project_id)))
+              .order_by(Script.created_at.desc()).first())
+    if not script:
+        return 0
+    scenes = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
+    chars = db.query(Character).filter(Character.project_id == uuid.UUID(str(project_id))).all()
+    voice_by_name = {c.name: {"voice_id": c.voice_id, "voice_model": c.voice_model} for c in chars}
+    scene_dicts = [{"number": s.number, "dialogue_json": s.dialogue_json} for s in scenes]
+    rows = await DialogueSynthesizer().synthesize_lines(project_id, scene_dicts, voice_by_name)
+    db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(str(project_id))).delete()
+    for r in rows:
+        db.add(LineAudio(**r))
+    db.commit()
+    return len(rows)
+
+
 def dispatch_generation_op(db: Session, project_id: str) -> str:
     job = GenerationJob(project_id=uuid.UUID(project_id))
     db.add(job)

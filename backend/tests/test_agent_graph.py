@@ -23,6 +23,12 @@ def test_casting_node_in_graph():
     assert "casting" in node_names
 
 
+def test_audio_node_in_graph():
+    from app.agent.graph import build_pipeline_graph
+    g = build_pipeline_graph(db=None)
+    assert "audio" in set(g.get_graph().nodes.keys())
+
+
 def test_judge_gate_branches():
     assert route_after_judge({"judgement": {"recommendation": "REVISE_FIRST"}, "revise_count": 0}) == "revise"
     assert route_after_judge({"judgement": {"recommendation": "PROCEED"}}) == "extract_characters"

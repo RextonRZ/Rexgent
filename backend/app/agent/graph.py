@@ -77,6 +77,13 @@ def build_pipeline_graph(db=None):
             await cast_bible_op(db, state["project_id"])
         return state
 
+    async def n_audio(state: PipelineState) -> PipelineState:
+        _emit_node(state, "audio")
+        if db is not None and state.get("project_id"):
+            from app.agent.pipeline_ops import synth_dialogue_op
+            await synth_dialogue_op(db, state["project_id"])
+        return state
+
     async def n_budget(state: PipelineState) -> PipelineState:
         _emit_node(state, "budget")
         if db is None:
@@ -113,6 +120,7 @@ def build_pipeline_graph(db=None):
     g.add_node("extract_characters", n_extract_characters)
     g.add_node("storyboard", n_storyboard)
     g.add_node("casting", n_casting)
+    g.add_node("audio", n_audio)
     g.add_node("budget", n_budget)
     g.add_node("generate_video", n_generate_video)
 
@@ -123,7 +131,8 @@ def build_pipeline_graph(db=None):
     g.add_edge("revise", "generate_script")  # self-correction loop
     g.add_edge("extract_characters", "storyboard")
     g.add_edge("storyboard", "casting")
-    g.add_edge("casting", "budget")
+    g.add_edge("casting", "audio")
+    g.add_edge("audio", "budget")
     g.add_edge("budget", "generate_video")
     g.add_edge("generate_video", END)
     return g.compile()
