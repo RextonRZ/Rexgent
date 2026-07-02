@@ -15,11 +15,12 @@ from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
 from app.models.line_audio import LineAudio
 from app.models.cost_event import CostEvent
+from app.models.agent_report import AgentReport
 
 __all__ = [
     "Project", "Script", "Scene", "Character", "CharacterRelationship",
     "PlotFlag", "Shot", "GenerationJob", "GeneratedClip", "EditFlag",
     "FinalExport", "NarrativeMemorySnapshot", "User",
     "CostumeVariant", "LocationPlate", "StylePreset", "LineAudio",
-    "CostEvent",
+    "CostEvent", "AgentReport",
 ]

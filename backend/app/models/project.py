@@ -16,6 +16,7 @@ class Project(Base):
     premise = Column(Text, nullable=True)
     status = Column(String(50), default="draft")
     auto_approve_casting = Column(Boolean, default=False)
+    auto_clarify = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
