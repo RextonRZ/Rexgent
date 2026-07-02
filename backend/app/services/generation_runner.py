@@ -31,6 +31,8 @@ CONSISTENCY_THRESHOLD = 0.4
 
 
 class GenerationRunner:
+    _max_concurrency = 5
+
     def __init__(self, db: Session, budget_usd: float = 40.0):
         self.db = db
         settings = get_settings()
@@ -125,27 +127,32 @@ class GenerationRunner:
 
         pid = str(job.project_id)
         bible = self._load_bible(job.project_id)
+
+        # Scenes (ordered) for this job's latest script.
         script = (self.db.query(Script).filter(Script.project_id == job.project_id)
                   .order_by(Script.created_at.desc()).first())
         scenes = (self.db.query(Scene).filter(Scene.script_id == script.id)
                   .order_by(Scene.number).all()) if script else []
-        for scene in scenes:
-            prev_last_frame = None
-            scene_shots = (self.db.query(Shot).filter(Shot.scene_id == scene.id)
-                           .order_by(Shot.number).all())
-            for shot in scene_shots:
-                if job.actual_cost >= self.budget_ceiling:
-                    job.status = "BUDGET_EXHAUSTED"
-                    self.db.commit()
-                    emit("job:budget_exhausted", {"job_id": str(job.id)}, pid)
-                    return
-                prev_last_frame = await self._process_shot(
-                    job, shot, char_by_name, bible, scene.number, prev_last_frame)
-                emit("cost:updated", {
-                    "current_cost": round(job.actual_cost, 2),
-                    "budget_remaining": round(self.budget_ceiling - job.actual_cost, 2),
-                }, pid)
 
+        import asyncio
+        self._job_id = job.id
+        self._spent = float(job.actual_cost or 0.0)
+        self._cost_lock = asyncio.Lock()
+        self._cancelled = False
+
+        await self._run_scenes_concurrently(scenes, bible)
+
+        # Reconcile counters from the DB (per-scene sessions wrote clips + cost events
+        # independently, so recompute authoritative totals here to avoid lost updates).
+        from app.models.generated_clip import GeneratedClip
+        job.completed_shots = (self.db.query(GeneratedClip)
+                               .filter(GeneratedClip.job_id == job.id).count())
+        job.actual_cost = round(self._spent, 4)
+        if self._cancelled:
+            job.status = "BUDGET_EXHAUSTED"
+            self.db.commit()
+            emit("job:budget_exhausted", {"job_id": str(job.id)}, pid)
+            return
         job.status = "COMPLETE"
         job.completed_at = datetime.now(timezone.utc)
         self.db.commit()
@@ -154,6 +161,62 @@ class GenerationRunner:
             "total_clips": job.completed_shots,
             "total_cost": round(job.actual_cost, 2),
         }, pid)
+
+    async def _run_scenes_concurrently(self, scenes, bible):
+        import asyncio
+        sem = asyncio.Semaphore(self._max_concurrency)
+
+        async def guarded(scene):
+            async with sem:
+                await self._run_scene(scene, bible)
+
+        await asyncio.gather(*(guarded(s) for s in scenes))
+
+    async def _run_scene(self, scene, bible):
+        from app.database import get_session_factory
+        from app.services.cost_rates import video_cost
+        from app.models.generation_job import GenerationJob
+        from app.models.shot import Shot
+        import asyncio  # noqa: F401
+
+        SessionLocal = get_session_factory()
+        db2 = SessionLocal()
+        try:
+            # A scene-local runner sharing the stateless services but bound to db2,
+            # so concurrent scenes never share a SQLAlchemy Session.
+            r2 = GenerationRunner.__new__(GenerationRunner)
+            r2.db = db2
+            r2.qwen = self.qwen
+            r2.oss = self.oss
+            r2.continuity = self.continuity
+            r2.prompt_crafter = self.prompt_crafter
+            r2.budget_ceiling = self.budget_ceiling
+
+            job2 = db2.query(GenerationJob).filter(GenerationJob.id == self._job_id).first()
+            if job2 is None:
+                return
+            pid = str(job2.project_id)
+            char_by_name = {c.name: c for c in
+                            db2.query(Character).filter(Character.project_id == job2.project_id).all()}
+            shots = db2.query(Shot).filter(Shot.scene_id == scene.id).order_by(Shot.number).all()
+
+            prev_last_frame = None
+            for shot in shots:
+                if self._cancelled:
+                    break
+                prev_last_frame = await r2._process_shot(
+                    job2, shot, char_by_name, bible, scene.number, prev_last_frame)
+                amt = video_cost(shot.estimated_duration_seconds, shot.quality_tier or "happyhorse")
+                async with self._cost_lock:
+                    self._spent += amt
+                    if self._spent >= self.budget_ceiling:
+                        self._cancelled = True
+                    emit("cost:updated", {
+                        "current_cost": round(self._spent, 2),
+                        "budget_remaining": round(self.budget_ceiling - self._spent, 2),
+                    }, pid)
+        finally:
+            db2.close()
 
     async def _craft_prompt(self, shot, char_by_name) -> str:
         in_frame = shot.characters_in_frame or []

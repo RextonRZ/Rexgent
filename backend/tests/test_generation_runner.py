@@ -106,6 +106,26 @@ async def test_hard_failure_retries_then_needs_review(monkeypatch):
     assert runner.qwen.generate_video_happyhorse.await_count == 2
 
 
+@pytest.mark.asyncio
+async def test_scenes_run_under_semaphore():
+    import asyncio
+    from app.services.generation_runner import GenerationRunner
+    runner = GenerationRunner.__new__(GenerationRunner)
+    runner._max_concurrency = 5
+    order = []
+
+    async def fake_scene(scene, bible):
+        order.append(("start", scene))
+        await asyncio.sleep(0.01)
+        order.append(("end", scene))
+
+    runner._run_scene = fake_scene
+    await runner._run_scenes_concurrently(scenes=[1, 2, 3], bible={})
+    # with concurrency + a sleep, all three start before any ends
+    assert order[:3] == [("start", 1), ("start", 2), ("start", 3)]
+    assert len(order) == 6
+
+
 def test_load_bible_shapes_characters_and_locations():
     from app.services.generation_runner import GenerationRunner
     runner = GenerationRunner.__new__(GenerationRunner)
