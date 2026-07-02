@@ -4,6 +4,9 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.project import Project
 from app.agent.graph import build_pipeline_graph
+from app.agents.registry import AGENTS
+from app.models.agent_report import AgentReport
+from app.models.character import Character
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -63,3 +66,59 @@ async def run_auto(request: dict, db: Session = Depends(get_db)):
         "revisions": final_state.get("revise_count", 0),
         "report": final_state.get("report"),
     }
+
+
+@router.get("/registry")
+def registry():
+    return AGENTS
+
+
+@router.get("/reports/{project_id}")
+def reports(project_id: str, db: Session = Depends(get_db)):
+    rows = (db.query(AgentReport).filter(AgentReport.project_id == uuid.UUID(project_id))
+            .order_by(AgentReport.created_at).all())
+    return [{"agent": r.agent, "stage": r.stage, "decision": r.decision,
+             "rationale": r.rationale, "confidence": r.confidence,
+             "created_at": r.created_at.isoformat() if r.created_at else None} for r in rows]
+
+
+@router.get("/clarifications/{project_id}")
+def clarifications(project_id: str, db: Session = Depends(get_db)):
+    row = (db.query(AgentReport).filter(AgentReport.project_id == uuid.UUID(project_id),
+           AgentReport.agent == "clarification").order_by(AgentReport.created_at.desc()).first())
+    return (row.decision or {"ambiguities": []}) if row else {"ambiguities": []}
+
+
+@router.post("/clarifications/{project_id}/answer")
+async def answer(project_id: str, body: dict, db: Session = Depends(get_db)):
+    from app.models.script import Script
+    from app.agent.pipeline_ops import generate_storyboard_op
+    from app.websocket.emitter import emit
+    if not db.query(Project).filter(Project.id == uuid.UUID(project_id)).first():
+        raise HTTPException(status_code=404, detail="Project not found")
+    # Apply each answer as an appended note on any character whose name matches the topic.
+    for ans in body.get("answers", []):
+        topic, text = ans.get("topic", ""), ans.get("answer", "")
+        chars = db.query(Character).filter(Character.project_id == uuid.UUID(project_id)).all()
+        for c in chars:
+            if topic and topic.lower() in (c.name or "").lower():
+                c.physical_description = f"{c.physical_description or ''}. {text}".strip(". ")
+                c.visual_description = f"{c.visual_description or ''}. {text}".strip(". ")
+    db.commit()
+    emit("clarification.resolved", {}, project_id)
+    # Continue the pipeline: run the storyboard now that ambiguity is resolved.
+    script = (db.query(Script).filter(Script.project_id == uuid.UUID(project_id))
+              .order_by(Script.created_at.desc()).first())
+    if script:
+        await generate_storyboard_op(db, str(script.id))
+    return {"resumed": True}
+
+
+@router.patch("/{project_id}/auto-clarify")
+def set_auto_clarify(project_id: str, enabled: bool, db: Session = Depends(get_db)):
+    p = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Project not found")
+    p.auto_clarify = enabled
+    db.commit()
+    return {"auto_clarify": enabled}
