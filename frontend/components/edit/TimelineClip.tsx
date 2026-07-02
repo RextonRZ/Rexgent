@@ -22,7 +22,7 @@ export function TimelineClip({
   const isWan = clip.model_used === "wan";
   const match =
     clip.consistency_score != null
-      ? Math.round(clip.consistency_score * 100)
+      ? Math.round(clip.consistency_score)
       : null;
 
   return (

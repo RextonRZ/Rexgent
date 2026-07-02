@@ -195,6 +195,10 @@ class GenerationRunner:
         emit("generation.shot.started", {"scene_number": scene_number,
              "shot_number": shot.number, "index": job.completed_shots + 1,
              "total": job.total_shots}, pid)
+        # Legacy event kept for backward compatibility with the live-generation UI,
+        # which still listens for clip:* events.
+        emit("clip:started", {"shot_id": str(shot.id),
+             "model": shot.quality_tier or "happyhorse"}, pid)
 
         for attempt in range(MAX_RETRIES + 1):
             try:
@@ -240,6 +244,10 @@ class GenerationRunner:
                          "continuity_score": guard["continuity_score"]}, pid)
                 emit("generation.shot.completed", {"scene_number": scene_number,
                      "shot_number": shot.number, "clip_url": clip_url, "status": status}, pid)
+                # Legacy event kept for backward compatibility with the live-generation UI,
+                # which still listens for clip:* events.
+                emit("clip:completed", {"shot_id": str(shot.id), "clip_url": clip_url,
+                     "consistency_score": guard["continuity_score"], "status": status}, pid)
                 # SOFT failures do NOT loop — single generation on the happy path.
                 return self._store_last_frame(pid, shot, clip_url)
             except Exception as e:  # HARD failure only -> at most one retry
