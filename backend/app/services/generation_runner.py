@@ -31,6 +31,8 @@ CONSISTENCY_THRESHOLD = 0.4
 
 
 class GenerationRunner:
+    _max_concurrency = 5
+
     def __init__(self, db: Session, budget_usd: float = 40.0):
         self.db = db
         settings = get_settings()
@@ -138,7 +140,7 @@ class GenerationRunner:
         self._cost_lock = asyncio.Lock()
         self._cancelled = False
 
-        await self._run_scenes_sequentially(scenes, bible)
+        await self._run_scenes_concurrently(scenes, bible)
 
         # Reconcile counters from the DB (per-scene sessions wrote clips + cost events
         # independently, so recompute authoritative totals here to avoid lost updates).
@@ -160,14 +162,19 @@ class GenerationRunner:
             "total_cost": round(job.actual_cost, 2),
         }, pid)
 
-    async def _run_scenes_sequentially(self, scenes, bible):
-        # Sequential so the last frame of each shot chains into the next — INCLUDING
-        # across scene boundaries — giving visual continuity between consecutive clips.
-        prev_last_frame = None
-        for scene in scenes:
-            if self._cancelled:
-                break
-            prev_last_frame = await self._run_scene(scene, bible, prev_last_frame)
+    async def _run_scenes_concurrently(self, scenes, bible):
+        # Scenes run in parallel for speed. Shots WITHIN a scene stay sequential and
+        # chain frame-to-frame (see _run_scene). A scene change is a clean cut, so the
+        # cross-scene look is held together by the shared location + style plates and
+        # the per-scene lighting consistency the storyboard enforces — not a splice.
+        import asyncio
+        sem = asyncio.Semaphore(self._max_concurrency)
+
+        async def guarded(scene):
+            async with sem:
+                await self._run_scene(scene, bible)
+
+        await asyncio.gather(*(guarded(s) for s in scenes))
 
     async def _run_scene(self, scene, bible, incoming_last_frame=None):
         from app.database import get_session_factory
