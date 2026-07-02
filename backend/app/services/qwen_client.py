@@ -143,12 +143,15 @@ class QwenClient:
         prompt: str,
         duration: int = 5,
         reference_image_url: str | None = None,
+        reference_media: list[dict] | None = None,
         model: str | None = None,
     ) -> str:
         # wan2.7-t2v (text) or wan2.7-i2v (image-to-video when a reference image exists)
-        chosen = model or ("wan2.7-i2v" if reference_image_url else "wan2.7-t2v")
+        chosen = model or ("wan2.7-i2v" if (reference_media or reference_image_url) else "wan2.7-t2v")
         input_obj: dict = {"prompt": prompt}
-        if reference_image_url:
+        if reference_media:
+            input_obj["media"] = reference_media
+        elif reference_image_url:
             input_obj["media"] = self._reference_media(reference_image_url)
         params = {"resolution": "1080P", "duration": duration}
         return await self._dispatch_video(chosen, input_obj, params)
@@ -159,6 +162,7 @@ class QwenClient:
         duration: int = 5,
         mode: str = "t2v",
         reference_image_url: str | None = None,
+        reference_media: list[dict] | None = None,
         source_video_url: str | None = None,
         edit_instruction: str | None = None,
         model: str | None = None,
@@ -172,7 +176,9 @@ class QwenClient:
         }
         chosen = model or model_map.get(mode, "happyhorse-1.1-t2v")
         input_obj: dict = {"prompt": prompt}
-        if reference_image_url:
+        if reference_media:
+            input_obj["media"] = reference_media
+        elif reference_image_url:
             input_obj["media"] = self._reference_media(reference_image_url)
         if source_video_url:
             input_obj["media"] = [{"type": "reference_video", "url": source_video_url}]

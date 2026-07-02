@@ -115,3 +115,24 @@ async def test_generate_image_returns_url(monkeypatch):
     monkeypatch.setattr(client, "_dispatch_image", AsyncMock(side_effect=fake_dispatch))
     url = await client.generate_image(prompt="a portrait")
     assert url == "https://oss/plate.png"
+
+
+@pytest.mark.asyncio
+async def test_happyhorse_accepts_reference_list(monkeypatch):
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    client = QwenClient(get_settings())
+    captured = {}
+
+    async def fake_dispatch(model, input_obj, parameters):
+        captured["media"] = input_obj.get("media")
+        return "task-123"
+
+    monkeypatch.setattr(client, "_dispatch_video", AsyncMock(side_effect=fake_dispatch))
+    await client.generate_video_happyhorse(
+        prompt="x", duration=5, mode="r2v",
+        reference_media=[{"type": "reference_image", "url": "a"},
+                         {"type": "reference_image", "url": "b"}],
+    )
+    assert captured["media"] == [{"type": "reference_image", "url": "a"},
+                                 {"type": "reference_image", "url": "b"}]
