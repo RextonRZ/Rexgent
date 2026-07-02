@@ -7,7 +7,7 @@ from app.models.character import Character
 from app.models.costume_variant import CostumeVariant
 from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
-from app.services.plate_generator import PlateGenerator
+from app.services.plate_generator import PlateGenerator, character_plate_prompt, CHAR_PLATE_NEGATIVE
 from app.services.oss_manager import OSSManager
 from app.services.face_embedder import FaceEmbedder
 from app.services.qwen_client import QwenClient
@@ -111,7 +111,8 @@ async def regenerate_variant(variant_id: str, db: Session = Depends(get_db)):
     prompt = _char_plate_prompt(char, v.outfit_description or "")
     url, vector = await PlateGenerator().generate_and_store_plate(
         str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
-        base_image_url=char.reference_image_url)
+        negative_prompt=CHAR_PLATE_NEGATIVE,
+        base_image_url=char.reference_image_url, prompt_extend=False)
     v.plate_image_url, v.face_vector, v.plate_status = url, vector, "ai_generated"
     # never clobber an uploaded face — only seed identity if none exists yet
     if v.is_default and not char.reference_image_url:
@@ -140,10 +141,8 @@ async def override_variant(variant_id: str, file: UploadFile = File(...), db: Se
 
 
 def _char_plate_prompt(char, outfit: str) -> str:
-    if char.reference_image_url:
-        return (f"Keep this exact same person and face unchanged. Full-body shot, "
-                f"wearing {outfit}. neutral background")
-    return f"{char.visual_description or char.name}, full-body shot, wearing {outfit}. neutral background"
+    return character_plate_prompt(bool(char.reference_image_url),
+                                  char.visual_description, char.name, outfit)
 
 
 @router.post("/character/{character_id}/plates")
@@ -172,7 +171,8 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
         prompt = _char_plate_prompt(c, v.outfit_description or "")
         url, vector = await pg.generate_and_store_plate(
             project_id, "character", f"{c.name}_{v.label}", prompt,
-            base_image_url=c.reference_image_url)
+            negative_prompt=CHAR_PLATE_NEGATIVE,
+            base_image_url=c.reference_image_url, prompt_extend=False)
         v.plate_image_url, v.face_vector, v.plate_status = url, vector, "ai_generated"
         # seed identity from the default plate only when no face exists yet
         if v.is_default and not c.reference_image_url:

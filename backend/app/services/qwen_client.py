@@ -301,11 +301,12 @@ class QwenClient:
         prompt: str,
         negative_prompt: str | None = None,
         size: str = "1280*1280",
+        prompt_extend: bool = True,
     ) -> str:
         s = get_settings()
         # wan2.6-t2i: prompt goes in a messages array; size/n/negative_prompt/flags in parameters.
         input_obj: dict = {"messages": [{"role": "user", "content": [{"text": prompt}]}]}
-        params: dict = {"size": size, "n": 1, "prompt_extend": True, "watermark": False}
+        params: dict = {"size": size, "n": 1, "prompt_extend": prompt_extend, "watermark": False}
         if negative_prompt:
             params["negative_prompt"] = negative_prompt
         return await self._dispatch_image(s.qwen_image_model, input_obj, params, s.qwen_image_path)
@@ -316,13 +317,15 @@ class QwenClient:
         base_image_url: str,
         size: str = "1280*1280",
         negative_prompt: str | None = None,
+        prompt_extend: bool = True,
     ) -> str:
         # qwen-image-edit-max: same messages endpoint as wan2.6-t2i, but the user
         # content carries the base image (to preserve identity) plus the edit text.
+        # prompt_extend is OFF for identity edits — expansion drifts the face.
         s = get_settings()
         input_obj = {"messages": [{"role": "user", "content": [
             {"image": base_image_url}, {"text": prompt}]}]}
-        params: dict = {"size": size, "n": 1, "prompt_extend": True, "watermark": False}
+        params: dict = {"size": size, "n": 1, "prompt_extend": prompt_extend, "watermark": False}
         if negative_prompt:
             params["negative_prompt"] = negative_prompt
         return await self._dispatch_image(s.qwen_image_edit_model, input_obj, params, s.qwen_image_path)

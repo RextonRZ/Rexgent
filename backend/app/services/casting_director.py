@@ -7,7 +7,7 @@ from app.models.costume_variant import CostumeVariant
 from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
 from app.services.wardrobe_planner import WardrobePlanner
-from app.services.plate_generator import PlateGenerator
+from app.services.plate_generator import PlateGenerator, character_plate_prompt, CHAR_PLATE_NEGATIVE
 from app.services.prompt_loader import load_prompt
 from app.websocket.emitter import emit
 
@@ -98,21 +98,17 @@ class CastingDirector:
         for c in characters:
             variants = plan.get(c.name) or [{"label": "default", "outfit_description": c.visual_description or "",
                                              "scene_numbers": []}]
-            style_tags = ", ".join(style.get("style_tags", []))
             for i, v in enumerate(variants):
                 idx += 1
                 emit("casting.plate.started", {"kind": "character", "key": f"{c.name}:{v['label']}", "index": idx, "total": total}, pid)
                 outfit = v.get("outfit_description", "")
-                if c.reference_image_url:
-                    # build the outfit ON the locked face — keep the same person
-                    prompt = (f"Keep this exact same person and face unchanged. Full-body shot, "
-                              f"wearing {outfit}. {style_tags}. neutral background")
-                else:
-                    prompt = (f"{c.visual_description or c.name}, full-body shot, wearing {outfit}. "
-                              f"{style_tags}. neutral background")
+                # identity plate: waist-up, plain background, no style-tag scene drift
+                prompt = character_plate_prompt(bool(c.reference_image_url),
+                                                c.visual_description, c.name, outfit)
                 url, vector = await self.plates.generate_and_store_plate(
                     pid, "character", f"{c.name}_{v['label']}", prompt,
-                    base_image_url=c.reference_image_url)
+                    negative_prompt=CHAR_PLATE_NEGATIVE,
+                    base_image_url=c.reference_image_url, prompt_extend=False)
                 is_default = (i == 0)
                 self.db.add(CostumeVariant(character_id=c.id, label=v["label"],
                                            outfit_description=v.get("outfit_description"),
