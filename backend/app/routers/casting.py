@@ -58,6 +58,15 @@ def approve_casting(project_id: str, db: Session = Depends(get_db)):
     return {"job_id": allocate_and_generate(db, project_id)}
 
 
+@router.post("/{project_id}/run")
+def run_casting(project_id: str, db: Session = Depends(get_db)):
+    if not db.query(Project).filter(Project.id == uuid.UUID(project_id)).first():
+        raise HTTPException(status_code=404, detail="Project not found")
+    from app.workers.casting_worker import run_casting_job
+    run_casting_job.delay(project_id)
+    return {"status": "started"}
+
+
 @router.patch("/{project_id}/auto-approve")
 def set_auto_approve(project_id: str, enabled: bool, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()

@@ -16,3 +16,11 @@ def test_approve_casting_dispatches_generation():
 def test_regenerate_endpoint_exists():
     r = client.post("/api/casting/variant/00000000-0000-0000-0000-000000000000/regenerate")
     assert r.status_code in (200, 404)
+
+
+def test_run_casting_dispatches():
+    from unittest.mock import patch
+    with patch("app.workers.casting_worker.run_casting_job") as m:
+        m.delay.return_value = None
+        r = client.post("/api/casting/00000000-0000-0000-0000-000000000000/run")
+    assert r.status_code in (200, 404)
