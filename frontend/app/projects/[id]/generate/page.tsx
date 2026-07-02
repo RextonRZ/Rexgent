@@ -4,6 +4,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { GenerationLauncher } from "@/components/generate/GenerationLauncher";
 import { GenerationQueue } from "@/components/generate/GenerationQueue";
 import { CostTracker } from "@/components/generate/CostTracker";
+import { CastingPanel } from "@/components/casting/CastingPanel";
 
 export default function GeneratePage({ params }: { params: { id: string } }) {
   useWebSocket(params.id);
@@ -15,6 +16,11 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
         <p className="text-sm text-muted-foreground">
           Watch the studio render your drama, shot by shot.
         </p>
+      </div>
+
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight mb-3">Casting</h2>
+        <CastingPanel projectId={params.id} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
