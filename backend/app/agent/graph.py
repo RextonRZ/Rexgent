@@ -86,14 +86,19 @@ def build_pipeline_graph(db=None):
 
     async def n_casting(state: PipelineState) -> PipelineState:
         _emit_node(state, "casting")
-        if db is not None and state.get("project_id"):
+        # Casting generates reference plates (real image-gen spend). In plan-only mode
+        # it is SKIPPED — the user runs casting via the reviewed Casting panel
+        # ("Generate plates" -> async casting worker). Only full-auto (dispatch_video)
+        # runs it inline here.
+        if db is not None and state.get("project_id") and state.get("dispatch_video"):
             from app.agent.pipeline_ops import cast_bible_op
             await cast_bible_op(db, state["project_id"])
         return state
 
     async def n_audio(state: PipelineState) -> PipelineState:
         _emit_node(state, "audio")
-        if db is not None and state.get("project_id"):
+        # Dialogue synthesis (TTS spend) — same rule as casting: full-auto only.
+        if db is not None and state.get("project_id") and state.get("dispatch_video"):
             from app.agent.pipeline_ops import synth_dialogue_op
             await synth_dialogue_op(db, state["project_id"])
         return state
