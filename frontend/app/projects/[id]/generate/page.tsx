@@ -6,12 +6,16 @@ import { GenerationQueue } from "@/components/generate/GenerationQueue";
 import { CostTracker } from "@/components/generate/CostTracker";
 import { CastingPanel } from "@/components/casting/CastingPanel";
 import { CostLedger } from "@/components/budget/CostLedger";
+import { AgentDecisionPanel } from "@/components/agents/AgentDecisionPanel";
+import { ClarificationModal } from "@/components/agents/ClarificationModal";
 
 export default function GeneratePage({ params }: { params: { id: string } }) {
   useWebSocket(params.id);
 
   return (
     <div className="space-y-6">
+      <ClarificationModal projectId={params.id} />
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Generate</h1>
         <p className="text-sm text-muted-foreground">
@@ -31,6 +35,7 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
         <div className="space-y-6">
           <CostTracker />
           <CostLedger projectId={params.id} />
+          <AgentDecisionPanel projectId={params.id} />
         </div>
       </div>
 
