@@ -5,7 +5,9 @@ from app.database import get_db
 from app.models.project import Project
 from app.models.generation_job import GenerationJob
 from app.models.generated_clip import GeneratedClip
+from app.models.shot import Shot
 from app.schemas.generation import GenerationStartRequest, GenerationJobStatus, ClipResult
+from app.services.cost_rates import video_cost
 from app.workers.generation_worker import run_generation_job
 
 router = APIRouter(prefix="/api/generate", tags=["generation"])
@@ -35,7 +37,18 @@ async def get_job_status(job_id: str, db: Session = Depends(get_db)):
 @router.get("/{job_id}/clips")
 async def get_job_clips(job_id: str, db: Session = Depends(get_db)):
     clips = db.query(GeneratedClip).filter(GeneratedClip.job_id == uuid.UUID(job_id)).all()
-    return {"clips": [ClipResult.model_validate(c) for c in clips]}
+
+    shot_ids = {c.shot_id for c in clips}
+    shots = db.query(Shot).filter(Shot.id.in_(shot_ids)).all() if shot_ids else []
+    duration_by_shot = {s.id: (s.estimated_duration_seconds or 5) for s in shots}
+
+    results = []
+    for c in clips:
+        item = ClipResult.model_validate(c)
+        duration = duration_by_shot.get(c.shot_id, 5)
+        item.cost_usd = video_cost(duration, c.model_used)
+        results.append(item)
+    return {"clips": results}
 
 
 @router.get("/project/{project_id}/latest", response_model=GenerationJobStatus)

@@ -26,5 +26,6 @@ class ClipResult(BaseModel):
     consistency_score: Optional[float] = None
     status: str
     retries: int = 0
+    cost_usd: Optional[float] = None
 
     model_config = {"from_attributes": True}
