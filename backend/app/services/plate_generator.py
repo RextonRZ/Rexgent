@@ -1,3 +1,4 @@
+import uuid
 from app.services.qwen_client import QwenClient
 from app.services.oss_manager import OSSManager
 from app.services.face_embedder import FaceEmbedder
@@ -42,7 +43,11 @@ class PlateGenerator:
         else:
             raw_url = await self.qwen.generate_image(prompt=prompt, negative_prompt=negative_prompt)
         content = self._fetch_bytes(raw_url)
-        oss_key = self.oss.get_project_path(project_id, f"plates/{kind}", f"{key.replace(':', '_')}.png")
+        # Unique filename per generation so a regenerated plate gets a NEW url — an
+        # overwritten deterministic key returns the same url and the browser would
+        # keep showing the cached (old) image.
+        fname = f"{key.replace(':', '_')}_{uuid.uuid4().hex[:8]}.png"
+        oss_key = self.oss.get_project_path(project_id, f"plates/{kind}", fname)
         oss_url = self.oss.upload_bytes(content, oss_key, content_type="image/png")
 
         if getattr(self, "db", None) is not None:

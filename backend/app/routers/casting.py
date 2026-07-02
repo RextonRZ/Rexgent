@@ -128,7 +128,8 @@ async def override_variant(variant_id: str, file: UploadFile = File(...), db: Se
     char = db.query(Character).filter(Character.id == v.character_id).first()
     content = await file.read()
     oss = OSSManager(get_settings())
-    key = oss.get_project_path(str(char.project_id), "plates/character", f"{char.name}_{v.label}_override.jpg")
+    key = oss.get_project_path(str(char.project_id), "plates/character",
+                               f"{char.name}_{v.label}_override_{uuid.uuid4().hex[:8]}.jpg")
     url = oss.upload_bytes(content, key, content_type="image/jpeg")
     result = await FaceEmbedder().extract(image_bytes=content, image_url=url)
     v.plate_image_url, v.face_vector, v.plate_status = url, result.get("vector"), "user_override"
