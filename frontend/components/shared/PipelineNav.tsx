@@ -9,8 +9,7 @@ const STEPS = [
   { n: 2, label: "Characters", path: "characters" },
   { n: 3, label: "Storyboard", path: "storyboard" },
   { n: 4, label: "Generate", path: "generate" },
-  { n: 5, label: "Edit", path: "edit" },
-  { n: 6, label: "Export", path: "export" },
+  { n: 5, label: "Edit & Export", path: "export" },
 ];
 
 export function PipelineNav({ projectId }: { projectId: string }) {

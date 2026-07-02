@@ -9,8 +9,7 @@ const NAV_ITEMS = [
   { label: "Characters", path: "characters" },
   { label: "Storyboard", path: "storyboard" },
   { label: "Generate", path: "generate" },
-  { label: "Edit", path: "edit" },
-  { label: "Export", path: "export" },
+  { label: "Edit & Export", path: "export" },
 ];
 
 export function ProjectNav({ projectId }: { projectId: string }) {

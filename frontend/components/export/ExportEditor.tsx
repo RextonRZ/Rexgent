@@ -10,6 +10,7 @@ import {
   type AudioSettings,
 } from "./EditorTimeline";
 import { MediaBin, type MediaAsset } from "./MediaBin";
+import { ClipEditModal } from "./ClipEditModal";
 import { useLatestJob } from "@/hooks/useGeneration";
 import { useLatestJobClips } from "@/hooks/useClips";
 import { useStoryboard } from "@/hooks/useStoryboard";
@@ -80,6 +81,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   const [rendering, setRendering] = useState(false);
   const [audio, setAudio] = useState<AudioSettings>(EMPTY_AUDIO);
   const [media, setMedia] = useState<MediaAsset[]>([]);
+  const [editingClip, setEditingClip] = useState<GeneratedClip | null>(null);
   const initialized = useRef(false);
 
   // AI default: pre-fill the timeline with every shot's clip, in order.
@@ -290,6 +292,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
           clipsByShot={clipsByShot}
           inTimeline={inTimeline}
           onAdd={addClip}
+          onEdit={setEditingClip}
         />
       </div>
 
@@ -384,6 +387,13 @@ export function ExportEditor({ projectId }: { projectId: string }) {
           </div>
         </div>
       ) : null}
+
+      <ClipEditModal
+        clip={editingClip}
+        projectId={projectId}
+        label={editingClip ? shotLabel[editingClip.shot_id] : undefined}
+        onClose={() => setEditingClip(null)}
+      />
     </div>
   );
 }

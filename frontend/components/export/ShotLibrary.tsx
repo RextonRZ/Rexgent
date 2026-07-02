@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { SceneShots } from "@/hooks/useStoryboard";
 import type { GeneratedClip } from "@/lib/types";
 import { ClipBadge } from "@/components/budget/ClipBadge";
@@ -10,12 +11,16 @@ export function ShotLibrary({
   clipsByShot,
   inTimeline,
   onAdd,
+  onEdit,
 }: {
   scenes: SceneShots[];
   clipsByShot: Record<string, GeneratedClip[]>;
   inTimeline: Set<string>; // clipIds currently on the timeline
   onAdd: (clip: GeneratedClip) => void;
+  onEdit: (clip: GeneratedClip) => void; // open the AI-edit modal for a take
 }) {
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+
   return (
     <div className="rounded-xl border hairline bg-card h-full flex flex-col">
       <div className="px-4 py-3 border-b hairline">
@@ -60,9 +65,16 @@ export function ShotLibrary({
                   ) : (
                     takes.map((clip, i) => {
                       const added = inTimeline.has(clip.id);
+                      const isSelected = selectedClipId === clip.id;
                       return (
                         <div key={clip.id} className="space-y-1">
-                          <div className="relative">
+                          <div
+                            className={`relative cursor-pointer rounded-md ${
+                              isSelected ? "ring-2 ring-primary" : ""
+                            }`}
+                            onClick={() => setSelectedClipId(clip.id)}
+                            title="Click to select, then ✏️ to AI-edit"
+                          >
                             <video
                               src={`${clip.url}#t=0.1`}
                               muted
@@ -84,6 +96,18 @@ export function ShotLibrary({
                                 costUsd={clip.cost_usd}
                               />
                             </span>
+                            {isSelected && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onEdit(clip);
+                                }}
+                                title="AI-edit this take"
+                                className="absolute bottom-1.5 right-1.5 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg ring-2 ring-background hover:scale-110 transition-transform"
+                              >
+                                ✏️
+                              </button>
+                            )}
                           </div>
                           <button
                             disabled={added}
