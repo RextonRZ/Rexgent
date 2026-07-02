@@ -61,6 +61,14 @@ def build_pipeline_graph(db=None):
         state["characters"] = await pipeline_ops.extract_characters_op(db, state["script_id"])
         return state
 
+    async def n_clarify(state: PipelineState) -> PipelineState:
+        _emit_node(state, "clarify")
+        if db is not None and state.get("project_id"):
+            from app.agent.pipeline_ops import clarify_op
+            out = await clarify_op(db, state["project_id"])
+            state["clarify_pause"] = out["pause"]
+        return state
+
     async def n_storyboard(state: PipelineState) -> PipelineState:
         _emit_node(state, "storyboard")
         if db is None:
@@ -118,6 +126,7 @@ def build_pipeline_graph(db=None):
     g.add_node("judge", n_judge)
     g.add_node("revise", n_revise)
     g.add_node("extract_characters", n_extract_characters)
+    g.add_node("clarify", n_clarify)
     g.add_node("storyboard", n_storyboard)
     g.add_node("casting", n_casting)
     g.add_node("audio", n_audio)
@@ -129,7 +138,10 @@ def build_pipeline_graph(db=None):
     g.add_conditional_edges("judge", route_after_judge,
                             {"revise": "revise", "extract_characters": "extract_characters"})
     g.add_edge("revise", "generate_script")  # self-correction loop
-    g.add_edge("extract_characters", "storyboard")
+    g.add_edge("extract_characters", "clarify")
+    g.add_conditional_edges("clarify",
+        lambda s: "END" if s.get("clarify_pause") else "storyboard",
+        {"END": END, "storyboard": "storyboard"})
     g.add_edge("storyboard", "casting")
     g.add_edge("casting", "audio")
     g.add_edge("audio", "budget")

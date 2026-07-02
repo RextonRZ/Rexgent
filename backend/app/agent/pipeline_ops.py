@@ -184,6 +184,30 @@ async def synth_dialogue_op(db: Session, project_id: str) -> int:
     return len(rows)
 
 
+async def clarify_op(db: Session, project_id: str) -> dict:
+    from app.agents.clarification_agent import ClarificationAgent, needs_pause
+    from app.agents.reporter import report_agent
+    from app.models.project import Project
+    from app.models.script import Script
+    from app.models.character import Character
+    from app.websocket.emitter import emit
+    script = (db.query(Script).filter(Script.project_id == uuid.UUID(str(project_id)))
+              .order_by(Script.created_at.desc()).first())
+    chars = db.query(Character).filter(Character.project_id == uuid.UUID(str(project_id))).all()
+    assessment = await ClarificationAgent().assess(
+        (script.structured_json if script else {}) or {},
+        [{"name": c.name, "physical_description": c.physical_description} for c in chars])
+    project = db.query(Project).filter(Project.id == uuid.UUID(str(project_id))).first()
+    pause = needs_pause(assessment, bool(project.auto_clarify) if project else False)
+    report_agent(db, project_id, agent="clarification", stage="clarify",
+                 decision=assessment,
+                 rationale=("awaiting user answers" if pause else "no blocking ambiguity / auto-assumed"),
+                 confidence=assessment.get("confidence", 1.0))
+    if pause:
+        emit("clarification.awaiting", {"questions": assessment["ambiguities"]}, str(project_id))
+    return {"pause": pause, "assessment": assessment}
+
+
 def dispatch_generation_op(db: Session, project_id: str) -> str:
     job = GenerationJob(project_id=uuid.UUID(project_id))
     db.add(job)

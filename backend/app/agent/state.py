@@ -15,6 +15,7 @@ class PipelineState(TypedDict, total=False):
     judgement: dict[str, Any]
     revise_count: int
     characters: list[dict]
+    clarify_pause: bool
     shots: list[dict]
     budget: dict[str, Any]
     job_id: str
