@@ -109,7 +109,8 @@ async def test_generate_image_returns_url(monkeypatch):
 
     async def fake_dispatch(model, input_obj, parameters, path):
         assert model == get_settings().qwen_image_model
-        assert input_obj["prompt"] == "a portrait"
+        # wan2.6-t2i messages format: prompt lives at input.messages[0].content[0].text
+        assert input_obj["messages"][0]["content"][0]["text"] == "a portrait"
         return "https://oss/plate.png"
 
     monkeypatch.setattr(client, "_dispatch_image", AsyncMock(side_effect=fake_dispatch))

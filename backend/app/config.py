@@ -26,11 +26,13 @@ class Settings(BaseSettings):
     qwen_max_input_cost_per_1k: float = 0.0016
     qwen_max_output_cost_per_1k: float = 0.0064
 
-    # Production Bible: image generation/editing model IDs (DashScope wanx text2image API)
-    qwen_image_model: str = "wanx2.1-t2i-turbo"
-    qwen_image_edit_model: str = "wanx2.1-imageedit"
+    # Production Bible: image generation/editing model IDs.
+    # wan2.6-t2i uses the image-generation/generation endpoint + a messages array
+    # (NOT the older text2image/image-synthesis prompt-string endpoint).
+    qwen_image_model: str = "wan2.6-t2i"
+    qwen_image_edit_model: str = "qwen-image-edit-max"
     qwen_vl_continuity_model: str = "qwen3-vl-plus"
-    qwen_image_path: str = "/services/aigc/text2image/image-synthesis"
+    qwen_image_path: str = "/services/aigc/image-generation/generation"
 
     # Production Bible: voice design/enrollment + TTS synthesis model IDs
     qwen_voice_design_model: str = "qwen-voice-design"

@@ -291,14 +291,14 @@ class QwenClient:
         self,
         prompt: str,
         negative_prompt: str | None = None,
-        size: str = "1024*1024",
+        size: str = "1280*1280",
     ) -> str:
         s = get_settings()
-        # wanx text2image: prompt + negative_prompt live in `input`; size/n/flags in `parameters`.
-        input_obj: dict = {"prompt": prompt}
-        if negative_prompt:
-            input_obj["negative_prompt"] = negative_prompt
+        # wan2.6-t2i: prompt goes in a messages array; size/n/negative_prompt/flags in parameters.
+        input_obj: dict = {"messages": [{"role": "user", "content": [{"text": prompt}]}]}
         params: dict = {"size": size, "n": 1, "prompt_extend": True, "watermark": False}
+        if negative_prompt:
+            params["negative_prompt"] = negative_prompt
         return await self._dispatch_image(s.qwen_image_model, input_obj, params, s.qwen_image_path)
 
     async def edit_image(
