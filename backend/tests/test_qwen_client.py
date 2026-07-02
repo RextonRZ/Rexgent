@@ -136,3 +136,21 @@ async def test_happyhorse_accepts_reference_list(monkeypatch):
     )
     assert captured["media"] == [{"type": "reference_image", "url": "a"},
                                  {"type": "reference_image", "url": "b"}]
+
+
+@pytest.mark.asyncio
+async def test_synthesize_speech_posts_text_and_voice(monkeypatch):
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    client = QwenClient(get_settings())
+    captured = {}
+
+    async def fake_post_bytes(path, payload):
+        captured.update(payload)
+        return b"RIFFxxxx"
+
+    monkeypatch.setattr(client, "_post_audio", AsyncMock(side_effect=fake_post_bytes))
+    audio = await client.synthesize_speech(text="hi", voice_id="v1", model="qwen3-tts-vd-realtime")
+    assert audio == b"RIFFxxxx"
+    assert captured["input"]["text"] == "hi"
+    assert captured["input"]["voice"] == "v1"

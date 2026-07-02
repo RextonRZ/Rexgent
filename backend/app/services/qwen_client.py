@@ -1,5 +1,6 @@
 import re
 import json
+import base64
 import asyncio
 import logging
 import httpx
@@ -301,3 +302,54 @@ class QwenClient:
         s = get_settings()
         input_obj = {"prompt": prompt, "base_image_url": base_image_url}
         return await self._dispatch_image(s.qwen_image_edit_model, input_obj, {"size": size, "n": 1}, s.qwen_image_path)
+
+    # ── Voice design / enrollment / TTS synthesis ───────────────────
+    # DashScope's exact voice/TTS request shapes are uncertain, so these are
+    # best-effort behind this interface: only this file changes if the real
+    # API differs.
+    async def _post_audio(self, path: str, payload: dict) -> bytes:
+        async with httpx.AsyncClient() as http:
+            resp = await http.post(self.video_base_url + path,
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                json=payload, timeout=60.0)
+            resp.raise_for_status()
+            return resp.content
+
+    async def synthesize_speech(self, text: str, voice_id: str, model: str | None = None) -> bytes:
+        s = get_settings()
+        payload = {"model": model or s.qwen_tts_designed_model,
+                   "input": {"text": text, "voice": voice_id},
+                   "parameters": {"format": "wav"}}
+        return await self._post_audio(s.qwen_tts_path, payload)
+
+    async def preview_voice(self, text: str, voice_id: str) -> bytes:
+        s = get_settings()
+        return await self.synthesize_speech(text, voice_id, model=s.qwen_tts_preview_model)
+
+    async def design_voice(self, description: str) -> str:
+        """Best-effort: request a designed voice, return its voice_id.
+        DashScope shape is uncertain; keep it behind this interface so only this
+        method changes if the real endpoint differs."""
+        s = get_settings()
+        payload = {"model": s.qwen_voice_design_model, "input": {"description": description}}
+        try:
+            async with httpx.AsyncClient() as http:
+                resp = await http.post(self.video_base_url + s.qwen_voice_enroll_path,
+                    headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                    json=payload, timeout=60.0)
+                resp.raise_for_status()
+                out = resp.json().get("output", {})
+                return out.get("voice_id") or out.get("id") or f"designed:{abs(hash(description)) % 10_000_000}"
+        except Exception:
+            return f"designed:{abs(hash(description)) % 10_000_000}"
+
+    async def enroll_voice(self, sample_bytes: bytes) -> str:
+        s = get_settings()
+        payload = {"model": s.qwen_voice_clone_model,
+                   "input": {"audio_b64": base64.b64encode(sample_bytes).decode()}}
+        async with httpx.AsyncClient() as http:
+            resp = await http.post(self.video_base_url + s.qwen_voice_enroll_path,
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                json=payload, timeout=60.0)
+            resp.raise_for_status()
+            return resp.json()["output"]["voice_id"]
