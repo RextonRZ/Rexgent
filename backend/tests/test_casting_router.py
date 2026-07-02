@@ -11,3 +11,8 @@ def test_approve_casting_dispatches_generation():
         r = client.post("/api/casting/00000000-0000-0000-0000-000000000000/approve")
     # 200 with a job id, or 404 if project missing — both acceptable structurally
     assert r.status_code in (200, 404)
+
+
+def test_regenerate_endpoint_exists():
+    r = client.post("/api/casting/variant/00000000-0000-0000-0000-000000000000/regenerate")
+    assert r.status_code in (200, 404)

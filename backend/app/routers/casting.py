@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.project import Project
@@ -7,6 +7,10 @@ from app.models.character import Character
 from app.models.costume_variant import CostumeVariant
 from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
+from app.services.plate_generator import PlateGenerator
+from app.services.oss_manager import OSSManager
+from app.services.face_embedder import FaceEmbedder
+from app.config import get_settings
 
 router = APIRouter(prefix="/api/casting", tags=["casting"])
 
@@ -62,3 +66,37 @@ def set_auto_approve(project_id: str, enabled: bool, db: Session = Depends(get_d
     project.auto_approve_casting = enabled
     db.commit()
     return {"auto_approve_casting": enabled}
+
+
+@router.post("/variant/{variant_id}/regenerate")
+async def regenerate_variant(variant_id: str, db: Session = Depends(get_db)):
+    v = db.query(CostumeVariant).filter(CostumeVariant.id == uuid.UUID(variant_id)).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Variant not found")
+    char = db.query(Character).filter(Character.id == v.character_id).first()
+    prompt = f"{char.visual_description or char.name}, wearing {v.outfit_description or ''}. clean portrait"
+    url, vector = await PlateGenerator().generate_and_store_plate(
+        str(char.project_id), "character", f"{char.name}_{v.label}", prompt)
+    v.plate_image_url, v.face_vector, v.plate_status = url, vector, "ai_generated"
+    if v.is_default:
+        char.reference_image_url, char.face_vector = url, vector
+    db.commit()
+    return {"plate_image_url": url}
+
+
+@router.post("/variant/{variant_id}/override")
+async def override_variant(variant_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    v = db.query(CostumeVariant).filter(CostumeVariant.id == uuid.UUID(variant_id)).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Variant not found")
+    char = db.query(Character).filter(Character.id == v.character_id).first()
+    content = await file.read()
+    oss = OSSManager(get_settings())
+    key = oss.get_project_path(str(char.project_id), "plates/character", f"{char.name}_{v.label}_override.jpg")
+    url = oss.upload_bytes(content, key, content_type="image/jpeg")
+    result = await FaceEmbedder().extract(image_bytes=content, image_url=url)
+    v.plate_image_url, v.face_vector, v.plate_status = url, result.get("vector"), "user_override"
+    if v.is_default:
+        char.reference_image_url, char.face_vector = url, result.get("vector")
+    db.commit()
+    return {"plate_image_url": url}
