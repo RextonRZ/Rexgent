@@ -74,6 +74,44 @@ export function useRegenerateVariant() {
   });
 }
 
+export function useRunCasting(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post(`/api/casting/${projectId}/run`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bible", projectId] });
+    },
+  });
+}
+
+export function useOverrideVariant() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      variantId,
+      file,
+    }: {
+      variantId: string;
+      file: File;
+    }) => {
+      const form = new FormData();
+      form.append("file", file);
+      const { data } = await api.post(
+        `/api/casting/variant/${variantId}/override`,
+        form,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bible"] });
+    },
+  });
+}
+
 export function useSetAutoApprove(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({

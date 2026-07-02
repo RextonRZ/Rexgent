@@ -8,6 +8,8 @@ import {
   useApproveCasting,
   useRegenerateVariant,
   useSetAutoApprove,
+  useRunCasting,
+  useOverrideVariant,
 } from "@/hooks/useCasting";
 
 export function CastingPanel({ projectId }: { projectId: string }) {
@@ -15,6 +17,8 @@ export function CastingPanel({ projectId }: { projectId: string }) {
   const approveCasting = useApproveCasting(projectId);
   const regenerateVariant = useRegenerateVariant();
   const setAutoApprove = useSetAutoApprove(projectId);
+  const runCasting = useRunCasting(projectId);
+  const overrideVariant = useOverrideVariant();
 
   if (isLoading) {
     return (
@@ -46,6 +50,18 @@ export function CastingPanel({ projectId }: { projectId: string }) {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                variant="outline"
+                onClick={() => runCasting.mutate()}
+                disabled={runCasting.isPending}
+              >
+                {runCasting.isPending ? "Generating…" : "Generate plates"}
+              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Generates character, location & style plates
+              </p>
+            </div>
             <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -100,6 +116,9 @@ export function CastingPanel({ projectId }: { projectId: string }) {
                       status={variant.plate_status}
                       onRegenerate={() =>
                         regenerateVariant.mutate(variant.id)
+                      }
+                      onUpload={(file) =>
+                        overrideVariant.mutate({ variantId: variant.id, file })
                       }
                     />
                   ))}
