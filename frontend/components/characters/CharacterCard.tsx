@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { MBTIBadge } from "./MBTIBadge";
 import { FaceUpload } from "./FaceUpload";
 import { AppearanceGenerator } from "./AppearanceGenerator";
@@ -9,6 +10,7 @@ import { VoiceRow } from "@/components/casting/VoiceRow";
 import {
   useRegenerateVariant,
   useOverrideVariant,
+  useGenerateCharacterPlates,
   type CastingCharacter,
 } from "@/hooks/useCasting";
 import type { Character } from "@/lib/types";
@@ -30,6 +32,9 @@ export function CharacterCard({
   const locked = !!character.reference_image_url;
   const regenerateVariant = useRegenerateVariant();
   const overrideVariant = useOverrideVariant();
+  const generatePlates = useGenerateCharacterPlates();
+  const hasFace = !!character.reference_image_url;
+  const hasPlates = (casting?.variants.length ?? 0) > 0;
   return (
     <Card className="hover:border-primary/40 transition-colors">
       <CardHeader className="pb-2">
@@ -130,13 +135,45 @@ export function CharacterCard({
           <>
             {/* 2 · Costume plates — full outfits generated on top of the face */}
             <div className="pt-2 mt-2 border-t hairline space-y-2">
-              <p className="text-[11px] font-semibold text-primary/80">
-                2 · Costume plates{" "}
-                <span className="font-normal text-muted-foreground">
-                  — outfits, same face
-                </span>
-              </p>
-              {casting.variants.length > 0 ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-semibold text-primary/80">
+                  2 · Costume plates{" "}
+                  <span className="font-normal text-muted-foreground">
+                    — outfits, same face
+                  </span>
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={generatePlates.isPending}
+                  onClick={() => generatePlates.mutate(character.id)}
+                  title={
+                    hasFace
+                      ? "Generate outfits on the face above"
+                      : "No face set — a default face will be invented"
+                  }
+                >
+                  {generatePlates.isPending
+                    ? "Generating…"
+                    : hasPlates
+                    ? "Regenerate"
+                    : "Generate plates"}
+                </Button>
+              </div>
+
+              {!hasFace && (
+                <p className="text-[10px] text-muted-foreground">
+                  No face set — generating will <em>invent</em> a default face.
+                  Upload/generate a face above first to control it.
+                </p>
+              )}
+              {hasFace && hasPlates && (
+                <p className="text-[10px] text-muted-foreground">
+                  Changed the face above? Click <span className="text-primary">Regenerate</span> to re-match.
+                </p>
+              )}
+
+              {hasPlates ? (
                 <div className="grid gap-2 sm:grid-cols-2">
                   {casting.variants.map((variant) => (
                     <PlateCard
@@ -154,8 +191,7 @@ export function CharacterCard({
                 </div>
               ) : (
                 <p className="text-[10px] text-muted-foreground">
-                  No costume plates yet — click{" "}
-                  <span className="text-primary">Generate Plates</span> above.
+                  No costume plates yet.
                 </p>
               )}
             </div>

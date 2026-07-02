@@ -94,6 +94,23 @@ export function useRegenerateVariant() {
   });
 }
 
+/** Generate/regenerate ONE character's costume plates on their current face. */
+export function useGenerateCharacterPlates() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (characterId: string) => {
+      const { data } = await api.post(
+        `/api/casting/character/${characterId}/plates`
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bible"] });
+      queryClient.invalidateQueries({ queryKey: ["characters"] });
+    },
+  });
+}
+
 export function useRunCasting(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({

@@ -108,11 +108,7 @@ async def regenerate_variant(variant_id: str, db: Session = Depends(get_db)):
     if not v:
         raise HTTPException(status_code=404, detail="Variant not found")
     char = db.query(Character).filter(Character.id == v.character_id).first()
-    if char.reference_image_url:
-        prompt = (f"Keep this exact same person and face unchanged. Full-body shot, "
-                  f"wearing {v.outfit_description or ''}. neutral background")
-    else:
-        prompt = f"{char.visual_description or char.name}, full-body shot, wearing {v.outfit_description or ''}. neutral background"
+    prompt = _char_plate_prompt(char, v.outfit_description or "")
     url, vector = await PlateGenerator().generate_and_store_plate(
         str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
         base_image_url=char.reference_image_url)
@@ -140,6 +136,54 @@ async def override_variant(variant_id: str, file: UploadFile = File(...), db: Se
         char.reference_image_url, char.face_vector = url, result.get("vector")
     db.commit()
     return {"plate_image_url": url}
+
+
+def _char_plate_prompt(char, outfit: str) -> str:
+    if char.reference_image_url:
+        return (f"Keep this exact same person and face unchanged. Full-body shot, "
+                f"wearing {outfit}. neutral background")
+    return f"{char.visual_description or char.name}, full-body shot, wearing {outfit}. neutral background"
+
+
+@router.post("/character/{character_id}/plates")
+async def generate_character_plates(character_id: str, db: Session = Depends(get_db)):
+    """Generate (or regenerate) one character's costume plates on their CURRENT face.
+    - No face set  -> text-to-image invents a face and seeds it as the identity.
+    - Face set     -> plates are image-edited onto that exact face.
+    Call it again after changing the face to re-match. Also assigns a voice if none."""
+    from app.services.casting_director import assign_voice
+    c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Character not found")
+    project_id = str(c.project_id)
+    variants = (db.query(CostumeVariant).filter(CostumeVariant.character_id == c.id)
+                .order_by(CostumeVariant.is_default.desc()).all())
+    if not variants:
+        v = CostumeVariant(character_id=c.id, label="default",
+                           outfit_description=c.visual_description or "",
+                           is_default=True, plate_status="ai_pending", scene_numbers=[])
+        db.add(v)
+        db.flush()
+        variants = [v]
+
+    pg = PlateGenerator(db)
+    for v in variants:
+        prompt = _char_plate_prompt(c, v.outfit_description or "")
+        url, vector = await pg.generate_and_store_plate(
+            project_id, "character", f"{c.name}_{v.label}", prompt,
+            base_image_url=c.reference_image_url)
+        v.plate_image_url, v.face_vector, v.plate_status = url, vector, "ai_generated"
+        # seed identity from the default plate only when no face exists yet
+        if v.is_default and not c.reference_image_url:
+            c.reference_image_url, c.face_vector, c.plate_status = url, vector, "ai_generated"
+    if not c.voice_id:
+        assign_voice(c, 0)
+    db.commit()
+    return {"variants": [{"id": str(v.id), "label": v.label,
+                          "plate_image_url": v.plate_image_url,
+                          "plate_status": v.plate_status} for v in variants],
+            "voice_id": c.voice_id, "voice_source": c.voice_source,
+            "reference_image_url": c.reference_image_url}
 
 
 @router.post("/character/{character_id}/voice/design")
