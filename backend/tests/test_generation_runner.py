@@ -10,6 +10,7 @@ def _no_ws(monkeypatch):
     """Keep tests isolated from Redis/WebSocket and the cost ledger's real DB aggregate."""
     monkeypatch.setattr(gr, "emit", lambda *a, **k: None)
     monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.54)
+    monkeypatch.setattr(gr, "report_agent", lambda *a, **k: None)
 
 
 def make_runner():

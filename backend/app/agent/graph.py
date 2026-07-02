@@ -47,6 +47,12 @@ def build_pipeline_graph(db=None):
         if db is None:
             return state
         state["judgement"] = await NarrativeJudge().evaluate(state.get("structured", {}))
+        from app.agents.reporter import report_agent
+        j = state["judgement"]
+        report_agent(db, state["project_id"], agent="narrative_judge", stage="judge",
+                     decision=j.get("scores", {}),
+                     rationale=j.get("recommendation", ""),
+                     confidence=float(j.get("overall", 0)) / 10.0)
         return state
 
     async def n_revise(state: PipelineState) -> PipelineState:

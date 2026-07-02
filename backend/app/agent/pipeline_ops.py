@@ -155,6 +155,11 @@ def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_u
         if shot:
             shot.quality_tier = tier
     db.commit()
+    from app.agents.reporter import report_agent
+    report_agent(db, project_id, agent="budget_allocator", stage="budget",
+                 decision={"wan": result.get("wan_shots"), "happyhorse": result.get("happyhorse_shots")}
+                         if isinstance(result, dict) else {},
+                 rationale="Allocated quality tiers under the cap", confidence=1.0)
     return result
 
 
@@ -181,6 +186,10 @@ async def synth_dialogue_op(db: Session, project_id: str) -> int:
     for r in rows:
         db.add(LineAudio(**r))
     db.commit()
+    from app.agents.reporter import report_agent
+    report_agent(db, project_id, agent="audio_continuity", stage="audio",
+                 decision={"lines": len(rows)},
+                 rationale=f"Synthesized {len(rows)} dialogue lines", confidence=1.0)
     return len(rows)
 
 

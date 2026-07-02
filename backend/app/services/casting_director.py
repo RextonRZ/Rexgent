@@ -113,6 +113,10 @@ class CastingDirector:
             emit("casting.voice.completed", {"character": c.name}, pid)
 
         self.db.commit()
+        from app.agents.reporter import report_agent
+        report_agent(self.db, project_id, agent="style_casting", stage="casting",
+                     decision={"plates_total": total},
+                     rationale=f"Cast {total} plates", confidence=1.0)
         project = self.db.query(Project).filter(Project.id == project_id).first()
         if project and project.auto_approve_casting:
             emit("casting.completed", {"plates_total": total, "auto_approved": True}, pid)

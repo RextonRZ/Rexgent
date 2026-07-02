@@ -15,6 +15,7 @@ from app.services.reference_stack import build_reference_stack
 from app.services.frame_sampler import extract_last_frame
 from app.services.cost_ledger import record_video
 from app.websocket.emitter import emit
+from app.agents.reporter import report_agent
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -213,6 +214,12 @@ class GenerationRunner:
                     clip_url=clip_url, duration=shot.estimated_duration_seconds,
                     characters_in_frame=in_frame, bible=bible, scene_number=scene_number)
                 emit("continuity.scoring.completed", {"shot_id": str(shot.id), "scores": guard}, pid)
+                report_agent(self.db, str(job.project_id), agent="continuity", stage="generation",
+                             decision={"continuity_score": guard["continuity_score"],
+                                       "face": guard.get("face_score"), "outfit": guard.get("outfit_score"),
+                                       "background": guard.get("background_score")},
+                             rationale=("passed" if guard["overall_pass"] else "flagged for review"),
+                             confidence=guard["continuity_score"] / 100.0)
 
                 status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
                 clip = GeneratedClip(
