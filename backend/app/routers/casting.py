@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.project import Project
@@ -10,6 +10,7 @@ from app.models.style_preset import StylePreset
 from app.services.plate_generator import PlateGenerator
 from app.services.oss_manager import OSSManager
 from app.services.face_embedder import FaceEmbedder
+from app.services.qwen_client import QwenClient
 from app.config import get_settings
 
 router = APIRouter(prefix="/api/casting", tags=["casting"])
@@ -109,3 +110,37 @@ async def override_variant(variant_id: str, file: UploadFile = File(...), db: Se
         char.reference_image_url, char.face_vector = url, result.get("vector")
     db.commit()
     return {"plate_image_url": url}
+
+
+@router.post("/character/{character_id}/voice/design")
+async def design_voice(character_id: str, description: str, db: Session = Depends(get_db)):
+    c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Character not found")
+    q = QwenClient(get_settings())
+    c.voice_id = await q.design_voice(description)
+    c.voice_model, c.voice_source = get_settings().qwen_tts_designed_model, "designed"
+    db.commit()
+    return {"voice_id": c.voice_id}
+
+
+@router.post("/character/{character_id}/voice/clone")
+async def clone_voice(character_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Character not found")
+    content = await file.read()
+    q = QwenClient(get_settings())
+    c.voice_id = await q.enroll_voice(content)
+    c.voice_model, c.voice_source = get_settings().qwen_tts_cloned_model, "cloned"
+    db.commit()
+    return {"voice_id": c.voice_id}
+
+
+@router.post("/character/{character_id}/voice/preview")
+async def preview_voice(character_id: str, text: str = "Hello, this is my voice.", db: Session = Depends(get_db)):
+    c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
+    if not c or not c.voice_id:
+        raise HTTPException(status_code=404, detail="No voice to preview")
+    audio = await QwenClient(get_settings()).preview_voice(text, c.voice_id)
+    return Response(content=audio, media_type="audio/wav")

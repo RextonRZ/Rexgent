@@ -33,6 +33,15 @@ async def style_from_request(qwen, prompt_template: str, free_text: str) -> dict
     return result if isinstance(result, dict) else {"style_tags": [], "prompt": free_text, "negative_prompt": ""}
 
 
+async def assign_voice(qwen, char) -> None:
+    if char.voice_id:
+        return
+    from app.config import get_settings
+    char.voice_id = await qwen.design_voice(char.visual_description or char.name or "neutral voice")
+    char.voice_model = get_settings().qwen_tts_designed_model
+    char.voice_source = "designed"
+
+
 class CastingDirector:
     def __init__(self, db: Session):
         self.db = db
@@ -97,6 +106,11 @@ class CastingDirector:
                     c.face_vector = vector
                     c.plate_status = "ai_generated"
                 emit("casting.plate.completed", {"kind": "character", "key": f"{c.name}:{v['label']}", "index": idx, "total": total}, pid)
+
+        for c in characters:
+            emit("casting.voice.started", {"character": c.name}, pid)
+            await assign_voice(self.plates.qwen, c)
+            emit("casting.voice.completed", {"character": c.name}, pid)
 
         self.db.commit()
         project = self.db.query(Project).filter(Project.id == project_id).first()
