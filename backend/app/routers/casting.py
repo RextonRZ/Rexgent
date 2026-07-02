@@ -39,6 +39,7 @@ def get_bible(project_id: str, db: Session = Depends(get_db)):
     return {
         "auto_approve_casting": (project.auto_approve_casting if project else False),
         "characters": [{"id": str(c.id), "name": c.name,
+            "voice_id": c.voice_id, "voice_source": c.voice_source,
             "variants": [{"id": str(v.id), "label": v.label, "outfit_description": v.outfit_description,
                           "plate_image_url": v.plate_image_url, "is_default": v.is_default,
                           "plate_status": v.plate_status}

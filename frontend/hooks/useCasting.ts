@@ -13,8 +13,16 @@ export interface CostumeVariant {
 export interface CastingCharacter {
   id: string;
   name: string;
+  voice_id: string | null;
+  voice_source: string | null;
   variants: CostumeVariant[];
 }
+
+/** Preset TTS voices (qwen3-tts-flash timbres) — mirrors backend VOICE_POOL. */
+export const PRESET_VOICES = [
+  "Cherry", "Ethan", "Chelsie", "Serena", "Dylan", "Jada", "Sunny", "Aiden",
+  "Nofish", "Katerina", "Elias", "Jennifer", "Ryan", "Marcus", "Roy", "Peter",
+];
 
 export interface LocationPlate {
   id: string;
@@ -112,19 +120,19 @@ export function useOverrideVariant() {
   });
 }
 
-export function useDesignVoice() {
+export function useSetPresetVoice() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       characterId,
-      description,
+      voice,
     }: {
       characterId: string;
-      description: string;
+      voice: string;
     }) => {
       const { data } = await api.post(
-        `/api/casting/character/${characterId}/voice/design?description=${encodeURIComponent(
-          description
+        `/api/casting/character/${characterId}/voice/design?voice=${encodeURIComponent(
+          voice
         )}`
       );
       return data;

@@ -1,10 +1,16 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { MBTIBadge } from "./MBTIBadge";
 import { FaceUpload } from "./FaceUpload";
 import { AppearanceGenerator } from "./AppearanceGenerator";
+import { PlateCard } from "@/components/casting/PlateCard";
+import { VoiceRow } from "@/components/casting/VoiceRow";
+import {
+  useRegenerateVariant,
+  useOverrideVariant,
+  type CastingCharacter,
+} from "@/hooks/useCasting";
 import type { Character } from "@/lib/types";
 
 const ROLE_COLORS: Record<string, string> = {
@@ -14,8 +20,16 @@ const ROLE_COLORS: Record<string, string> = {
   MINOR: "bg-secondary text-muted-foreground",
 };
 
-export function CharacterCard({ character }: { character: Character }) {
+export function CharacterCard({
+  character,
+  casting,
+}: {
+  character: Character;
+  casting?: CastingCharacter;
+}) {
   const locked = !!character.reference_image_url;
+  const regenerateVariant = useRegenerateVariant();
+  const overrideVariant = useOverrideVariant();
   return (
     <Card className="hover:border-primary/40 transition-colors">
       <CardHeader className="pb-2">
@@ -98,6 +112,40 @@ export function CharacterCard({ character }: { character: Character }) {
             visualDescription={character.visual_description}
           />
         </div>
+
+        {casting && (
+          <div className="pt-2 mt-2 border-t hairline space-y-2">
+            <p className="text-[11px] font-semibold text-primary/80">
+              Wardrobe & voice
+            </p>
+            <VoiceRow
+              characterId={character.id}
+              voiceId={casting.voice_id}
+              voiceSource={casting.voice_source}
+            />
+            {casting.variants.length > 0 ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {casting.variants.map((variant) => (
+                  <PlateCard
+                    key={variant.id}
+                    imageUrl={variant.plate_image_url ?? undefined}
+                    label={variant.label + (variant.is_default ? " (default)" : "")}
+                    description={variant.outfit_description ?? undefined}
+                    status={variant.plate_status}
+                    onRegenerate={() => regenerateVariant.mutate(variant.id)}
+                    onUpload={(file) =>
+                      overrideVariant.mutate({ variantId: variant.id, file })
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">
+                No costume plates yet — run “Generate plates” above.
+              </p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -2,24 +2,37 @@
 
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useDesignVoice, useCloneVoice, previewVoice } from "@/hooks/useCasting";
+import {
+  useSetPresetVoice,
+  useCloneVoice,
+  previewVoice,
+  PRESET_VOICES,
+} from "@/hooks/useCasting";
 
-/** Per-character voice casting: design a voice from text, clone from a sample, or preview. */
-export function VoiceRow({ characterId }: { characterId: string }) {
-  const [mode, setMode] = useState<"design" | "clone">("design");
-  const [description, setDescription] = useState("");
+/** Per-character voice: pick a preset timbre, or clone a custom voice from a
+ *  short sample. Reflects the character's current voice + previews it. */
+export function VoiceRow({
+  characterId,
+  voiceId,
+  voiceSource,
+}: {
+  characterId: string;
+  voiceId?: string | null;
+  voiceSource?: string | null;
+}) {
+  const cloned = voiceSource === "cloned";
+  const [mode, setMode] = useState<"preset" | "clone">(cloned ? "clone" : "preset");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const designVoice = useDesignVoice();
+  const setPreset = useSetPresetVoice();
   const cloneVoice = useCloneVoice();
 
   const handlePreview = async () => {
     setPreviewing(true);
     try {
-      const url = await previewVoice(characterId);
-      setPreviewUrl(url);
+      setPreviewUrl(await previewVoice(characterId));
     } catch {
       /* no voice yet / preview failed — silently ignore */
     } finally {
@@ -27,17 +40,26 @@ export function VoiceRow({ characterId }: { characterId: string }) {
     }
   };
 
+  const currentLabel = cloned
+    ? "Cloned voice"
+    : voiceId
+    ? `Preset: ${voiceId}`
+    : "No voice set";
+
   return (
     <div className="rounded-lg border hairline bg-background/40 p-2.5 space-y-2">
       <div className="flex items-center gap-2 text-[11px]">
-        <span className="text-muted-foreground">Voice:</span>
+        <span className="text-muted-foreground">Voice</span>
+        <span className={`rounded px-1.5 py-0.5 ${cloned ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}>
+          {currentLabel}
+        </span>
         <button
-          onClick={() => setMode("design")}
-          className={`rounded px-1.5 py-0.5 ${
-            mode === "design" ? "bg-primary/20 text-primary" : "text-muted-foreground"
+          onClick={() => setMode("preset")}
+          className={`ml-auto rounded px-1.5 py-0.5 ${
+            mode === "preset" ? "bg-primary/20 text-primary" : "text-muted-foreground"
           }`}
         >
-          Design
+          Preset
         </button>
         <button
           onClick={() => setMode("clone")}
@@ -49,32 +71,31 @@ export function VoiceRow({ characterId }: { characterId: string }) {
         </button>
         <button
           onClick={handlePreview}
-          disabled={previewing}
-          className="ml-auto rounded px-1.5 py-0.5 text-primary hover:bg-primary/15 disabled:opacity-50"
+          disabled={previewing || !voiceId}
+          className="rounded px-1.5 py-0.5 text-primary hover:bg-primary/15 disabled:opacity-40"
         >
           {previewing ? "…" : "▶ Preview"}
         </button>
       </div>
 
-      {mode === "design" ? (
-        <div className="flex items-center gap-2">
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="e.g. warm low female voice, calm"
-            className="flex-1 rounded border border-border bg-background/60 px-2 py-1 text-[11px]"
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={designVoice.isPending || !description.trim()}
-            onClick={() => designVoice.mutate({ characterId, description })}
-          >
-            {designVoice.isPending ? "…" : "Design"}
-          </Button>
-        </div>
+      {mode === "preset" ? (
+        <select
+          value={cloned ? "" : voiceId ?? ""}
+          onChange={(e) => e.target.value && setPreset.mutate({ characterId, voice: e.target.value })}
+          disabled={setPreset.isPending}
+          className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px]"
+        >
+          <option value="" disabled>
+            {setPreset.isPending ? "Setting…" : "Choose a preset voice…"}
+          </option>
+          {PRESET_VOICES.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
       ) : (
-        <div className="flex items-center gap-2">
+        <div className="space-y-1">
           <input
             ref={fileRef}
             type="file"
@@ -90,15 +111,23 @@ export function VoiceRow({ characterId }: { characterId: string }) {
             variant="outline"
             disabled={cloneVoice.isPending}
             onClick={() => fileRef.current?.click()}
+            className="w-full"
           >
-            {cloneVoice.isPending ? "Cloning…" : "Upload 5–20s sample"}
+            {cloneVoice.isPending
+              ? "Cloning…"
+              : cloned
+              ? "Re-clone (upload new sample)"
+              : "Upload 5–20s sample to clone"}
           </Button>
+          {cloneVoice.isError && (
+            <p className="text-[10px] text-bad">
+              {(cloneVoice.error as Error).message}
+            </p>
+          )}
         </div>
       )}
 
-      {previewUrl && (
-        <audio src={previewUrl} controls autoPlay className="w-full h-7" />
-      )}
+      {previewUrl && <audio src={previewUrl} controls autoPlay className="w-full h-7" />}
     </div>
   );
 }

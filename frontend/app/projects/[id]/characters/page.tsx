@@ -12,6 +12,8 @@ import {
   useGraph,
   useBuildRelationshipGraph,
 } from "@/hooks/useRelationshipGraph";
+import { useBible, useRunCasting } from "@/hooks/useCasting";
+import type { CastingCharacter } from "@/hooks/useCasting";
 import type { CharacterRelationship } from "@/lib/types";
 
 export default function CharactersPage({
@@ -23,12 +25,20 @@ export default function CharactersPage({
   const extractCharacters = useExtractCharacters();
   const { data: graph } = useGraph(params.id);
   const buildGraph = useBuildRelationshipGraph();
+  const { data: bible } = useBible(params.id);
+  const runCasting = useRunCasting(params.id);
 
   const [selectedEdge, setSelectedEdge] =
     useState<CharacterRelationship | null>(null);
   const [inferMbti, setInferMbti] = useState(false);
 
   const characters = data?.characters || [];
+
+  const castingByCharId = useMemo(() => {
+    const map: Record<string, CastingCharacter> = {};
+    (bible?.characters || []).forEach((c) => (map[c.id] = c));
+    return map;
+  }, [bible]);
 
   const characterNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -71,8 +81,24 @@ export default function CharactersPage({
           >
             {buildGraph.isPending ? "Building..." : "Build Relationships"}
           </Button>
+          <Button
+            variant="secondary"
+            onClick={() => runCasting.mutate()}
+            disabled={runCasting.isPending}
+            title="Generate costume, location & style plates for the whole cast"
+          >
+            {runCasting.isPending ? "Generating…" : "Generate Plates"}
+          </Button>
         </div>
       </div>
+
+      {runCasting.isSuccess && (
+        <p className="text-xs text-muted-foreground">
+          Plate generation started — costume plates and voices will appear on each
+          card as they finish. Review locations, style, and approve on the{" "}
+          <span className="text-primary">Generate</span> step.
+        </p>
+      )}
 
       <Tabs defaultValue="cards">
         <TabsList>
@@ -84,7 +110,10 @@ export default function CharactersPage({
           {isLoading ? (
             <p className="text-muted-foreground">Loading characters...</p>
           ) : (
-            <CharacterList characters={characters} />
+            <CharacterList
+              characters={characters}
+              castingByCharId={castingByCharId}
+            />
           )}
         </TabsContent>
         <TabsContent value="relationships">

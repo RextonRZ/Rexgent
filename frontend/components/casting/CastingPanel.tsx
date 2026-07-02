@@ -3,23 +3,16 @@
 import { Button } from "@/components/ui/button";
 import { PlateCard } from "./PlateCard";
 import { ActivityFeed } from "./ActivityFeed";
-import { VoiceRow } from "./VoiceRow";
 import {
   useBible,
   useApproveCasting,
-  useRegenerateVariant,
   useSetAutoApprove,
-  useRunCasting,
-  useOverrideVariant,
 } from "@/hooks/useCasting";
 
 export function CastingPanel({ projectId }: { projectId: string }) {
   const { data: bible, isLoading } = useBible(projectId);
   const approveCasting = useApproveCasting(projectId);
-  const regenerateVariant = useRegenerateVariant();
   const setAutoApprove = useSetAutoApprove(projectId);
-  const runCasting = useRunCasting(projectId);
-  const overrideVariant = useOverrideVariant();
 
   if (isLoading) {
     return (
@@ -32,37 +25,32 @@ export function CastingPanel({ projectId }: { projectId: string }) {
   if (!bible) {
     return (
       <div className="rounded-xl border hairline bg-card p-8 text-center text-sm text-muted-foreground">
-        No casting data yet. Run the storyboard step first, then casting will
-        generate character, location, and style plates here.
+        No casting data yet. Run the storyboard step first, then generate plates
+        on the Characters step.
       </div>
     );
   }
 
+  const charactersReady = bible.characters.filter((c) => c.variants.length > 0).length;
+
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-6">
-        {/* top bar */}
+        {/* top bar — review + approve gate */}
         <div className="glass rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h2 className="font-semibold">Casting review</h2>
             <p className="text-sm text-muted-foreground max-w-md">
-              Review every character costume, location, and style plate before
-              spend continues.
+              Character costume plates & voices are set on the{" "}
+              <span className="text-primary">Characters</span> step. Review
+              locations and style below, then approve before spend continues.
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {charactersReady}/{bible.characters.length} characters have plates ·{" "}
+              {bible.locations.length} locations · {bible.style ? "style set" : "no style"}
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex flex-col items-end gap-1">
-              <Button
-                variant="outline"
-                onClick={() => runCasting.mutate()}
-                disabled={runCasting.isPending}
-              >
-                {runCasting.isPending ? "Generating…" : "Generate plates"}
-              </Button>
-              <p className="text-[11px] text-muted-foreground">
-                Generates character, location & style plates
-              </p>
-            </div>
             <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -92,43 +80,6 @@ export function CastingPanel({ projectId }: { projectId: string }) {
             {(approveCasting.error as Error).message}
           </p>
         )}
-
-        {/* characters */}
-        <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-primary/80">Characters</h3>
-          {bible.characters.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No characters yet.</p>
-          ) : (
-            bible.characters.map((character) => (
-              <div key={character.id} className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">
-                  {character.name}
-                </p>
-                <VoiceRow characterId={character.id} />
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {character.variants.map((variant) => (
-                    <PlateCard
-                      key={variant.id}
-                      imageUrl={variant.plate_image_url ?? undefined}
-                      label={
-                        variant.label +
-                        (variant.is_default ? " (default)" : "")
-                      }
-                      description={variant.outfit_description ?? undefined}
-                      status={variant.plate_status}
-                      onRegenerate={() =>
-                        regenerateVariant.mutate(variant.id)
-                      }
-                      onUpload={(file) =>
-                        overrideVariant.mutate({ variantId: variant.id, file })
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </section>
 
         {/* locations */}
         <section className="space-y-3">
@@ -161,9 +112,7 @@ export function CastingPanel({ projectId }: { projectId: string }) {
               />
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              No style preset yet.
-            </p>
+            <p className="text-xs text-muted-foreground">No style preset yet.</p>
           )}
         </section>
       </div>

@@ -1,9 +1,16 @@
 "use client";
 
 import { CharacterCard } from "./CharacterCard";
+import type { CastingCharacter } from "@/hooks/useCasting";
 import type { Character } from "@/lib/types";
 
-export function CharacterList({ characters }: { characters: Character[] }) {
+export function CharacterList({
+  characters,
+  castingByCharId,
+}: {
+  characters: Character[];
+  castingByCharId?: Record<string, CastingCharacter>;
+}) {
   if (characters.length === 0) {
     return (
       <p className="text-center text-muted-foreground py-8">
@@ -15,7 +22,11 @@ export function CharacterList({ characters }: { characters: Character[] }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {characters.map((char) => (
-        <CharacterCard key={char.id} character={char} />
+        <CharacterCard
+          key={char.id}
+          character={char}
+          casting={castingByCharId?.[char.id]}
+        />
       ))}
     </div>
   );
