@@ -7,24 +7,30 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Push the model to keep the reference identity and not wander into a scene.
+# Fallback outfit when no wardrobe plan exists (never feed the face description in).
+DEFAULT_OUTFIT = "a simple, well-fitted everyday outfit"
+
+# Keep the reference identity, one person only, and no scene bleed-through.
 CHAR_PLATE_NEGATIVE = (
-    "different person, different face, altered facial features, distorted face, "
-    "deformed, extra people, full body, wide shot, busy background, cluttered scene, text, watermark"
+    "two people, second person, multiple people, another person, crowd, background people, "
+    "different person, different face, altered facial features, distorted face, deformed, "
+    "full body, wide shot, room interior, doorway, scene, busy background, cluttered, text, watermark"
 )
 
 
 def character_plate_prompt(has_face: bool, visual_description: str | None,
                            name: str, outfit: str) -> str:
-    """A costume-plate prompt tuned for FACE consistency: a waist-up shot (keeps the
-    face large enough to survive) on a plain background. When a reference face exists
-    the model is told to reuse that exact identity."""
+    """A costume-plate prompt tuned for FACE consistency AND a single subject: a
+    waist-up studio shot (face stays large) of ONE person on a plain backdrop.
+    outfit should be clothing only — any scene text is fought by 'ignore the scene'
+    and the negative prompt so stray blocking doesn't spawn a second person."""
+    frame = ("Solo studio costume-reference photo of ONE person alone, no other people, "
+             "waist-up medium portrait facing forward, plain seamless neutral backdrop, "
+             "soft even lighting. Ignore any location, action or scene — plain background only.")
     if has_face:
         return (f"The exact same person with the identical face, hairstyle and features as the "
-                f"reference image — do not change the face. Waist-up medium portrait, facing "
-                f"forward, wearing {outfit}. Plain neutral studio background, soft even lighting.")
-    return (f"{visual_description or name}, waist-up medium portrait, facing forward, "
-            f"wearing {outfit}. Plain neutral studio background, soft even lighting.")
+                f"reference image — do not change the face. Wearing {outfit}. {frame}")
+    return f"{visual_description or name}. Wearing {outfit}. {frame}"
 
 
 class PlateGenerator:

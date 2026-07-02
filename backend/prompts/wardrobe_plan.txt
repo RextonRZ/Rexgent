@@ -6,3 +6,12 @@ Return ONLY JSON:
   "variants":[{"label": str, "outfit_description": str, "scene_numbers":[int,...]}]}]}
 One outfit that spans the whole story = a single variant listing all its scenes.
 A wardrobe change = multiple variants with disjoint scene_numbers.
+
+CRITICAL — outfit_description must describe ONLY the clothing this ONE character
+wears: garment types, colours, fabrics, and accessories. Under ~15 words.
+Do NOT include actions, poses, the location/room, the scene, other characters'
+names, era phrasing, or story context — clothing only.
+GOOD: "grey wool three-piece suit, white shirt, dark tie, polished shoes"
+GOOD: "faded floral cotton day dress, cardigan, low heels"
+BAD:  "40s, standing quietly outside Emma's room" (that is a scene, not clothing)
+label is a short outfit name (e.g. "work suit", "evening dress"), never a scene.
