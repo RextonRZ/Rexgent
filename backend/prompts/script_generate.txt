@@ -16,8 +16,9 @@ Structure requirements:
 - End with a clear resolution unless multi-episode arc (in which case end on a compelling hook)
 - Dialogue should sound natural, not expository
 
-Visual feasibility (AI video) — AI video cannot keep a picture-inside-the-frame consistent between shots, so DO NOT build the story around a prop that must show a SPECIFIC, recognizable image more than once:
+Visual feasibility (AI video) — AI video cannot keep a picture-inside-the-frame or readable writing consistent between shots, so DO NOT build the story around a prop that must show SPECIFIC, recognizable content:
 - Avoid beats that hinge on a photograph or portrait of a particular person, an ID card, a wanted poster, or a phone/computer/TV screen showing a specific face, or a mirror reflecting a specific absent person. These re-generate differently every shot.
+- Avoid notes, letters, texts, or signs whose specific words matter (e.g. a warning note). Convey the message through DIALOGUE or VOICEOVER (a character reads it aloud, or we hear their inner voice) — never a close-up of the writing, which comes out as garbled, inconsistent text.
 - To evoke someone who isn't present, use dialogue, memory, or a brief flashback that shows them IN PERSON — not a recurring close-up of their picture.
 - If such a prop is truly unavoidable, have it appear ONCE, briefly, never in close-up, and keep it indistinct.
 
