@@ -1,3 +1,5 @@
+from unittest.mock import patch, MagicMock
+
 from app.services.usage_tracker import UsageTracker
 
 
@@ -24,3 +26,15 @@ def test_handles_none():
     t.add(prompt_tokens=None, completion_tokens=None)
     assert t.total_input == 0
     assert t.total_output == 0
+
+
+def test_record_usage_writes_llm_event_when_project_set():
+    from app.services.usage_tracker import record_usage, current_project
+    usage = MagicMock(prompt_tokens=1000, completion_tokens=1000)
+    token = current_project.set(("p1", MagicMock()))  # (project_id, db)
+    try:
+        with patch("app.services.cost_ledger.record_llm") as m:
+            record_usage(usage)
+            m.assert_called_once()
+    finally:
+        current_project.reset(token)

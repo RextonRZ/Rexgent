@@ -8,7 +8,11 @@ script/analysis/storyboard calls; the Celery worker tracks generation-time
 calls). For the single-project hackathon demo this gives an accurate
 "LLM tokens used" figure.
 """
+import contextvars
+
 from app.config import get_settings
+
+current_project: contextvars.ContextVar = contextvars.ContextVar("current_project", default=None)
 
 
 class UsageTracker:
@@ -52,13 +56,27 @@ def global_usage() -> UsageTracker:
 
 
 def record_usage(usage) -> None:
-    """Record a response.usage object (OpenAI-compatible) into the global tracker."""
+    """Record a response.usage object (OpenAI-compatible).
+
+    If a project is active (see ``current_project``), the usage is written as
+    an ``llm`` cost_event on that project's ledger. Otherwise it falls back to
+    the process-global in-memory tracker (non-project calls).
+    """
     if usage is None:
         return
+    ctx = current_project.get()
+    if ctx:
+        project_id, db = ctx
+        try:
+            from app.services.cost_ledger import record_llm
+            record_llm(db, project_id,
+                       getattr(usage, "prompt_tokens", 0) or 0,
+                       getattr(usage, "completion_tokens", 0) or 0)
+            return
+        except Exception:  # noqa: BLE001
+            pass
+    # fallback: in-memory global tracker (non-project calls)
     try:
-        global_usage().add(
-            prompt_tokens=getattr(usage, "prompt_tokens", None),
-            completion_tokens=getattr(usage, "completion_tokens", None),
-        )
+        global_usage().add(getattr(usage, "prompt_tokens", None), getattr(usage, "completion_tokens", None))
     except Exception:  # noqa: BLE001
         pass

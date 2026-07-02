@@ -49,22 +49,32 @@ async def generate_script_op(
     tone: str = "dramatic", episode_count: int = 1, target_length: int = 30,
     language: str = "en",
 ) -> dict:
-    clean_premise = InputSanitizer().sanitize(premise, max_length=300)
-    raw_text = await ScriptGenerator().generate(
-        genre=genre, premise=clean_premise, tone=tone,
-        episode_count=episode_count, target_length=target_length, language=language,
-    )
-    structured = await ScriptStructurer().structure(raw_text, language=language)
-    script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
-    sync_scenes(project_id, structured, scene_uuids=scene_uuids)
-    return {"script_id": str(script.id), "structured": structured}
+    from app.services.usage_tracker import current_project
+    _tok = current_project.set((str(project_id), db))
+    try:
+        clean_premise = InputSanitizer().sanitize(premise, max_length=300)
+        raw_text = await ScriptGenerator().generate(
+            genre=genre, premise=clean_premise, tone=tone,
+            episode_count=episode_count, target_length=target_length, language=language,
+        )
+        structured = await ScriptStructurer().structure(raw_text, language=language)
+        script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
+        sync_scenes(project_id, structured, scene_uuids=scene_uuids)
+        return {"script_id": str(script.id), "structured": structured}
+    finally:
+        current_project.reset(_tok)
 
 
 async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = False) -> list[dict]:
     script = db.query(Script).filter(Script.id == uuid.UUID(script_id)).first()
     if not script or not script.structured_json:
         return []
-    data = await CharacterExtractor().extract(script.structured_json)
+    from app.services.usage_tracker import current_project
+    _tok = current_project.set((str(script.project_id), db))
+    try:
+        data = await CharacterExtractor().extract(script.structured_json)
+    finally:
+        current_project.reset(_tok)
     db.query(Character).filter(Character.project_id == script.project_id).delete()
     created = []
     for cd in data:
@@ -102,28 +112,33 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
     shots_per_scene, shot_seconds = plan_shot_budget(len(scenes), target_length)
     gen = StoryboardGenerator()
     created = []
-    for scene in scenes:
-        scene_chars = [char_map.get(str(n).upper(), {"name": n}) for n in (scene.characters_json or [])]
-        shots = await gen.generate_for_scene(
-            {"scene_number": scene.number, "heading": scene.heading,
-             "description": scene.description, "emotional_beat": scene.emotional_beat},
-            scene_chars,
-            max_shots=shots_per_scene,
-            shot_seconds=shot_seconds,
-        )
-        for sd in shots:
-            shot = Shot(
-                scene_id=scene.id, number=sd.get("shot_number", 1),
-                shot_type=sd.get("shot_type"), camera_movement=sd.get("camera_movement"),
-                lighting=sd.get("lighting"), colour_mood=sd.get("colour_mood"),
-                action=sd.get("action"), dialogue=sd.get("dialogue"),
-                emotional_beat=sd.get("emotional_beat"),
-                estimated_duration_seconds=sd.get("estimated_duration_seconds", 5),
-                characters_in_frame=sd.get("characters_in_frame", []),
-                notes=sd.get("notes"),
+    from app.services.usage_tracker import current_project
+    _tok = current_project.set((str(script.project_id), db))
+    try:
+        for scene in scenes:
+            scene_chars = [char_map.get(str(n).upper(), {"name": n}) for n in (scene.characters_json or [])]
+            shots = await gen.generate_for_scene(
+                {"scene_number": scene.number, "heading": scene.heading,
+                 "description": scene.description, "emotional_beat": scene.emotional_beat},
+                scene_chars,
+                max_shots=shots_per_scene,
+                shot_seconds=shot_seconds,
             )
-            db.add(shot)
-            created.append(shot)
+            for sd in shots:
+                shot = Shot(
+                    scene_id=scene.id, number=sd.get("shot_number", 1),
+                    shot_type=sd.get("shot_type"), camera_movement=sd.get("camera_movement"),
+                    lighting=sd.get("lighting"), colour_mood=sd.get("colour_mood"),
+                    action=sd.get("action"), dialogue=sd.get("dialogue"),
+                    emotional_beat=sd.get("emotional_beat"),
+                    estimated_duration_seconds=sd.get("estimated_duration_seconds", 5),
+                    characters_in_frame=sd.get("characters_in_frame", []),
+                    notes=sd.get("notes"),
+                )
+                db.add(shot)
+                created.append(shot)
+    finally:
+        current_project.reset(_tok)
     db.commit()
     return [{"shot_id": str(s.id), "shot_type": s.shot_type,
              "emotional_beat": s.emotional_beat,
