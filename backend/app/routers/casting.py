@@ -7,7 +7,8 @@ from app.models.character import Character
 from app.models.costume_variant import CostumeVariant
 from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
-from app.services.plate_generator import PlateGenerator, character_plate_prompt, CHAR_PLATE_NEGATIVE, DEFAULT_OUTFIT
+from app.services.plate_generator import (PlateGenerator, character_plate_prompt,
+                                          subject_descriptor, CHAR_PLATE_NEGATIVE, DEFAULT_OUTFIT)
 from app.services.oss_manager import OSSManager
 from app.services.face_embedder import FaceEmbedder
 from app.services.qwen_client import QwenClient
@@ -141,8 +142,9 @@ async def override_variant(variant_id: str, file: UploadFile = File(...), db: Se
 
 
 def _char_plate_prompt(char, outfit: str) -> str:
-    return character_plate_prompt(bool(char.reference_image_url),
-                                  char.visual_description, char.name, outfit)
+    subject = subject_descriptor(char.gender, char.estimated_age,
+                                 char.physical_description or char.visual_description)
+    return character_plate_prompt(bool(char.reference_image_url), subject, outfit)
 
 
 @router.post("/character/{character_id}/plates")

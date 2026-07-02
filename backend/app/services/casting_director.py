@@ -7,7 +7,8 @@ from app.models.costume_variant import CostumeVariant
 from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
 from app.services.wardrobe_planner import WardrobePlanner
-from app.services.plate_generator import PlateGenerator, character_plate_prompt, CHAR_PLATE_NEGATIVE, DEFAULT_OUTFIT
+from app.services.plate_generator import (PlateGenerator, character_plate_prompt,
+                                          subject_descriptor, CHAR_PLATE_NEGATIVE, DEFAULT_OUTFIT)
 from app.services.prompt_loader import load_prompt
 from app.websocket.emitter import emit
 
@@ -103,8 +104,9 @@ class CastingDirector:
                 emit("casting.plate.started", {"kind": "character", "key": f"{c.name}:{v['label']}", "index": idx, "total": total}, pid)
                 outfit = v.get("outfit_description", "")
                 # identity plate: waist-up, plain background, no style-tag scene drift
-                prompt = character_plate_prompt(bool(c.reference_image_url),
-                                                c.visual_description, c.name, outfit)
+                subject = subject_descriptor(c.gender, c.estimated_age,
+                                             c.physical_description or c.visual_description)
+                prompt = character_plate_prompt(bool(c.reference_image_url), subject, outfit)
                 url, vector = await self.plates.generate_and_store_plate(
                     pid, "character", f"{c.name}_{v['label']}", prompt,
                     negative_prompt=CHAR_PLATE_NEGATIVE,

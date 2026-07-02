@@ -18,19 +18,37 @@ CHAR_PLATE_NEGATIVE = (
 )
 
 
-def character_plate_prompt(has_face: bool, visual_description: str | None,
-                           name: str, outfit: str) -> str:
+def subject_descriptor(gender: str | None = None, age: str | None = None,
+                       appearance: str | None = None) -> str:
+    """A concise 'who this is' phrase so plates stay CHARACTER-SPECIFIC even if the
+    face-edit path can't run — otherwise two characters collapse into the same
+    generic person. Uses gender/age/appearance, never the character's name (a name
+    isn't visual)."""
+    from app.services.voice_catalog import gender_bucket
+    b = gender_bucket(gender)
+    lead = "a woman" if b == "female" else "a man" if b == "male" else "a person"
+    if age:
+        lead = f"{lead} around {age}"
+    appearance = (appearance or "").strip()
+    if appearance:
+        if len(appearance) > 220:  # keep the face from being drowned by a paragraph
+            appearance = appearance[:220].rsplit(" ", 1)[0] + "…"
+        return f"{lead}, {appearance}"
+    return lead
+
+
+def character_plate_prompt(has_face: bool, subject: str, outfit: str) -> str:
     """A costume-plate prompt tuned for FACE consistency AND a single subject: a
     waist-up studio shot (face stays large) of ONE person on a plain backdrop.
-    outfit should be clothing only — any scene text is fought by 'ignore the scene'
-    and the negative prompt so stray blocking doesn't spawn a second person."""
+    `subject` describes who the character is (gender/age/appearance) so even the
+    text-to-image fallback stays character-specific. outfit should be clothing only."""
     frame = ("Solo studio costume-reference photo of ONE person alone, no other people, "
              "waist-up medium portrait facing forward, plain seamless neutral backdrop, "
              "soft even lighting. Ignore any location, action or scene — plain background only.")
     if has_face:
-        return (f"The exact same person with the identical face, hairstyle and features as the "
-                f"reference image — do not change the face. Wearing {outfit}. {frame}")
-    return f"{visual_description or name}. Wearing {outfit}. {frame}"
+        return (f"The exact same person as the reference image ({subject}) — keep the identical "
+                f"face and hair, do not change the face. Wearing {outfit}. {frame}")
+    return f"{subject}. Wearing {outfit}. {frame}"
 
 
 class PlateGenerator:
