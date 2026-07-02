@@ -104,6 +104,46 @@ class VideoStitcher:
             raise RuntimeError(f"ffmpeg audio mux failed: {proc.stderr[-800:]}")
         return output_path
 
+    def mix_tracks(self, video_path, dialogue_segments, bgm_path, output_path,
+                   bgm_volume=0.3, duck=True):
+        """Build one dialogue track (each segment delayed to its start, then amix),
+        optionally duck a BGM bed beneath it (sidechaincompress), and mux onto the
+        silent video. Returns output_path."""
+        inputs = ["-i", video_path]
+        filters, dlg_labels = [], []
+        for i, seg in enumerate(dialogue_segments):
+            inputs += ["-i", seg["audio_path"]]
+            delay_ms = int(float(seg["start"]) * 1000)
+            filters.append(f"[{i+1}:a]adelay={delay_ms}|{delay_ms}[d{i}]")
+            dlg_labels.append(f"[d{i}]")
+        n = len(dialogue_segments)
+        final_audio = None
+        if dlg_labels:
+            filters.append(f"{''.join(dlg_labels)}amix=inputs={n}:dropout_transition=0[dlg]")
+            final_audio = "[dlg]"
+        if bgm_path:
+            bgm_idx = n + 1
+            inputs += ["-i", bgm_path]
+            filters.append(f"[{bgm_idx}:a]volume={bgm_volume}[bgm]")
+            if duck and final_audio:
+                # duplicate the dialogue: one copy keys the compressor, one goes to the final mix
+                filters.append("[dlg]asplit=2[dlgkey][dlgmix]")
+                filters.append("[bgm][dlgkey]sidechaincompress=threshold=0.03:ratio=8[bgmduck]")
+                filters.append("[bgmduck][dlgmix]amix=inputs=2:dropout_transition=0[aout]")
+                final_audio = "[aout]"
+            elif final_audio:
+                filters.append("[bgm][dlg]amix=inputs=2:dropout_transition=0[aout]")
+                final_audio = "[aout]"
+            else:
+                final_audio = "[bgm]"
+        cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", ";".join(filters),
+               "-map", "0:v", "-map", final_audio, "-c:v", "copy", "-c:a", "aac",
+               "-shortest", "-movflags", "+faststart", output_path]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(f"ffmpeg mix failed: {proc.stderr[-800:]}")
+        return output_path
+
     def burn_subtitles(self, video_path: str, srt_path: str, output_path: str) -> str:
         cmd = [
             "ffmpeg", "-y", "-i", video_path,
