@@ -127,17 +127,26 @@ def set_voice(character_id: str, voice: str = "Cherry", db: Session = Depends(ge
 
 @router.post("/character/{character_id}/voice/clone")
 async def clone_voice(character_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """Voice cloning needs the realtime enrollment API (not enabled) — fall back to a preset."""
-    from app.services.casting_director import VOICE_POOL
+    """Clone a custom voice from an uploaded sample (5-20s). Enrols it via
+    qwen-voice-enrollment; the character then speaks with the realtime vc model."""
+    settings = get_settings()
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c:
         raise HTTPException(status_code=404, detail="Character not found")
-    await file.read()  # consume the upload
-    if not c.voice_id or c.voice_id not in VOICE_POOL:
-        c.voice_id = "Cherry"
-    c.voice_model, c.voice_source = get_settings().qwen_tts_designed_model, "preset"
+    content = await file.read()
+    # keep the source sample so the clone can be re-enrolled/audited later
+    oss = OSSManager(settings)
+    sample_key = oss.get_project_path(str(c.project_id), "voice_samples", f"{c.name}_sample")
+    sample_url = oss.upload_bytes(content, sample_key, content_type=file.content_type or "audio/wav")
+    try:
+        voice = await QwenClient(settings).enroll_voice(
+            content, preferred_name=c.name, content_type=file.content_type or "audio/wav")
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Voice enrollment failed: {e}")
+    c.voice_id, c.voice_model, c.voice_source = voice, settings.qwen_tts_cloned_model, "cloned"
+    c.voice_sample_url = sample_url
     db.commit()
-    return {"voice_id": c.voice_id, "note": "cloning not enabled — using preset voice"}
+    return {"voice_id": voice, "voice_source": "cloned"}
 
 
 @router.post("/character/{character_id}/voice/preview")
@@ -145,5 +154,7 @@ async def preview_voice(character_id: str, text: str = "Hello, this is my voice.
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c or not c.voice_id:
         raise HTTPException(status_code=404, detail="No voice to preview")
-    audio = await QwenClient(get_settings()).preview_voice(text, c.voice_id)
+    # cloned voices must preview through their realtime model; presets use flash.
+    model = c.voice_model if c.voice_source == "cloned" else None
+    audio = await QwenClient(get_settings()).preview_voice(text, c.voice_id, model)
     return Response(content=audio, media_type="audio/wav")

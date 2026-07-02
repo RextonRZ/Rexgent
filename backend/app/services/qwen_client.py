@@ -325,11 +325,14 @@ class QwenClient:
     # best-effort behind this interface: only this file changes if the real
     # API differs.
     async def synthesize_speech(self, text: str, voice: str, model: str | None = None) -> bytes:
-        """Offline TTS via the DashScope SDK (qwen3-tts-flash). `voice` is a preset
-        timbre name (e.g. 'Cherry'). Returns synthesized audio bytes (WAV)."""
-        import asyncio
+        """TTS synthesis. Preset voices use the OFFLINE SDK (qwen3-tts-flash); cloned
+        voices route to the realtime vc WebSocket (any model containing 'realtime').
+        `voice` is a preset timbre name or an enrolled voice id. Returns WAV bytes."""
         s = get_settings()
         model = model or s.qwen_tts_designed_model
+        if "realtime" in model:
+            return await self.synthesize_speech_realtime(text, voice, model)
+
         api_key, base = self.api_key, self.video_base_url
 
         def _call() -> bytes:
@@ -351,5 +354,109 @@ class QwenClient:
 
         return await asyncio.to_thread(_call)
 
-    async def preview_voice(self, text: str, voice: str) -> bytes:
-        return await self.synthesize_speech(text, voice, model=get_settings().qwen_tts_preview_model)
+    async def enroll_voice(self, sample_bytes: bytes, preferred_name: str,
+                           content_type: str = "audio/wav") -> str:
+        """Enrol a custom voice from a short sample via qwen-voice-enrollment.
+        Returns the enrolled voice id, usable with the qwen3-tts-vc-realtime model."""
+        s = get_settings()
+        name = re.sub(r"[^a-z0-9]", "", (preferred_name or "").lower())[:10] or "voice"
+        b64 = base64.b64encode(sample_bytes).decode()
+        payload = {
+            "model": s.qwen_voice_enroll_model,
+            "input": {
+                "action": "create",
+                "target_model": s.qwen_tts_cloned_model,
+                "preferred_name": name,
+                "audio": {"data": f"data:{content_type};base64,{b64}"},
+            },
+        }
+        async with httpx.AsyncClient() as http:
+            resp = await http.post(
+                self.video_base_url + s.qwen_voice_enroll_path,
+                headers={"Authorization": f"Bearer {self.api_key}",
+                         "Content-Type": "application/json"},
+                json=payload,
+                timeout=60.0,
+            )
+            if resp.status_code >= 400:
+                raise RuntimeError(f"Voice enrollment {resp.status_code}: {resp.text[:600]}")
+            output = resp.json().get("output", {})
+        voice = output.get("voice")
+        if not voice:
+            raise RuntimeError(f"Voice enrollment returned no voice: {output}")
+        return voice
+
+    async def synthesize_speech_realtime(self, text: str, voice: str,
+                                         model: str | None = None) -> bytes:
+        """TTS via the realtime vc WebSocket (qwen3-tts-vc-realtime). Accumulates the
+        base64 PCM deltas and wraps them into a 24kHz mono 16-bit WAV. Blocking SDK,
+        so it runs in a worker thread."""
+        s = get_settings()
+        model = model or s.qwen_tts_cloned_model
+        api_key, ws_url = self.api_key, s.qwen_tts_realtime_url
+
+        def _call() -> bytes:
+            import io
+            import wave
+            import threading
+            import dashscope
+            from dashscope.audio.qwen_tts_realtime import (
+                QwenTtsRealtime, QwenTtsRealtimeCallback, AudioFormat)
+
+            dashscope.api_key = api_key  # QwenTtsRealtime reads api_key at construction
+            chunks: list[bytes] = []
+            done = threading.Event()
+            error: dict = {}
+
+            class _CB(QwenTtsRealtimeCallback):
+                def on_open(self) -> None:
+                    pass
+
+                def on_close(self, close_status_code, close_msg) -> None:
+                    done.set()
+
+                def on_event(self, message: dict) -> None:
+                    try:
+                        etype = message.get("type")
+                        if etype == "response.audio.delta":
+                            b64 = message.get("delta") or message.get("audio")
+                            if b64:
+                                chunks.append(base64.b64decode(b64))
+                        elif etype in ("response.done", "session.finished"):
+                            done.set()
+                        elif etype == "error":
+                            error["msg"] = message.get("error") or message
+                            done.set()
+                    except Exception as e:  # noqa: BLE001
+                        error["msg"] = str(e)
+                        done.set()
+
+            tts = QwenTtsRealtime(model=model, callback=_CB(), url=ws_url)
+            tts.connect()
+            tts.update_session(voice=voice,
+                               response_format=AudioFormat.PCM_24000HZ_MONO_16BIT)
+            tts.append_text(text)
+            tts.finish()
+            done.wait(timeout=90)
+            try:
+                tts.close()
+            except Exception:  # noqa: BLE001
+                pass
+            if error:
+                raise RuntimeError(f"Realtime TTS error: {error['msg']}")
+            pcm = b"".join(chunks)
+            if not pcm:
+                raise RuntimeError("Realtime TTS returned no audio")
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(24000)
+                wav.writeframes(pcm)
+            return buf.getvalue()
+
+        return await asyncio.to_thread(_call)
+
+    async def preview_voice(self, text: str, voice: str, model: str | None = None) -> bytes:
+        # Preset voices preview through flash; cloned voices pass their realtime model.
+        return await self.synthesize_speech(text, voice, model or get_settings().qwen_tts_preview_model)

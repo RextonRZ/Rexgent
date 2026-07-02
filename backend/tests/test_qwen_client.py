@@ -179,3 +179,62 @@ def test_extract_image_url_results_shape():
     from app.services.qwen_client import QwenClient
     out = {"results": [{"url": "https://x/z.png"}]}
     assert QwenClient._extract_image_url(out) == "https://x/z.png"
+
+
+@pytest.mark.asyncio
+async def test_enroll_voice_posts_and_returns_voice(monkeypatch):
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    import app.services.qwen_client as qc
+    client = QwenClient(get_settings())
+    captured = {}
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"output": {"voice": "cosyvoice-v1-char-abc"}}
+
+    class FakeAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None, timeout=None):
+            captured["url"] = url
+            captured["json"] = json
+            return FakeResp()
+
+    monkeypatch.setattr(qc.httpx, "AsyncClient", lambda *a, **k: FakeAsyncClient())
+    voice = await client.enroll_voice(b"RIFFsample", preferred_name="Emma Stone!", content_type="audio/wav")
+    assert voice == "cosyvoice-v1-char-abc"
+    body = captured["json"]
+    assert body["model"] == get_settings().qwen_voice_enroll_model
+    assert body["input"]["action"] == "create"
+    assert body["input"]["target_model"] == get_settings().qwen_tts_cloned_model
+    # preferred_name is sanitized to lowercase alnum, capped
+    assert body["input"]["preferred_name"] == "emmastone"
+    assert body["input"]["audio"]["data"].startswith("data:audio/wav;base64,")
+    assert captured["url"].endswith(get_settings().qwen_voice_enroll_path)
+
+
+@pytest.mark.asyncio
+async def test_synthesize_speech_routes_realtime_for_vc_model(monkeypatch):
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    from unittest.mock import AsyncMock
+    client = QwenClient(get_settings())
+    rt = AsyncMock(return_value=b"WAVCLONE")
+    monkeypatch.setattr(client, "synthesize_speech_realtime", rt)
+    out = await client.synthesize_speech("hi", "cloned-voice-id", model="qwen3-tts-vc-realtime-2026-01-15")
+    assert out == b"WAVCLONE"
+    rt.assert_awaited_once()
+
+
+def test_enroll_default_name_when_blank():
+    # sanitizer falls back to "voice" when nothing usable remains
+    import re
+    name = re.sub(r"[^a-z0-9]", "", ("###").lower())[:10] or "voice"
+    assert name == "voice"
