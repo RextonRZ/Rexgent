@@ -13,10 +13,11 @@ from app.models.user import User
 from app.models.costume_variant import CostumeVariant
 from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
+from app.models.line_audio import LineAudio
 
 __all__ = [
     "Project", "Script", "Scene", "Character", "CharacterRelationship",
     "PlotFlag", "Shot", "GenerationJob", "GeneratedClip", "EditFlag",
     "FinalExport", "NarrativeMemorySnapshot", "User",
-    "CostumeVariant", "LocationPlate", "StylePreset",
+    "CostumeVariant", "LocationPlate", "StylePreset", "LineAudio",
 ]
