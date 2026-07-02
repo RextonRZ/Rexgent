@@ -14,10 +14,12 @@ from app.models.costume_variant import CostumeVariant
 from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
 from app.models.line_audio import LineAudio
+from app.models.cost_event import CostEvent
 
 __all__ = [
     "Project", "Script", "Scene", "Character", "CharacterRelationship",
     "PlotFlag", "Shot", "GenerationJob", "GeneratedClip", "EditFlag",
     "FinalExport", "NarrativeMemorySnapshot", "User",
     "CostumeVariant", "LocationPlate", "StylePreset", "LineAudio",
+    "CostEvent",
 ]
