@@ -34,7 +34,8 @@ def make_shot():
     return SimpleNamespace(
         id="shot1", number=1, shot_type="CU", camera_movement="STATIC", action="x",
         lighting="NATURAL", colour_mood="COOL", emotional_beat="tension",
-        estimated_duration_seconds=5, quality_tier="happyhorse", characters_in_frame=["Yuki"])
+        dialogue="YUKI: We need to move.", estimated_duration_seconds=5,
+        quality_tier="happyhorse", characters_in_frame=["Yuki"])
 
 
 def make_char():

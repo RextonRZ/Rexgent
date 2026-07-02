@@ -234,6 +234,7 @@ class GenerationRunner:
             shot={"shot_type": shot.shot_type, "camera_movement": shot.camera_movement,
                   "action": shot.action, "lighting": shot.lighting,
                   "colour_mood": shot.colour_mood, "emotional_beat": shot.emotional_beat,
+                  "dialogue": shot.dialogue,
                   "estimated_duration_seconds": shot.estimated_duration_seconds},
             character_visuals=character_visuals,
             target_model=shot.quality_tier or "happyhorse",
