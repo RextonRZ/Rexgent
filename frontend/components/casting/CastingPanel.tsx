@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { PlateCard } from "./PlateCard";
 import { ActivityFeed } from "./ActivityFeed";
+import { VoiceRow } from "./VoiceRow";
 import {
   useBible,
   useApproveCasting,
@@ -103,6 +104,7 @@ export function CastingPanel({ projectId }: { projectId: string }) {
                 <p className="text-xs font-medium text-muted-foreground">
                   {character.name}
                 </p>
+                <VoiceRow characterId={character.id} />
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {character.variants.map((variant) => (
                     <PlateCard

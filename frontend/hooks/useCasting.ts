@@ -112,6 +112,64 @@ export function useOverrideVariant() {
   });
 }
 
+export function useDesignVoice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      characterId,
+      description,
+    }: {
+      characterId: string;
+      description: string;
+    }) => {
+      const { data } = await api.post(
+        `/api/casting/character/${characterId}/voice/design?description=${encodeURIComponent(
+          description
+        )}`
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bible"] });
+    },
+  });
+}
+
+export function useCloneVoice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      characterId,
+      file,
+    }: {
+      characterId: string;
+      file: File;
+    }) => {
+      const form = new FormData();
+      form.append("file", file);
+      const { data } = await api.post(
+        `/api/casting/character/${characterId}/voice/clone`,
+        form,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bible"] });
+    },
+  });
+}
+
+/** Fetch a short voice preview; returns an object URL for an <audio> element. */
+export async function previewVoice(characterId: string): Promise<string> {
+  const { data } = await api.post(
+    `/api/casting/character/${characterId}/voice/preview`,
+    null,
+    { responseType: "blob" }
+  );
+  return URL.createObjectURL(data as Blob);
+}
+
 export function useSetAutoApprove(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
