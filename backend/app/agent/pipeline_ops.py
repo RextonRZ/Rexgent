@@ -18,12 +18,13 @@ from app.mcp_tools.token_optimizer import TokenOptimizer
 from app.graph.sync import sync_scenes, sync_characters
 
 
-def _persist_script(db: Session, project_id: str, raw_text: str, structured: dict) -> Script:
+def _persist_script(db: Session, project_id: str, raw_text: str, structured: dict) -> tuple[Script, dict]:
     script = Script(project_id=uuid.UUID(project_id), raw_text=raw_text, structured_json=structured)
     db.add(script)
     db.flush()
+    scene_uuids: dict = {}
     for sc in structured.get("scenes", []):
-        db.add(Scene(
+        scene = Scene(
             script_id=script.id,
             number=sc.get("scene_number", 0),
             title=sc.get("heading", ""),
@@ -35,10 +36,12 @@ def _persist_script(db: Session, project_id: str, raw_text: str, structured: dic
             emotional_beat=sc.get("emotional_beat", ""),
             dialogue_json=sc.get("dialogue_lines", []),
             stage_directions=sc.get("stage_directions", []),
-        ))
+        )
+        db.add(scene)
+        scene_uuids[scene.number] = str(scene.id)
     db.commit()
     db.refresh(script)
-    return script
+    return script, scene_uuids
 
 
 async def generate_script_op(
@@ -52,8 +55,8 @@ async def generate_script_op(
         episode_count=episode_count, target_length=target_length, language=language,
     )
     structured = await ScriptStructurer().structure(raw_text, language=language)
-    script = _persist_script(db, project_id, raw_text, structured)
-    sync_scenes(project_id, structured)
+    script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
+    sync_scenes(project_id, structured, scene_uuids=scene_uuids)
     return {"script_id": str(script.id), "structured": structured}
 
 
