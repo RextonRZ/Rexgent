@@ -5,6 +5,7 @@ import { GenerationLauncher } from "@/components/generate/GenerationLauncher";
 import { GenerationQueue } from "@/components/generate/GenerationQueue";
 import { CostTracker } from "@/components/generate/CostTracker";
 import { CastingPanel } from "@/components/casting/CastingPanel";
+import { CostLedger } from "@/components/budget/CostLedger";
 
 export default function GeneratePage({ params }: { params: { id: string } }) {
   useWebSocket(params.id);
@@ -27,7 +28,10 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
         <div className="lg:col-span-2">
           <GenerationLauncher projectId={params.id} />
         </div>
-        <CostTracker />
+        <div className="space-y-6">
+          <CostTracker />
+          <CostLedger projectId={params.id} />
+        </div>
       </div>
 
       <GenerationQueue />
