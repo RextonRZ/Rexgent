@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CharacterList } from "@/components/characters/CharacterList";
 import { RelationshipGraph } from "@/components/characters/RelationshipGraph";
 import { RelationshipEdgePanel } from "@/components/characters/RelationshipEdgePanel";
-import { SceneGraph } from "@/components/characters/SceneGraph";
 import { NarrativeGraphView } from "@/components/agents/NarrativeGraphView";
 import { Skeleton } from "@/components/shared/Skeleton";
 import { useCharacters, useExtractCharacters } from "@/hooks/useCharacters";
@@ -32,9 +31,34 @@ export default function CharactersPage({
 
   const [selectedEdge, setSelectedEdge] =
     useState<CharacterRelationship | null>(null);
-  const [inferMbti, setInferMbti] = useState(false);
 
   const characters = data?.characters || [];
+
+  // Relationships build themselves: once after extraction, and once on load if
+  // the cast exists but no relationships do (no button to remember).
+  const autoBuilt = useRef(false);
+  useEffect(() => {
+    if (autoBuilt.current || buildGraph.isPending) return;
+    if (
+      characters.length >= 2 &&
+      graph &&
+      (graph.relationships?.length ?? 0) === 0
+    ) {
+      autoBuilt.current = true;
+      buildGraph.mutate(params.id);
+    }
+  }, [characters.length, graph, buildGraph, params.id]);
+
+  const handleExtract = () =>
+    extractCharacters.mutate(
+      { projectId: params.id },
+      {
+        onSuccess: () => {
+          autoBuilt.current = true;
+          buildGraph.mutate(params.id);
+        },
+      }
+    );
 
   const castingByCharId = useMemo(() => {
     const map: Record<string, CastingCharacter> = {};
@@ -58,30 +82,10 @@ export default function CharactersPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-            <input
-              type="checkbox"
-              checked={inferMbti}
-              onChange={(e) => setInferMbti(e.target.checked)}
-            />
-            Infer MBTI (for fun)
-          </label>
-          <Button
-            onClick={() =>
-              extractCharacters.mutate({ projectId: params.id, inferMbti })
-            }
-            disabled={extractCharacters.isPending}
-          >
+          <Button onClick={handleExtract} disabled={extractCharacters.isPending}>
             {extractCharacters.isPending
               ? "Extracting..."
               : "Extract from Script"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => buildGraph.mutate(params.id)}
-            disabled={buildGraph.isPending}
-          >
-            {buildGraph.isPending ? "Building..." : "Build Relationships"}
           </Button>
           <Button
             variant="outline"
@@ -94,6 +98,11 @@ export default function CharactersPage({
         </div>
       </div>
 
+      {buildGraph.isPending && (
+        <p className="text-xs text-muted-foreground">
+          Building character relationships…
+        </p>
+      )}
       {runCasting.isSuccess && (
         <p className="text-xs text-muted-foreground">
           Plate generation started — costume plates and voices will appear on each
@@ -130,13 +139,7 @@ export default function CharactersPage({
           />
         </TabsContent>
         <TabsContent value="scenes">
-          <div className="space-y-4">
-            <NarrativeGraphView projectId={params.id} />
-            <SceneGraph
-              scenes={graph?.scenes || []}
-              characters={graph?.characters || []}
-            />
-          </div>
+          <NarrativeGraphView projectId={params.id} />
         </TabsContent>
       </Tabs>
 

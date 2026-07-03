@@ -16,7 +16,8 @@ import {
 } from "@/hooks/useCasting";
 import type { Character } from "@/lib/types";
 
-/** Collapsible card section with a quiet uppercase heading. */
+/** Collapsible card section with a quiet uppercase heading and a smooth
+ *  grid-rows height transition (children stay mounted so state survives). */
 function Section({
   title,
   action,
@@ -30,22 +31,34 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-border pt-2">
+    <div className="border-t border-border pt-2.5">
       <div className="flex items-center justify-between gap-2">
         <button
           onClick={() => setOpen((o) => !o)}
-          className="flex-1 flex items-center justify-between text-left py-0.5"
+          className="flex-1 flex items-center gap-2 text-left py-1 group/sec"
         >
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">
-            {title}
+          <span
+            className={`text-[10px] text-muted-foreground transition-transform duration-200 ${
+              open ? "rotate-90" : ""
+            }`}
+          >
+            ▸
           </span>
-          <span className="text-[10px] text-muted-foreground">
-            {open ? "▾" : "▸"}
+          <span className="text-xs uppercase tracking-wide text-muted-foreground group-hover/sec:text-foreground transition-colors">
+            {title}
           </span>
         </button>
         {action}
       </div>
-      {open && <div className="mt-2 space-y-2">{children}</div>}
+      <div
+        className={`grid transition-all duration-300 ease-in-out ${
+          open ? "grid-rows-[1fr] opacity-100 mt-2" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="space-y-2.5 pb-1">{children}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -91,18 +104,18 @@ export function CharacterCard({
 
   return (
     <Card>
-      <CardContent className="pt-4 space-y-3">
+      <CardContent className="px-5 py-1 space-y-3">
         {/* compact header: avatar + name + role */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           {hasFace ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={character.reference_image_url!}
               alt={character.name}
-              className="h-10 w-10 rounded-full object-cover border border-border shrink-0"
+              className="h-16 w-16 rounded-full object-cover border border-border shrink-0"
             />
           ) : (
-            <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-sm font-semibold text-muted-foreground shrink-0">
+            <div className="h-16 w-16 rounded-full bg-secondary flex items-center justify-center text-xl font-semibold text-muted-foreground shrink-0">
               {character.name.charAt(0)}
             </div>
           )}

@@ -19,8 +19,14 @@ export function CharacterList({
     );
   }
 
+  // 1-2 characters fill the row (no orphan gap); 3+ pack three per row
+  const cols =
+    characters.length <= 2
+      ? "grid-cols-1 md:grid-cols-2"
+      : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className={`grid ${cols} gap-4 items-start`}>
       {characters.map((char) => (
         <CharacterCard
           key={char.id}

@@ -20,7 +20,7 @@ function PanelSection({
 }) {
   return (
     <div className="flex flex-col min-h-0">
-      <div className="flex items-center justify-between px-3 py-2 border-b hairline shrink-0">
+      <div className="flex items-center justify-between pl-4 pr-3 py-2.5 border-b hairline shrink-0">
         <span className="text-xs font-semibold">{title}</span>
         <button
           onClick={onClose}
@@ -30,7 +30,7 @@ function PanelSection({
           ✕
         </button>
       </div>
-      <div className="p-3 overflow-x-hidden">{children}</div>
+      <div className="px-4 py-3 overflow-x-hidden">{children}</div>
     </div>
   );
 }
