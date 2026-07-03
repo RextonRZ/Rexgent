@@ -3,6 +3,9 @@ import { useAuthStore } from "@/store/auth";
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
+  // Backstop so a slow/hung request surfaces as an error instead of hanging the
+  // UI forever. Generous enough for the slowest inline calls (plate/voice gen).
+  timeout: 120000,
   headers: {
     "Content-Type": "application/json",
   },
