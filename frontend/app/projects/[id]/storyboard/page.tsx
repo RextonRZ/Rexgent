@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { NextStepButton } from "@/components/shared/NextStepButton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StoryboardView } from "@/components/storyboard/StoryboardView";
@@ -110,6 +111,7 @@ export default function StoryboardPage({
           <LocationStylePanel projectId={params.id} />
         </TabsContent>
       </Tabs>
+      <NextStepButton projectId={params.id} current="storyboard" />
     </div>
   );
 }

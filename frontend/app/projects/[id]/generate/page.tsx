@@ -1,6 +1,7 @@
 "use client";
 
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { NextStepButton } from "@/components/shared/NextStepButton";
 import { GenerationLauncher } from "@/components/generate/GenerationLauncher";
 import { GenerationQueue } from "@/components/generate/GenerationQueue";
 import { CastingPanel } from "@/components/casting/CastingPanel";
@@ -27,6 +28,7 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
 
       <GenerationLauncher projectId={params.id} />
       <GenerationQueue projectId={params.id} />
+      <NextStepButton projectId={params.id} current="generate" />
     </div>
   );
 }

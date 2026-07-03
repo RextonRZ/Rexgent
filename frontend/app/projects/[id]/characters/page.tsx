@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { NextStepButton } from "@/components/shared/NextStepButton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CharacterList } from "@/components/characters/CharacterList";
@@ -145,6 +146,7 @@ export default function CharactersPage({
         characterById={characterById}
         onClose={() => setSelectedEdge(null)}
       />
+      <NextStepButton projectId={params.id} current="characters" />
     </div>
   );
 }
