@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { PipelineNav } from "@/components/shared/PipelineNav";
-import { BudgetMeter } from "@/components/shared/BudgetMeter";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { UserMenu } from "@/components/auth/UserMenu";
+import { CostBubble } from "@/components/budget/CostBubble";
+import { AgentBubble } from "@/components/agents/AgentBubble";
 
 export default function ProjectLayout({
   children,
@@ -31,7 +32,6 @@ export default function ProjectLayout({
             </div>
 
             <div className="flex items-center gap-4">
-              <BudgetMeter projectId={params.id} />
               <UserMenu />
             </div>
           </div>
@@ -42,6 +42,8 @@ export default function ProjectLayout({
         </header>
 
         <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
+        <CostBubble projectId={params.id} />
+        <AgentBubble projectId={params.id} />
       </div>
     </AuthGate>
   );
