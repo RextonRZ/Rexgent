@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/shared/Skeleton";
 import { PlateCard } from "./PlateCard";
 import { ActivityFeed } from "./ActivityFeed";
 import {
@@ -16,8 +17,9 @@ export function CastingPanel({ projectId }: { projectId: string }) {
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border hairline bg-card p-8 text-center text-sm text-muted-foreground">
-        Loading casting…
+      <div className="space-y-3">
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
       </div>
     );
   }

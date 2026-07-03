@@ -8,6 +8,7 @@ import { RelationshipGraph } from "@/components/characters/RelationshipGraph";
 import { RelationshipEdgePanel } from "@/components/characters/RelationshipEdgePanel";
 import { SceneGraph } from "@/components/characters/SceneGraph";
 import { NarrativeGraphView } from "@/components/agents/NarrativeGraphView";
+import { Skeleton } from "@/components/shared/Skeleton";
 import { useCharacters, useExtractCharacters } from "@/hooks/useCharacters";
 import {
   useGraph,
@@ -110,7 +111,11 @@ export default function CharactersPage({
         </TabsList>
         <TabsContent value="cards">
           {isLoading ? (
-            <p className="text-muted-foreground">Loading characters...</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-64 rounded-xl" />
+              ))}
+            </div>
           ) : (
             <CharacterList
               characters={characters}

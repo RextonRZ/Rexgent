@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { NewProjectModal } from "@/components/home/NewProjectModal";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { UserMenu } from "@/components/auth/UserMenu";
+import { Skeleton } from "@/components/shared/Skeleton";
 import { useProjects } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
 import type { Project } from "@/lib/types";
@@ -24,7 +25,7 @@ export default function ProjectsPage() {
 }
 
 function ProjectsHub() {
-  const { data } = useProjects();
+  const { data, isLoading } = useProjects();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const projects = data?.projects || [];
@@ -81,12 +82,14 @@ function ProjectsHub() {
             <span className="text-[11px]">Initialize AI Showrunner</span>
           </button>
 
-          {projects.map((p) => (
-            <ProjectCard key={p.id} project={p} />
-          ))}
+          {isLoading
+            ? Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="min-h-[160px] rounded-xl" />
+              ))
+            : projects.map((p) => <ProjectCard key={p.id} project={p} />)}
         </div>
 
-        {projects.length === 0 && (
+        {!isLoading && projects.length === 0 && (
           <p className="text-center text-sm text-muted-foreground mt-10">
             Your first drama is one idea away.
           </p>
