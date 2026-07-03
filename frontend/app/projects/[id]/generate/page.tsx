@@ -3,12 +3,8 @@
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { GenerationLauncher } from "@/components/generate/GenerationLauncher";
 import { GenerationQueue } from "@/components/generate/GenerationQueue";
-import { CostTracker } from "@/components/generate/CostTracker";
 import { CastingPanel } from "@/components/casting/CastingPanel";
-import { CostLedger } from "@/components/budget/CostLedger";
-import { AgentDecisionPanel } from "@/components/agents/AgentDecisionPanel";
 import { ClarificationModal } from "@/components/agents/ClarificationModal";
-import { NarrativeGraphView } from "@/components/agents/NarrativeGraphView";
 
 export default function GeneratePage({ params }: { params: { id: string } }) {
   useWebSocket(params.id);
@@ -29,20 +25,8 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
         <CastingPanel projectId={params.id} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <GenerationLauncher projectId={params.id} />
-        </div>
-        <div className="space-y-6">
-          <CostTracker />
-          <CostLedger projectId={params.id} />
-          <AgentDecisionPanel projectId={params.id} />
-        </div>
-      </div>
-
+      <GenerationLauncher projectId={params.id} />
       <GenerationQueue />
-
-      <NarrativeGraphView projectId={params.id} />
     </div>
   );
 }
