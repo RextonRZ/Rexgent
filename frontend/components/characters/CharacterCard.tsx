@@ -1,6 +1,7 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MBTIBadge } from "./MBTIBadge";
 import { FaceUpload } from "./FaceUpload";
@@ -15,12 +16,65 @@ import {
 } from "@/hooks/useCasting";
 import type { Character } from "@/lib/types";
 
-const ROLE_COLORS: Record<string, string> = {
-  PROTAGONIST: "bg-primary/15 text-primary",
-  ANTAGONIST: "bg-bad/15 text-bad",
-  SUPPORTING: "bg-ok/15 text-ok",
-  MINOR: "bg-secondary text-muted-foreground",
-};
+/** Collapsible card section with a quiet uppercase heading. */
+function Section({
+  title,
+  action,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-t border-border pt-2">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex-1 flex items-center justify-between text-left py-0.5"
+        >
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            {title}
+          </span>
+          <span className="text-[10px] text-muted-foreground">
+            {open ? "▾" : "▸"}
+          </span>
+        </button>
+        {action}
+      </div>
+      {open && <div className="mt-2 space-y-2">{children}</div>}
+    </div>
+  );
+}
+
+/** Long generated text collapsed to two lines with a toggle. */
+function Expandable({ text }: { text: string }) {
+  const [more, setMore] = useState(false);
+  return (
+    <div>
+      <p
+        className={
+          more
+            ? "text-xs text-muted-foreground"
+            : "text-xs text-muted-foreground line-clamp-2"
+        }
+      >
+        {text}
+      </p>
+      {text.length > 120 && (
+        <button
+          onClick={() => setMore((m) => !m)}
+          className="text-[11px] text-muted-foreground underline hover:text-foreground"
+        >
+          {more ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function CharacterCard({
   character,
@@ -29,122 +83,102 @@ export function CharacterCard({
   character: Character;
   casting?: CastingCharacter;
 }) {
-  const locked = !!character.reference_image_url;
   const regenerateVariant = useRegenerateVariant();
   const overrideVariant = useOverrideVariant();
   const generatePlates = useGenerateCharacterPlates();
   const hasFace = !!character.reference_image_url;
   const hasPlates = (casting?.variants.length ?? 0) > 0;
+
   return (
-    <Card className="hover:border-primary/40 transition-colors">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-lg">{character.name}</CardTitle>
-            <span
-              className={`inline-flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 ${
-                locked ? "bg-ok/15 text-ok" : "bg-secondary text-muted-foreground"
-              }`}
-              title={locked ? "Identity locked" : "No reference set"}
-            >
-              {locked ? "● locked" : "○ no ID"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {character.role && (
-              <span
-                className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${
-                  ROLE_COLORS[character.role] || "bg-secondary text-muted-foreground"
-                }`}
-              >
-                {character.role}
-              </span>
-            )}
-            <MBTIBadge
-              type={character.mbti}
-              confidence={character.mbti_confidence}
+    <Card>
+      <CardContent className="pt-4 space-y-3">
+        {/* compact header: avatar + name + role */}
+        <div className="flex items-center gap-3">
+          {hasFace ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={character.reference_image_url!}
+              alt={character.name}
+              className="h-10 w-10 rounded-full object-cover border border-border shrink-0"
             />
+          ) : (
+            <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-sm font-semibold text-muted-foreground shrink-0">
+              {character.name.charAt(0)}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="font-medium truncate">{character.name}</p>
+              <MBTIBadge
+                type={character.mbti}
+                confidence={character.mbti_confidence}
+              />
+            </div>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              {character.role || "cast"} · {hasFace ? "face locked" : "no face"}
+            </p>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-2 text-sm">
-        {character.estimated_age && (
-          <p>
-            <span className="text-muted-foreground">Age:</span>{" "}
-            {character.estimated_age}
-          </p>
-        )}
-        {character.gender && (
-          <p>
-            <span className="text-muted-foreground">Gender:</span>{" "}
-            {character.gender}
-          </p>
-        )}
-        {character.physical_description && (
-          <p>
-            <span className="text-muted-foreground">Appearance:</span>{" "}
-            {character.physical_description}
-          </p>
-        )}
+
+        {/* one-line bio */}
         {character.personality_summary && (
-          <p className="text-muted-foreground">
+          <p className="text-xs text-muted-foreground line-clamp-1">
             {character.personality_summary}
           </p>
         )}
-        {character.speech_pattern && (
-          <p>
-            <span className="text-muted-foreground">Speech:</span>{" "}
-            {character.speech_pattern}
+
+        <Section title="Profile">
+          <div className="space-y-1.5 text-xs">
+            {character.estimated_age && (
+              <p>
+                <span className="text-muted-foreground">Age</span> —{" "}
+                {character.estimated_age}
+              </p>
+            )}
+            {character.gender && (
+              <p>
+                <span className="text-muted-foreground">Gender</span> —{" "}
+                {character.gender}
+              </p>
+            )}
+            {character.speech_pattern && (
+              <p>
+                <span className="text-muted-foreground">Speech</span> —{" "}
+                {character.speech_pattern}
+              </p>
+            )}
+            {character.emotional_arc && (
+              <p className="text-muted-foreground">
+                Arc: {character.emotional_arc.start} →{" "}
+                {character.emotional_arc.midpoint} →{" "}
+                {character.emotional_arc.end}
+              </p>
+            )}
+            {character.physical_description && (
+              <Expandable text={character.physical_description} />
+            )}
+          </div>
+        </Section>
+
+        <Section title="Face reference" defaultOpen={!hasFace}>
+          <p className="text-[11px] text-muted-foreground">
+            The identity anchor — outfits below are built on this exact face.
           </p>
-        )}
-        {character.emotional_arc && (
-          <div className="flex items-center gap-2 text-xs flex-wrap">
-            <span className="text-muted-foreground">Arc:</span>
-            <span>{character.emotional_arc.start}</span>
-            <span>→</span>
-            <span>{character.emotional_arc.midpoint}</span>
-            <span>→</span>
-            <span>{character.emotional_arc.end}</span>
-          </div>
-        )}
-        {/* 1 · Face reference — the identity anchor (face only, no outfit) */}
-        <div className="pt-2 mt-1 border-t hairline space-y-2">
-          <div>
-            <p className="text-[11px] font-semibold text-primary/80">
-              1 · Face reference{" "}
-              <span className="font-normal text-muted-foreground">
-                — identity, face only
-              </span>
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              Upload or generate the face. Outfits below are built on this exact
-              face.
-            </p>
-          </div>
-          <FaceUpload
-            characterId={character.id}
-            hasReference={!!character.reference_image_url}
-          />
+          <FaceUpload characterId={character.id} hasReference={hasFace} />
           <AppearanceGenerator
             characterId={character.id}
             visualDescription={character.visual_description}
           />
-        </div>
+        </Section>
 
         {casting && (
           <>
-            {/* 2 · Costume plates — full outfits generated on top of the face */}
-            <div className="pt-2 mt-2 border-t hairline space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] font-semibold text-primary/80">
-                  2 · Costume plates{" "}
-                  <span className="font-normal text-muted-foreground">
-                    — outfits, same face
-                  </span>
-                </p>
+            <Section
+              title="Costume plates"
+              action={
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   disabled={generatePlates.isPending}
                   onClick={() => generatePlates.mutate(character.id)}
                   title={
@@ -156,30 +190,26 @@ export function CharacterCard({
                   {generatePlates.isPending
                     ? "Generating…"
                     : hasPlates
-                    ? "Regenerate"
-                    : "Generate plates"}
+                    ? "↻ Regenerate"
+                    : "Generate"}
                 </Button>
-              </div>
-
+              }
+            >
               {!hasFace && (
-                <p className="text-[10px] text-muted-foreground">
-                  No face set — generating will <em>invent</em> a default face.
-                  Upload/generate a face above first to control it.
+                <p className="text-[11px] text-muted-foreground">
+                  No face set — generating will invent one. Add a face above
+                  first to control it.
                 </p>
               )}
-              {hasFace && hasPlates && (
-                <p className="text-[10px] text-muted-foreground">
-                  Changed the face above? Click <span className="text-primary">Regenerate</span> to re-match.
-                </p>
-              )}
-
               {hasPlates ? (
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-3">
                   {casting.variants.map((variant) => (
                     <PlateCard
                       key={variant.id}
                       imageUrl={variant.plate_image_url ?? undefined}
-                      label={variant.label + (variant.is_default ? " (default)" : "")}
+                      label={
+                        variant.label + (variant.is_default ? " (default)" : "")
+                      }
                       description={variant.outfit_description ?? undefined}
                       status={variant.plate_status}
                       onRegenerate={() => regenerateVariant.mutate(variant.id)}
@@ -190,21 +220,19 @@ export function CharacterCard({
                   ))}
                 </div>
               ) : (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   No costume plates yet.
                 </p>
               )}
-            </div>
+            </Section>
 
-            {/* 3 · Voice */}
-            <div className="pt-2 mt-2 border-t hairline space-y-2">
-              <p className="text-[11px] font-semibold text-primary/80">3 · Voice</p>
+            <Section title="Voice">
               <VoiceRow
                 characterId={character.id}
                 voiceId={casting.voice_id}
                 voiceSource={casting.voice_source}
               />
-            </div>
+            </Section>
           </>
         )}
       </CardContent>

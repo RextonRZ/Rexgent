@@ -77,14 +77,14 @@ export default function CharactersPage({
               : "Extract from Script"}
           </Button>
           <Button
-            variant="secondary"
+            variant="outline"
             onClick={() => buildGraph.mutate(params.id)}
             disabled={buildGraph.isPending}
           >
             {buildGraph.isPending ? "Building..." : "Build Relationships"}
           </Button>
           <Button
-            variant="secondary"
+            variant="outline"
             onClick={() => runCasting.mutate()}
             disabled={runCasting.isPending}
             title="Generate costume, location & style plates for the whole cast"

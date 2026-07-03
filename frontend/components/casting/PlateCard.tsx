@@ -1,8 +1,6 @@
 "use client";
 
 import { useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 
 const STATUS_LABEL: Record<string, string> = {
   ai_generated: "AI generated",
@@ -13,7 +11,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_COLOR: Record<string, string> = {
   ai_generated: "bg-ok/15 text-ok",
   ai_pending: "bg-warn/15 text-warn",
-  user_override: "bg-primary/15 text-primary",
+  user_override: "bg-secondary text-muted-foreground",
 };
 
 export interface PlateCardProps {
@@ -41,16 +39,14 @@ export function PlateCard({
     e.target.value = "";
   };
 
+  const hasActions = Boolean(onRegenerate || onUpload);
+
   return (
-    <Card className="hover:border-primary/40 transition-colors">
+    <div className="group relative overflow-hidden rounded-lg border border-border bg-card">
       <div className="relative aspect-video w-full bg-background/40">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl}
-            alt={label}
-            className="h-full w-full object-cover"
-          />
+          <img src={imageUrl} alt={label} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">
             no plate yet
@@ -65,44 +61,45 @@ export function PlateCard({
             {STATUS_LABEL[status] || status}
           </span>
         )}
+        {/* actions appear on hover as icon buttons over the image */}
+        {hasActions && (
+          <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            {onRegenerate && (
+              <button
+                onClick={onRegenerate}
+                title="Regenerate plate"
+                className="h-8 w-8 rounded-full bg-background/90 hover:bg-background flex items-center justify-center text-sm"
+              >
+                ↻
+              </button>
+            )}
+            {onUpload && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                title="Upload replacement"
+                className="h-8 w-8 rounded-full bg-background/90 hover:bg-background flex items-center justify-center text-sm"
+              >
+                ⬆
+              </button>
+            )}
+          </div>
+        )}
       </div>
-      <CardContent className="space-y-2 pt-3">
-        <div>
-          <p className="text-sm font-medium leading-snug">{label}</p>
-          {description && (
-            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-              {description}
-            </p>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onRegenerate}
-            disabled={!onRegenerate}
-            className="flex-1"
-          >
-            ↻ Regenerate
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!onUpload}
-            className="flex-1"
-          >
-            ⬆ Upload
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </div>
-      </CardContent>
-    </Card>
+
+      <div className="px-2.5 py-2 min-w-0">
+        <p className="text-xs font-medium truncate">{label}</p>
+        {description && (
+          <p className="text-[11px] text-muted-foreground truncate">{description}</p>
+        )}
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+    </div>
   );
 }
