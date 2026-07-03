@@ -146,6 +146,21 @@ async def generate_script(
     )
 
 
+@router.get("/project/{project_id}/latest", response_model=ScriptResponse)
+async def latest_script_for_project(project_id: str, db: Session = Depends(get_db)):
+    """The most recent script for a project, so opening an existing project can
+    resume straight into the editor instead of a blank 'write a script' screen."""
+    script = (
+        db.query(Script)
+        .filter(Script.project_id == uuid.UUID(project_id))
+        .order_by(Script.created_at.desc())
+        .first()
+    )
+    if not script:
+        raise HTTPException(status_code=404, detail="No script for project")
+    return script
+
+
 @router.get("/{script_id}", response_model=ScriptResponse)
 async def get_script(script_id: str, db: Session = Depends(get_db)):
     script = db.query(Script).filter(Script.id == uuid.UUID(script_id)).first()

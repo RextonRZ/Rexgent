@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useProject } from "@/hooks/useProjects";
+import { useLatestScript } from "@/hooks/useScript";
 import { ScriptImport } from "@/components/script/ScriptImport";
 import { ScriptGenerate } from "@/components/script/ScriptGenerate";
 import { ScriptEditor } from "@/components/script/ScriptEditor";
@@ -35,6 +36,18 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
   } | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [judgement, setJudgement] = useState<JudgeResult | null>(null);
+
+  // Resume an existing project straight into the editor instead of the blank
+  // "write a script" tabs. (404 for a brand-new project just leaves scriptData null.)
+  const { data: latestScript } = useLatestScript(params.id);
+  useEffect(() => {
+    if (!scriptData && latestScript?.id) {
+      setScriptData({
+        script_id: latestScript.id,
+        raw_text: latestScript.raw_text ?? "",
+      });
+    }
+  }, [latestScript, scriptData]);
 
   const analyzeScript = useAnalyzeScript();
   const judgeScript = useJudgeScript();

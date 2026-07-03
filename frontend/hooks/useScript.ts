@@ -13,6 +13,22 @@ export function useScript(scriptId: string | null) {
   });
 }
 
+/** The project's most recent script, so opening an existing project resumes into
+ *  the editor. 404 (no script yet) is expected for brand-new projects. */
+export function useLatestScript(projectId: string) {
+  return useQuery<Script>({
+    queryKey: ["latest-script", projectId],
+    queryFn: async () => {
+      const { data } = await api.get(
+        `/api/script/project/${projectId}/latest`
+      );
+      return data;
+    },
+    enabled: !!projectId,
+    retry: false,
+  });
+}
+
 export function useGenerateScript() {
   const queryClient = useQueryClient();
 
