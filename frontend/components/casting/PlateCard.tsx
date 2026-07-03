@@ -43,10 +43,11 @@ export function PlateCard({
 
   return (
     <div className="group relative overflow-hidden rounded-lg border border-border bg-card">
-      <div className="relative aspect-video w-full bg-background/40">
+      {/* square + contain so the whole plate is visible (plates are 1:1; uploads letterbox) */}
+      <div className="relative aspect-square w-full bg-background/40">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt={label} className="h-full w-full object-cover" />
+          <img src={imageUrl} alt={label} className="h-full w-full object-contain" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">
             no plate yet
@@ -87,9 +88,11 @@ export function PlateCard({
       </div>
 
       <div className="px-2.5 py-2 min-w-0">
-        <p className="text-xs font-medium truncate">{label}</p>
+        <p className="text-xs font-medium leading-snug">{label}</p>
         {description && (
-          <p className="text-[11px] text-muted-foreground truncate">{description}</p>
+          <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+            {description}
+          </p>
         )}
       </div>
 
