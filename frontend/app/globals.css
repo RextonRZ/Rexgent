@@ -58,25 +58,26 @@
   body {
     @apply bg-background text-foreground;
     background-image:
-      radial-gradient(60rem 60rem at 80% -10%, hsl(265 85% 40% / 0.10), transparent 60%),
-      radial-gradient(50rem 50rem at 0% 110%, hsl(200 80% 45% / 0.08), transparent 55%);
+      radial-gradient(60rem 60rem at 80% -10%, hsl(265 60% 40% / 0.05), transparent 60%),
+      radial-gradient(50rem 50rem at 0% 110%, hsl(200 60% 45% / 0.04), transparent 55%);
     background-attachment: fixed;
   }
 }
 
 @layer utilities {
-  /* frosted panel */
+  /* restrained frosted panel */
   .glass {
-    background: hsl(250 22% 11% / 0.7);
-    backdrop-filter: blur(12px);
-    border: 1px solid hsl(250 16% 22% / 0.6);
+    background: hsl(250 20% 10% / 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid hsl(250 16% 20% / 0.6);
   }
-  /* subtle accent glow for hero elements */
+  /* subtle accent ring — no neon glow */
   .glow {
-    box-shadow: 0 0 0 1px hsl(265 85% 66% / 0.25), 0 8px 40px -8px hsl(265 85% 50% / 0.45);
+    box-shadow: 0 0 0 1px hsl(265 85% 66% / 0.18);
   }
+  /* softer, tighter gradient text (used sparingly) */
   .text-gradient {
-    background: linear-gradient(135deg, hsl(265 90% 78%), hsl(200 90% 70%));
+    background: linear-gradient(135deg, hsl(265 70% 74%), hsl(210 60% 74%));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;

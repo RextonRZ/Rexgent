@@ -53,15 +53,14 @@ function ProjectsHub() {
           {firstName ? `Welcome back, ${firstName}` : "One premise. A whole drama."}
         </p>
         <h1 className="text-4xl sm:text-6xl font-bold tracking-tight">
-          Direct films with a{" "}
-          <span className="text-gradient">crew of agents</span>.
+          Direct films with a <span className="text-primary">crew of agents</span>.
         </h1>
         <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
           Type a story idea. Rexgent writes it, casts it, storyboards it,
           generates it, and hands you back a finished short drama — on budget.
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">
-          <Button size="lg" className="glow" onClick={() => setOpen(true)}>
+          <Button size="lg" onClick={() => setOpen(true)}>
             ⚡ Start a new drama
           </Button>
         </div>
