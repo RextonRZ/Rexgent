@@ -101,7 +101,12 @@ export function RelationshipGraph({
 
     link
       .on("mouseover", function (event, d) {
-        d3.select(this).attr("opacity", 1);
+        d3.select(this)
+          .attr("opacity", 1)
+          .attr("stroke-width", 3 + (d.rel.strength || 5) / 2.5);
+        // the tooltip group is created before the nodes, so raise it above
+        // them or the text renders behind the face images
+        tooltip.raise();
         if (d.rel.evidence_quote) {
           tooltip.selectAll("*").remove();
           const [mx, my] = d3.pointer(event, svgRef.current);
@@ -125,8 +130,10 @@ export function RelationshipGraph({
             .attr("rx", 5);
         }
       })
-      .on("mouseout", function () {
-        d3.select(this).attr("opacity", 0.7);
+      .on("mouseout", function (_event, d) {
+        d3.select(this)
+          .attr("opacity", 0.7)
+          .attr("stroke-width", 1 + (d.rel.strength || 5) / 2.5);
         tooltip.selectAll("*").remove();
       })
       .on("click", (_event, d) => {

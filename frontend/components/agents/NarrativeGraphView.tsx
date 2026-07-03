@@ -124,6 +124,7 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
   const fgRef = useRef<any>(null);
   const [width, setWidth] = useState(0);
   const [selLink, setSelLink] = useState<any | null>(null);
+  const [hoverLink, setHoverLink] = useState<any | null>(null);
 
   // link.source/target may be raw ids or hydrated node objects
   const endNode = (end: any) =>
@@ -203,9 +204,18 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
             height={420}
             nodeId="id"
             linkColor={(l: any) =>
-              l === selLink ? "rgba(139,92,246,0.9)" : "rgba(148,163,184,0.35)"
+              l === selLink
+                ? "rgba(139,92,246,0.95)" // selected: violet
+                : l === hoverLink
+                ? "rgba(236,72,153,0.9)" // hovered: pink
+                : "rgba(148,163,184,0.35)"
             }
-            linkWidth={(l: any) => (l === selLink ? 2.5 : 1.5)}
+            linkWidth={(l: any) => (l === selLink || l === hoverLink ? 3 : 1.5)}
+            onLinkHover={(l: any) => {
+              setHoverLink(l);
+              if (containerRef.current)
+                containerRef.current.style.cursor = l ? "pointer" : "default";
+            }}
             onLinkClick={(l: any) => setSelLink(l)}
             onBackgroundClick={() => setSelLink(null)}
             backgroundColor="rgba(0,0,0,0)"
