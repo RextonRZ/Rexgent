@@ -24,6 +24,8 @@ export interface GraphScene {
   heading: string;
   characters: string[];
   image?: string | null;
+  description?: string | null;
+  emotional_beat?: string | null;
 }
 
 export interface GraphResponse {
@@ -42,6 +44,10 @@ export interface GraphNode {
 export interface GraphLink {
   source: string;
   target: string;
+  kind: "relationship" | "appears";
+  label?: string | null; // rel_type, or "Scene N"
+  info?: string | null; // relationship description, or scene description
+  beat?: string | null; // scene emotional beat
 }
 
 export interface GraphData {
@@ -77,14 +83,27 @@ function shapeGraph(data?: GraphResponse): GraphData {
   }
 
   for (const r of relationships) {
-    links.push({ source: r.from_char_id, target: r.to_char_id });
+    links.push({
+      source: r.from_char_id,
+      target: r.to_char_id,
+      kind: "relationship",
+      label: r.rel_type,
+      info: r.description,
+    });
   }
 
   for (const s of scenes) {
     for (const name of s.characters ?? []) {
       const character = charByName.get(name);
       if (!character) continue;
-      links.push({ source: character.id, target: `scene-${s.number}` });
+      links.push({
+        source: character.id,
+        target: `scene-${s.number}`,
+        kind: "appears",
+        label: `Scene ${s.number}`,
+        info: s.description,
+        beat: s.emotional_beat,
+      });
     }
   }
 

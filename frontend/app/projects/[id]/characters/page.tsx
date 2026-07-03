@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CharacterList } from "@/components/characters/CharacterList";
 import { RelationshipGraph } from "@/components/characters/RelationshipGraph";
 import { RelationshipEdgePanel } from "@/components/characters/RelationshipEdgePanel";
+import { SceneGraph } from "@/components/characters/SceneGraph";
 import { NarrativeGraphView } from "@/components/agents/NarrativeGraphView";
 import { Skeleton } from "@/components/shared/Skeleton";
 import { useCharacters, useExtractCharacters } from "@/hooks/useCharacters";
@@ -139,7 +140,13 @@ export default function CharactersPage({
           />
         </TabsContent>
         <TabsContent value="scenes">
-          <NarrativeGraphView projectId={params.id} />
+          <div className="space-y-4">
+            <NarrativeGraphView projectId={params.id} />
+            <SceneGraph
+              scenes={graph?.scenes || []}
+              characters={graph?.characters || []}
+            />
+          </div>
         </TabsContent>
       </Tabs>
 

@@ -128,6 +128,8 @@ async def get_graphs(project_id: str, db: Session = Depends(get_db)):
                 "heading": s.heading,
                 "characters": s.characters_json or [],
                 "image": plate_by_scene.get(s.number),
+                "description": s.description,
+                "emotional_beat": s.emotional_beat,
             }
             for s in scene_rows
         ]

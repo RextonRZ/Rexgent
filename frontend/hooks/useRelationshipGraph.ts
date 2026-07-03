@@ -7,6 +7,8 @@ export interface GraphScene {
   heading: string | null;
   characters: string[];
   image?: string | null;
+  description?: string | null;
+  emotional_beat?: string | null;
 }
 
 export interface GraphCharacterInfo {

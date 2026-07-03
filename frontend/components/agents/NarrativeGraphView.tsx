@@ -8,6 +8,13 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<any>(null);
   const [width, setWidth] = useState(0);
+  const [selLink, setSelLink] = useState<any | null>(null);
+
+  // link.source/target may be raw ids or hydrated node objects
+  const endName = (end: any) =>
+    typeof end === "object"
+      ? end?.label
+      : nodes.find((n) => n.id === end)?.label ?? String(end);
 
   // Client-only import that supports refs (next/dynamic doesn't forward them),
   // so we can spread the force layout out for readability.
@@ -59,7 +66,7 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
       <div className="px-4 py-3 border-b hairline">
         <h2 className="text-sm font-medium">Story graph</h2>
         <p className="text-[11px] text-muted-foreground">
-          Who appears in which scene — faces link to the scenes they&apos;re in
+          Who appears in which scene — click a connection to see what happens
         </p>
       </div>
 
@@ -78,7 +85,12 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
             width={width}
             height={420}
             nodeId="id"
-            linkColor={() => "rgba(148,163,184,0.35)"}
+            linkColor={(l: any) =>
+              l === selLink ? "rgba(139,92,246,0.9)" : "rgba(148,163,184,0.35)"
+            }
+            linkWidth={(l: any) => (l === selLink ? 2.5 : 1.5)}
+            onLinkClick={(l: any) => setSelLink(l)}
+            onBackgroundClick={() => setSelLink(null)}
             backgroundColor="rgba(0,0,0,0)"
             nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, scale: number) => {
               const x = node.x ?? 0;
@@ -148,6 +160,40 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
           />
         ) : null}
       </div>
+
+      {selLink && (
+        <div className="mx-4 mb-3 rounded-lg border hairline bg-background/40 p-3 text-xs space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">
+              {endName(selLink.source)}{" "}
+              {selLink.kind === "relationship" ? "↔" : "→"}{" "}
+              {endName(selLink.target)}
+              {selLink.label && (
+                <span className="ml-2 text-primary/80">{selLink.label}</span>
+              )}
+            </span>
+            <button
+              onClick={() => setSelLink(null)}
+              aria-label="Close"
+              className="h-5 w-5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary text-[10px]"
+            >
+              ✕
+            </button>
+          </div>
+          {selLink.info ? (
+            <p className="text-muted-foreground leading-relaxed">{selLink.info}</p>
+          ) : (
+            <p className="text-muted-foreground">No description available.</p>
+          )}
+          {selLink.beat && (
+            <p className="text-muted-foreground">
+              <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px]">
+                Beat · {selLink.beat}
+              </span>
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-4 px-4 py-2 border-t hairline text-[11px] text-muted-foreground">
         <span>
