@@ -33,29 +33,11 @@ export function CastingPanel({ projectId }: { projectId: string }) {
     );
   }
 
-  const charactersReady = bible.characters.filter(
-    (c) => c.variants.length > 0
-  ).length;
-
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-3">
         <div className="glass rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h2 className="font-semibold">Casting review</h2>
-            <p className="text-sm text-muted-foreground max-w-md">
-              Character plates live on the{" "}
-              <span className="text-primary">Characters</span> step; locations
-              &amp; style on the{" "}
-              <span className="text-primary">Storyboard</span> step. Approve
-              here before spend continues.
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              {charactersReady}/{bible.characters.length} characters have plates
-              · {bible.locations.length} locations ·{" "}
-              {bible.style ? "style set" : "no style"}
-            </p>
-          </div>
+          <h2 className="font-semibold">Casting review</h2>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
               <input
