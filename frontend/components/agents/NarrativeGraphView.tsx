@@ -4,6 +4,120 @@ import { useEffect, useRef, useState } from "react";
 import { forceCollide } from "d3";
 import { useGraph } from "@/hooks/useGraph";
 
+function Face({ node, size = 12 }: { node: any; size?: number }) {
+  const px = size * 4; // tailwind units → px
+  return node?.img ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={node.img}
+      alt={node.label}
+      className="rounded-full object-cover border-2 border-primary/50 shrink-0"
+      style={{ width: px, height: px }}
+    />
+  ) : (
+    <div
+      className="rounded-full bg-secondary flex items-center justify-center text-sm font-semibold text-muted-foreground shrink-0"
+      style={{ width: px, height: px }}
+    >
+      {String(node?.label ?? "?").charAt(0)}
+    </div>
+  );
+}
+
+/** Right-side drawer explaining a clicked connection, with images —
+ *  same pattern as the relationship edge panel on the Characters step. */
+function ConnectionDrawer({
+  link,
+  source,
+  target,
+  onClose,
+}: {
+  link: any;
+  source: any;
+  target: any;
+  onClose: () => void;
+}) {
+  const isRel = link.kind === "relationship";
+  return (
+    <div className="fixed right-0 top-14 z-50 h-[calc(100vh-3.5rem)] w-80 bg-background border-l hairline shadow-xl p-4 space-y-4 overflow-y-auto">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">
+          {isRel ? "Relationship" : "Scene appearance"}
+        </h3>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary text-xs"
+        >
+          ✕
+        </button>
+      </div>
+
+      {isRel ? (
+        <>
+          {/* who ↔ who, with faces */}
+          <div className="flex items-center justify-center gap-4">
+            <div className="flex flex-col items-center gap-1.5">
+              <Face node={source} size={16} />
+              <span className="text-xs font-medium">{source?.label}</span>
+            </div>
+            <span className="text-lg text-muted-foreground">↔</span>
+            <div className="flex flex-col items-center gap-1.5">
+              <Face node={target} size={16} />
+              <span className="text-xs font-medium">{target?.label}</span>
+            </div>
+          </div>
+          {link.label && (
+            <p className="text-center">
+              <span className="rounded-full bg-primary/15 text-primary px-2.5 py-1 text-[11px] font-medium">
+                {link.label}
+              </span>
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          {/* character → scene, scene shown as its plate */}
+          <div className="flex items-center gap-3">
+            <Face node={source} size={12} />
+            <p className="text-xs">
+              <span className="font-medium">{source?.label}</span>{" "}
+              <span className="text-muted-foreground">appears in</span>
+              {link.label && (
+                <span className="ml-1 text-primary/80">{link.label}</span>
+              )}
+            </p>
+          </div>
+          {target?.img ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={target.img}
+              alt={target.label}
+              className="w-full rounded-lg border hairline aspect-video object-cover"
+            />
+          ) : (
+            <div className="w-full rounded-lg border border-dashed hairline aspect-video flex items-center justify-center text-[11px] text-muted-foreground">
+              no location plate yet
+            </div>
+          )}
+          <p className="text-xs font-medium">{target?.label}</p>
+        </>
+      )}
+
+      <div className="border-t hairline pt-3 space-y-2">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {link.info || "No description available."}
+        </p>
+        {link.beat && (
+          <span className="inline-block rounded bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
+            Beat · {link.beat}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function NarrativeGraphView({ projectId }: { projectId: string }) {
   const { nodes, links } = useGraph(projectId);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -12,10 +126,8 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
   const [selLink, setSelLink] = useState<any | null>(null);
 
   // link.source/target may be raw ids or hydrated node objects
-  const endName = (end: any) =>
-    typeof end === "object"
-      ? end?.label
-      : nodes.find((n) => n.id === end)?.label ?? String(end);
+  const endNode = (end: any) =>
+    typeof end === "object" ? end : nodes.find((n) => n.id === end);
 
   // Client-only import that supports refs (next/dynamic doesn't forward them),
   // so we can spread the force layout out for readability.
@@ -119,7 +231,15 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
                   ctx.beginPath();
                   ctx.arc(x, y, r - 1, 0, 2 * Math.PI);
                   ctx.clip();
-                  ctx.drawImage(img!, x - r, y - r, r * 2, r * 2);
+                  // cover-fit so portrait photos aren't stretched into the circle
+                  const ar = img!.naturalWidth / img!.naturalHeight;
+                  let dw = r * 2;
+                  let dh = dw / ar;
+                  if (dh < r * 2) {
+                    dh = r * 2;
+                    dw = dh * ar;
+                  }
+                  ctx.drawImage(img!, x - dw / 2, y - dh / 2, dw, dh);
                   ctx.restore();
                 }
                 ctx.font = `600 ${11 / scale}px sans-serif`;
@@ -167,37 +287,12 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
       </div>
 
       {selLink && (
-        <div className="mx-4 mb-3 rounded-lg border hairline bg-background/40 p-3 text-xs space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-medium">
-              {endName(selLink.source)}{" "}
-              {selLink.kind === "relationship" ? "↔" : "→"}{" "}
-              {endName(selLink.target)}
-              {selLink.label && (
-                <span className="ml-2 text-primary/80">{selLink.label}</span>
-              )}
-            </span>
-            <button
-              onClick={() => setSelLink(null)}
-              aria-label="Close"
-              className="h-5 w-5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary text-[10px]"
-            >
-              ✕
-            </button>
-          </div>
-          {selLink.info ? (
-            <p className="text-muted-foreground leading-relaxed">{selLink.info}</p>
-          ) : (
-            <p className="text-muted-foreground">No description available.</p>
-          )}
-          {selLink.beat && (
-            <p className="text-muted-foreground">
-              <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px]">
-                Beat · {selLink.beat}
-              </span>
-            </p>
-          )}
-        </div>
+        <ConnectionDrawer
+          link={selLink}
+          source={endNode(selLink.source)}
+          target={endNode(selLink.target)}
+          onClose={() => setSelLink(null)}
+        />
       )}
 
       <div className="flex items-center gap-4 px-4 py-2 border-t hairline text-[11px] text-muted-foreground">
