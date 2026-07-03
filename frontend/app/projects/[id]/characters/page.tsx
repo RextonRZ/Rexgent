@@ -65,9 +65,11 @@ export default function CharactersPage({
     return map;
   }, [bible]);
 
-  const characterNames = useMemo(() => {
-    const map: Record<string, string> = {};
-    (graph?.characters || []).forEach((c) => (map[c.id] = c.name));
+  const characterById = useMemo(() => {
+    const map: Record<string, { name: string; image?: string | null }> = {};
+    (graph?.characters || []).forEach(
+      (c) => (map[c.id] = { name: c.name, image: c.reference_image_url })
+    );
     return map;
   }, [graph]);
 
@@ -140,7 +142,7 @@ export default function CharactersPage({
 
       <RelationshipEdgePanel
         rel={selectedEdge}
-        characterNames={characterNames}
+        characterById={characterById}
         onClose={() => setSelectedEdge(null)}
       />
     </div>
