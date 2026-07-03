@@ -4,7 +4,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { NextStepButton } from "@/components/shared/NextStepButton";
 import { GenerationLauncher } from "@/components/generate/GenerationLauncher";
 import { GenerationQueue } from "@/components/generate/GenerationQueue";
-import { CastingPanel } from "@/components/casting/CastingPanel";
+import { ActivityFeed } from "@/components/casting/ActivityFeed";
 import { ClarificationModal } from "@/components/agents/ClarificationModal";
 
 export default function GeneratePage({ params }: { params: { id: string } }) {
@@ -21,12 +21,14 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
         </p>
       </div>
 
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight mb-3">Casting</h2>
-        <CastingPanel projectId={params.id} />
+      {/* activity (left) beside the launcher (right) */}
+      <div className="grid gap-6 lg:grid-cols-3 items-start">
+        <ActivityFeed projectId={params.id} />
+        <div className="lg:col-span-2">
+          <GenerationLauncher projectId={params.id} />
+        </div>
       </div>
 
-      <GenerationLauncher projectId={params.id} />
       <GenerationQueue projectId={params.id} />
       <NextStepButton projectId={params.id} current="generate" />
     </div>

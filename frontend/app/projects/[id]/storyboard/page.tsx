@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { NextStepButton } from "@/components/shared/NextStepButton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StoryboardView } from "@/components/storyboard/StoryboardView";
+import type { SceneLocation } from "@/components/storyboard/SceneSection";
 import { BudgetDashboard } from "@/components/storyboard/BudgetDashboard";
 import { NarrativeGraphView } from "@/components/agents/NarrativeGraphView";
 import { SceneGraph } from "@/components/characters/SceneGraph";
-import { LocationStylePanel } from "@/components/casting/LocationStylePanel";
 import { useStoryboard, useGenerateStoryboard } from "@/hooks/useStoryboard";
 import { useGraph } from "@/hooks/useRelationshipGraph";
+import { useBible } from "@/hooks/useCasting";
 import { useCalculateBudget, type BudgetResult } from "@/hooks/useBudget";
 
 export default function StoryboardPage({
@@ -22,9 +23,26 @@ export default function StoryboardPage({
   const generateStoryboard = useGenerateStoryboard();
   const calculateBudget = useCalculateBudget();
   const { data: graph } = useGraph(params.id);
+  const { data: bible } = useBible(params.id);
   const [budget, setBudget] = useState<BudgetResult | null>(null);
 
   const scenes = data?.scenes || [];
+
+  // scene number -> its location plate, shown to the left of the scene's shots
+  const locationByScene = useMemo(() => {
+    const map: Record<number, SceneLocation> = {};
+    (bible?.locations ?? []).forEach((l) => {
+      (l.scene_numbers ?? []).forEach((n) => {
+        if (!map[n]) {
+          map[n] = {
+            url: l.plate_image_url,
+            label: l.description || l.location_key.replace(/_/g, " "),
+          };
+        }
+      });
+    });
+    return map;
+  }, [bible]);
 
   const handleBudget = async () => {
     const result = await calculateBudget.mutateAsync(params.id);
@@ -68,7 +86,6 @@ export default function StoryboardPage({
         <TabsList>
           <TabsTrigger value="shots">Shots</TabsTrigger>
           <TabsTrigger value="map">Story map</TabsTrigger>
-          <TabsTrigger value="world">Locations &amp; Style</TabsTrigger>
         </TabsList>
 
         <TabsContent value="shots">
@@ -77,10 +94,13 @@ export default function StoryboardPage({
               {isLoading ? (
                 <p className="text-muted-foreground">Loading storyboard…</p>
               ) : (
-                <StoryboardView scenes={scenes} />
+                <StoryboardView
+                  scenes={scenes}
+                  locationByScene={locationByScene}
+                />
               )}
             </div>
-            <div>
+            <div className="space-y-4">
               {budget ? (
                 <BudgetDashboard budget={budget} />
               ) : (
@@ -91,6 +111,25 @@ export default function StoryboardPage({
                   </span>{" "}
                   to see how the $40 voucher is spread across Wan and HappyHorse
                   shots.
+                </div>
+              )}
+
+              {bible?.style && (
+                <div className="rounded-xl border hairline bg-card overflow-hidden">
+                  <div className="px-4 py-2.5 border-b hairline text-xs font-medium">
+                    Style
+                  </div>
+                  {bible.style.plate_image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={bible.style.plate_image_url}
+                      alt="Style preset"
+                      className="aspect-video w-full object-cover"
+                    />
+                  )}
+                  <p className="px-4 py-2.5 text-[11px] text-muted-foreground">
+                    {bible.style.style_tags.join(", ")}
+                  </p>
                 </div>
               )}
             </div>
@@ -105,10 +144,6 @@ export default function StoryboardPage({
               characters={graph?.characters || []}
             />
           </div>
-        </TabsContent>
-
-        <TabsContent value="world">
-          <LocationStylePanel projectId={params.id} />
         </TabsContent>
       </Tabs>
       <NextStepButton projectId={params.id} current="storyboard" />

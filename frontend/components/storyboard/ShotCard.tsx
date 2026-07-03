@@ -43,23 +43,29 @@ export function ShotCard({ shot }: { shot: Shot }) {
     .filter(Boolean)
     .join(" · ");
 
+  const isWan = shot.quality_tier === "wan";
+
   return (
     <Card className="group">
-      <CardContent className="pt-4 space-y-2.5 text-sm">
+      <CardContent className="px-5 py-1.5 space-y-3 text-sm">
         {/* header: shot id + technicals left, model + hover actions right */}
         <div className="flex items-start justify-between gap-2">
-          <p className="text-xs font-semibold">
-            Shot {shot.number}
+          <p className="text-xs flex items-center gap-2">
+            <span className="rounded bg-primary/15 text-primary px-1.5 py-0.5 font-semibold">
+              Shot {shot.number}
+            </span>
             {technicals && (
-              <span className="ml-2 font-normal text-muted-foreground">
-                {technicals}
-              </span>
+              <span className="text-muted-foreground">{technicals}</span>
             )}
           </p>
           <div className="flex items-center gap-1.5 shrink-0">
             {shot.quality_tier && (
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                {shot.quality_tier === "wan" ? "Wan 2.7" : "HappyHorse"}
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  isWan ? "bg-wan/15 text-wan" : "bg-hh/15 text-hh"
+                }`}
+              >
+                {isWan ? "Wan 2.7" : "HappyHorse"}
               </span>
             )}
             <div className="flex opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
@@ -85,13 +91,13 @@ export function ShotCard({ shot }: { shot: Shot }) {
         {/* the description is the hero */}
         {shot.action && <p className="leading-relaxed">{shot.action}</p>}
         {shot.dialogue && (
-          <p className="border-l-2 border-border pl-3 text-xs italic text-muted-foreground">
+          <p className="border-l-2 border-primary/40 pl-3 py-0.5 text-xs italic text-muted-foreground">
             &ldquo;{shot.dialogue}&rdquo;
           </p>
         )}
 
         {/* one quiet metadata row */}
-        <div className="flex items-center gap-3 pt-0.5 text-[11px] text-muted-foreground flex-wrap">
+        <div className="flex items-center gap-3 pt-1 pb-1 text-[11px] text-muted-foreground flex-wrap">
           {shot.lighting && (
             <Meta icon={Lightbulb}>
               {shot.lighting.toLowerCase().replace(/_/g, " ")}
@@ -105,7 +111,7 @@ export function ShotCard({ shot }: { shot: Shot }) {
             <Meta icon={Users}>{shot.characters_in_frame.join(", ")}</Meta>
           )}
           {shot.emotional_beat && (
-            <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 text-[10px]">
+            <span className="ml-auto rounded bg-primary/10 text-primary/90 px-1.5 py-0.5 text-[10px]">
               Beat · {shot.emotional_beat}
             </span>
           )}
