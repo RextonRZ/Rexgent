@@ -4,8 +4,7 @@ import Link from "next/link";
 import { PipelineNav } from "@/components/shared/PipelineNav";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { UserMenu } from "@/components/auth/UserMenu";
-import { CostBubble } from "@/components/budget/CostBubble";
-import { AgentBubble } from "@/components/agents/AgentBubble";
+import { DockRail } from "@/components/shared/DockRail";
 
 export default function ProjectLayout({
   children,
@@ -41,9 +40,13 @@ export default function ProjectLayout({
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
-        <CostBubble projectId={params.id} />
-        <AgentBubble projectId={params.id} />
+        {/* content + right dock: the dock reflows the page, never overlaps it */}
+        <div className="flex items-start">
+          <main className="flex-1 min-w-0 px-4 py-8">
+            <div className="mx-auto max-w-7xl">{children}</div>
+          </main>
+          <DockRail projectId={params.id} />
+        </div>
       </div>
     </AuthGate>
   );
