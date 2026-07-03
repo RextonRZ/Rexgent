@@ -25,12 +25,13 @@ interface EndingGraphProps {
   onSelectEnding?: (endingId: string) => void;
 }
 
+// tone chip colors on the dark theme (semantic tokens, no light-mode pastels)
 const TONE_COLORS: Record<string, string> = {
-  BITTERSWEET: "bg-amber-100 text-amber-800 border-amber-300",
-  HOPEFUL: "bg-teal-100 text-teal-800 border-teal-300",
-  AMBIGUOUS: "bg-purple-100 text-purple-800 border-purple-300",
-  TRAGIC: "bg-red-100 text-red-800 border-red-300",
-  TRIUMPHANT: "bg-green-100 text-green-800 border-green-300",
+  BITTERSWEET: "bg-warn/15 text-warn",
+  HOPEFUL: "bg-ok/15 text-ok",
+  AMBIGUOUS: "bg-primary/15 text-primary",
+  TRAGIC: "bg-bad/15 text-bad",
+  TRIUMPHANT: "bg-ok/15 text-ok",
 };
 
 export function EndingGraph({
@@ -55,9 +56,7 @@ export function EndingGraph({
           <div className="flex items-center gap-2">
             <span
               className={
-                analysis.main_conflict_resolved
-                  ? "text-green-600"
-                  : "text-red-600"
+                analysis.main_conflict_resolved ? "text-ok" : "text-bad"
               }
             >
               {analysis.main_conflict_resolved ? "✓" : "✗"}
@@ -67,9 +66,7 @@ export function EndingGraph({
           <div className="flex items-center gap-2">
             <span
               className={
-                analysis.protagonist_arc_complete
-                  ? "text-green-600"
-                  : "text-red-600"
+                analysis.protagonist_arc_complete ? "text-ok" : "text-bad"
               }
             >
               {analysis.protagonist_arc_complete ? "✓" : "✗"}
@@ -80,11 +77,13 @@ export function EndingGraph({
 
         {analysis.open_threads.length > 0 && (
           <div>
-            <p className="text-sm font-medium mb-1">Open Threads:</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+              Open threads
+            </p>
             <ul className="text-sm text-muted-foreground space-y-1">
               {analysis.open_threads.map((thread, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-yellow-500 mt-0.5">{"⚠"}</span>
+                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-warn shrink-0" />
                   {thread}
                 </li>
               ))}
@@ -94,21 +93,31 @@ export function EndingGraph({
 
         {alternatives.length > 0 && (
           <div className="space-y-3">
-            <p className="text-sm font-medium">Alternative Endings:</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Alternative endings
+            </p>
             {alternatives.map((alt) => (
               <div
                 key={alt.id}
-                className={`border rounded-lg p-3 space-y-2 ${
-                  TONE_COLORS[alt.emotional_tone] || ""
-                }`}
+                className="border border-border rounded-lg p-3 space-y-2 bg-background/40"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-sm">{alt.title}</span>
-                  <Badge variant="outline">
-                    {alt.compatibility_score.toFixed(1)}/10
-                  </Badge>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        TONE_COLORS[alt.emotional_tone] ||
+                        "bg-secondary text-muted-foreground"
+                      }`}
+                    >
+                      {alt.emotional_tone.toLowerCase()}
+                    </span>
+                    <Badge variant="outline">
+                      {alt.compatibility_score.toFixed(1)}/10
+                    </Badge>
+                  </div>
                 </div>
-                <p className="text-sm">{alt.summary}</p>
+                <p className="text-sm text-muted-foreground">{alt.summary}</p>
                 {onSelectEnding && (
                   <Button
                     size="sm"

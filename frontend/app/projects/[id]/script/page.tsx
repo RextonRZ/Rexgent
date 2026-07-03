@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { NextStepButton } from "@/components/shared/NextStepButton";
 import { useSearchParams } from "next/navigation";
 import { useProject } from "@/hooks/useProjects";
 import { useLatestScript } from "@/hooks/useScript";
@@ -53,15 +54,27 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
   const judgeScript = useJudgeScript();
   const dismissFlag = useDismissFlag();
 
+  // Skip pointless re-runs: only call the LLM again if the text changed since
+  // the last analysis/judgement.
+  const currentTextRef = useRef<string>("");
+  const analyzedTextRef = useRef<string | null>(null);
+  const judgedTextRef = useRef<string | null>(null);
+
   const handleAnalyze = async () => {
     if (!scriptData) return;
+    const text = currentTextRef.current || scriptData.raw_text;
+    if (analysis && analyzedTextRef.current === text) return; // unchanged
     const result = await analyzeScript.mutateAsync(scriptData.script_id);
+    analyzedTextRef.current = text;
     setAnalysis(result);
   };
 
   const handleJudge = async () => {
     if (!scriptData) return;
+    const text = currentTextRef.current || scriptData.raw_text;
+    if (judgement && judgedTextRef.current === text) return; // unchanged
     const result = await judgeScript.mutateAsync(scriptData.script_id);
+    judgedTextRef.current = text;
     setJudgement(result);
   };
 
@@ -164,6 +177,7 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
             <ScriptEditor
               scriptId={scriptData.script_id}
               initialContent={scriptData.raw_text}
+              onTextChange={(t) => (currentTextRef.current = t)}
             />
           </div>
 
@@ -192,6 +206,7 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
           )}
         </div>
       )}
+      <NextStepButton projectId={params.id} current="script" />
     </div>
   );
 }

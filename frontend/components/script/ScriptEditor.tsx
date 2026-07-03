@@ -8,49 +8,67 @@ import { useUpdateScript } from "@/hooks/useScript";
 interface ScriptEditorProps {
   scriptId: string;
   initialContent: string;
+  onTextChange?: (text: string) => void;
 }
 
-export function ScriptEditor({ scriptId, initialContent }: ScriptEditorProps) {
+export function ScriptEditor({
+  scriptId,
+  initialContent,
+  onTextChange,
+}: ScriptEditorProps) {
   const [content, setContent] = useState(initialContent);
-  const [hasChanges, setHasChanges] = useState(false);
+  const [savedContent, setSavedContent] = useState(initialContent);
+  const [justSaved, setJustSaved] = useState(false);
   const updateScript = useUpdateScript();
+
+  const hasChanges = content !== savedContent;
 
   const handleChange = useCallback(
     (value: string | undefined) => {
       if (value !== undefined) {
         setContent(value);
-        setHasChanges(value !== initialContent);
+        setJustSaved(false);
+        onTextChange?.(value);
       }
     },
-    [initialContent]
+    [onTextChange]
   );
 
   const handleSave = async () => {
     await updateScript.mutateAsync({ scriptId, rawText: content });
-    setHasChanges(false);
+    setSavedContent(content);
+    setJustSaved(true);
   };
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h3 className="font-semibold">Script Editor</h3>
-        <Button
-          onClick={handleSave}
-          disabled={!hasChanges || updateScript.isPending}
-          size="sm"
-          variant={hasChanges ? "default" : "outline"}
-        >
-          {updateScript.isPending
-            ? "Saving..."
-            : hasChanges
-            ? "Save Changes"
-            : "Saved"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {justSaved && (
+            <span className="text-[11px] text-muted-foreground">
+              Saved — re-run Characters/Storyboard to apply story changes
+            </span>
+          )}
+          <Button
+            onClick={handleSave}
+            disabled={!hasChanges || updateScript.isPending}
+            size="sm"
+            variant={hasChanges ? "default" : "outline"}
+          >
+            {updateScript.isPending
+              ? "Saving..."
+              : hasChanges
+              ? "Save Changes"
+              : "Saved"}
+          </Button>
+        </div>
       </div>
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border hairline rounded-lg overflow-hidden">
         <Editor
           height="500px"
           defaultLanguage="plaintext"
+          theme="vs-dark"
           value={content}
           onChange={handleChange}
           options={{

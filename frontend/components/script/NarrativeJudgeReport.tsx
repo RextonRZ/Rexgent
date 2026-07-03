@@ -1,7 +1,6 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   RadarChart,
   PolarGrid,
@@ -30,9 +29,9 @@ const AXIS_LABELS: Record<string, string> = {
 };
 
 const REC_COLORS: Record<string, string> = {
-  PROCEED: "bg-green-500",
-  REVISE_FIRST: "bg-yellow-500",
-  MAJOR_REWRITE: "bg-red-500",
+  PROCEED: "bg-ok/15 text-ok",
+  REVISE_FIRST: "bg-warn/15 text-warn",
+  MAJOR_REWRITE: "bg-bad/15 text-bad",
 };
 
 export function NarrativeJudgeReport({ result }: { result: JudgeResult }) {
@@ -48,12 +47,17 @@ export function NarrativeJudgeReport({ result }: { result: JudgeResult }) {
         <CardTitle className="flex items-center justify-between">
           <span>Script Quality Score</span>
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold">
+            <span className="text-2xl font-bold tabular-nums">
               {result.overall.toFixed(1)}
             </span>
-            <Badge className={REC_COLORS[result.recommendation]}>
+            <span
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                REC_COLORS[result.recommendation] ||
+                "bg-secondary text-muted-foreground"
+              }`}
+            >
               {result.recommendation.replace("_", " ")}
-            </Badge>
+            </span>
           </div>
         </CardTitle>
       </CardHeader>
@@ -62,19 +66,23 @@ export function NarrativeJudgeReport({ result }: { result: JudgeResult }) {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={radarData}>
-                <PolarGrid />
-                <PolarAngleAxis dataKey="axis" tick={{ fontSize: 12 }} />
+                <PolarGrid stroke="rgba(148,163,184,0.2)" />
+                <PolarAngleAxis
+                  dataKey="axis"
+                  tick={{ fontSize: 11, fill: "#9aa3b2" }}
+                />
                 <PolarRadiusAxis
                   angle={30}
                   domain={[0, 10]}
-                  tick={{ fontSize: 10 }}
+                  tick={{ fontSize: 10, fill: "#9aa3b2" }}
+                  stroke="rgba(148,163,184,0.2)"
                 />
                 <Radar
                   name="Score"
                   dataKey="score"
-                  stroke="#2563eb"
-                  fill="#2563eb"
-                  fillOpacity={0.2}
+                  stroke="#8b5cf6"
+                  fill="#8b5cf6"
+                  fillOpacity={0.25}
                 />
               </RadarChart>
             </ResponsiveContainer>
@@ -82,11 +90,9 @@ export function NarrativeJudgeReport({ result }: { result: JudgeResult }) {
         )}
 
         {result.blocking_issues.length > 0 && (
-          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-            <p className="text-sm font-medium text-destructive mb-1">
-              Blocking Issues:
-            </p>
-            <ul className="text-sm space-y-1">
+          <div className="bg-bad/10 border border-bad/20 rounded-lg p-3">
+            <p className="text-sm font-medium text-bad mb-1">Blocking issues</p>
+            <ul className="text-sm space-y-1 text-muted-foreground">
               {result.blocking_issues.map((issue, i) => (
                 <li key={i}>{issue}</li>
               ))}
@@ -94,22 +100,28 @@ export function NarrativeJudgeReport({ result }: { result: JudgeResult }) {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 text-xs">
           <div>
-            <p className="text-sm font-medium text-green-600 mb-1">Strengths</p>
-            <ul className="text-sm space-y-1">
+            <p className="font-medium text-ok mb-1.5 uppercase tracking-wide text-[10px]">
+              Strengths
+            </p>
+            <ul className="space-y-1 text-muted-foreground">
               {result.top_strengths.map((s, i) => (
-                <li key={i}>+ {s}</li>
+                <li key={i} className="flex gap-1.5">
+                  <span className="text-ok shrink-0">+</span> {s}
+                </li>
               ))}
             </ul>
           </div>
           <div>
-            <p className="text-sm font-medium text-orange-600 mb-1">
+            <p className="font-medium text-warn mb-1.5 uppercase tracking-wide text-[10px]">
               Weaknesses
             </p>
-            <ul className="text-sm space-y-1">
+            <ul className="space-y-1 text-muted-foreground">
               {result.top_weaknesses.map((w, i) => (
-                <li key={i}>- {w}</li>
+                <li key={i} className="flex gap-1.5">
+                  <span className="text-warn shrink-0">−</span> {w}
+                </li>
               ))}
             </ul>
           </div>

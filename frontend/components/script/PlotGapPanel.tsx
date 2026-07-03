@@ -10,9 +10,9 @@ interface PlotGapPanelProps {
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
-  CRITICAL: "bg-red-500",
-  MAJOR: "bg-orange-500",
-  MINOR: "bg-yellow-500",
+  CRITICAL: "bg-bad",
+  MAJOR: "bg-warn",
+  MINOR: "bg-muted-foreground",
 };
 
 const FLAG_TYPE_LABELS: Record<string, string> = {
@@ -48,7 +48,10 @@ export function PlotGapPanel({ flags, onDismiss }: PlotGapPanelProps) {
       </CardHeader>
       <CardContent className="space-y-3">
         {flags.map((flag) => (
-          <div key={flag.id} className="border rounded-lg p-3 space-y-2">
+          <div
+            key={flag.id}
+            className="border border-border rounded-lg p-3 space-y-2 bg-background/40"
+          >
             <div className="flex items-center gap-2">
               <div
                 className={`w-2 h-2 rounded-full ${
