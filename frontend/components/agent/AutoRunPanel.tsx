@@ -92,11 +92,11 @@ export function AutoRunPanel({
   };
 
   return (
-    <Card>
+    <Card className="[--card-spacing:1.25rem]">
       <CardHeader>
         <CardTitle>Full Auto — One Premise → Whole Drama</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5">
         <p className="text-sm text-muted-foreground">
           The agent autonomously writes the script, judges it (and self-corrects
           if weak), extracts characters, storyboards, and allocates the budget —
@@ -117,7 +117,7 @@ export function AutoRunPanel({
           <div className="space-y-1.5">
             <Label>Language</Label>
             <Select value={language} onValueChange={(v) => v && setLanguage(v)}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

@@ -78,11 +78,11 @@ export function ScriptGenerate({
   };
 
   return (
-    <Card>
+    <Card className="[--card-spacing:1.25rem]">
       <CardHeader>
         <CardTitle>Write from Scratch</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Genre</Label>
@@ -95,7 +95,7 @@ export function ScriptGenerate({
                 }
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -120,7 +120,7 @@ export function ScriptGenerate({
           <div className="space-y-1.5">
             <Label>Language</Label>
             <Select value={language} onValueChange={(v) => v && setLanguage(v)}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -132,7 +132,7 @@ export function ScriptGenerate({
           <div className="space-y-1.5">
             <Label>Model</Label>
             <Select value={model} onValueChange={(v) => v && setModel(v)}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
