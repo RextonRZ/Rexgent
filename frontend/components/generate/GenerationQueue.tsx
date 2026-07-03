@@ -1,15 +1,48 @@
 "use client";
 
+import { useMemo } from "react";
 import { useGenerationStore } from "@/stores/generationStore";
 import { useStoryboard } from "@/hooks/useStoryboard";
+import { useLatestJobClips } from "@/hooks/useClips";
 import { clipStatusChip } from "@/lib/clipStatus";
 
-export function GenerationQueue({ projectId }: { projectId: string }) {
-  const clips = useGenerationStore((s) => s.clips);
-  const { data } = useStoryboard(projectId);
-  const scenes = data?.scenes ?? [];
-  const hasAny = Object.keys(clips).length > 0;
+interface Tile {
+  url?: string;
+  status: string;
+  score?: number | null;
+}
 
+export function GenerationQueue({ projectId }: { projectId: string }) {
+  const live = useGenerationStore((s) => s.clips);
+  const { data: storyboard } = useStoryboard(projectId);
+  const { data: persisted } = useLatestJobClips(projectId);
+  const scenes = storyboard?.scenes ?? [];
+
+  // Merge persisted clips (survive navigation/refresh) with the live progress store.
+  const byShot = useMemo(() => {
+    const map: Record<string, Tile> = {};
+    // 1) best persisted take per shot (APPROVED first, then highest score)
+    for (const c of persisted?.clips ?? []) {
+      if (!c.url) continue;
+      const cur = map[c.shot_id];
+      const better =
+        !cur ||
+        (c.status === "APPROVED" && cur.status !== "APPROVED") ||
+        (c.consistency_score ?? 0) > (cur.score ?? 0);
+      if (better) map[c.shot_id] = { url: c.url, status: c.status, score: c.consistency_score };
+    }
+    // 2) overlay live progress (a shot mid-generation wins)
+    for (const [sid, cp] of Object.entries(live)) {
+      map[sid] = {
+        url: cp.clip_url ?? map[sid]?.url,
+        status: cp.status,
+        score: cp.consistency_score ?? map[sid]?.score,
+      };
+    }
+    return map;
+  }, [persisted, live]);
+
+  const hasAny = Object.keys(byShot).length > 0;
   if (!hasAny) {
     return (
       <p className="text-center text-muted-foreground py-8">
@@ -21,7 +54,7 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-6">
       {scenes.map((scene) => {
-        const shots = scene.shots.filter((sh) => clips[sh.id]);
+        const shots = scene.shots.filter((sh) => byShot[sh.id]);
         if (shots.length === 0) return null;
         return (
           <div key={scene.scene_number}>
@@ -33,18 +66,18 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               {shots.map((shot) => {
-                const clip = clips[shot.id];
-                const chip = clipStatusChip(clip.status);
-                const score = clip.consistency_score;
+                const tile = byShot[shot.id];
+                const chip = clipStatusChip(tile.status);
+                const score = tile.score;
                 return (
                   <div
                     key={shot.id}
                     className="rounded-xl border hairline bg-card overflow-hidden"
                   >
                     <div className="relative aspect-video bg-black">
-                      {clip.clip_url ? (
+                      {tile.url ? (
                         <video
-                          src={`${clip.clip_url}#t=0.1`}
+                          src={`${tile.url}#t=0.1`}
                           muted
                           loop
                           playsInline
@@ -55,9 +88,9 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
                         />
                       ) : (
                         <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
-                          {clip.status === "GENERATING" || clip.status === "CHECKING"
+                          {tile.status === "GENERATING" || tile.status === "CHECKING"
                             ? "rendering…"
-                            : clip.status.toLowerCase()}
+                            : tile.status.toLowerCase()}
                         </div>
                       )}
                       <span className="absolute top-2 left-2 rounded bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">

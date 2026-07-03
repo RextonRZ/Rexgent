@@ -1,6 +1,4 @@
-import type { ClipProgress } from "@/stores/generationStore";
-
-export function clipStatusChip(status: ClipProgress["status"]) {
+export function clipStatusChip(status: string) {
   switch (status) {
     case "APPROVED":
       return { label: "verified", cls: "bg-ok/20 text-ok" };
