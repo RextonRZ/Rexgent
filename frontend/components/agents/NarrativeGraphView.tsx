@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { forceCollide } from "d3";
 import { useGraph } from "@/hooks/useGraph";
 
 export function NarrativeGraphView({ projectId }: { projectId: string }) {
@@ -29,12 +30,13 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
     };
   }, []);
 
-  // Longer links + stronger repulsion = nodes stop crowding each other.
+  // Longer links + repulsion + collision = big picture-nodes don't overlap.
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    fg.d3Force("link")?.distance(110);
-    fg.d3Force("charge")?.strength(-260);
+    fg.d3Force("link")?.distance(140);
+    fg.d3Force("charge")?.strength(-320);
+    fg.d3Force("collide", forceCollide(48));
   }, [FG, nodes.length]);
 
   // cache node images (character faces + scene plates) for canvas drawing
@@ -102,7 +104,7 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
 
               if (isChar) {
                 // character: round face chip
-                const r = 16;
+                const r = 22;
                 ctx.beginPath();
                 ctx.arc(x, y, r, 0, 2 * Math.PI);
                 ctx.fillStyle = "#1c1633";
@@ -123,8 +125,8 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
                 ctx.fillText(node.label, x, y + r + 12 / scale);
               } else {
                 // scene: location-plate thumbnail card
-                const w = 46;
-                const h = 30;
+                const w = 76;
+                const h = 48;
                 ctx.beginPath();
                 ctx.rect(x - w / 2, y - h / 2, w, h);
                 ctx.fillStyle = "#101827";

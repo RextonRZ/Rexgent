@@ -42,8 +42,11 @@ export function LocationStylePanel({ projectId }: { projectId: string }) {
               <PlateCard
                 key={location.id}
                 imageUrl={location.plate_image_url ?? undefined}
-                label={location.location_key}
-                description={location.description ?? undefined}
+                // human-readable name, not the snake_case key
+                label={
+                  location.description ||
+                  location.location_key.replace(/_/g, " ")
+                }
               />
             ))}
           </div>
