@@ -7,50 +7,74 @@ import { CostPanelContent } from "@/components/budget/CostPanelContent";
 import { AgentPanelContent } from "@/components/agents/AgentPanelContent";
 
 type PanelKey = "agent" | "cost";
+type OpenState = Record<PanelKey, boolean>;
+
+function PanelSection({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col min-h-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b hairline shrink-0">
+        <span className="text-xs font-semibold">{title}</span>
+        <button
+          onClick={onClose}
+          aria-label={`Close ${title}`}
+          className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary text-xs"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="p-3 overflow-x-hidden">{children}</div>
+    </div>
+  );
+}
 
 /** Right-edge dock hosting Live cost + Agent activity. The rail is always a thin
- *  icon strip; opening a panel expands a column that the page layout flows around
- *  — it never overlaps the main content. */
+ *  icon strip; open panels stack in a column the page layout flows around — they
+ *  never overlap the main content, and both can be open at once. */
 export function DockRail({ projectId }: { projectId: string }) {
-  const [open, setOpen] = useState<PanelKey | null>(null);
+  const [open, setOpen] = useState<OpenState>({ agent: false, cost: false });
   const ledger = useLedger(projectId);
   const grand = ledger?.grand_total ?? 0;
 
   useEffect(() => {
-    const saved = localStorage.getItem("rx.dock.open");
-    if (saved === "cost" || saved === "agent") setOpen(saved);
+    try {
+      const saved = JSON.parse(localStorage.getItem("rx.dock.open") || "{}");
+      setOpen({ agent: !!saved.agent, cost: !!saved.cost });
+    } catch {
+      /* older string format or bad value — start closed */
+    }
   }, []);
 
   const toggle = (which: PanelKey) =>
     setOpen((cur) => {
-      const next = cur === which ? null : which;
-      localStorage.setItem("rx.dock.open", next ?? "");
+      const next = { ...cur, [which]: !cur[which] };
+      localStorage.setItem("rx.dock.open", JSON.stringify(next));
       return next;
     });
 
+  const anyOpen = open.agent || open.cost;
+
   return (
     <aside className="hidden md:flex sticky top-14 h-[calc(100vh-3.5rem)] shrink-0 items-stretch">
-      {open && (
-        <div className="w-80 border-l hairline bg-card flex flex-col">
-          <div className="flex items-center justify-between px-3 py-2 border-b hairline shrink-0">
-            <span className="text-xs font-semibold">
-              {open === "cost" ? "Live cost" : "Agent activity"}
-            </span>
-            <button
-              onClick={() => toggle(open)}
-              aria-label="Close panel"
-              className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary text-xs"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="overflow-y-auto p-3">
-            {open === "cost" ? (
-              <CostPanelContent projectId={projectId} />
-            ) : (
+      {anyOpen && (
+        <div className="w-80 border-l hairline bg-card flex flex-col divide-y divide-border overflow-y-auto">
+          {open.agent && (
+            <PanelSection title="Agent activity" onClose={() => toggle("agent")}>
               <AgentPanelContent projectId={projectId} />
-            )}
-          </div>
+            </PanelSection>
+          )}
+          {open.cost && (
+            <PanelSection title="Live cost" onClose={() => toggle("cost")}>
+              <CostPanelContent projectId={projectId} />
+            </PanelSection>
+          )}
         </div>
       )}
 
@@ -60,7 +84,7 @@ export function DockRail({ projectId }: { projectId: string }) {
           title="Agent activity"
           className={cn(
             "h-9 w-9 rounded-lg flex items-center justify-center text-sm transition-colors",
-            open === "agent"
+            open.agent
               ? "bg-primary text-primary-foreground"
               : "text-muted-foreground hover:text-foreground hover:bg-secondary"
           )}
@@ -72,7 +96,7 @@ export function DockRail({ projectId }: { projectId: string }) {
           title="Live cost"
           className={cn(
             "h-11 w-9 rounded-lg flex flex-col items-center justify-center transition-colors",
-            open === "cost"
+            open.cost
               ? "bg-primary text-primary-foreground"
               : "text-muted-foreground hover:text-foreground hover:bg-secondary"
           )}

@@ -16,7 +16,7 @@ const STAGES = [
 export function PipelineFlow({ current }: { current: string | null }) {
   const idx = STAGES.findIndex((s) => s.key === current);
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 gap-y-1.5 flex-wrap">
       {STAGES.map((s, i) => {
         const active = i === idx;
         const done = idx > -1 && i < idx;
