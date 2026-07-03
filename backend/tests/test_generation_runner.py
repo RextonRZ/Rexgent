@@ -7,10 +7,11 @@ from app.services.generation_runner import GenerationRunner
 
 @pytest.fixture(autouse=True)
 def _no_ws(monkeypatch):
-    """Keep tests isolated from Redis/WebSocket and the cost ledger's real DB aggregate."""
+    """Keep tests isolated from Redis/WebSocket, OSS re-hosting, and the cost ledger."""
     monkeypatch.setattr(gr, "emit", lambda *a, **k: None)
     monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.54)
     monkeypatch.setattr(gr, "report_agent", lambda *a, **k: None)
+    monkeypatch.setattr(gr, "persist_clip_url", lambda pid, hint, url: url)
 
 
 def make_runner():

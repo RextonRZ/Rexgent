@@ -1,11 +1,14 @@
+import asyncio
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.generated_clip import GeneratedClip
 from app.models.edit_flag import EditFlag
+from app.models.generation_job import GenerationJob
 from app.schemas.edit import TrimRequest, FlagRequest, RegenRequest
 from app.services.regen_prompt_rewriter import RegenPromptRewriter
+from app.services.clip_store import persist_clip_url
 from app.services.qwen_client import QwenClient
 from app.config import get_settings
 
@@ -69,6 +72,11 @@ async def regen_clip(request: RegenRequest, db: Session = Depends(get_db)):
         edit_instruction=flag.description,
     )
     new_url = await qwen.poll_video_task(task_id)
+    # DashScope URLs expire (~24h) — keep our own copy on OSS
+    job = db.query(GenerationJob).filter(GenerationJob.id == clip.job_id).first()
+    if job:
+        new_url = await asyncio.to_thread(
+            persist_clip_url, str(job.project_id), f"shot_{clip.shot_id}_regen", new_url)
 
     new_clip = GeneratedClip(
         job_id=clip.job_id, shot_id=clip.shot_id, model_used="happyhorse-v2v",

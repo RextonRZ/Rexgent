@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from app.services.oss_manager import OSSManager
 from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
 from app.services.guardrails import CostCircuitBreaker, PreGenerationValidator
 from app.services.reference_stack import build_reference_stack
+from app.services.clip_store import persist_clip_url
 from app.services.frame_sampler import extract_last_frame
 from app.services.cost_ledger import record_video
 from app.websocket.emitter import emit
@@ -281,6 +283,9 @@ class GenerationRunner:
                         prompt=prompt, duration=shot.estimated_duration_seconds,
                         mode="r2v" if ref_stack else "t2v", reference_media=ref_stack or None)
                 clip_url = await self.qwen.poll_video_task(task_id)
+                # DashScope URLs are signed and expire (~24h) — keep our own copy
+                clip_url = await asyncio.to_thread(
+                    persist_clip_url, pid, f"shot_{shot.id}", clip_url)
 
                 emit("continuity.scoring.started", {"shot_id": str(shot.id)}, pid)
                 guard = await self.continuity.validate(
