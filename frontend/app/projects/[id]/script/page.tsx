@@ -107,10 +107,10 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
       </div>
 
       {!scriptData ? (
-        <div className="max-w-3xl">
+        <div className="max-w-4xl">
           <Tabs defaultValue={mode === "guided" ? "generate" : "auto"}>
             <TabsList>
-              <TabsTrigger value="auto">⚡ Full Auto</TabsTrigger>
+              <TabsTrigger value="auto">Full Auto</TabsTrigger>
               <TabsTrigger value="generate">Write from Scratch</TabsTrigger>
               <TabsTrigger value="import">Import Script</TabsTrigger>
             </TabsList>

@@ -84,7 +84,7 @@ export function ScriptGenerate({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <div>
+          <div className="space-y-1.5">
             <Label>Genre</Label>
             <Select
               value={genre}
@@ -107,7 +107,7 @@ export function ScriptGenerate({
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label>Tone</Label>
             <Input
               value={tone}
@@ -117,7 +117,7 @@ export function ScriptGenerate({
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div>
+          <div className="space-y-1.5">
             <Label>Language</Label>
             <Select value={language} onValueChange={(v) => v && setLanguage(v)}>
               <SelectTrigger>
@@ -129,7 +129,7 @@ export function ScriptGenerate({
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label>Model</Label>
             <Select value={model} onValueChange={(v) => v && setModel(v)}>
               <SelectTrigger>
@@ -144,7 +144,7 @@ export function ScriptGenerate({
             </Select>
           </div>
         </div>
-        <div>
+        <div className="space-y-1.5">
           <Label>Premise (max 300 characters)</Label>
           <Textarea
             value={premise}
@@ -160,7 +160,7 @@ export function ScriptGenerate({
           </p>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div>
+          <div className="space-y-1.5">
             <Label>Episodes</Label>
             <Input
               type="number"
@@ -170,7 +170,7 @@ export function ScriptGenerate({
               onChange={(e) => setEpisodeCount(Number(e.target.value))}
             />
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label>Target Length (sec/ep)</Label>
             <Input
               type="number"

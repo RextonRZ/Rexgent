@@ -103,8 +103,8 @@ export function AutoRunPanel({
           then hands you a plan to review. No voucher is spent until you start
           generation on the Generate tab.
         </p>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
             <Label>Genre</Label>
             <Input
               value={genre}
@@ -114,7 +114,7 @@ export function AutoRunPanel({
               }}
             />
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label>Language</Label>
             <Select value={language} onValueChange={(v) => v && setLanguage(v)}>
               <SelectTrigger>
@@ -127,7 +127,7 @@ export function AutoRunPanel({
             </Select>
           </div>
         </div>
-        <div>
+        <div className="space-y-1.5">
           <Label>Premise</Label>
           <Textarea
             value={premise}
@@ -140,8 +140,8 @@ export function AutoRunPanel({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
             <Label>Episodes</Label>
             <Input
               type="number"
@@ -153,7 +153,7 @@ export function AutoRunPanel({
               }
             />
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label>Target length (sec/ep)</Label>
             <Input
               type="number"
