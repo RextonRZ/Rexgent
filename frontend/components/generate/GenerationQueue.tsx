@@ -57,6 +57,15 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
     );
   }
 
+  // Clips whose shot no longer exists (storyboard was regenerated) still show,
+  // under "Earlier takes" — old videos never silently disappear.
+  const currentShotIds = new Set(
+    scenes.flatMap((s) => s.shots.map((sh) => sh.id))
+  );
+  const orphans = Object.entries(byShot).filter(
+    ([sid, t]) => !currentShotIds.has(sid) && t.url
+  );
+
   // Scenes with clips; consecutive single-clip scenes pair up two per row.
   const blocks: SceneBlock[] = scenes
     .map((scene) => ({
@@ -164,6 +173,54 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
         ) : (
           renderBlock(row[0], false)
         )
+      )}
+
+      {orphans.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3 text-sm">
+            <span className="font-semibold">Earlier takes</span>
+            <span className="text-xs text-muted-foreground">
+              — from previous storyboards
+            </span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {orphans.map(([sid, tile]) => {
+              const chip = clipStatusChip(tile.status);
+              return (
+                <div
+                  key={sid}
+                  className="rounded-xl border hairline bg-card overflow-hidden"
+                >
+                  <div className="relative aspect-video bg-black">
+                    <video
+                      src={`${tile.url}#t=0.1`}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="h-full w-full object-contain bg-black"
+                    />
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                      {typeof tile.score === "number" && (
+                        <span
+                          className={`rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold ${
+                            tile.score >= 70 ? "text-ok" : "text-warn"
+                          }`}
+                        >
+                          ID {tile.score}%
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      className={`absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] ${chip.cls}`}
+                    >
+                      {chip.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

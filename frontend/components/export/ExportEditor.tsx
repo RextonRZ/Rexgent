@@ -60,6 +60,11 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   const clips = clipsQuery.data?.clips ?? [];
 
   const clipsByShot = useMemo(() => buildClipsByShot(clips), [clips]);
+  // takes whose shot no longer exists (storyboard regenerated) — still usable
+  const orphanClips = useMemo(() => {
+    const shotIds = new Set(scenes.flatMap((s) => s.shots.map((sh) => sh.id)));
+    return clips.filter((c) => c.url && !shotIds.has(c.shot_id));
+  }, [clips, scenes]);
   const clipByShot = useMemo(() => {
     const m: Record<string, GeneratedClip> = {};
     for (const [shotId, takes] of Object.entries(clipsByShot)) m[shotId] = takes[0];
@@ -129,7 +134,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
               clipId: clip.id,
               shotId: clip.shot_id,
               url: clip.url!,
-              label: shotLabel[clip.shot_id] || "Shot",
+              label: shotLabel[clip.shot_id] || "Earlier take",
               score: clip.consistency_score,
               duration: 5,
               trimStart: 0,
@@ -290,6 +295,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         <ShotLibrary
           scenes={scenes}
           clipsByShot={clipsByShot}
+          orphans={orphanClips}
           inTimeline={inTimeline}
           onAdd={addClip}
           onEdit={setEditingClip}

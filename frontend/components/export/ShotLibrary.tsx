@@ -5,16 +5,92 @@ import type { SceneShots } from "@/hooks/useStoryboard";
 import type { GeneratedClip } from "@/lib/types";
 import { ClipBadge } from "@/components/budget/ClipBadge";
 
-/** Right rail: scenes → shots (with description) → every generated take. */
+function TakeTile({
+  clip,
+  label,
+  added,
+  selected,
+  onSelect,
+  onAdd,
+  onEdit,
+}: {
+  clip: GeneratedClip;
+  label: string;
+  added: boolean;
+  selected: boolean;
+  onSelect: () => void;
+  onAdd: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <div
+        className={`relative cursor-pointer rounded-md ${
+          selected ? "ring-2 ring-primary" : ""
+        }`}
+        onClick={onSelect}
+        title="Click to select, then the pen to AI-edit"
+      >
+        <video
+          src={`${clip.url}#t=0.1`}
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
+          onMouseLeave={(e) => e.currentTarget.pause()}
+          className="aspect-video w-full rounded-md object-cover border hairline bg-black"
+        />
+        <span className="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white/90">
+          {label}
+        </span>
+        <span className="absolute top-1 right-1">
+          <ClipBadge
+            continuityScore={clip.consistency_score}
+            costUsd={clip.cost_usd}
+          />
+        </span>
+        {selected && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            title="AI-edit this take"
+            className="absolute bottom-1.5 right-1.5 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg ring-2 ring-background hover:scale-110 transition-transform"
+          >
+            ✏️
+          </button>
+        )}
+      </div>
+      <button
+        disabled={added}
+        onClick={onAdd}
+        className={`w-full rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+          added
+            ? "bg-ok/15 text-ok cursor-default"
+            : "bg-primary/15 text-primary hover:bg-primary/25"
+        }`}
+      >
+        {added ? "✓ on timeline" : "+ add take"}
+      </button>
+    </div>
+  );
+}
+
+/** Right rail: scenes → shots (with description) → every generated take, plus
+ *  takes from previous storyboards ("Earlier takes") so old videos stay usable. */
 export function ShotLibrary({
   scenes,
   clipsByShot,
+  orphans = [],
   inTimeline,
   onAdd,
   onEdit,
 }: {
   scenes: SceneShots[];
   clipsByShot: Record<string, GeneratedClip[]>;
+  orphans?: GeneratedClip[]; // clips whose shot no longer exists
   inTimeline: Set<string>; // clipIds currently on the timeline
   onAdd: (clip: GeneratedClip) => void;
   onEdit: (clip: GeneratedClip) => void; // open the AI-edit modal for a take
@@ -63,72 +139,49 @@ export function ShotLibrary({
                       no clip generated
                     </div>
                   ) : (
-                    takes.map((clip, i) => {
-                      const added = inTimeline.has(clip.id);
-                      const isSelected = selectedClipId === clip.id;
-                      return (
-                        <div key={clip.id} className="space-y-1">
-                          <div
-                            className={`relative cursor-pointer rounded-md ${
-                              isSelected ? "ring-2 ring-primary" : ""
-                            }`}
-                            onClick={() => setSelectedClipId(clip.id)}
-                            title="Click to select, then ✏️ to AI-edit"
-                          >
-                            <video
-                              src={`${clip.url}#t=0.1`}
-                              muted
-                              loop
-                              playsInline
-                              preload="metadata"
-                              onMouseEnter={(e) =>
-                                e.currentTarget.play().catch(() => {})
-                              }
-                              onMouseLeave={(e) => e.currentTarget.pause()}
-                              className="aspect-video w-full rounded-md object-cover border hairline bg-black"
-                            />
-                            <span className="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white/90">
-                              Take {i + 1}
-                            </span>
-                            <span className="absolute top-1 right-1">
-                              <ClipBadge
-                                continuityScore={clip.consistency_score}
-                                costUsd={clip.cost_usd}
-                              />
-                            </span>
-                            {isSelected && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onEdit(clip);
-                                }}
-                                title="AI-edit this take"
-                                className="absolute bottom-1.5 right-1.5 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg ring-2 ring-background hover:scale-110 transition-transform"
-                              >
-                                ✏️
-                              </button>
-                            )}
-                          </div>
-                          <button
-                            disabled={added}
-                            onClick={() => onAdd(clip)}
-                            className={`w-full rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-                              added
-                                ? "bg-ok/15 text-ok cursor-default"
-                                : "bg-primary/15 text-primary hover:bg-primary/25"
-                            }`}
-                          >
-                            {added ? "✓ on timeline" : "+ add take"}
-                          </button>
-                        </div>
-                      );
-                    })
+                    takes.map((clip, i) => (
+                      <TakeTile
+                        key={clip.id}
+                        clip={clip}
+                        label={`Take ${i + 1}`}
+                        added={inTimeline.has(clip.id)}
+                        selected={selectedClipId === clip.id}
+                        onSelect={() => setSelectedClipId(clip.id)}
+                        onAdd={() => onAdd(clip)}
+                        onEdit={() => onEdit(clip)}
+                      />
+                    ))
                   )}
                 </div>
               );
             })}
           </div>
         ))}
+
+        {orphans.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground">
+              Earlier takes
+              <span className="ml-1 font-normal text-[11px]">
+                — from previous storyboards
+              </span>
+            </p>
+            <div className="rounded-lg border hairline bg-background/40 p-2.5 space-y-2">
+              {orphans.map((clip, i) => (
+                <TakeTile
+                  key={clip.id}
+                  clip={clip}
+                  label={`Earlier ${i + 1}`}
+                  added={inTimeline.has(clip.id)}
+                  selected={selectedClipId === clip.id}
+                  onSelect={() => setSelectedClipId(clip.id)}
+                  onAdd={() => onAdd(clip)}
+                  onEdit={() => onEdit(clip)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

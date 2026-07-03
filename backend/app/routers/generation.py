@@ -51,6 +51,32 @@ async def get_job_clips(job_id: str, db: Session = Depends(get_db)):
     return {"clips": results}
 
 
+@router.get("/project/{project_id}/clips")
+async def project_clips(project_id: str, db: Session = Depends(get_db)):
+    """All playable clips for a project across ALL jobs. The per-job route breaks
+    when the newest job is an empty duplicate or when a storyboard regeneration
+    replaced the shots — this keeps every generated video reachable."""
+    pid = uuid.UUID(project_id)
+    job_ids = [j.id for j in db.query(GenerationJob).filter(GenerationJob.project_id == pid).all()]
+    if not job_ids:
+        return {"clips": []}
+    clips = (db.query(GeneratedClip)
+             .filter(GeneratedClip.job_id.in_(job_ids), GeneratedClip.url.isnot(None))
+             .order_by(GeneratedClip.created_at.desc())
+             .all())
+
+    shot_ids = {c.shot_id for c in clips if c.shot_id}
+    shots = db.query(Shot).filter(Shot.id.in_(shot_ids)).all() if shot_ids else []
+    duration_by_shot = {s.id: (s.estimated_duration_seconds or 5) for s in shots}
+
+    results = []
+    for c in clips:
+        item = ClipResult.model_validate(c)
+        item.cost_usd = video_cost(duration_by_shot.get(c.shot_id, 5), c.model_used)
+        results.append(item)
+    return {"clips": results}
+
+
 @router.get("/project/{project_id}/latest", response_model=GenerationJobStatus)
 async def latest_job(project_id: str, db: Session = Depends(get_db)):
     job = (
