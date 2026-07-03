@@ -42,7 +42,7 @@ export default function StoryboardPage({
             {generateStoryboard.isPending ? "Generating…" : "Generate storyboard"}
           </Button>
           <Button
-            variant="secondary"
+            variant="outline"
             onClick={handleBudget}
             disabled={calculateBudget.isPending}
           >

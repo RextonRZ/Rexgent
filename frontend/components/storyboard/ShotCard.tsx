@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ShotEditor } from "./ShotEditor";
 import { useDeleteShot } from "@/hooks/useStoryboard";
 import type { Shot } from "@/lib/types";
@@ -22,61 +20,74 @@ export function ShotCard({ shot }: { shot: Shot }) {
     }
   };
 
-  const isWan = shot.quality_tier === "wan";
+  const technicals = [
+    shot.shot_type,
+    shot.camera_movement?.toLowerCase().replace(/_/g, " "),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <Card className="border-l-2" style={{ borderLeftColor: isWan ? "hsl(38 92% 60%)" : "hsl(199 89% 60%)" }}>
-      <CardContent className="pt-4 space-y-2 text-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline">Shot {shot.number}</Badge>
-            {shot.shot_type && <Badge variant="secondary">{shot.shot_type}</Badge>}
-            {shot.camera_movement && (
-              <Badge variant="secondary">{shot.camera_movement}</Badge>
-            )}
-            {shot.quality_tier && (
-              <span
-                className={
-                  isWan
-                    ? "inline-flex items-center gap-1 rounded-full bg-wan/15 text-wan px-2 py-0.5 text-[11px] font-medium"
-                    : "inline-flex items-center gap-1 rounded-full bg-hh/15 text-hh px-2 py-0.5 text-[11px] font-medium"
-                }
-              >
-                {isWan ? "Wan 2.7" : "HappyHorse"}
+    <Card className="group">
+      <CardContent className="pt-4 space-y-2.5 text-sm">
+        {/* header: shot id + technicals left, model + hover actions right */}
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-xs font-semibold">
+            Shot {shot.number}
+            {technicals && (
+              <span className="ml-2 font-normal text-muted-foreground">
+                {technicals}
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-1">
-            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-              Edit
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-bad hover:text-bad hover:bg-bad/10"
-              disabled={deleteShot.isPending}
-              onClick={handleDelete}
-              title="Delete this shot"
-            >
-              {deleteShot.isPending ? "…" : "Delete"}
-            </Button>
+          </p>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {shot.quality_tier && (
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {shot.quality_tier === "wan" ? "Wan 2.7" : "HappyHorse"}
+              </span>
+            )}
+            <div className="flex opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <button
+                onClick={() => setEditing(true)}
+                title="Edit shot"
+                className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center justify-center text-xs"
+              >
+                ✎
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteShot.isPending}
+                title="Delete shot"
+                className="h-7 w-7 rounded-md text-muted-foreground hover:text-bad hover:bg-bad/10 flex items-center justify-center text-xs disabled:opacity-50"
+              >
+                🗑
+              </button>
+            </div>
           </div>
         </div>
-        {shot.action && <p>{shot.action}</p>}
+
+        {/* the description is the hero */}
+        {shot.action && <p className="leading-relaxed">{shot.action}</p>}
         {shot.dialogue && (
-          <p className="italic text-muted-foreground">&ldquo;{shot.dialogue}&rdquo;</p>
+          <p className="border-l-2 border-border pl-3 text-xs italic text-muted-foreground">
+            &ldquo;{shot.dialogue}&rdquo;
+          </p>
         )}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+
+        {/* one quiet metadata row */}
+        <div className="flex items-center gap-3 pt-0.5 text-[11px] text-muted-foreground flex-wrap">
           {shot.lighting && <span>💡 {shot.lighting}</span>}
           {shot.colour_mood && <span>🎨 {shot.colour_mood}</span>}
           <span>⏱ {shot.estimated_duration_seconds}s</span>
           {shot.characters_in_frame && shot.characters_in_frame.length > 0 && (
             <span>👥 {shot.characters_in_frame.join(", ")}</span>
           )}
+          {shot.emotional_beat && (
+            <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 text-[10px]">
+              Beat · {shot.emotional_beat}
+            </span>
+          )}
         </div>
-        {shot.emotional_beat && (
-          <p className="text-xs text-primary">Beat: {shot.emotional_beat}</p>
-        )}
       </CardContent>
     </Card>
   );
