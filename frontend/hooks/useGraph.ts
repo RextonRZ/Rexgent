@@ -7,6 +7,7 @@ export interface GraphCharacter {
   id: string;
   name: string;
   role: string;
+  reference_image_url?: string | null;
 }
 
 export interface GraphRelationship {
@@ -34,6 +35,7 @@ export interface GraphNode {
   id: string;
   label: string;
   group: "character" | "scene";
+  img?: string | null;
 }
 
 export interface GraphLink {
@@ -60,7 +62,7 @@ function shapeGraph(data?: GraphResponse): GraphData {
 
   const charByName = new Map<string, GraphCharacter>();
   for (const c of characters) {
-    nodes.push({ id: c.id, label: c.name, group: "character" });
+    nodes.push({ id: c.id, label: c.name, group: "character", img: c.reference_image_url });
     charByName.set(c.name, c);
   }
 

@@ -7,6 +7,7 @@ import { CharacterList } from "@/components/characters/CharacterList";
 import { RelationshipGraph } from "@/components/characters/RelationshipGraph";
 import { RelationshipEdgePanel } from "@/components/characters/RelationshipEdgePanel";
 import { SceneGraph } from "@/components/characters/SceneGraph";
+import { NarrativeGraphView } from "@/components/agents/NarrativeGraphView";
 import { useCharacters, useExtractCharacters } from "@/hooks/useCharacters";
 import {
   useGraph,
@@ -105,6 +106,7 @@ export default function CharactersPage({
           <TabsTrigger value="cards">Cards</TabsTrigger>
           <TabsTrigger value="relationships">Relationships</TabsTrigger>
           <TabsTrigger value="scenes">Scenes</TabsTrigger>
+          <TabsTrigger value="graph">Story graph</TabsTrigger>
         </TabsList>
         <TabsContent value="cards">
           {isLoading ? (
@@ -128,6 +130,9 @@ export default function CharactersPage({
             scenes={graph?.scenes || []}
             characters={graph?.characters || []}
           />
+        </TabsContent>
+        <TabsContent value="graph">
+          <NarrativeGraphView projectId={params.id} />
         </TabsContent>
       </Tabs>
 
