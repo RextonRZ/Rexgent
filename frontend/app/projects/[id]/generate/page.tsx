@@ -26,7 +26,7 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
       </div>
 
       <GenerationLauncher projectId={params.id} />
-      <GenerationQueue />
+      <GenerationQueue projectId={params.id} />
     </div>
   );
 }
