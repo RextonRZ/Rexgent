@@ -111,6 +111,14 @@ async def get_graphs(project_id: str, db: Session = Depends(get_db)):
         .order_by(Script.created_at.desc())
         .first()
     )
+    # scene -> location plate image, so graph scene nodes can show the picture
+    from app.models.location_plate import LocationPlate
+    plate_by_scene: dict[int, str] = {}
+    for lp in db.query(LocationPlate).filter(LocationPlate.project_id == pid).all():
+        for n in (lp.scene_numbers or []):
+            if lp.plate_image_url and n not in plate_by_scene:
+                plate_by_scene[n] = lp.plate_image_url
+
     scenes = []
     if script:
         scene_rows = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
@@ -119,6 +127,7 @@ async def get_graphs(project_id: str, db: Session = Depends(get_db)):
                 "number": s.number,
                 "heading": s.heading,
                 "characters": s.characters_json or [],
+                "image": plate_by_scene.get(s.number),
             }
             for s in scene_rows
         ]

@@ -1,23 +1,40 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import dynamic from "next/dynamic";
 import { useGraph } from "@/hooks/useGraph";
-
-const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
-  ssr: false,
-});
 
 export function NarrativeGraphView({ projectId }: { projectId: string }) {
   const { nodes, links } = useGraph(projectId);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fgRef = useRef<any>(null);
   const [width, setWidth] = useState(0);
 
-  // load + cache character face images once, so the canvas can draw avatar chips
+  // Client-only import that supports refs (next/dynamic doesn't forward them),
+  // so we can spread the force layout out for readability.
+  const [FG, setFG] = useState<any>(null);
+  useEffect(() => {
+    let alive = true;
+    import("react-force-graph-2d").then((m) => {
+      if (alive) setFG(() => m.default);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Longer links + stronger repulsion = nodes stop crowding each other.
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    fg.d3Force("link")?.distance(110);
+    fg.d3Force("charge")?.strength(-260);
+  }, [FG, nodes.length]);
+
+  // cache node images (character faces + scene plates) for canvas drawing
   const imgCache = useRef(new Map<string, HTMLImageElement>()).current;
   useEffect(() => {
     for (const n of nodes) {
-      if (n.group === "character" && n.img && !imgCache.has(n.id)) {
+      if (n.img && !imgCache.has(n.id)) {
         const im = new Image();
         im.crossOrigin = "anonymous";
         im.src = n.img;
@@ -42,11 +59,11 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
       <div className="px-4 py-3 border-b hairline">
         <h2 className="text-sm font-medium">Story graph</h2>
         <p className="text-[11px] text-muted-foreground">
-          Characters, relationships &amp; scene appearances
+          Who appears in which scene — faces link to the scenes they&apos;re in
         </p>
       </div>
 
-      <div ref={containerRef} className="relative h-[340px]">
+      <div ref={containerRef} className="relative h-[420px]">
         {nodes.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
             <p className="text-xs text-muted-foreground">
@@ -54,46 +71,79 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
               relationships, and generate scenes.
             </p>
           </div>
-        ) : width > 0 ? (
-          <ForceGraph2D
+        ) : width > 0 && FG ? (
+          <FG
+            ref={fgRef}
             graphData={{ nodes, links }}
             width={width}
-            height={340}
+            height={420}
             nodeId="id"
             linkColor={() => "rgba(148,163,184,0.35)"}
             backgroundColor="rgba(0,0,0,0)"
-            nodeCanvasObject={(node: any, ctx, scale) => {
+            nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, scale: number) => {
               const x = node.x ?? 0;
               const y = node.y ?? 0;
               const isChar = node.group === "character";
-              const r = isChar ? 10 : 7;
+              const img = imgCache.get(node.id);
+              const ready = img && img.complete && img.naturalWidth > 0;
               ctx.lineWidth = 1.5 / scale;
-              ctx.fillStyle = isChar ? "#1c1633" : "#101827";
-              ctx.strokeStyle = isChar ? "#8b5cf6" : "#5aa9e6";
+
               if (isChar) {
+                // character: round face chip
+                const r = 16;
                 ctx.beginPath();
                 ctx.arc(x, y, r, 0, 2 * Math.PI);
+                ctx.fillStyle = "#1c1633";
                 ctx.fill();
+                ctx.strokeStyle = "#8b5cf6";
                 ctx.stroke();
-                const img = imgCache.get(node.id);
-                if (img && img.complete && img.naturalWidth > 0) {
+                if (ready) {
                   ctx.save();
                   ctx.beginPath();
                   ctx.arc(x, y, r - 1, 0, 2 * Math.PI);
                   ctx.clip();
-                  ctx.drawImage(img, x - r, y - r, r * 2, r * 2);
+                  ctx.drawImage(img!, x - r, y - r, r * 2, r * 2);
                   ctx.restore();
                 }
+                ctx.font = `600 ${11 / scale}px sans-serif`;
+                ctx.fillStyle = "#e7e9ee";
+                ctx.textAlign = "center";
+                ctx.fillText(node.label, x, y + r + 12 / scale);
               } else {
+                // scene: location-plate thumbnail card
+                const w = 46;
+                const h = 30;
                 ctx.beginPath();
-                ctx.rect(x - r, y - r * 0.7, r * 2, r * 1.4);
+                ctx.rect(x - w / 2, y - h / 2, w, h);
+                ctx.fillStyle = "#101827";
                 ctx.fill();
+                ctx.strokeStyle = "#5aa9e6";
                 ctx.stroke();
+                if (ready) {
+                  ctx.save();
+                  ctx.beginPath();
+                  ctx.rect(x - w / 2 + 1, y - h / 2 + 1, w - 2, h - 2);
+                  ctx.clip();
+                  // cover-fit the plate into the card
+                  const ar = img!.naturalWidth / img!.naturalHeight;
+                  let dw = w - 2;
+                  let dh = dw / ar;
+                  if (dh < h - 2) {
+                    dh = h - 2;
+                    dw = dh * ar;
+                  }
+                  ctx.drawImage(img!, x - dw / 2, y - dh / 2, dw, dh);
+                  ctx.restore();
+                }
+                ctx.font = `${10 / scale}px sans-serif`;
+                ctx.fillStyle = "#9aa3b2";
+                ctx.textAlign = "center";
+                const label =
+                  node.label.length > 26
+                    ? node.label.slice(0, 26) + "…"
+                    : node.label;
+                ctx.fillText(label, x, y + h / 2 + 11 / scale);
               }
-              ctx.font = `${11 / scale}px sans-serif`;
-              ctx.fillStyle = "#c9cdd6";
-              ctx.textAlign = "center";
-              ctx.fillText(node.label, x, y + r + 11 / scale);
             }}
           />
         ) : null}

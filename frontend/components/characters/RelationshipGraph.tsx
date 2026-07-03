@@ -8,6 +8,7 @@ interface GraphNode extends d3.SimulationNodeDatum {
   id: string;
   name: string;
   role: string;
+  reference_image_url?: string | null;
 }
 
 interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
@@ -15,7 +16,12 @@ interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
 }
 
 interface RelationshipGraphProps {
-  characters: { id: string; name: string; role: string }[];
+  characters: {
+    id: string;
+    name: string;
+    role: string;
+    reference_image_url?: string | null;
+  }[];
   relationships: CharacterRelationship[];
   onSelectEdge?: (rel: CharacterRelationship) => void;
 }
@@ -32,10 +38,10 @@ const REL_COLORS: Record<string, string> = {
 };
 
 const ROLE_RADIUS: Record<string, number> = {
-  PROTAGONIST: 22,
-  ANTAGONIST: 18,
-  SUPPORTING: 14,
-  MINOR: 10,
+  PROTAGONIST: 28,
+  ANTAGONIST: 24,
+  SUPPORTING: 20,
+  MINOR: 16,
 };
 
 export function RelationshipGraph({
@@ -105,18 +111,18 @@ export function RelationshipGraph({
             .attr("x", mx + 8)
             .attr("y", my - 8)
             .attr("font-size", 11)
-            .attr("fill", "currentColor")
+            .attr("fill", "#e7e9ee")
             .text(text.length > 60 ? text.slice(0, 60) + "..." : text);
           const bbox = (t.node() as SVGTextElement).getBBox();
           tooltip
             .insert("rect", "text")
-            .attr("x", bbox.x - 4)
-            .attr("y", bbox.y - 2)
-            .attr("width", bbox.width + 8)
-            .attr("height", bbox.height + 4)
-            .attr("fill", "white")
-            .attr("stroke", "#e5e7eb")
-            .attr("rx", 3);
+            .attr("x", bbox.x - 6)
+            .attr("y", bbox.y - 4)
+            .attr("width", bbox.width + 12)
+            .attr("height", bbox.height + 8)
+            .attr("fill", "#161b26")
+            .attr("stroke", "#333c4f")
+            .attr("rx", 5);
         }
       })
       .on("mouseout", function () {
@@ -151,20 +157,45 @@ export function RelationshipGraph({
           })
       );
 
+    const radius = (d: GraphNode) => ROLE_RADIUS[d.role] || 16;
+
+    // face plate clipped to a circle when available, else a plain disc
+    const defs = svg.append("defs");
+    nodes.forEach((n) => {
+      if (n.reference_image_url) {
+        defs
+          .append("clipPath")
+          .attr("id", `rel-clip-${n.id}`)
+          .append("circle")
+          .attr("r", radius(n));
+      }
+    });
+
     node
       .append("circle")
-      .attr("r", (d) => ROLE_RADIUS[d.role] || 12)
+      .attr("r", radius)
       .attr("fill", "#1e293b")
-      .attr("stroke", "#fff")
+      .attr("stroke", "#8b5cf6")
       .attr("stroke-width", 2);
+
+    node
+      .filter((d) => !!d.reference_image_url)
+      .append("image")
+      .attr("href", (d) => d.reference_image_url!)
+      .attr("x", (d) => -radius(d))
+      .attr("y", (d) => -radius(d))
+      .attr("width", (d) => radius(d) * 2)
+      .attr("height", (d) => radius(d) * 2)
+      .attr("preserveAspectRatio", "xMidYMid slice")
+      .attr("clip-path", (d) => `url(#rel-clip-${d.id})`);
 
     node
       .append("text")
       .text((d) => d.name)
       .attr("text-anchor", "middle")
-      .attr("dy", (d) => (ROLE_RADIUS[d.role] || 12) + 14)
+      .attr("dy", (d) => radius(d) + 16)
       .attr("font-size", 11)
-      .attr("fill", "currentColor");
+      .attr("fill", "#c9cdd6");
 
     simulation.on("tick", () => {
       link

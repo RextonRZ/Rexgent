@@ -23,6 +23,7 @@ export interface GraphScene {
   number: number;
   heading: string;
   characters: string[];
+  image?: string | null;
 }
 
 export interface GraphResponse {
@@ -71,6 +72,7 @@ function shapeGraph(data?: GraphResponse): GraphData {
       id: `scene-${s.number}`,
       label: s.heading || `Scene ${s.number}`,
       group: "scene",
+      img: s.image,
     });
   }
 

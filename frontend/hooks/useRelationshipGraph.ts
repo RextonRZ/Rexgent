@@ -6,10 +6,18 @@ export interface GraphScene {
   number: number;
   heading: string | null;
   characters: string[];
+  image?: string | null;
+}
+
+export interface GraphCharacterInfo {
+  id: string;
+  name: string;
+  role: string;
+  reference_image_url?: string | null;
 }
 
 export interface GraphData {
-  characters: { id: string; name: string; role: string }[];
+  characters: GraphCharacterInfo[];
   relationships: CharacterRelationship[];
   scenes: GraphScene[];
 }
