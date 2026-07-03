@@ -315,20 +315,38 @@ class QwenClient:
         self,
         prompt: str,
         base_image_url: str,
-        size: str = "1280*1280",
         negative_prompt: str | None = None,
-        prompt_extend: bool = True,
+        prompt_extend: bool = True,  # unused by the edit endpoint; kept for call-site compat
     ) -> str:
-        # qwen-image-edit-max: same messages endpoint as wan2.6-t2i, but the user
-        # content carries the base image (to preserve identity) plus the edit text.
-        # prompt_extend is OFF for identity edits — expansion drifts the face.
+        # qwen-image-edit-max is served by the SYNCHRONOUS multimodal endpoint: the
+        # async image-generation endpoint 400s with InvalidParameter "url error".
+        # The edited image comes back directly in choices[0].message.content[].image
+        # (verified live: reference face + outfit change preserved the person).
         s = get_settings()
-        input_obj = {"messages": [{"role": "user", "content": [
-            {"image": base_image_url}, {"text": prompt}]}]}
-        params: dict = {"size": size, "n": 1, "prompt_extend": prompt_extend, "watermark": False}
-        if negative_prompt:
-            params["negative_prompt"] = negative_prompt
-        return await self._dispatch_image(s.qwen_image_edit_model, input_obj, params, s.qwen_image_path)
+        payload = {
+            "model": s.qwen_image_edit_model,
+            "input": {"messages": [{"role": "user", "content": [
+                {"image": base_image_url}, {"text": prompt}]}]},
+            "parameters": {"watermark": False,
+                           **({"negative_prompt": negative_prompt} if negative_prompt else {})},
+        }
+        async with httpx.AsyncClient() as http:
+            response = await http.post(
+                self.video_base_url + s.qwen_image_edit_path,
+                headers={"Authorization": f"Bearer {self.api_key}",
+                         "Content-Type": "application/json"},
+                json=payload,
+                timeout=180.0,
+            )
+            if response.status_code >= 400:
+                raise RuntimeError(
+                    f"DashScope image-edit {response.status_code} for model "
+                    f"'{s.qwen_image_edit_model}': {response.text[:600]}")
+            output = response.json().get("output", {})
+        url = self._extract_image_url(output)
+        if not url:
+            raise RuntimeError(f"Image edit returned no URL: {output}")
+        return url
 
     # ── Voice design / enrollment / TTS synthesis ───────────────────
     # DashScope's exact voice/TTS request shapes are uncertain, so these are

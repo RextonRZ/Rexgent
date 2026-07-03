@@ -43,6 +43,17 @@ async def test_generate_and_store_plate_location_skips_face():
     gen.embedder.extract.assert_not_called()
 
 
+def test_subject_descriptor_keeps_numeric_age_without_gender():
+    from app.services.plate_generator import subject_descriptor
+    # gender missing but age '20s' — must still anchor a human adult, or the
+    # model reads 'soft/delicate' face text as a child
+    s = subject_descriptor(None, "20s", "soft, delicate features")
+    assert s.startswith("a person around 20s")
+    # non-numeric 'age' with no gender (e.g. a pet) keeps appearance-only
+    dog = subject_descriptor("unknown", "dog age", "small white dog")
+    assert dog == "small white dog"
+
+
 @pytest.mark.asyncio
 async def test_character_plate_edits_face_when_reference_given():
     gen = PlateGenerator.__new__(PlateGenerator)

@@ -28,6 +28,10 @@ def subject_descriptor(gender: str | None = None, age: str | None = None,
     from app.services.voice_catalog import gender_bucket
     b = gender_bucket(gender)
     lead = "a woman" if b == "female" else "a man" if b == "male" else ""
+    # A numeric age ("20s") implies a human even when gender wasn't extracted —
+    # dropping it let 'soft/delicate' face text read as a CHILD to the image model.
+    if not lead and age and any(ch.isdigit() for ch in str(age)):
+        lead = "a person"
     if lead and age:
         lead = f"{lead} around {age}"
     appearance = (appearance or "").strip()
@@ -49,12 +53,14 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "") -> st
              "soft even lighting. Ignore any location, action or scene — plain background only.")
     outfit = (outfit or "").strip()
     if has_face:
+        anchor = ("Keep the same age and body proportions as the reference — do not make "
+                  "them younger or older.")
         if outfit:
             return (f"The exact same subject as the reference image ({subject}) — keep the "
-                    f"identical face and hair. Wearing {outfit}. {frame}")
+                    f"identical face and hair. {anchor} Wearing {outfit}. {frame}")
         # no story costume: preserve the reference's own clothing too
         return (f"The exact same subject as the reference image ({subject}) — keep the identical "
-                f"face, hair and the same clothing as the reference. {frame}")
+                f"face, hair and the same clothing as the reference. {anchor} {frame}")
     if outfit:
         return f"{subject}, wearing {outfit}. {frame}"
     return f"{subject}. {frame}"

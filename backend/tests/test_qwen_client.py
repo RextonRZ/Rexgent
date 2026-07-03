@@ -233,6 +233,45 @@ async def test_synthesize_speech_routes_realtime_for_vc_model(monkeypatch):
     rt.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_edit_image_uses_sync_multimodal_endpoint(monkeypatch):
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    import app.services.qwen_client as qc
+    client = QwenClient(get_settings())
+    captured = {}
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"output": {"choices": [
+                {"message": {"content": [{"image": "https://x/edited.png"}]}}]}}
+
+    class FakeAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None, timeout=None):
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers
+            return FakeResp()
+
+    monkeypatch.setattr(qc.httpx, "AsyncClient", lambda *a, **k: FakeAsyncClient())
+    out = await client.edit_image("red hoodie", "https://x/face.jpg", negative_prompt="bad")
+    assert out == "https://x/edited.png"
+    # SYNC multimodal endpoint — not the async image-generation one
+    assert captured["url"].endswith("/services/aigc/multimodal-generation/generation")
+    assert "X-DashScope-Async" not in captured["headers"]
+    content = captured["json"]["input"]["messages"][0]["content"]
+    assert content[0] == {"image": "https://x/face.jpg"}
+    assert captured["json"]["parameters"]["negative_prompt"] == "bad"
+
+
 def test_enroll_default_name_when_blank():
     # sanitizer falls back to "voice" when nothing usable remains
     import re

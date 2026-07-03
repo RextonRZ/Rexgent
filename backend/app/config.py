@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     qwen_image_edit_model: str = "qwen-image-edit-max"
     qwen_vl_continuity_model: str = "qwen3-vl-plus"
     qwen_image_path: str = "/services/aigc/image-generation/generation"
+    # qwen-image-edit-max lives on the SYNCHRONOUS multimodal endpoint — the async
+    # image-generation endpoint rejects it with InvalidParameter "url error".
+    qwen_image_edit_path: str = "/services/aigc/multimodal-generation/generation"
 
     # Production Bible: TTS synthesis.
     # qwen3-tts-flash is the OFFLINE model (simple SDK call, preset voices) — the DEFAULT
