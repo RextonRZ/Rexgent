@@ -41,6 +41,7 @@ export interface LocationPlate {
   location_key: string;
   description: string | null;
   plate_image_url: string | null;
+  scene_numbers: number[];
 }
 
 export interface StylePreset {

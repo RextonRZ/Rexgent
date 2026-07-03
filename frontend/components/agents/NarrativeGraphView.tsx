@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { forceCollide } from "d3";
 import { useGraph } from "@/hooks/useGraph";
 
@@ -125,6 +125,8 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
   const [width, setWidth] = useState(0);
   const [selLink, setSelLink] = useState<any | null>(null);
   const [hoverLink, setHoverLink] = useState<any | null>(null);
+  // stable identity so hover/select re-renders don't re-heat the layout
+  const graphData = useMemo(() => ({ nodes, links }), [nodes, links]);
 
   // link.source/target may be raw ids or hydrated node objects
   const endNode = (end: any) =>
@@ -199,7 +201,7 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
         ) : width > 0 && FG ? (
           <FG
             ref={fgRef}
-            graphData={{ nodes, links }}
+            graphData={graphData}
             width={width}
             height={420}
             nodeId="id"

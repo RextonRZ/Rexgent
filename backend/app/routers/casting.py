@@ -70,7 +70,8 @@ def get_bible(project_id: str, db: Session = Depends(get_db)):
                          for v in db.query(CostumeVariant).filter(CostumeVariant.character_id == c.id).all()]}
             for c in chars],
         "locations": [{"id": str(l.id), "location_key": l.location_key,
-                       "description": l.description, "plate_image_url": l.plate_image_url}
+                       "description": l.description, "plate_image_url": l.plate_image_url,
+                       "scene_numbers": l.scene_numbers or []}
                       for l in db.query(LocationPlate).filter(LocationPlate.project_id == pid).all()],
         "style": (lambda s: {"style_tags": s.style_tags, "plate_image_url": s.plate_image_url} if s else None)(
                   db.query(StylePreset).filter(StylePreset.project_id == pid).first()),

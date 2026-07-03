@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { getSocket } from "@/lib/websocket";
@@ -137,5 +137,7 @@ export function useGraph(projectId: string) {
     };
   }, [projectId, queryClient]);
 
-  return shapeGraph(query.data);
+  // Memoize: rebuilding nodes/links every render makes the force graph treat
+  // it as a NEW graph on any state change (e.g. hover), re-heating the layout.
+  return useMemo(() => shapeGraph(query.data), [query.data]);
 }
