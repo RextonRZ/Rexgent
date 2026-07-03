@@ -35,12 +35,24 @@ export function SceneSection({
         </span>
         <span className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
           {scene.shots.length} shot{scene.shots.length !== 1 ? "s" : ""}
-          <span className="text-[10px]">{open ? "▾" : "▸"}</span>
+          <span
+            className={`text-[10px] transition-transform duration-200 ${
+              open ? "rotate-90" : ""
+            }`}
+          >
+            ▸
+          </span>
         </span>
       </button>
-      {open && (
-        <div className="border-t border-border px-5 py-4">
-          <div className="flex flex-col md:flex-row gap-4">
+      {/* animated collapse: children stay mounted, height eases via grid-rows */}
+      <div
+        className={`grid transition-all duration-300 ease-in-out ${
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-border px-5 py-4">
+            <div className="flex flex-col md:flex-row gap-4">
             {/* the scene's location plate anchors the scene on the left */}
             {location && (
               <div className="md:w-44 shrink-0">
@@ -70,9 +82,10 @@ export function SceneSection({
                 scene.shots.map((shot) => <ShotCard key={shot.id} shot={shot} />)
               )}
             </div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

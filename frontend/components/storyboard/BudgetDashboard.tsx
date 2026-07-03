@@ -13,7 +13,7 @@ export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
   const over = total > VOUCHER;
 
   return (
-    <div className="glass rounded-xl p-5 space-y-4 sticky top-20">
+    <div className="glass rounded-xl p-5 space-y-4">
       <div className="flex items-end justify-between">
         <div>
           <p className="text-xs uppercase tracking-widest text-muted-foreground">
