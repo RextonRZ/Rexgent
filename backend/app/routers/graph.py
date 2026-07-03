@@ -125,7 +125,13 @@ async def get_graphs(project_id: str, db: Session = Depends(get_db)):
 
     return {
         "characters": [
-            {"id": str(c.id), "name": c.name, "role": c.role} for c in characters
+            {
+                "id": str(c.id),
+                "name": c.name,
+                "role": c.role,
+                "reference_image_url": c.reference_image_url,
+            }
+            for c in characters
         ],
         "relationships": [_serialize_rel(r) for r in relationships],
         "scenes": scenes,
