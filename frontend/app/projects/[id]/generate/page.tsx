@@ -5,6 +5,7 @@ import { GenerationLauncher } from "@/components/generate/GenerationLauncher";
 import { GenerationQueue } from "@/components/generate/GenerationQueue";
 import { CastingPanel } from "@/components/casting/CastingPanel";
 import { ClarificationModal } from "@/components/agents/ClarificationModal";
+import { NarrativeGraphView } from "@/components/agents/NarrativeGraphView";
 
 export default function GeneratePage({ params }: { params: { id: string } }) {
   useWebSocket(params.id);
@@ -27,6 +28,7 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
 
       <GenerationLauncher projectId={params.id} />
       <GenerationQueue projectId={params.id} />
+      <NarrativeGraphView projectId={params.id} />
     </div>
   );
 }

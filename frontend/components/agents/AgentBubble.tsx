@@ -61,7 +61,7 @@ export function AgentBubble({ projectId }: { projectId: string }) {
       title="Agent activity"
       storageKey="rx.agent.open"
       topOffset={NAV_H}
-      width={300}
+      width={360}
       pill={
         <>
           <span className="h-2 w-2 rounded-full bg-ok" />

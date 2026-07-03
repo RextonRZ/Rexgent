@@ -78,13 +78,10 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
                       {tile.url ? (
                         <video
                           src={`${tile.url}#t=0.1`}
-                          muted
-                          loop
+                          controls
                           playsInline
                           preload="metadata"
-                          onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
-                          onMouseLeave={(e) => e.currentTarget.pause()}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain bg-black"
                         />
                       ) : (
                         <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
