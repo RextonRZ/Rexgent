@@ -39,13 +39,16 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
     fg.d3Force("collide", forceCollide(48));
   }, [FG, nodes.length]);
 
-  // cache node images (character faces + scene plates) for canvas drawing
+  // cache node images (character faces + scene plates) for canvas drawing.
+  // NO crossOrigin: OSS sends no CORS headers, so an anonymous request fails
+  // outright — a plain load "taints" the canvas but draws fine (we never read
+  // pixels back). Nudge the sim on load so late images actually get painted.
   const imgCache = useRef(new Map<string, HTMLImageElement>()).current;
   useEffect(() => {
     for (const n of nodes) {
       if (n.img && !imgCache.has(n.id)) {
         const im = new Image();
-        im.crossOrigin = "anonymous";
+        im.onload = () => fgRef.current?.d3ReheatSimulation?.();
         im.src = n.img;
         imgCache.set(n.id, im);
       }
