@@ -21,12 +21,12 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
         </p>
       </div>
 
-      {/* activity (left) beside the launcher (right) */}
+      {/* launcher (left) beside the activity feed (right) */}
       <div className="grid gap-6 lg:grid-cols-3 items-start">
-        <ActivityFeed projectId={params.id} />
         <div className="lg:col-span-2">
           <GenerationLauncher projectId={params.id} />
         </div>
+        <ActivityFeed projectId={params.id} />
       </div>
 
       <GenerationQueue projectId={params.id} />

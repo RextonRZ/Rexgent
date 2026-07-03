@@ -30,7 +30,8 @@ function PanelSection({
           ✕
         </button>
       </div>
-      <div className="px-4 py-3 overflow-x-hidden">{children}</div>
+      {/* generous bottom padding so stacked panels don't butt against each other */}
+      <div className="px-4 pt-3 pb-6 overflow-x-hidden">{children}</div>
     </div>
   );
 }

@@ -59,15 +59,6 @@ export function ShotCard({ shot }: { shot: Shot }) {
             )}
           </p>
           <div className="flex items-center gap-1.5 shrink-0">
-            {shot.quality_tier && (
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  isWan ? "bg-wan/15 text-wan" : "bg-hh/15 text-hh"
-                }`}
-              >
-                {isWan ? "Wan 2.7" : "HappyHorse"}
-              </span>
-            )}
             <div className="flex opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <button
                 onClick={() => setEditing(true)}
@@ -85,6 +76,15 @@ export function ShotCard({ shot }: { shot: Shot }) {
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
+            {shot.quality_tier && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  isWan ? "bg-wan/15 text-wan" : "bg-hh/15 text-hh"
+                }`}
+              >
+                {isWan ? "Wan 2.7" : "HappyHorse"}
+              </span>
+            )}
           </div>
         </div>
 

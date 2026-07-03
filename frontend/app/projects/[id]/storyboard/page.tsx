@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NextStepButton } from "@/components/shared/NextStepButton";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/shared/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StoryboardView } from "@/components/storyboard/StoryboardView";
 import type { SceneLocation } from "@/components/storyboard/SceneSection";
@@ -44,11 +45,32 @@ export default function StoryboardPage({
     return map;
   }, [bible]);
 
-  const handleBudget = async () => {
-    const result = await calculateBudget.mutateAsync(params.id);
-    setBudget(result);
-    refetch();
-  };
+  // Budget allocates itself once shots exist — no button to remember.
+  const autoBudgeted = useRef(false);
+  const hasShots = scenes.some((s) => s.shots.length > 0);
+  useEffect(() => {
+    if (autoBudgeted.current || calculateBudget.isPending || !hasShots || budget)
+      return;
+    autoBudgeted.current = true;
+    calculateBudget
+      .mutateAsync(params.id)
+      .then((result) => {
+        setBudget(result);
+        refetch();
+      })
+      .catch(() => {
+        autoBudgeted.current = false; // retry on next change
+      });
+  }, [hasShots, budget, calculateBudget, params.id, refetch]);
+
+  const handleGenerate = () =>
+    generateStoryboard.mutate(params.id, {
+      onSuccess: () => {
+        // new board -> re-allocate
+        setBudget(null);
+        autoBudgeted.current = false;
+      },
+    });
 
   return (
     <div className="space-y-6">
@@ -59,21 +81,9 @@ export default function StoryboardPage({
             Shot-by-shot breakdown, story map, and the world your drama lives in.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={() => generateStoryboard.mutate(params.id)}
-            disabled={generateStoryboard.isPending}
-          >
-            {generateStoryboard.isPending ? "Generating…" : "Generate storyboard"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleBudget}
-            disabled={calculateBudget.isPending}
-          >
-            {calculateBudget.isPending ? "Allocating…" : "Allocate budget"}
-          </Button>
-        </div>
+        <Button onClick={handleGenerate} disabled={generateStoryboard.isPending}>
+          {generateStoryboard.isPending ? "Generating…" : "Generate storyboard"}
+        </Button>
       </div>
 
       {generateStoryboard.isError && (
@@ -103,14 +113,13 @@ export default function StoryboardPage({
             <div className="space-y-4">
               {budget ? (
                 <BudgetDashboard budget={budget} />
+              ) : calculateBudget.isPending ? (
+                <Skeleton className="h-48 rounded-xl" />
               ) : (
-                <div className="glass rounded-xl p-5 text-sm text-muted-foreground sticky top-20">
-                  Generate a storyboard, then{" "}
-                  <span className="text-foreground font-medium">
-                    Allocate budget
-                  </span>{" "}
-                  to see how the $40 voucher is spread across Wan and HappyHorse
-                  shots.
+                <div className="rounded-xl border hairline bg-card p-5 text-sm text-muted-foreground">
+                  The budget allocates itself once the storyboard exists —
+                  it decides which shots get Wan vs HappyHorse under the $40
+                  voucher.
                 </div>
               )}
 

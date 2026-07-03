@@ -90,24 +90,27 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
                             : tile.status.toLowerCase()}
                         </div>
                       )}
-                      <span className="absolute top-2 left-2 rounded bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
-                        Shot {shot.number}
-                        {shot.shot_type ? ` · ${shot.shot_type}` : ""}
-                      </span>
+                      {/* badges live at the top — the bottom belongs to the video controls */}
+                      <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                        <span className="rounded bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
+                          Shot {shot.number}
+                          {shot.shot_type ? ` · ${shot.shot_type}` : ""}
+                        </span>
+                        {typeof score === "number" && (
+                          <span
+                            className={`rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold ${
+                              score >= 70 ? "text-ok" : "text-warn"
+                            }`}
+                          >
+                            ID {score}%
+                          </span>
+                        )}
+                      </div>
                       <span
                         className={`absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] ${chip.cls}`}
                       >
                         {chip.label}
                       </span>
-                      {typeof score === "number" && (
-                        <span
-                          className={`absolute bottom-2 left-2 text-[11px] font-bold ${
-                            score >= 70 ? "text-ok" : "text-warn"
-                          }`}
-                        >
-                          ID {score}%
-                        </span>
-                      )}
                     </div>
                     <div className="p-3">
                       {shot.action && (
