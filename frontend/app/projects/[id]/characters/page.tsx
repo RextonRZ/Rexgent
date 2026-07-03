@@ -107,7 +107,6 @@ export default function CharactersPage({
           <TabsTrigger value="cards">Cards</TabsTrigger>
           <TabsTrigger value="relationships">Relationships</TabsTrigger>
           <TabsTrigger value="scenes">Scenes</TabsTrigger>
-          <TabsTrigger value="graph">Story graph</TabsTrigger>
         </TabsList>
         <TabsContent value="cards">
           {isLoading ? (
@@ -131,13 +130,13 @@ export default function CharactersPage({
           />
         </TabsContent>
         <TabsContent value="scenes">
-          <SceneGraph
-            scenes={graph?.scenes || []}
-            characters={graph?.characters || []}
-          />
-        </TabsContent>
-        <TabsContent value="graph">
-          <NarrativeGraphView projectId={params.id} />
+          <div className="space-y-4">
+            <NarrativeGraphView projectId={params.id} />
+            <SceneGraph
+              scenes={graph?.scenes || []}
+              characters={graph?.characters || []}
+            />
+          </div>
         </TabsContent>
       </Tabs>
 
