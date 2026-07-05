@@ -7,6 +7,12 @@ import { FilmstripHero } from "@/components/landing/FilmstripHero";
 import { ShowreelGallery } from "@/components/landing/ShowreelGallery";
 import { useAuth } from "@/hooks/useAuth";
 
+// Same gradient as the filmstrip timeline's active cell, plus a soft
+// lift + glow on hover.
+const CTA_GRADIENT =
+  "bg-gradient-to-r from-primary to-fuchsia-500 transition-all duration-300 " +
+  "hover:brightness-110 hover:-translate-y-0.5 hover:shadow-[0_0_28px_hsl(265_85%_66%/0.45)]";
+
 const WOWS = [
   {
     k: "01",
@@ -59,7 +65,7 @@ export default function LandingPage() {
                   Sign in
                 </Link>
                 <Link href="/signup">
-                  <Button size="sm" className="glow">
+                  <Button size="sm" className={CTA_GRADIENT}>
                     Get started
                   </Button>
                 </Link>
@@ -83,18 +89,25 @@ export default function LandingPage() {
             </h1>
             <p className="mt-5 text-muted-foreground max-w-xl mx-auto md:mx-0">
               Rexgent writes it, casts it with locked facial identity,
-              storyboards it, generates the clips, and exports a captioned film —
+              storyboards it, generates the clips, and exports a captioned film, 
               all on a fixed budget you can watch in real time.
             </p>
             <div className="mt-8 flex items-center justify-center md:justify-start gap-3">
               <Link href={isAuthenticated ? "/projects" : "/signup"}>
-                <Button size="lg" className="glow">
-                  ⚡ {isAuthenticated ? "Open your studio" : "Start directing"}
+                <Button
+                  size="lg"
+                  className={`h-12 px-8 text-base ${CTA_GRADIENT}`}
+                >
+                  {isAuthenticated ? "Open your studio" : "Start directing"}
                 </Button>
               </Link>
               {!isAuthenticated && (
                 <Link href="/login">
-                  <Button size="lg" variant="outline">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="h-12 px-8 text-base transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10 hover:shadow-[0_0_20px_hsl(265_85%_66%/0.25)]"
+                  >
                     Sign in
                   </Button>
                 </Link>
