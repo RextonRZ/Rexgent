@@ -210,7 +210,11 @@ export function ShowreelGallery() {
   const stripB = REEL_SHOTS.slice(half);
 
   return (
-    <section id="reel" ref={sectionRef} className="overflow-hidden pb-24">
+    <section
+      id="reel"
+      ref={sectionRef}
+      className="overflow-hidden pt-24 pb-24 scroll-mt-4"
+    >
       <div className="mb-10 px-6 text-center">
         <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-2">
           Every shot generated, not filmed
