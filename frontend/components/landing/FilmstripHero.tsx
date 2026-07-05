@@ -6,17 +6,19 @@ import { cn } from "@/lib/utils";
 interface Episode {
   id: string;
   title: string;
+  genre: string;
+  duration: string;
   videoSrc: string;
   posterSrc: string;
 }
 
 // The five strongest EMBERWAKE shots: establish → mystery → horror → monster → payoff.
 const EPISODES: Episode[] = [
-  { id: "ep1", title: "The Ember Field", videoSrc: "/clip1.mp4", posterSrc: "/poster1.jpg" },
-  { id: "ep2", title: "The Signal", videoSrc: "/clip5.mp4", posterSrc: "/poster5.jpg" },
-  { id: "ep3", title: "Don't Open It", videoSrc: "/clip7.mp4", posterSrc: "/poster7.jpg" },
-  { id: "ep4", title: "It Wakes", videoSrc: "/clip9.mp4", posterSrc: "/poster9.jpg" },
-  { id: "ep5", title: "Emberwake", videoSrc: "/clip12.mp4", posterSrc: "/poster12.jpg" },
+  { id: "ep1", title: "The Ember Field", genre: "Sci-fi", duration: "0:05", videoSrc: "/clip1.mp4", posterSrc: "/poster1.jpg" },
+  { id: "ep2", title: "The Signal", genre: "Mystery", duration: "0:05", videoSrc: "/clip5.mp4", posterSrc: "/poster5.jpg" },
+  { id: "ep3", title: "Don't Open It", genre: "Horror", duration: "0:05", videoSrc: "/clip7.mp4", posterSrc: "/poster7.jpg" },
+  { id: "ep4", title: "It Wakes", genre: "Horror", duration: "0:05", videoSrc: "/clip9.mp4", posterSrc: "/poster9.jpg" },
+  { id: "ep5", title: "Emberwake", genre: "Thriller", duration: "0:05", videoSrc: "/clip12.mp4", posterSrc: "/poster12.jpg" },
 ];
 
 const ADVANCE_MS = 6000;
@@ -25,16 +27,17 @@ const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 const SLOT_TRANSITION = `top 600ms ${EASE}, transform 600ms ${EASE}, opacity 600ms ${EASE}`;
 
 // The curve is an illusion: flat frames, per-slot transforms along an S.
-// Slot 0 is the featured center; negatives hang above, positives below.
+// Slot 0 is the featured focal point — full scale, the rest recede hard so
+// the eye lands on the center frame first.
 const SLOTS: Record<
   number,
   { top: string; x: number; rx: number; r: number; s: number; o: number; z: number }
 > = {
-  [-2]: { top: "2%", x: 48, rx: 6, r: 9, s: 0.5, o: 0.4, z: 10 },
-  [-1]: { top: "26%", x: 16, rx: 3, r: 4, s: 0.68, o: 0.7, z: 20 },
-  [0]: { top: "50%", x: 0, rx: 0, r: -2, s: 1, o: 1, z: 30 },
-  [1]: { top: "74%", x: 16, rx: -3, r: -5, s: 0.68, o: 0.7, z: 20 },
-  [2]: { top: "98%", x: 48, rx: -6, r: -9, s: 0.5, o: 0.4, z: 10 },
+  [-2]: { top: "0%", x: 40, rx: 6, r: 8, s: 0.4, o: 0.35, z: 10 },
+  [-1]: { top: "22%", x: 14, rx: 3, r: 4, s: 0.55, o: 0.65, z: 20 },
+  [0]: { top: "50%", x: 0, rx: 0, r: -1.5, s: 1, o: 1, z: 30 },
+  [1]: { top: "78%", x: 14, rx: -3, r: -5, s: 0.55, o: 0.65, z: 20 },
+  [2]: { top: "100%", x: 40, rx: -6, r: -8, s: 0.4, o: 0.35, z: 10 },
 };
 
 // rel 0..4 (distance below featured, circular) → slot -2..+2
@@ -72,7 +75,7 @@ function Sprockets() {
       aria-hidden
       className="flex w-6 shrink-0 flex-col items-center justify-center gap-4 py-2"
     >
-      {Array.from({ length: 8 }).map((_, i) => (
+      {Array.from({ length: 9 }).map((_, i) => (
         <span key={i} className="h-[9px] w-[7px] rounded-[2px] bg-zinc-700" />
       ))}
     </div>
@@ -135,7 +138,7 @@ function FilmFrame({
       aria-label={onClick ? `Feature EP ${n} · ${ep.title}` : undefined}
       className={cn(
         "flex items-stretch rounded-md border border-zinc-800 bg-zinc-950",
-        featured && "shadow-2xl",
+        featured ? "shadow-2xl shadow-black/60" : "shadow-lg shadow-black/40",
         onClick && "cursor-pointer",
         className
       )}
@@ -167,7 +170,11 @@ function FilmFrame({
   );
 }
 
-function Pips({
+/**
+ * Storyboard-cell timeline nav. Sits flush against the strip so it reads as
+ * part of the media, not floating chrome. Hover reveals a glass preview card.
+ */
+function TimelineNav({
   featured,
   onSelect,
   vertical,
@@ -179,26 +186,71 @@ function Pips({
   className?: string;
 }) {
   return (
-    <div className={cn("flex gap-2", vertical ? "flex-col" : "flex-row", className)}>
-      {EPISODES.map((ep, i) => (
-        <button
-          key={ep.id}
-          aria-label={`Feature EP ${i + 1} · ${ep.title}`}
-          title={`EP ${i + 1} · ${ep.title}`}
-          onClick={() => onSelect(i)}
-          className={cn(
-            "rounded-full transition-all",
-            i === featured ? "bg-primary" : "bg-zinc-600 hover:bg-zinc-400",
-            vertical
-              ? i === featured
-                ? "h-5 w-1.5"
-                : "h-1.5 w-1.5"
-              : i === featured
-              ? "h-1.5 w-5"
-              : "h-1.5 w-1.5"
-          )}
-        />
-      ))}
+    <div
+      className={cn(
+        "flex items-center gap-2.5",
+        vertical ? "flex-col" : "flex-row",
+        className
+      )}
+    >
+      {EPISODES.map((ep, i) => {
+        const active = i === featured;
+        return (
+          <button
+            key={ep.id}
+            onClick={() => onSelect(i)}
+            aria-label={`Feature EP ${i + 1} · ${ep.title}`}
+            aria-current={active}
+            className="group relative flex items-center justify-center outline-none"
+          >
+            {/* soft breathing glow behind the active cell */}
+            {active && (
+              <span
+                aria-hidden
+                className="absolute -inset-1 animate-pulse rounded-md bg-primary/40 blur-md"
+              />
+            )}
+            {/* the storyboard cell */}
+            <span
+              className={cn(
+                "relative block rounded-[3px] border transition-all duration-300",
+                vertical ? "w-3" : "h-3",
+                active
+                  ? cn(
+                      vertical ? "h-8" : "w-8",
+                      "scale-105 border-primary/60 bg-gradient-to-b from-primary to-fuchsia-500",
+                      "shadow-[0_0_14px_hsl(265_85%_66%/0.55)]"
+                    )
+                  : cn(
+                      vertical ? "h-5" : "w-5",
+                      "border-zinc-700/60 bg-zinc-800/80 opacity-50",
+                      "group-hover:scale-110 group-hover:opacity-90",
+                      "group-focus-visible:opacity-90 group-focus-visible:ring-2 group-focus-visible:ring-primary/50"
+                    )
+              )}
+            />
+            {/* glass preview card, only where hover exists */}
+            {vertical && (
+              <span
+                className={cn(
+                  "glass pointer-events-none absolute right-full top-1/2 z-50 mr-3",
+                  "-translate-y-1/2 translate-x-1 whitespace-nowrap rounded-lg px-3 py-2 text-left",
+                  "opacity-0 transition-all duration-200",
+                  "group-hover:translate-x-0 group-hover:opacity-100",
+                  "group-focus-visible:translate-x-0 group-focus-visible:opacity-100"
+                )}
+              >
+                <span className="block text-[11px] font-medium text-foreground">
+                  <span className="text-primary">EP {i + 1}</span> · {ep.title}
+                </span>
+                <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                  {ep.genre} · {ep.duration}
+                </span>
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -211,6 +263,7 @@ export function FilmstripHero() {
   const [hovered, setHovered] = useState(false);
   const [inView, setInView] = useState(true);
   const [pageVisible, setPageVisible] = useState(true);
+  const [par, setPar] = useState({ x: 0, y: 0 });
   const rootRef = useRef<HTMLDivElement>(null);
   const prevFeaturedRef = useRef(0);
   const touchX = useRef<number | null>(null);
@@ -267,7 +320,7 @@ export function FilmstripHero() {
     step(1);
   };
 
-  // Reduced motion: static featured poster + manual pips, no tilt, no autoplay.
+  // Reduced motion: static featured poster + manual nav, no tilt, no autoplay.
   if (reduced) {
     return (
       <div
@@ -279,9 +332,9 @@ export function FilmstripHero() {
           n={featured + 1}
           featured
           playing={false}
-          className="w-full max-w-[480px]"
+          className="w-full max-w-[520px]"
         />
-        <Pips featured={featured} onSelect={setFeatured} />
+        <TimelineNav featured={featured} onSelect={setFeatured} />
       </div>
     );
   }
@@ -299,7 +352,7 @@ export function FilmstripHero() {
             n={featured + 1}
             featured
             playing={false}
-            className="w-full max-w-[440px]"
+            className="w-full max-w-[520px]"
           />
         </div>
       )}
@@ -310,7 +363,17 @@ export function FilmstripHero() {
           <div
             className="absolute inset-0 overflow-hidden [perspective:1200px]"
             onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
+            onMouseLeave={() => {
+              setHovered(false);
+              setPar({ x: 0, y: 0 });
+            }}
+            onMouseMove={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setPar({
+                x: ((e.clientX - r.left) / r.width - 0.5) * 2,
+                y: ((e.clientY - r.top) / r.height - 0.5) * 2,
+              });
+            }}
           >
             {EPISODES.map((ep, i) => {
               const rel = (i - featured + EPISODES.length) % EPISODES.length;
@@ -325,7 +388,7 @@ export function FilmstripHero() {
               return (
                 <div
                   key={ep.id}
-                  className="absolute left-1/2 w-[440px] max-w-[85%]"
+                  className="absolute left-1/2 w-[520px] max-w-[92%]"
                   style={{
                     top: s.top,
                     zIndex: s.z,
@@ -334,22 +397,34 @@ export function FilmstripHero() {
                     transition: wrapping ? "none" : SLOT_TRANSITION,
                   }}
                 >
-                  <FilmFrame
-                    ep={ep}
-                    n={i + 1}
-                    featured={slot === 0}
-                    playing={slot === 0}
-                    onClick={slot === 0 ? undefined : () => feedTo(i)}
-                  />
+                  {/* parallax rides an inner wrapper so it never fights the
+                      slot transition on the outer transform */}
+                  <div
+                    style={{
+                      transform: `translate3d(${par.x * 10 * s.s}px, ${
+                        par.y * 6 * s.s
+                      }px, 0)`,
+                      transition: "transform 300ms cubic-bezier(0.22, 1, 0.36, 1)",
+                    }}
+                  >
+                    <FilmFrame
+                      ep={ep}
+                      n={i + 1}
+                      featured={slot === 0}
+                      playing={slot === 0}
+                      onClick={slot === 0 ? undefined : () => feedTo(i)}
+                    />
+                  </div>
                 </div>
               );
             })}
           </div>
-          <Pips
+          {/* timeline nav hugs the right edge of the showcase */}
+          <TimelineNav
             featured={featured}
             onSelect={feedTo}
             vertical
-            className="absolute -left-3 top-1/2 z-40 -translate-y-1/2"
+            className="absolute right-0 top-1/2 z-40 -translate-y-1/2"
           />
         </>
       )}
@@ -374,10 +449,10 @@ export function FilmstripHero() {
             playing
             className="w-full"
           />
-          <Pips
+          <TimelineNav
             featured={featured}
             onSelect={feedTo}
-            className="mt-3 justify-center"
+            className="mt-4 justify-center"
           />
         </div>
       )}

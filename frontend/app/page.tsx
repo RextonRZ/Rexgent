@@ -36,7 +36,7 @@ export default function LandingPage() {
   return (
     <main className="min-h-screen">
       <header className="border-b hairline">
-        <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
+        <div className="mx-auto max-w-7xl px-6 h-14 flex items-center justify-between">
           <span className="font-bold tracking-tight">Rexgent</span>
           <nav className="flex items-center gap-3">
             {isAuthenticated ? (
@@ -64,9 +64,9 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* hero — split: copy left (~55%), curved filmstrip right (~45%) */}
-      <section className="mx-auto max-w-6xl px-6">
-        <div className="grid items-center gap-10 pt-16 pb-16 sm:pt-24 md:min-h-[calc(100vh-3.5rem)] md:grid-cols-[11fr_9fr] md:py-10">
+      {/* hero — split: copy left, curved filmstrip showcase right */}
+      <section className="mx-auto max-w-7xl px-6">
+        <div className="grid items-center gap-10 pt-16 pb-16 sm:pt-24 md:min-h-[calc(100vh-3.5rem)] md:grid-cols-[10fr_9fr] md:gap-16 md:py-10">
           {/* left: copy + CTAs */}
           <div className="text-center md:text-left">
             <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-4">
@@ -126,7 +126,7 @@ export default function LandingPage() {
       </section>
 
       <footer className="border-t hairline">
-        <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="mx-auto max-w-7xl px-6 h-14 flex items-center justify-between text-xs text-muted-foreground">
           <span>Rexgent — AI Drama Production</span>
           <span>Built on Qwen Cloud · Alibaba Cloud</span>
         </div>
