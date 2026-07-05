@@ -10,7 +10,6 @@ import {
   AuthAlert,
   AuthShell,
   FIELD,
-  FIELD_ERROR,
   LABEL,
   PasswordField,
 } from "@/components/auth/AuthShell";
@@ -142,14 +141,15 @@ export default function SignupPage() {
             className={cn(
               "h-11 w-full",
               BTN_PRIMARY,
-              "disabled:pointer-events-auto disabled:cursor-not-allowed"
+              "shadow-[0_0_20px_rgba(139,92,246,0.30)]",
+              "disabled:pointer-events-auto disabled:cursor-not-allowed disabled:opacity-40"
             )}
           >
             Continue
             <CtaArrow />
           </Button>
 
-          <p className="text-xs text-zinc-500">
+          <p className="whitespace-nowrap text-[11px] text-zinc-500">
             By continuing you agree to the{" "}
             <Link href="#" className="underline hover:text-zinc-300">
               Terms
@@ -158,7 +158,6 @@ export default function SignupPage() {
             <Link href="#" className="underline hover:text-zinc-300">
               Privacy Policy
             </Link>
-            .
           </p>
         </form>
       ) : (
@@ -201,7 +200,8 @@ export default function SignupPage() {
               className={cn(
                 "h-11 flex-1",
                 BTN_PRIMARY,
-                "disabled:pointer-events-auto disabled:cursor-not-allowed"
+                "shadow-[0_0_20px_rgba(139,92,246,0.30)]",
+                "disabled:pointer-events-auto disabled:cursor-not-allowed disabled:opacity-40"
               )}
             >
               {register.isPending ? (

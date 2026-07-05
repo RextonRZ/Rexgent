@@ -100,7 +100,8 @@ export default function LoginPage() {
           className={cn(
             "h-11 w-full",
             BTN_PRIMARY,
-            "disabled:pointer-events-auto disabled:cursor-not-allowed"
+            "shadow-[0_0_20px_rgba(139,92,246,0.30)]",
+            "disabled:pointer-events-auto disabled:cursor-not-allowed disabled:opacity-40"
           )}
         >
           {login.isPending ? (
