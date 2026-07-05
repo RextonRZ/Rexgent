@@ -27,7 +27,7 @@ export default function ProjectLayout({
               <img
                 src="/rexgent_wordmark.png"
                 alt="Rexgent"
-                className="h-5 w-auto"
+                className="h-4 w-auto"
               />
             </Link>
 

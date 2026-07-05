@@ -49,7 +49,7 @@ function ProjectsHub() {
             <img
               src="/rexgent_wordmark.png"
               alt="Rexgent"
-              className="h-6 w-auto"
+              className="h-4 w-auto"
             />
           </Link>
           <div className="flex items-center gap-4">

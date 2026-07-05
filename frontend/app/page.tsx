@@ -41,7 +41,7 @@ export default function LandingPage() {
           <img
             src="/rexgent_wordmark.png"
             alt="Rexgent"
-            className="h-6 w-auto"
+            className="h-4 w-auto"
           />
           <nav className="flex items-center gap-3">
             {isAuthenticated ? (
