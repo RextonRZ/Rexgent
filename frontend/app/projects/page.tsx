@@ -1,8 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Clapperboard,
+  LayoutGrid,
+  List,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,40 +17,192 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { BTN_PRIMARY, CtaArrow } from "@/components/ui/cta";
 import { NewProjectModal } from "@/components/home/NewProjectModal";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { UserMenu } from "@/components/auth/UserMenu";
+import { RecapShelf } from "@/components/dashboard/RecapShelf";
+import {
+  NewProjectTile,
+  ProjectCard,
+  ProjectRow,
+  RenameDialog,
+  statusOf,
+  type ProjectAction,
+} from "@/components/dashboard/ProjectCards";
+import { PosterPicker } from "@/components/dashboard/PosterPicker";
 import { Skeleton } from "@/components/shared/Skeleton";
-import { useProjects, useDeleteProject } from "@/hooks/useProjects";
+import { cn } from "@/lib/utils";
+import {
+  useDeleteProject,
+  useDuplicateProject,
+  useProjectsOverview,
+} from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
-import type { Project } from "@/lib/types";
+import type { ProjectOverviewItem } from "@/lib/types";
 
-const STATUS_TONE: Record<string, string> = {
-  draft: "text-muted-foreground",
-  complete: "text-ok",
+const VIEW_KEY = "rx.dashboard.view";
+
+const SORTS = [
+  { value: "edited", label: "Recently edited" },
+  { value: "newest", label: "Newest" },
+  { value: "az", label: "A–Z" },
+  { value: "spent", label: "Budget spent" },
+  { value: "status", label: "Status" },
+];
+
+const STATUS_ORDER: Record<string, number> = {
+  generating: 0,
+  draft: 1,
+  complete: 2,
 };
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1 text-xs capitalize transition-colors",
+        active
+          ? "border-violet-500 bg-violet-500/10 text-violet-300"
+          : "border-white/10 text-zinc-400 hover:border-white/25 hover:text-zinc-300"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
 
 export default function ProjectsPage() {
   return (
     <AuthGate>
-      <ProjectsHub />
+      <Dashboard />
     </AuthGate>
   );
 }
 
-function ProjectsHub() {
-  const { data, isLoading } = useProjects();
+function Dashboard() {
+  const router = useRouter();
+  const { data, isLoading } = useProjectsOverview();
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
-  const projects = data?.projects || [];
+  const deleteProject = useDeleteProject();
+  const duplicateProject = useDuplicateProject();
+
+  const [newOpen, setNewOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectOverviewItem | null>(null);
+  const [renameTarget, setRenameTarget] = useState<ProjectOverviewItem | null>(null);
+  const [posterTarget, setPosterTarget] = useState<ProjectOverviewItem | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("edited");
+  const [genres, setGenres] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [view, setView] = useState<"grid" | "list">("grid");
+
+  // view preference survives reloads; read after mount to match SSR
+  useEffect(() => {
+    const saved = window.localStorage.getItem(VIEW_KEY);
+    if (saved === "grid" || saved === "list") setView(saved);
+  }, []);
+  const changeView = (v: "grid" | "list") => {
+    setView(v);
+    window.localStorage.setItem(VIEW_KEY, v);
+  };
+
+  const projects = useMemo(() => data?.projects ?? [], [data]);
   const firstName = user?.full_name?.split(" ")[0];
+
+  const allGenres = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          projects
+            .map((p) => p.genre?.toLowerCase().trim())
+            .filter((g): g is string => Boolean(g))
+        )
+      ).sort(),
+    [projects]
+  );
+  const allStatuses = useMemo(
+    () => Array.from(new Set(projects.map(statusOf))).sort(),
+    [projects]
+  );
+
+  const filtered = useMemo(() => {
+    let list = projects;
+    const q = search.trim().toLowerCase();
+    if (q) list = list.filter((p) => p.title.toLowerCase().includes(q));
+    if (genres.length)
+      list = list.filter((p) => genres.includes(p.genre?.toLowerCase() ?? ""));
+    if (statuses.length) list = list.filter((p) => statuses.includes(statusOf(p)));
+
+    const sorted = [...list];
+    switch (sort) {
+      case "newest":
+        sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+        break;
+      case "az":
+        sorted.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case "spent":
+        sorted.sort((a, b) => b.spent_usd - a.spent_usd);
+        break;
+      case "status":
+        sorted.sort(
+          (a, b) => STATUS_ORDER[statusOf(a)] - STATUS_ORDER[statusOf(b)]
+        );
+        break;
+      default: // recently edited — the API order
+        sorted.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    }
+    return sorted;
+  }, [projects, search, sort, genres, statuses]);
+
+  const filtersActive = genres.length > 0 || statuses.length > 0 || search !== "";
+
+  const toggle = (list: string[], set: (v: string[]) => void, value: string) =>
+    set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
+
+  const handleAction = (action: ProjectAction, project: ProjectOverviewItem) => {
+    switch (action) {
+      case "open":
+        router.push(`/projects/${project.id}/script`);
+        break;
+      case "poster":
+        setPosterTarget(project);
+        break;
+      case "rename":
+        setRenameTarget(project);
+        break;
+      case "duplicate":
+        duplicateProject.mutate(project.id);
+        break;
+      case "delete":
+        setDeleteTarget(project);
+        break;
+    }
+  };
 
   return (
     <main className="min-h-screen">
-      {/* top nav */}
       <header className="sticky top-0 z-40 glass border-b hairline">
-        <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
+        <div className="mx-auto max-w-7xl px-6 h-14 flex items-center justify-between">
           <Link href="/">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -52,144 +211,202 @@ function ProjectsHub() {
               className="h-4 w-auto"
             />
           </Link>
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              AI Showrunner · Qwen Cloud
-            </span>
-            <UserMenu />
-          </div>
+          <UserMenu />
         </div>
       </header>
 
-      {/* hero */}
-      <section className="mx-auto max-w-6xl px-6 pt-16 pb-10 text-center">
-        <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-3">
-          {firstName ? `Welcome back, ${firstName}` : "One premise. A whole drama."}
-        </p>
-        <h1 className="text-4xl sm:text-6xl font-bold tracking-tight">
-          Direct films with a <span className="text-primary">crew of agents</span>.
-        </h1>
-        <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-          Type a story idea. Rexgent writes it, casts it, storyboards it,
-          generates it, and hands you back a finished short drama — on budget.
-        </p>
-        <div className="mt-8 flex items-center justify-center gap-3">
-          <Button size="lg" onClick={() => setOpen(true)}>
-            ⚡ Start a new drama
-          </Button>
-        </div>
-      </section>
+      <div className="mx-auto max-w-7xl space-y-10 px-6 py-8">
+        <RecapShelf
+          overview={data}
+          userName={firstName}
+          onNewDrama={() => setNewOpen(true)}
+        />
 
-      {/* projects */}
-      <section className="mx-auto max-w-6xl px-6 pb-24">
-        <h2 className="text-sm font-medium text-muted-foreground mb-4">
-          Your dramas
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <button
-            onClick={() => setOpen(true)}
-            className="group rounded-xl border border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all min-h-[160px] flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
-          >
-            <span className="text-3xl">+</span>
-            <span className="text-sm font-medium">Start new project</span>
-            <span className="text-[11px]">Initialize AI Showrunner</span>
-          </button>
-
-          {isLoading
-            ? Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="min-h-[160px] rounded-xl" />
-              ))
-            : projects.map((p) => (
-                <ProjectCard
-                  key={p.id}
-                  project={p}
-                  onDelete={() => setDeleteTarget(p)}
+        <section>
+          {/* toolbar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-lg font-semibold tracking-tight">Your dramas</h2>
+            <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300">
+              {filtered.length}
+            </span>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-500" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search dramas"
+                  className="h-9 w-64 rounded-lg border border-white/10 bg-zinc-900 pl-8 pr-3 text-sm placeholder:text-zinc-500 outline-none transition-colors focus:border-violet-500/40 focus:ring-2 focus:ring-violet-500/25"
                 />
+              </div>
+              <Select value={sort} onValueChange={(v) => v && setSort(v)}>
+                <SelectTrigger className="h-9 w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORTS.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex overflow-hidden rounded-lg border border-white/10">
+                {(
+                  [
+                    ["grid", LayoutGrid],
+                    ["list", List],
+                  ] as const
+                ).map(([v, Icon]) => (
+                  <button
+                    key={v}
+                    aria-label={`${v} view`}
+                    onClick={() => changeView(v)}
+                    className={cn(
+                      "flex h-9 w-9 items-center justify-center transition-colors",
+                      view === v
+                        ? "bg-violet-500/15 text-violet-300"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    )}
+                  >
+                    <Icon className="size-4" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* filter chips */}
+          {(allGenres.length > 0 || allStatuses.length > 0) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {allGenres.map((g) => (
+                <Chip
+                  key={g}
+                  active={genres.includes(g)}
+                  onClick={() => toggle(genres, setGenres, g)}
+                >
+                  {g}
+                </Chip>
               ))}
-        </div>
+              {allGenres.length > 0 && allStatuses.length > 0 && (
+                <span className="h-4 w-px bg-white/10" />
+              )}
+              {allStatuses.map((s) => (
+                <Chip
+                  key={s}
+                  active={statuses.includes(s)}
+                  onClick={() => toggle(statuses, setStatuses, s)}
+                >
+                  {s}
+                </Chip>
+              ))}
+              {filtersActive && (
+                <button
+                  onClick={() => {
+                    setGenres([]);
+                    setStatuses([]);
+                    setSearch("");
+                  }}
+                  className="text-xs text-zinc-500 underline-offset-2 transition-colors hover:text-zinc-300 hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
 
-        {!isLoading && projects.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground mt-10">
-            Your first drama is one idea away.
-          </p>
-        )}
-      </section>
+          {/* content */}
+          <div className="mt-5">
+            {isLoading ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="min-h-[220px] rounded-xl" />
+                ))}
+              </div>
+            ) : projects.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-20 text-center">
+                <Clapperboard className="size-8 text-zinc-600" />
+                <p className="font-medium">No dramas yet</p>
+                <p className="text-sm text-muted-foreground">
+                  Type one premise and watch a studio go to work.
+                </p>
+                <Button
+                  onClick={() => setNewOpen(true)}
+                  className={cn("mt-2 h-10", BTN_PRIMARY)}
+                >
+                  Start your first drama
+                  <CtaArrow />
+                </Button>
+              </div>
+            ) : view === "grid" ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <NewProjectTile onClick={() => setNewOpen(true)} />
+                {filtered.map((p) => (
+                  <ProjectCard
+                    key={p.id}
+                    project={p}
+                    previewing={previewId === p.id}
+                    onPreview={setPreviewId}
+                    onAction={handleAction}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filtered.map((p) => (
+                  <ProjectRow key={p.id} project={p} onAction={handleAction} />
+                ))}
+              </div>
+            )}
+            {!isLoading && projects.length > 0 && filtered.length === 0 && (
+              <p className="mt-8 text-center text-sm text-muted-foreground">
+                Nothing matches those filters.
+              </p>
+            )}
+          </div>
+        </section>
+      </div>
 
-      <NewProjectModal open={open} onOpenChange={setOpen} />
+      <NewProjectModal open={newOpen} onOpenChange={setNewOpen} />
+      <RenameDialog
+        project={renameTarget}
+        onOpenChange={(v) => !v && setRenameTarget(null)}
+      />
+      <PosterPicker
+        project={posterTarget}
+        onOpenChange={(v) => !v && setPosterTarget(null)}
+      />
       <DeleteProjectModal
         project={deleteTarget}
-        onOpenChange={(v) => {
-          if (!v) setDeleteTarget(null);
+        onDelete={async (id) => {
+          await deleteProject.mutateAsync(id);
+          setDeleteTarget(null);
         }}
+        pending={deleteProject.isPending}
+        error={
+          deleteProject.isError
+            ? (deleteProject.error as Error).message
+            : null
+        }
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
       />
     </main>
   );
 }
 
-function ProjectCard({
-  project,
-  onDelete,
-}: {
-  project: Project;
-  onDelete: () => void;
-}) {
-  return (
-    <Link href={`/projects/${project.id}/script`}>
-      <div className="group relative rounded-xl border hairline bg-card hover:border-primary/40 transition-all overflow-hidden min-h-[160px] flex flex-col">
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDelete();
-          }}
-          title="Delete drama"
-          aria-label={`Delete ${project.title}`}
-          className="absolute top-2 right-2 z-10 rounded-md p-1.5 text-muted-foreground/70 opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-        <div className="relative h-24 bg-gradient-to-br from-primary/20 via-secondary to-hh/10 flex items-center justify-center">
-          <span className="text-[10px] uppercase tracking-widest text-foreground/70">
-            {project.genre || "drama"}
-          </span>
-        </div>
-        <div className="p-4 flex-1 flex flex-col justify-between">
-          <p className="font-medium line-clamp-2 text-sm">{project.title}</p>
-          <div className="flex items-center gap-1.5 mt-2">
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                project.status === "complete" ? "bg-ok" : "bg-warn"
-              }`}
-            />
-            <span
-              className={`text-[11px] capitalize ${
-                STATUS_TONE[project.status] || "text-muted-foreground"
-              }`}
-            >
-              {project.status}
-            </span>
-          </div>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
 function DeleteProjectModal({
   project,
+  onDelete,
+  pending,
+  error,
   onOpenChange,
 }: {
-  project: Project | null;
+  project: ProjectOverviewItem | null;
+  onDelete: (id: string) => void;
+  pending: boolean;
+  error: string | null;
   onOpenChange: (v: boolean) => void;
 }) {
-  const deleteProject = useDeleteProject();
-
-  const handleDelete = async () => {
-    if (!project) return;
-    await deleteProject.mutateAsync(project.id);
-    onOpenChange(false);
-  };
-
   return (
     <Dialog open={Boolean(project)} onOpenChange={onOpenChange}>
       <DialogContent className="glass sm:max-w-md">
@@ -198,32 +415,28 @@ function DeleteProjectModal({
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <p className="text-sm text-muted-foreground">
-            <span className="text-foreground font-medium">
+            <span className="font-medium text-foreground">
               “{project?.title}”
             </span>{" "}
             and everything inside it — script, characters, storyboard, and
             generated clips — will be permanently deleted. This cannot be
             undone.
           </p>
-          {deleteProject.isError && (
-            <p className="text-sm text-destructive">
-              Delete failed: {(deleteProject.error as Error).message}
-            </p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={deleteProject.isPending}
+              disabled={pending}
             >
               Cancel
             </Button>
             <Button
               variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteProject.isPending}
+              onClick={() => project && onDelete(project.id)}
+              disabled={pending}
             >
-              {deleteProject.isPending ? (
+              {pending ? (
                 "Deleting…"
               ) : (
                 <>

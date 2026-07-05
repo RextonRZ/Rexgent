@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import type { Project } from "@/lib/types";
+import type { Project, ProjectsOverview } from "@/lib/types";
 
 export function useProjects() {
   return useQuery<{ projects: Project[] }>({
@@ -20,6 +20,75 @@ export function useProject(projectId: string) {
       return data;
     },
     enabled: Boolean(projectId),
+  });
+}
+
+export function useProjectsOverview() {
+  return useQuery<ProjectsOverview>({
+    queryKey: ["projects", "overview"],
+    queryFn: async () => {
+      const { data } = await api.get("/api/projects/overview");
+      return data;
+    },
+  });
+}
+
+export function useUpdateProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      projectId: string;
+      title?: string;
+      poster_url?: string;
+    }) => {
+      const { projectId, ...body } = params;
+      const { data } = await api.patch<Project>(
+        `/api/projects/${projectId}`,
+        body
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+export function useDuplicateProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (projectId: string) => {
+      const { data } = await api.post<Project>(
+        `/api/projects/${projectId}/duplicate`
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+// Poster capture happens server-side (ffmpeg): OSS serves clips without CORS
+// headers, so drawing the video to a canvas in the browser taints it and
+// toBlob() throws. The backend extracts the exact frame instead.
+export function useSetPosterFromClip() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      projectId: string;
+      clipUrl: string;
+      timestamp: number;
+    }) => {
+      const { data } = await api.post<{ poster_url: string }>(
+        `/api/projects/${params.projectId}/poster/from_clip`,
+        { clip_url: params.clipUrl, timestamp: params.timestamp }
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
   });
 }
 

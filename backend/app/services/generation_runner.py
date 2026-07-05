@@ -286,6 +286,9 @@ class GenerationRunner:
                 # DashScope URLs are signed and expire (~24h) — keep our own copy
                 clip_url = await asyncio.to_thread(
                     persist_clip_url, pid, f"shot_{shot.id}", clip_url)
+                # TODO(dashboard): if the project has no poster_url yet, extract a
+                # default poster here (frame_sampler.extract_frame_at(clip_url, 2.0)
+                # -> OSS -> project.poster_url) so cards never ship empty.
 
                 emit("continuity.scoring.started", {"shot_id": str(shot.id)}, pid)
                 guard = await self.continuity.validate(

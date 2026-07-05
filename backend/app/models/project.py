@@ -15,6 +15,7 @@ class Project(Base):
     genre = Column(String(100), nullable=True)
     premise = Column(Text, nullable=True)
     status = Column(String(50), default="draft")
+    poster_url = Column(String(500), nullable=True)
     auto_approve_casting = Column(Boolean, default=False)
     auto_clarify = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -29,6 +29,28 @@ def sample_frames(clip_path_or_url: str, duration: float, count: int = 3) -> lis
     return frames
 
 
+def extract_frame_at(clip_url: str, timestamp: float) -> bytes | None:
+    """Return the frame at `timestamp` seconds as JPEG bytes (or None).
+    ffmpeg reads http(s) URLs directly — no download step needed. This is the
+    server-side poster capture: OSS serves clips without CORS headers, so a
+    browser canvas capture would be tainted and unreadable."""
+    out = tempfile.mktemp(suffix=".jpg")
+    cmd = [
+        "ffmpeg", "-y", "-ss", str(max(0.0, timestamp)), "-i", clip_url,
+        "-vframes", "1", "-q:v", "2", out,
+    ]
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=30)
+        if os.path.exists(out):
+            with open(out, "rb") as f:
+                data = f.read()
+            os.unlink(out)
+            return data
+    except Exception:
+        pass
+    return None
+
+
 def extract_last_frame(clip_url: str) -> bytes | None:
     """Return the final frame of a clip as JPEG bytes (or None on failure)."""
     out = tempfile.mktemp(suffix=".jpg")
