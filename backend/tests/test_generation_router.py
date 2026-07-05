@@ -46,6 +46,18 @@ class FakeDB:
         return FakeQuery([])
 
 
+def test_url_expired_detects_dead_signed_links():
+    import time
+    from app.routers.generation import _url_expired
+    past = int(time.time()) - 100
+    future = int(time.time()) + 3600
+    assert _url_expired(f"http://dash/x.mp4?Expires={past}") is True
+    assert _url_expired(f"http://dash/x.mp4?Expires={future}") is False
+    # our OSS re-hosted clips have no Expires param -> never treated as expired
+    assert _url_expired("https://rexgent-assets.oss/x.mp4") is False
+    assert _url_expired(None) is False
+
+
 def test_job_clips_include_cost_usd_for_wan_clip():
     job_id = uuid.uuid4()
     shot_id = uuid.uuid4()

@@ -92,11 +92,11 @@ export function AutoRunPanel({
   };
 
   return (
-    <Card className="[--card-spacing:1.25rem]">
-      <CardHeader>
+    <Card className="py-6">
+      <CardHeader className="px-6">
         <CardTitle>Full Auto — One Premise → Whole Drama</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="px-6 space-y-5">
         <p className="text-sm text-muted-foreground">
           The agent autonomously writes the script, judges it (and self-corrects
           if weak), extracts characters, storyboards, and allocates the budget —

@@ -1,3 +1,5 @@
+import re
+import time
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -51,6 +53,14 @@ async def get_job_clips(job_id: str, db: Session = Depends(get_db)):
     return {"clips": results}
 
 
+def _url_expired(url: str | None) -> bool:
+    """Old clips stored DashScope's signed URLs, which die after ~24h. Their
+    Expires=<unix ts> query param tells us which are already dead — hide those
+    instead of rendering broken players. (Our OSS re-hosted clips never match.)"""
+    m = re.search(r"[?&]Expires=(\d+)", url or "")
+    return bool(m) and int(m.group(1)) < time.time()
+
+
 @router.get("/project/{project_id}/clips")
 async def project_clips(project_id: str, db: Session = Depends(get_db)):
     """All playable clips for a project across ALL jobs. The per-job route breaks
@@ -64,6 +74,7 @@ async def project_clips(project_id: str, db: Session = Depends(get_db)):
              .filter(GeneratedClip.job_id.in_(job_ids), GeneratedClip.url.isnot(None))
              .order_by(GeneratedClip.created_at.desc())
              .all())
+    clips = [c for c in clips if not _url_expired(c.url)]
 
     shot_ids = {c.shot_id for c in clips if c.shot_id}
     shots = db.query(Shot).filter(Shot.id.in_(shot_ids)).all() if shot_ids else []

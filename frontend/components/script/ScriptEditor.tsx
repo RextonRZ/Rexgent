@@ -77,6 +77,8 @@ export function ScriptEditor({
             fontSize: 14,
             lineNumbers: "on",
             scrollBeyondLastLine: false,
+            // air between the text and the editor frame
+            padding: { top: 16, bottom: 16 },
           }}
         />
       </div>

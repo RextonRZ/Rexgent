@@ -42,7 +42,7 @@ export default function ProjectLayout({
 
         {/* content + right dock: the dock reflows the page, never overlaps it */}
         <div className="flex items-start gap-4">
-          <main className="flex-1 min-w-0 px-4 py-8">
+          <main className="flex-1 min-w-0 px-6 lg:px-10 py-8">
             <div className="mx-auto max-w-7xl">{children}</div>
           </main>
           <DockRail projectId={params.id} />
