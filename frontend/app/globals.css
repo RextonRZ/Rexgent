@@ -102,3 +102,33 @@
     transform: translateX(0);
   }
 }
+
+/* features bento — identity scan line sweeping the mini frame strip */
+@keyframes scan-sweep {
+  from {
+    left: 0%;
+  }
+  to {
+    left: calc(100% - 2px);
+  }
+}
+/* per-frame verification check: pops as the line passes, holds, resets */
+@keyframes scan-check {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  5% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  9% {
+    transform: scale(1);
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}

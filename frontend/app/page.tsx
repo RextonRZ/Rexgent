@@ -6,7 +6,15 @@ import { ArrowRight, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FilmstripHero } from "@/components/landing/FilmstripHero";
 import { ShowreelGallery } from "@/components/landing/ShowreelGallery";
+import { FeatureBento } from "@/components/landing/FeatureBento";
 import { useAuth } from "@/hooks/useAuth";
+
+function scrollToReel() {
+  const el = document.getElementById("reel");
+  if (!el) return;
+  const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+}
 
 // One button system for the whole page. Flat brand violet, shared radius and
 // timing; translate animations only when motion is allowed.
@@ -30,39 +38,6 @@ function CtaArrow() {
     <ArrowRight className="size-4 transition-transform duration-200 motion-safe:group-hover/button:translate-x-[3px]" />
   );
 }
-
-const WOWS = [
-  {
-    k: "01",
-    title: "One premise, a whole drama",
-    body: "An autonomous agent writes the script, judges its own draft, casts the characters, storyboards every scene and reports back. You watch a studio work for you.",
-  },
-  {
-    k: "02",
-    title: "Faces that never drift",
-    body: "Upload one reference photo. Every clip is verified against a real facial embedding, and weak takes retry themselves until the face holds.",
-  },
-  {
-    k: "03",
-    title: "Wardrobe built in",
-    body: "Every character gets costume plates for each look in the story, so the same person walks through every scene wearing the right outfit.",
-  },
-  {
-    k: "04",
-    title: "Clone your voice",
-    body: "Read one short passage into your mic and your characters speak with your voice, or pick from a catalog of studio presets.",
-  },
-  {
-    k: "05",
-    title: "You stay the director",
-    body: "Edit the script, swap faces, redo plates, delete shots, regenerate clips. The agent runs the pipeline while you keep creative control.",
-  },
-  {
-    k: "06",
-    title: "The budget is a feature",
-    body: "A live meter spends premium generation only on the shots that matter, turning a hard limit into a smart allocator.",
-  },
-];
 
 export default function LandingPage() {
   const { isAuthenticated: authed } = useAuth();
@@ -140,17 +115,7 @@ export default function LandingPage() {
               <Button
                 variant="outline"
                 className={`h-12 text-base ${BTN_SECONDARY}`}
-                onClick={() => {
-                  const el = document.getElementById("reel");
-                  if (!el) return;
-                  const smooth = !window.matchMedia(
-                    "(prefers-reduced-motion: reduce)"
-                  ).matches;
-                  el.scrollIntoView({
-                    behavior: smooth ? "smooth" : "auto",
-                    block: "start",
-                  });
-                }}
+                onClick={scrollToReel}
               >
                 <Play className="size-3.5" />
                 Watch the reel
@@ -165,28 +130,89 @@ export default function LandingPage() {
 
       <ShowreelGallery />
 
-      {/* wow moments */}
-      <section className="mx-auto max-w-6xl px-6 pb-28">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {WOWS.map((w) => (
-            <div
-              key={w.k}
-              className="rounded-xl border hairline bg-card p-6 hover:border-primary/40 transition-all"
-            >
-              <span className="text-xs font-mono text-primary/70">{w.k}</span>
-              <h3 className="mt-3 font-semibold">{w.title}</h3>
-              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                {w.body}
-              </p>
-            </div>
+      {/* wow moments — bento grid */}
+      <FeatureBento />
+
+      {/* final CTA */}
+      <section className="relative overflow-hidden py-32 text-center">
+        {/* one faint echo of the film sprocket motif behind the heading */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center gap-4 overflow-hidden opacity-[0.07]"
+        >
+          {Array.from({ length: 120 }).map((_, i) => (
+            <span
+              key={i}
+              className="h-[9px] w-[7px] shrink-0 rounded-[2px] bg-zinc-400"
+            />
           ))}
+        </div>
+        <div className="relative mx-auto max-w-2xl px-6">
+          <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-4">
+            Ready when you are
+          </p>
+          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">
+            Your first drama is one idea away.
+          </h2>
+          <p className="mt-4 text-muted-foreground">
+            Type a premise. Watch a studio go to work.
+          </p>
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <Link href={isAuthenticated ? "/projects" : "/signup"}>
+              <Button
+                className={`h-12 text-base ${BTN_PRIMARY} shadow-[0_0_24px_rgba(139,92,246,0.35)]`}
+              >
+                {isAuthenticated ? "Open your studio" : "Start directing"}
+                <CtaArrow />
+              </Button>
+            </Link>
+            <Button
+              variant="outline"
+              className={`h-12 text-base ${BTN_SECONDARY}`}
+              onClick={scrollToReel}
+            >
+              <Play className="size-3.5" />
+              Watch the reel
+            </Button>
+          </div>
         </div>
       </section>
 
-      <footer className="border-t hairline">
-        <div className="mx-auto max-w-7xl px-6 h-14 flex items-center justify-between text-xs text-muted-foreground">
-          <span>Rexgent — AI Drama Production</span>
-          <span>Built on Qwen Cloud · Alibaba Cloud</span>
+      <footer className="border-t border-white/[0.08]">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-6 px-6 py-10 text-xs text-muted-foreground md:flex-row md:justify-between">
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/rexgent_wordmark.png"
+              alt="Rexgent"
+              className="h-4 w-auto"
+            />
+            <span>AI Drama Production</span>
+          </div>
+          <nav className="flex items-center gap-6">
+            <a
+              href="#features"
+              className="transition-colors hover:text-foreground"
+            >
+              How it works
+            </a>
+            <a href="#reel" className="transition-colors hover:text-foreground">
+              Reel
+            </a>
+            <a href="#" className="transition-colors hover:text-foreground">
+              Pricing
+            </a>
+            <a
+              href="mailto:ooiruizhe@gmail.com"
+              className="transition-colors hover:text-foreground"
+            >
+              Contact
+            </a>
+          </nav>
+          <div className="flex flex-col items-center gap-1 md:items-end">
+            <span>Built on Qwen Cloud · Alibaba Cloud</span>
+            <span>© 2026 Rexgent</span>
+          </div>
         </div>
       </footer>
     </main>
