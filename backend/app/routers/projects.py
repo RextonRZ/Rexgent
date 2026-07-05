@@ -42,6 +42,22 @@ async def list_projects(
     return {"projects": [ProjectResponse.model_validate(p) for p in projects]}
 
 
+@router.delete("/{project_id}")
+async def delete_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.user_id != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized to delete this project")
+    db.delete(project)
+    db.commit()
+    return {"deleted": True, "project_id": project_id}
+
+
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
     project_id: str,

@@ -2,12 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { NewProjectModal } from "@/components/home/NewProjectModal";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { Skeleton } from "@/components/shared/Skeleton";
-import { useProjects } from "@/hooks/useProjects";
+import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
 import type { Project } from "@/lib/types";
 
@@ -28,6 +35,7 @@ function ProjectsHub() {
   const { data, isLoading } = useProjects();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const projects = data?.projects || [];
   const firstName = user?.full_name?.split(" ")[0];
 
@@ -86,7 +94,13 @@ function ProjectsHub() {
             ? Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="min-h-[160px] rounded-xl" />
               ))
-            : projects.map((p) => <ProjectCard key={p.id} project={p} />)}
+            : projects.map((p) => (
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  onDelete={() => setDeleteTarget(p)}
+                />
+              ))}
         </div>
 
         {!isLoading && projects.length === 0 && (
@@ -97,14 +111,38 @@ function ProjectsHub() {
       </section>
 
       <NewProjectModal open={open} onOpenChange={setOpen} />
+      <DeleteProjectModal
+        project={deleteTarget}
+        onOpenChange={(v) => {
+          if (!v) setDeleteTarget(null);
+        }}
+      />
     </main>
   );
 }
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({
+  project,
+  onDelete,
+}: {
+  project: Project;
+  onDelete: () => void;
+}) {
   return (
     <Link href={`/projects/${project.id}/script`}>
-      <div className="group rounded-xl border hairline bg-card hover:border-primary/40 transition-all overflow-hidden min-h-[160px] flex flex-col">
+      <div className="group relative rounded-xl border hairline bg-card hover:border-primary/40 transition-all overflow-hidden min-h-[160px] flex flex-col">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDelete();
+          }}
+          title="Delete drama"
+          aria-label={`Delete ${project.title}`}
+          className="absolute top-2 right-2 z-10 rounded-md p-1.5 text-muted-foreground/70 opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
         <div className="relative h-24 bg-gradient-to-br from-primary/20 via-secondary to-hh/10 flex items-center justify-center">
           <span className="text-[10px] uppercase tracking-widest text-foreground/70">
             {project.genre || "drama"}
@@ -129,5 +167,69 @@ function ProjectCard({ project }: { project: Project }) {
         </div>
       </div>
     </Link>
+  );
+}
+
+function DeleteProjectModal({
+  project,
+  onOpenChange,
+}: {
+  project: Project | null;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const deleteProject = useDeleteProject();
+
+  const handleDelete = async () => {
+    if (!project) return;
+    await deleteProject.mutateAsync(project.id);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={Boolean(project)} onOpenChange={onOpenChange}>
+      <DialogContent className="glass sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-xl">Delete this drama?</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <p className="text-sm text-muted-foreground">
+            <span className="text-foreground font-medium">
+              “{project?.title}”
+            </span>{" "}
+            and everything inside it — script, characters, storyboard, and
+            generated clips — will be permanently deleted. This cannot be
+            undone.
+          </p>
+          {deleteProject.isError && (
+            <p className="text-sm text-destructive">
+              Delete failed: {(deleteProject.error as Error).message}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={deleteProject.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleteProject.isPending}
+            >
+              {deleteProject.isPending ? (
+                "Deleting…"
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Delete drama
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
