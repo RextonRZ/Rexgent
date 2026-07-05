@@ -132,3 +132,27 @@
     opacity: 0;
   }
 }
+/* agent pipeline chip lighting up in sequence */
+@keyframes step-glow {
+  0%,
+  30%,
+  100% {
+    background-color: rgb(255 255 255 / 0.05);
+    color: rgb(161 161 170);
+  }
+  6%,
+  22% {
+    background-color: rgb(139 92 246 / 0.25);
+    color: rgb(196 181 253);
+  }
+}
+/* voice clone equalizer bars */
+@keyframes voice-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}

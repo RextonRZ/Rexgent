@@ -1,40 +1,49 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check } from "lucide-react";
+import {
+  Check,
+  Mic,
+  Pencil,
+  RefreshCw,
+  Shirt,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 
+// Numbered in reading order: large row first, then the compact row.
 const WOWS = [
   {
     k: "01",
-    title: "One premise, a whole drama",
-    body: "An autonomous agent writes the script, judges its own draft, casts the characters, storyboards every scene and reports back. You watch a studio work for you.",
-  },
-  {
-    k: "02",
     title: "Faces that never drift",
     body: "Upload one reference photo. Every clip is verified against a real facial embedding, and weak takes retry themselves until the face holds.",
   },
   {
+    k: "02",
+    title: "The budget is a feature",
+    body: "A live meter spends premium generation only on the shots that matter, turning a hard limit into a smart allocator.",
+  },
+  {
     k: "03",
+    title: "One premise, a whole drama",
+    body: "An autonomous agent writes the script, judges its own draft, casts the characters, storyboards every scene and reports back. You watch a studio work for you.",
+  },
+  {
+    k: "04",
     title: "Wardrobe built in",
     body: "Every character gets costume plates for each look in the story, so the same person walks through every scene wearing the right outfit.",
   },
   {
-    k: "04",
+    k: "05",
     title: "Clone your voice",
     body: "Read one short passage into your mic and your characters speak with your voice, or pick from a catalog of studio presets.",
   },
   {
-    k: "05",
+    k: "06",
     title: "You stay the director",
     body: "Edit the script, swap faces, redo plates, delete shots, regenerate clips. The agent runs the pipeline while you keep creative control.",
-  },
-  {
-    k: "06",
-    title: "The budget is a feature",
-    body: "A live meter spends premium generation only on the shots that matter, turning a hard limit into a smart allocator.",
   },
 ];
 
@@ -235,30 +244,133 @@ function BudgetMeterMini({ reduced }: { reduced: boolean }) {
   );
 }
 
+/** Agent pipeline chips lighting up in sequence: write, judge, cast, board. */
+function PipelineTrace({ reduced }: { reduced: boolean }) {
+  const steps = ["Write", "Judge", "Cast", "Board"];
+  return (
+    <div className="mt-5 flex flex-wrap items-center gap-1.5">
+      {steps.map((s, i) => (
+        <span
+          key={s}
+          className={cn(
+            "rounded-full px-2.5 py-1 text-[10px] font-medium",
+            reduced && i === 0
+              ? "bg-violet-500/25 text-violet-300"
+              : "bg-white/5 text-zinc-400",
+            !reduced && "animate-[step-glow_4.8s_linear_infinite]"
+          )}
+          style={!reduced ? { animationDelay: `${i * 1.2}s` } : undefined}
+        >
+          {s}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Same face, three looks: outfit plate chips with the active one lit. */
+function WardrobeRow() {
+  return (
+    <div className="mt-5 flex items-center gap-2">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-md border",
+            i === 1
+              ? "border-violet-400/50 bg-violet-500/15 text-violet-300"
+              : "border-white/10 bg-white/5 text-zinc-400"
+          )}
+        >
+          <Shirt className="size-3.5" />
+        </span>
+      ))}
+      <span className="ml-1 text-[10px] text-muted-foreground">
+        1 face · 3 looks
+      </span>
+    </div>
+  );
+}
+
+/** Mic + a small equalizer that breathes. */
+function VoiceWave({ reduced }: { reduced: boolean }) {
+  const heights = [6, 10, 15, 9, 17, 7, 12, 18, 10, 14, 6, 11];
+  return (
+    <div className="mt-5 flex items-center gap-3">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-400">
+        <Mic className="size-3.5" />
+      </span>
+      <div className="flex h-5 items-center gap-[3px]">
+        {heights.map((h, i) => (
+          <span
+            key={i}
+            className={cn(
+              "w-[3px] rounded-full bg-violet-400/70",
+              !reduced && "animate-[voice-bar_1.3s_ease-in-out_infinite]"
+            )}
+            style={{
+              height: `${h}px`,
+              animationDelay: !reduced ? `${i * 0.09}s` : undefined,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The director's toolbar: edit, recast, regenerate, cut. */
+function DirectorTools() {
+  const tools = [Pencil, UserRound, RefreshCw, Trash2];
+  return (
+    <div className="mt-5 flex items-center gap-2">
+      {tools.map((Icon, i) => (
+        <span
+          key={i}
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-400 transition-colors group-hover:text-zinc-300"
+        >
+          <Icon className="size-3.5" />
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function FeatureBento() {
   const reduced = useReducedMotion();
-  const faces = WOWS[1];
-  const budget = WOWS[5];
-  const compact = [WOWS[0], WOWS[2], WOWS[3], WOWS[4]];
 
   return (
     <section id="features" className="mx-auto max-w-6xl px-6 pb-28">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
         <GlowCard className="md:col-span-7">
-          <CardText {...faces} />
+          <CardText {...WOWS[0]} />
           <FaceScanStrip reduced={reduced} />
         </GlowCard>
 
         <GlowCard className="md:col-span-5">
-          <CardText {...budget} />
+          <CardText {...WOWS[1]} />
           <BudgetMeterMini reduced={reduced} />
         </GlowCard>
 
-        {compact.map((w) => (
-          <GlowCard key={w.k} className="md:col-span-3">
-            <CardText {...w} />
-          </GlowCard>
-        ))}
+        <GlowCard className="md:col-span-3">
+          <CardText {...WOWS[2]} />
+          <PipelineTrace reduced={reduced} />
+        </GlowCard>
+
+        <GlowCard className="md:col-span-3">
+          <CardText {...WOWS[3]} />
+          <WardrobeRow />
+        </GlowCard>
+
+        <GlowCard className="md:col-span-3">
+          <CardText {...WOWS[4]} />
+          <VoiceWave reduced={reduced} />
+        </GlowCard>
+
+        <GlowCard className="md:col-span-3">
+          <CardText {...WOWS[5]} />
+          <DirectorTools />
+        </GlowCard>
       </div>
     </section>
   );
