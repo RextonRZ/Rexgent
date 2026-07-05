@@ -218,7 +218,7 @@ function TimelineNav({
                 active
                   ? cn(
                       vertical ? "h-8" : "w-8",
-                      "scale-105 border-primary/60 bg-gradient-to-b from-violet-500 to-fuchsia-500",
+                      "scale-105 border-primary/60 bg-gradient-to-b from-violet-500 to-purple-500",
                       "shadow-[0_0_14px_hsl(265_85%_66%/0.55)]"
                     )
                   : cn(
