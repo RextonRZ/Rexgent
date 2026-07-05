@@ -3,10 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { AuthShell } from "@/components/auth/AuthShell";
+import { BTN_PRIMARY, BTN_SECONDARY, CtaArrow } from "@/components/ui/cta";
+import {
+  AuthAlert,
+  AuthShell,
+  FIELD,
+  FIELD_ERROR,
+  LABEL,
+  PasswordField,
+} from "@/components/auth/AuthShell";
 import { cn } from "@/lib/utils";
 import { useAuth, useRegister } from "@/hooks/useAuth";
 
@@ -82,23 +89,24 @@ export default function SignupPage() {
       {step === 1 ? (
         <form onSubmit={handleNext} className="space-y-4">
           <div>
-            <Label htmlFor="name" className="text-xs text-muted-foreground">
-              Name <span className="opacity-60">(optional)</span>
-            </Label>
-            <Input
+            <label htmlFor="name" className={LABEL}>
+              Name <span className="text-zinc-500">(optional)</span>
+            </label>
+            <input
               id="name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Ada Director"
-              className="mt-1 bg-background/50"
+              autoComplete="name"
               autoFocus
+              className={FIELD}
             />
           </div>
           <div>
-            <Label htmlFor="email" className="text-xs text-muted-foreground">
+            <label htmlFor="email" className={LABEL}>
               Email
-            </Label>
-            <Input
+            </label>
+            <input
               id="email"
               type="email"
               autoComplete="email"
@@ -106,37 +114,52 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@studio.com"
-              className="mt-1 bg-background/50"
+              className={FIELD}
             />
           </div>
           <div>
-            <Label htmlFor="password" className="text-xs text-muted-foreground">
+            <label htmlFor="password" className={LABEL}>
               Password
-            </Label>
-            <Input
+            </label>
+            <PasswordField
               id="password"
-              type="password"
-              autoComplete="new-password"
-              required
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
+              autoComplete="new-password"
               placeholder="At least 8 characters"
-              className="mt-1 bg-background/50"
+              error={passwordTooShort}
             />
             {passwordTooShort && (
-              <p className="text-[11px] text-warn mt-1">
+              <p className="mt-1.5 text-sm text-red-400">
                 Use at least 8 characters.
               </p>
             )}
           </div>
+
           <Button
             type="submit"
-            className="w-full glow"
-            size="lg"
             disabled={!canContinue}
+            className={cn(
+              "h-11 w-full",
+              BTN_PRIMARY,
+              "disabled:pointer-events-auto disabled:cursor-not-allowed"
+            )}
           >
-            Continue →
+            Continue
+            <CtaArrow />
           </Button>
+
+          <p className="text-xs text-zinc-500">
+            By continuing you agree to the{" "}
+            <Link href="#" className="underline hover:text-zinc-300">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link href="#" className="underline hover:text-zinc-300">
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </form>
       ) : (
         <div className="space-y-4">
@@ -146,42 +169,58 @@ export default function SignupPage() {
                 key={p.id}
                 onClick={() => setPersona(p.id)}
                 className={cn(
-                  "text-left rounded-lg border p-3 transition-all",
+                  "w-full rounded-lg border p-3 text-left outline-none transition-all",
+                  "focus-visible:ring-2 focus-visible:ring-violet-500/40",
                   persona === p.id
-                    ? "border-primary bg-primary/10"
-                    : "border-border hover:border-primary/40"
+                    ? "border-violet-500 bg-violet-500/10"
+                    : "border-white/10 bg-zinc-900 hover:border-violet-500/40"
                 )}
               >
                 <div className="text-sm font-semibold">{p.label}</div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">
+                <div className="mt-0.5 text-[11px] text-muted-foreground">
                   {p.desc}
                 </div>
               </button>
             ))}
           </div>
 
-          {errorMessage && <p className="text-sm text-bad">{errorMessage}</p>}
+          <AuthAlert message={errorMessage} />
 
           <div className="flex gap-2">
             <Button
               variant="outline"
               onClick={() => setStep(1)}
               disabled={register.isPending}
+              className={cn("h-11", BTN_SECONDARY)}
             >
               Back
             </Button>
             <Button
               onClick={handleCreate}
-              className="flex-1 glow"
               disabled={register.isPending}
+              className={cn(
+                "h-11 flex-1",
+                BTN_PRIMARY,
+                "disabled:pointer-events-auto disabled:cursor-not-allowed"
+              )}
             >
-              {register.isPending ? "Creating…" : "Create account"}
+              {register.isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Creating studio...
+                </>
+              ) : (
+                <>
+                  Create account
+                  <CtaArrow />
+                </>
+              )}
             </Button>
           </div>
           <button
             onClick={handleCreate}
             disabled={register.isPending}
-            className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="w-full text-center text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-violet-500/40 rounded"
           >
             Skip for now
           </button>

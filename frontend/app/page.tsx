@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BTN_PRIMARY, BTN_SECONDARY, CtaArrow } from "@/components/ui/cta";
 import { FilmstripHero } from "@/components/landing/FilmstripHero";
 import { ShowreelGallery } from "@/components/landing/ShowreelGallery";
 import { FeatureBento } from "@/components/landing/FeatureBento";
@@ -15,29 +16,6 @@ function scrollToReel() {
   if (!el) return;
   const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   el.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
-}
-
-// One button system for the whole page. Flat brand violet, shared radius and
-// timing; translate animations only when motion is allowed.
-const BTN_PRIMARY =
-  "rounded-xl px-6 font-medium bg-violet-500 text-white " +
-  "transition-all duration-200 hover:bg-violet-400 " +
-  "motion-safe:hover:-translate-y-px active:translate-y-0 active:bg-violet-600 " +
-  "focus-visible:ring-2 focus-visible:ring-violet-400/60 " +
-  "focus-visible:ring-offset-2 focus-visible:ring-offset-black";
-
-const BTN_SECONDARY =
-  "rounded-xl px-6 font-medium bg-transparent dark:bg-transparent " +
-  "border-white/15 dark:border-white/15 text-zinc-200 " +
-  "transition-all duration-200 " +
-  "hover:border-white/30 dark:hover:border-white/30 " +
-  "hover:bg-white/5 dark:hover:bg-white/5 hover:text-zinc-100";
-
-// trailing arrow that nudges right on button hover
-function CtaArrow() {
-  return (
-    <ArrowRight className="size-4 transition-transform duration-200 motion-safe:group-hover/button:translate-x-[3px]" />
-  );
 }
 
 export default function LandingPage() {

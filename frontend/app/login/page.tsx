@@ -3,10 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { AuthShell } from "@/components/auth/AuthShell";
+import { BTN_PRIMARY, CtaArrow } from "@/components/ui/cta";
+import {
+  AuthAlert,
+  AuthShell,
+  FIELD,
+  LABEL,
+  PasswordField,
+} from "@/components/auth/AuthShell";
+import { cn } from "@/lib/utils";
 import { useAuth, useLogin } from "@/hooks/useAuth";
 
 export default function LoginPage() {
@@ -49,47 +56,64 @@ export default function LoginPage() {
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <Label htmlFor="email" className="text-xs text-muted-foreground">
+          <label htmlFor="email" className={LABEL}>
             Email
-          </Label>
-          <Input
+          </label>
+          <input
             id="email"
             type="email"
             autoComplete="email"
+            autoFocus
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@studio.com"
-            className="mt-1 bg-background/50"
+            className={FIELD}
           />
         </div>
         <div>
-          <Label htmlFor="password" className="text-xs text-muted-foreground">
-            Password
-          </Label>
-          <Input
+          <div className="mb-1.5 flex items-center justify-between">
+            <label htmlFor="password" className={cn(LABEL, "mb-0")}>
+              Password
+            </label>
+            <Link
+              href="#"
+              className="text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+            >
+              Forgot password?
+            </Link>
+          </div>
+          <PasswordField
             id="password"
-            type="password"
-            autoComplete="current-password"
-            required
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
+            autoComplete="current-password"
             placeholder="••••••••"
-            className="mt-1 bg-background/50"
           />
         </div>
 
-        {errorMessage && (
-          <p className="text-sm text-bad">{errorMessage}</p>
-        )}
+        <AuthAlert message={errorMessage} />
 
         <Button
           type="submit"
-          className="w-full glow"
-          size="lg"
           disabled={login.isPending}
+          className={cn(
+            "h-11 w-full",
+            BTN_PRIMARY,
+            "disabled:pointer-events-auto disabled:cursor-not-allowed"
+          )}
         >
-          {login.isPending ? "Signing in…" : "Sign in"}
+          {login.isPending ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Signing in...
+            </>
+          ) : (
+            <>
+              Sign in
+              <CtaArrow />
+            </>
+          )}
         </Button>
       </form>
     </AuthShell>
