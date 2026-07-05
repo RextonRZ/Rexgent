@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 // Same gradient as the filmstrip timeline's active cell, plus a soft
 // lift + glow on hover.
 const CTA_GRADIENT =
-  "bg-gradient-to-r from-primary to-fuchsia-500 transition-all duration-300 " +
+  "bg-gradient-to-r from-violet-600 to-fuchsia-600 transition-all duration-300 " +
   "hover:brightness-110 hover:-translate-y-0.5 hover:shadow-[0_0_28px_hsl(265_85%_66%/0.45)]";
 
 const WOWS = [
@@ -42,7 +42,7 @@ export default function LandingPage() {
   return (
     <main className="min-h-screen">
       <header className="border-b hairline">
-        <div className="mx-auto max-w-7xl px-6 h-14 flex items-center justify-between">
+        <div className="mx-auto max-w-7xl px-6 h-16 flex items-center justify-between">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/rexgent_wordmark.png"
@@ -77,7 +77,7 @@ export default function LandingPage() {
 
       {/* hero — split: copy left, curved filmstrip showcase right */}
       <section className="mx-auto max-w-7xl px-6">
-        <div className="grid items-center gap-10 pt-16 pb-16 sm:pt-24 md:min-h-[calc(100vh-3.5rem)] md:grid-cols-[10fr_9fr] md:gap-16 md:py-10">
+        <div className="grid items-center gap-10 pt-16 pb-16 sm:pt-24 md:min-h-[calc(100vh-4rem)] md:grid-cols-[10fr_9fr] md:gap-16 md:py-10">
           {/* left: copy + CTAs */}
           <div className="text-center md:text-left">
             <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-4">
