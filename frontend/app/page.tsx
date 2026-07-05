@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { FilmstripHero } from "@/components/landing/FilmstripHero";
 import { ShowreelGallery } from "@/components/landing/ShowreelGallery";
 import { FeatureBento } from "@/components/landing/FeatureBento";
+import { CtaBackdrop } from "@/components/landing/CtaBackdrop";
 import { useAuth } from "@/hooks/useAuth";
 
 function scrollToReel() {
@@ -76,7 +77,6 @@ export default function LandingPage() {
                 <Link href="/signup">
                   <Button className={`h-10 ${BTN_PRIMARY}`}>
                     Get started
-                    <CtaArrow />
                   </Button>
                 </Link>
               </>
@@ -134,20 +134,9 @@ export default function LandingPage() {
       <FeatureBento />
 
       {/* final CTA */}
-      <section className="relative overflow-hidden py-32 text-center">
-        {/* one faint echo of the film sprocket motif behind the heading */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center gap-4 overflow-hidden opacity-[0.07]"
-        >
-          {Array.from({ length: 120 }).map((_, i) => (
-            <span
-              key={i}
-              className="h-[9px] w-[7px] shrink-0 rounded-[2px] bg-zinc-400"
-            />
-          ))}
-        </div>
-        <div className="relative mx-auto max-w-2xl px-6">
+      <section id="cta" className="relative overflow-hidden py-32 text-center">
+        <CtaBackdrop />
+        <div className="relative z-10 mx-auto max-w-2xl px-6">
           <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-4">
             Ready when you are
           </p>

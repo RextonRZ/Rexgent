@@ -156,3 +156,68 @@
     transform: scaleY(1);
   }
 }
+
+/* final CTA — projector flutter: irregular, barely-there opacity wobble */
+@keyframes projector-flutter {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  7% {
+    opacity: 0.92;
+  }
+  11% {
+    opacity: 0.99;
+  }
+  23% {
+    opacity: 0.89;
+  }
+  31% {
+    opacity: 1;
+  }
+  47% {
+    opacity: 0.94;
+  }
+  53% {
+    opacity: 0.99;
+  }
+  68% {
+    opacity: 0.86;
+  }
+  74% {
+    opacity: 0.97;
+  }
+  89% {
+    opacity: 0.92;
+  }
+}
+/* final CTA — film grain shimmer: jump between offsets, never tween */
+@keyframes film-grain {
+  0% {
+    background-position: 0 0;
+  }
+  12.5% {
+    background-position: -32px 18px;
+  }
+  25% {
+    background-position: 24px -26px;
+  }
+  37.5% {
+    background-position: -14px -34px;
+  }
+  50% {
+    background-position: 30px 22px;
+  }
+  62.5% {
+    background-position: -28px -10px;
+  }
+  75% {
+    background-position: 16px 32px;
+  }
+  87.5% {
+    background-position: -20px 8px;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
