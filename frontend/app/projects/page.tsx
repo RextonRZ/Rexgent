@@ -44,8 +44,13 @@ function ProjectsHub() {
       {/* top nav */}
       <header className="sticky top-0 z-40 glass border-b hairline">
         <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
-          <Link href="/" className="font-bold tracking-tight">
-            Rexgent
+          <Link href="/">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/rexgent_wordmark.png"
+              alt="Rexgent"
+              className="h-6 w-auto"
+            />
           </Link>
           <div className="flex items-center gap-4">
             <span className="text-xs text-muted-foreground hidden sm:inline">
