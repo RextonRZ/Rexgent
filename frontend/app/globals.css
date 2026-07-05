@@ -86,3 +86,19 @@
     border-color: hsl(250 16% 20% / 0.8);
   }
 }
+
+/* landing reel marquee — track holds two copies of the frame list, so
+   -50% lands exactly one copy over and the loop is seamless */
+@keyframes reel-left {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes reel-right {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}

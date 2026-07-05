@@ -1,38 +1,69 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-// The shots not used in the hero — the rest of the EMBERWAKE reel.
-const REEL_CLIPS = [
-  "/clip15.mp4",
-  "/clip13.mp4",
-  "/clip3.mp4",
-  "/clip4.mp4",
-  "/clip6.mp4",
-  "/clip2.mp4",
-  "/clip8.mp4",
-  "/clip10.mp4",
+interface ReelShot {
+  id: string;
+  title: string;
+  imgSrc: string;
+  videoSrc?: string;
+}
+
+// The shots not used in the hero strip — the rest of the reel.
+const REEL_SHOTS: ReelShot[] = [
+  { id: "s15", title: "Opening Scene", imgSrc: "/poster15.jpg", videoSrc: "/clip15.mp4" },
+  { id: "s13", title: "Morning Light", imgSrc: "/poster13.jpg", videoSrc: "/clip13.mp4" },
+  { id: "s3", title: "The Meeting", imgSrc: "/poster3.jpg", videoSrc: "/clip3.mp4" },
+  { id: "s4", title: "Side by Side", imgSrc: "/poster4.jpg", videoSrc: "/clip4.mp4" },
+  { id: "s6", title: "A Quiet Walk", imgSrc: "/poster6.jpg", videoSrc: "/clip6.mp4" },
+  { id: "s2", title: "City Lights", imgSrc: "/poster2.jpg", videoSrc: "/clip2.mp4" },
+  { id: "s8", title: "The Promise", imgSrc: "/poster8.jpg", videoSrc: "/clip8.mp4" },
+  { id: "s10", title: "Golden Hour", imgSrc: "/poster10.jpg", videoSrc: "/clip10.mp4" },
+  { id: "s11", title: "Almost Said", imgSrc: "/poster11.jpg", videoSrc: "/clip11.mp4" },
+  { id: "s14", title: "Stars Above", imgSrc: "/poster14.jpg", videoSrc: "/clip14.mp4" },
 ];
 
-/** A muted loop that only downloads + plays while it's on screen. */
-function ShowreelClip({ src }: { src: string }) {
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const fn = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener("change", fn);
+    return () => mq.removeEventListener("change", fn);
+  }, []);
+  return reduced;
+}
+
+/** Horizontal film: perforations run along the top and bottom edges. */
+function SprocketRow() {
+  return (
+    <div
+      aria-hidden
+      className="flex justify-center gap-4 overflow-hidden py-1.5"
+    >
+      {Array.from({ length: 180 }).map((_, i) => (
+        <span
+          key={i}
+          className="h-[9px] w-[7px] shrink-0 rounded-[2px] bg-zinc-700"
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Mounted only on the hovered frame; fades in over the poster. */
+function HoverVideo({ src }: { src: string }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          el.play().catch(() => {});
-        } else {
-          el.pause();
-        }
-      },
-      { threshold: 0.25 }
-    );
-    io.observe(el);
-    return () => io.disconnect();
+    const v = ref.current;
+    if (!v) return;
+    v.play().catch(() => {});
+    return () => v.pause();
   }, []);
 
   return (
@@ -42,16 +73,126 @@ function ShowreelClip({ src }: { src: string }) {
       muted
       loop
       playsInline
+      autoPlay
       preload="none"
-      className="aspect-video w-full rounded-xl border hairline object-cover transition-transform duration-300 hover:scale-[1.02]"
+      onPlaying={() => setReady(true)}
+      className={cn(
+        "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
+        ready ? "opacity-100" : "opacity-0"
+      )}
     />
   );
 }
 
 export function ShowreelGallery() {
+  const reduced = usePrefersReducedMotion();
+  const sectionRef = useRef<HTMLElement>(null);
+  const [inView, setInView] = useState(true);
+  const [pageVisible, setPageVisible] = useState(true);
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<ReelShot | null>(null);
+
+  const running = inView && pageVisible;
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setInView(e.isIntersecting), {
+      threshold: 0.1,
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const onVis = () => setPageVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  // ESC closes the lightbox
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightbox(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
+
+  const renderCell = (shot: ReelShot, copy: number) => {
+    const key = `${shot.id}:${copy}`;
+    return (
+      <div key={key} className="shrink-0 snap-start pr-3">
+        <button
+          onMouseEnter={() => setHoverKey(key)}
+          onMouseLeave={() => setHoverKey(null)}
+          onClick={() => setLightbox(shot)}
+          aria-label={`Watch ${shot.title}`}
+          className="relative block w-[280px] max-w-[70vw] overflow-hidden rounded-sm border border-zinc-800 bg-zinc-900 transition-all duration-300 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-violet-400/60 outline-none"
+        >
+          <img
+            src={shot.imgSrc}
+            alt={shot.title}
+            loading="lazy"
+            draggable={false}
+            className="aspect-video w-full object-cover"
+          />
+          {hoverKey === key && shot.videoSrc && !reduced && (
+            <HoverVideo src={shot.videoSrc} />
+          )}
+        </button>
+      </div>
+    );
+  };
+
+  // Each strip is one continuous piece of film: sprockets top and bottom,
+  // frames exposed in between. The marquee track holds two copies of the
+  // shot list so translateX(-50%) loops seamlessly.
+  const renderStrip = (
+    shots: ReelShot[],
+    direction: "left" | "right",
+    tilt: string
+  ) => (
+    <div
+      className={cn(
+        "group relative w-[104vw] -ml-[2vw] border-y border-zinc-800 bg-zinc-950",
+        tilt
+      )}
+    >
+      <SprocketRow />
+      <div className="overflow-hidden">
+        {reduced ? (
+          <div className="flex snap-x snap-mandatory overflow-x-auto px-6">
+            {shots.map((s) => renderCell(s, 0))}
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "flex w-max",
+              direction === "left"
+                ? "animate-[reel-left_40s_linear_infinite]"
+                : "animate-[reel-right_40s_linear_infinite]",
+              "group-hover:[animation-play-state:paused]",
+              !running && "[animation-play-state:paused]"
+            )}
+          >
+            {shots.map((s) => renderCell(s, 0))}
+            {shots.map((s) => renderCell(s, 1))}
+          </div>
+        )}
+      </div>
+      <SprocketRow />
+    </div>
+  );
+
+  const half = Math.ceil(REEL_SHOTS.length / 2);
+  const stripA = REEL_SHOTS.slice(0, half);
+  const stripB = REEL_SHOTS.slice(half);
+
   return (
-    <section className="mx-auto max-w-6xl px-6 pb-24">
-      <div className="mb-6 text-center">
+    <section id="reel" ref={sectionRef} className="overflow-hidden pb-24">
+      <div className="mb-10 px-6 text-center">
         <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-2">
           Every shot generated, not filmed
         </p>
@@ -59,11 +200,51 @@ export function ShowreelGallery() {
           A reel that didn&apos;t exist this morning
         </h2>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {REEL_CLIPS.map((src) => (
-          <ShowreelClip key={src} src={src} />
-        ))}
+
+      <div className="space-y-8 py-4">
+        {renderStrip(stripA, "left", "-rotate-1")}
+        {renderStrip(stripB, "right", "rotate-1")}
       </div>
+
+      {/* minimal lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            aria-label="Close"
+            onClick={() => setLightbox(null)}
+            className="absolute right-6 top-5 text-zinc-400 transition-colors hover:text-white"
+          >
+            <X className="size-6" />
+          </button>
+          <div
+            className="flex flex-col items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {lightbox.videoSrc ? (
+              <video
+                src={lightbox.videoSrc}
+                autoPlay
+                loop
+                muted
+                playsInline
+                controls
+                className="max-h-[78vh] max-w-[92vw] rounded-lg border border-zinc-800"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={lightbox.imgSrc}
+                alt={lightbox.title}
+                className="max-h-[78vh] max-w-[92vw] rounded-lg border border-zinc-800"
+              />
+            )}
+            <p className="text-sm text-zinc-300">{lightbox.title}</p>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

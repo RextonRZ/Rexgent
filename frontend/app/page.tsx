@@ -2,33 +2,65 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ArrowRight, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FilmstripHero } from "@/components/landing/FilmstripHero";
 import { ShowreelGallery } from "@/components/landing/ShowreelGallery";
 import { useAuth } from "@/hooks/useAuth";
 
-// Same gradient as the filmstrip timeline's active cell, plus a soft
-// lift + glow on hover.
-const CTA_GRADIENT =
-  "bg-gradient-to-r from-violet-500 to-purple-500 text-black font-semibold " +
-  "transition-all duration-300 " +
-  "hover:brightness-110 hover:-translate-y-0.5 hover:shadow-[0_0_28px_hsl(265_85%_66%/0.45)]";
+// One button system for the whole page. Flat brand violet, shared radius and
+// timing; translate animations only when motion is allowed.
+const BTN_PRIMARY =
+  "rounded-xl px-6 font-medium bg-violet-500 text-white " +
+  "transition-all duration-200 hover:bg-violet-400 " +
+  "motion-safe:hover:-translate-y-px active:translate-y-0 active:bg-violet-600 " +
+  "focus-visible:ring-2 focus-visible:ring-violet-400/60 " +
+  "focus-visible:ring-offset-2 focus-visible:ring-offset-black";
+
+const BTN_SECONDARY =
+  "rounded-xl px-6 font-medium bg-transparent dark:bg-transparent " +
+  "border-white/15 dark:border-white/15 text-zinc-200 " +
+  "transition-all duration-200 " +
+  "hover:border-white/30 dark:hover:border-white/30 " +
+  "hover:bg-white/5 dark:hover:bg-white/5 hover:text-zinc-100";
+
+// trailing arrow that nudges right on button hover
+function CtaArrow() {
+  return (
+    <ArrowRight className="size-4 transition-transform duration-200 motion-safe:group-hover/button:translate-x-[3px]" />
+  );
+}
 
 const WOWS = [
   {
     k: "01",
-    title: "One premise → a whole drama",
-    body: "An autonomous agent writes the script, casts it, storyboards it, generates it, and reports back. You watch a studio work for you.",
+    title: "One premise, a whole drama",
+    body: "An autonomous agent writes the script, judges its own draft, casts the characters, storyboards every scene and reports back. You watch a studio work for you.",
   },
   {
     k: "02",
-    title: "Faces that don't drift",
-    body: "Upload one reference photo. Every clip is verified frame-by-frame against a real facial embedding, with self-correcting retries.",
+    title: "Faces that never drift",
+    body: "Upload one reference photo. Every clip is verified against a real facial embedding, and weak takes retry themselves until the face holds.",
   },
   {
     k: "03",
+    title: "Wardrobe built in",
+    body: "Every character gets costume plates for each look in the story, so the same person walks through every scene wearing the right outfit.",
+  },
+  {
+    k: "04",
+    title: "Clone your voice",
+    body: "Read one short passage into your mic and your characters speak with your voice, or pick from a catalog of studio presets.",
+  },
+  {
+    k: "05",
+    title: "You stay the director",
+    body: "Edit the script, swap faces, redo plates, delete shots, regenerate clips. The agent runs the pipeline while you keep creative control.",
+  },
+  {
+    k: "06",
     title: "The budget is a feature",
-    body: "A live meter spends premium generation only on the shots that matter — turning a hard limit into a smart allocator.",
+    body: "A live meter spends premium generation only on the shots that matter, turning a hard limit into a smart allocator.",
   },
 ];
 
@@ -53,8 +85,9 @@ export default function LandingPage() {
           <nav className="flex items-center gap-6">
             {isAuthenticated ? (
               <Link href="/projects">
-                <Button size="sm" className="glow">
-                  Your dramas →
+                <Button className={`h-10 ${BTN_PRIMARY}`}>
+                  Your dramas
+                  <CtaArrow />
                 </Button>
               </Link>
             ) : (
@@ -66,10 +99,9 @@ export default function LandingPage() {
                   Sign in
                 </Link>
                 <Link href="/signup">
-                  <Button
-                    className={`h-10 rounded-xl px-6 text-sm leading-none ${CTA_GRADIENT}`}
-                  >
+                  <Button className={`h-10 ${BTN_PRIMARY}`}>
                     Get started
+                    <CtaArrow />
                   </Button>
                 </Link>
               </>
@@ -99,23 +131,30 @@ export default function LandingPage() {
             <div className="mt-8 flex items-center justify-center md:justify-start gap-3">
               <Link href={isAuthenticated ? "/projects" : "/signup"}>
                 <Button
-                  size="lg"
-                  className={`h-11 px-6 text-base ${CTA_GRADIENT}`}
+                  className={`h-12 text-base ${BTN_PRIMARY} shadow-[0_0_24px_rgba(139,92,246,0.35)]`}
                 >
                   {isAuthenticated ? "Open your studio" : "Start directing"}
+                  <CtaArrow />
                 </Button>
               </Link>
-              {!isAuthenticated && (
-                <Link href="/login">
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="h-11 px-6 text-base border-white/90 dark:border-white/90 transition-all duration-300 hover:-translate-y-0.5 hover:border-white dark:hover:border-white hover:bg-primary/10 dark:hover:bg-primary/10 hover:shadow-[0_0_20px_hsl(265_85%_66%/0.25)]"
-                  >
-                    Sign in
-                  </Button>
-                </Link>
-              )}
+              <Button
+                variant="outline"
+                className={`h-12 text-base ${BTN_SECONDARY}`}
+                onClick={() => {
+                  const el = document.getElementById("reel");
+                  if (!el) return;
+                  const smooth = !window.matchMedia(
+                    "(prefers-reduced-motion: reduce)"
+                  ).matches;
+                  el.scrollIntoView({
+                    behavior: smooth ? "smooth" : "auto",
+                    block: "start",
+                  });
+                }}
+              >
+                <Play className="size-3.5" />
+                Watch the reel
+              </Button>
             </div>
           </div>
 
