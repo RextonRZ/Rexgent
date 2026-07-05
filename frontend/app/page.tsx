@@ -50,7 +50,7 @@ export default function LandingPage() {
             alt="Rexgent"
             className="h-4 w-auto"
           />
-          <nav className="flex items-center gap-3">
+          <nav className="flex items-center gap-6">
             {isAuthenticated ? (
               <Link href="/projects">
                 <Button size="sm" className="glow">
@@ -67,8 +67,7 @@ export default function LandingPage() {
                 </Link>
                 <Link href="/signup">
                   <Button
-                    size="sm"
-                    className={`rounded-lg px-5 leading-none ${CTA_GRADIENT}`}
+                    className={`h-10 rounded-xl px-6 text-sm leading-none ${CTA_GRADIENT}`}
                   >
                     Get started
                   </Button>
@@ -92,9 +91,10 @@ export default function LandingPage() {
               <span className="text-gradient">short drama</span>.
             </h1>
             <p className="mt-5 text-muted-foreground max-w-xl mx-auto md:mx-0">
-              Rexgent writes it, casts it with locked facial identity,
-              storyboards it, generates the clips, and exports a captioned film, 
-              all on a fixed budget you can watch in real time.
+              Rexgent writes the script, casts your characters with faces that
+              never drift, storyboards every scene, generates each clip, and
+              delivers a finished captioned film, all within a budget you can
+              watch in real time.
             </p>
             <div className="mt-8 flex items-center justify-center md:justify-start gap-3">
               <Link href={isAuthenticated ? "/projects" : "/signup"}>
