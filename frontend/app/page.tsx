@@ -10,7 +10,8 @@ import { useAuth } from "@/hooks/useAuth";
 // Same gradient as the filmstrip timeline's active cell, plus a soft
 // lift + glow on hover.
 const CTA_GRADIENT =
-  "bg-gradient-to-r from-violet-600 to-fuchsia-600 transition-all duration-300 " +
+  "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-black font-semibold " +
+  "transition-all duration-300 " +
   "hover:brightness-110 hover:-translate-y-0.5 hover:shadow-[0_0_28px_hsl(265_85%_66%/0.45)]";
 
 const WOWS = [
@@ -65,7 +66,7 @@ export default function LandingPage() {
                   Sign in
                 </Link>
                 <Link href="/signup">
-                  <Button size="sm" className={CTA_GRADIENT}>
+                  <Button size="sm" className={`rounded-full px-5 ${CTA_GRADIENT}`}>
                     Get started
                   </Button>
                 </Link>
@@ -106,7 +107,7 @@ export default function LandingPage() {
                   <Button
                     size="lg"
                     variant="outline"
-                    className="h-12 px-8 text-base transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10 hover:shadow-[0_0_20px_hsl(265_85%_66%/0.25)]"
+                    className="h-12 px-8 text-base border-white/90 dark:border-white/90 transition-all duration-300 hover:-translate-y-0.5 hover:border-white dark:hover:border-white hover:bg-primary/10 dark:hover:bg-primary/10 hover:shadow-[0_0_20px_hsl(265_85%_66%/0.25)]"
                   >
                     Sign in
                   </Button>
