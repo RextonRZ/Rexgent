@@ -13,13 +13,14 @@ export const FIELD =
 export const FIELD_ERROR = "border-red-500/50";
 export const LABEL = "mb-1.5 block text-sm text-zinc-300";
 
-// One of these lights the right panel per page load. Wide cinematic stills
-// only — figures small in frame, never tight close-ups; full-res extracts.
+// One of these lights the right panel per page load. Wide cinematic shots
+// only — figures small in frame, never tight close-ups. Full-quality clips
+// (only one loads per visit) over full-res poster stills.
 const PANEL_SHOTS = [
-  { ep: 5, title: "Stars Remember", still: "/still12.jpg" },
-  { ep: 2, title: "The Hollow Woods", still: "/still13.jpg" },
-  { ep: 3, title: "The Watcher", still: "/still15.jpg" },
-  { ep: 4, title: "The Crossing", still: "/still10.jpg" },
+  { ep: 5, title: "Stars Remember", still: "/still12.jpg", video: "/clip12.mp4" },
+  { ep: 2, title: "The Hollow Woods", still: "/still13.jpg", video: "/clip13.mp4" },
+  { ep: 3, title: "The Watcher", still: "/still15.jpg", video: "/clip15.mp4" },
+  { ep: 4, title: "The Crossing", still: "/still10.jpg", video: "/clip10.mp4" },
 ];
 
 function SprocketColumn({ className }: { className?: string }) {
@@ -145,10 +146,14 @@ export function AuthShell({
       <div className="relative hidden overflow-hidden bg-zinc-950 lg:block">
         {shot && (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={shot.still}
-              alt=""
+            <video
+              src={shot.video}
+              poster={shot.still}
+              muted
+              loop
+              playsInline
+              autoPlay
+              preload="metadata"
               className="absolute inset-0 h-full w-full object-cover brightness-[0.6] saturate-[0.85]"
             />
             {/* the image melts into the page instead of hard-cutting */}
