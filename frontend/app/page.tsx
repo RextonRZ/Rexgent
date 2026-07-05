@@ -100,7 +100,7 @@ export default function LandingPage() {
               <Link href={isAuthenticated ? "/projects" : "/signup"}>
                 <Button
                   size="lg"
-                  className={`h-12 px-8 text-base ${CTA_GRADIENT}`}
+                  className={`h-11 px-6 text-base ${CTA_GRADIENT}`}
                 >
                   {isAuthenticated ? "Open your studio" : "Start directing"}
                 </Button>
@@ -110,7 +110,7 @@ export default function LandingPage() {
                   <Button
                     size="lg"
                     variant="outline"
-                    className="h-12 px-8 text-base border-white/90 dark:border-white/90 transition-all duration-300 hover:-translate-y-0.5 hover:border-white dark:hover:border-white hover:bg-primary/10 dark:hover:bg-primary/10 hover:shadow-[0_0_20px_hsl(265_85%_66%/0.25)]"
+                    className="h-11 px-6 text-base border-white/90 dark:border-white/90 transition-all duration-300 hover:-translate-y-0.5 hover:border-white dark:hover:border-white hover:bg-primary/10 dark:hover:bg-primary/10 hover:shadow-[0_0_20px_hsl(265_85%_66%/0.25)]"
                   >
                     Sign in
                   </Button>
