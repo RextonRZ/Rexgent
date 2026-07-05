@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { HeroVideo } from "@/components/landing/HeroVideo";
+import { FilmstripHero } from "@/components/landing/FilmstripHero";
 import { ShowreelGallery } from "@/components/landing/ShowreelGallery";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -64,11 +64,11 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* hero — split: copy left, cinematic reel right */}
-      <section className="mx-auto max-w-6xl px-6 pt-16 sm:pt-24 pb-16">
-        <div className="grid items-center gap-10 lg:grid-cols-2">
+      {/* hero — split: copy left (~55%), curved filmstrip right (~45%) */}
+      <section className="mx-auto max-w-6xl px-6">
+        <div className="grid items-center gap-10 pt-16 pb-16 sm:pt-24 md:min-h-[calc(100vh-3.5rem)] md:grid-cols-[11fr_9fr] md:py-10">
           {/* left: copy + CTAs */}
-          <div className="text-center lg:text-left">
+          <div className="text-center md:text-left">
             <p className="text-xs uppercase tracking-[0.3em] text-primary/80 mb-4">
               AI Showrunner · Qwen Cloud
             </p>
@@ -76,12 +76,12 @@ export default function LandingPage() {
               Give me a story idea. I&apos;ll hand you back a{" "}
               <span className="text-gradient">short drama</span>.
             </h1>
-            <p className="mt-5 text-muted-foreground max-w-xl mx-auto lg:mx-0">
+            <p className="mt-5 text-muted-foreground max-w-xl mx-auto md:mx-0">
               Rexgent writes it, casts it with locked facial identity,
               storyboards it, generates the clips, and exports a captioned film —
               all on a fixed budget you can watch in real time.
             </p>
-            <div className="mt-8 flex items-center justify-center lg:justify-start gap-3">
+            <div className="mt-8 flex items-center justify-center md:justify-start gap-3">
               <Link href={isAuthenticated ? "/projects" : "/signup"}>
                 <Button size="lg" className="glow">
                   ⚡ {isAuthenticated ? "Open your studio" : "Start directing"}
@@ -100,8 +100,8 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* right: cycling hero reel */}
-          <HeroVideo />
+          {/* right: vertical curved filmstrip feeding through 5 episodes */}
+          <FilmstripHero />
         </div>
       </section>
 
