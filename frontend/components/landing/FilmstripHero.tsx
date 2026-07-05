@@ -279,6 +279,14 @@ export function FilmstripHero() {
     setFeatured((f) => (f + dir + EPISODES.length) % EPISODES.length);
   }, []);
 
+  // Feed whichever way around the loop is closer (EP2 → EP1 steps back once,
+  // not forward through the whole strip).
+  const shortestDir = useCallback((from: number, to: number): 1 | -1 => {
+    const fwd = (to - from + EPISODES.length) % EPISODES.length;
+    const bwd = (from - to + EPISODES.length) % EPISODES.length;
+    return fwd <= bwd ? 1 : -1;
+  }, []);
+
   // Clicking a frame feeds the strip one position at a time until it arrives.
   useEffect(() => {
     if (target === null) return;
@@ -286,9 +294,12 @@ export function FilmstripHero() {
       setTarget(null);
       return;
     }
-    const t = window.setTimeout(() => step(1), FEED_STEP_MS);
+    const t = window.setTimeout(
+      () => step(shortestDir(featured, target)),
+      FEED_STEP_MS
+    );
     return () => window.clearTimeout(t);
-  }, [target, featured, step]);
+  }, [target, featured, step, shortestDir]);
 
   useEffect(() => {
     const onVis = () => setPageVisible(!document.hidden);
@@ -317,7 +328,7 @@ export function FilmstripHero() {
   const feedTo = (i: number) => {
     if (i === featured) return;
     setTarget(i);
-    step(1);
+    step(shortestDir(featured, i));
   };
 
   // Reduced motion: static featured poster + manual nav, no tilt, no autoplay.
