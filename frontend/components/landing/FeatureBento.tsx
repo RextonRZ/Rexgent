@@ -107,13 +107,13 @@ function CardText({
 
 /** Reference chip + four frames; a scan line sweeps and checks pop per frame. */
 function FaceScanStrip({ reduced }: { reduced: boolean }) {
-  const frames = ["/poster3.jpg", "/poster6.jpg", "/poster10.jpg", "/poster15.jpg"];
+  const frames = ["/poster1.jpg", "/poster5.jpg", "/poster7.jpg", "/poster12.jpg"];
   return (
     <div className="mt-6 flex items-center gap-3">
       <div className="flex shrink-0 flex-col items-center gap-1">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/poster13.jpg"
+          src="/refimg.png"
           alt=""
           className="h-12 w-12 rounded-md border border-white/15 object-cover"
         />
