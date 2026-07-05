@@ -8,21 +8,25 @@ interface ReelShot {
   id: string;
   title: string;
   imgSrc: string;
+  /** small silent encode the strip plays continuously */
   videoSrc?: string;
+  /** full-quality clip for the lightbox */
+  fullSrc?: string;
 }
 
 // The shots not used in the hero strip — the rest of the reel.
 const REEL_SHOTS: ReelShot[] = [
-  { id: "s15", title: "Opening Scene", imgSrc: "/poster15.jpg", videoSrc: "/clip15.mp4" },
-  { id: "s13", title: "Morning Light", imgSrc: "/poster13.jpg", videoSrc: "/clip13.mp4" },
-  { id: "s3", title: "The Meeting", imgSrc: "/poster3.jpg", videoSrc: "/clip3.mp4" },
-  { id: "s4", title: "Side by Side", imgSrc: "/poster4.jpg", videoSrc: "/clip4.mp4" },
-  { id: "s6", title: "A Quiet Walk", imgSrc: "/poster6.jpg", videoSrc: "/clip6.mp4" },
-  { id: "s2", title: "City Lights", imgSrc: "/poster2.jpg", videoSrc: "/clip2.mp4" },
-  { id: "s8", title: "The Promise", imgSrc: "/poster8.jpg", videoSrc: "/clip8.mp4" },
-  { id: "s10", title: "Golden Hour", imgSrc: "/poster10.jpg", videoSrc: "/clip10.mp4" },
-  { id: "s11", title: "Almost Said", imgSrc: "/poster11.jpg", videoSrc: "/clip11.mp4" },
-  { id: "s14", title: "Stars Above", imgSrc: "/poster14.jpg", videoSrc: "/clip14.mp4" },
+  { id: "s15", title: "Opening Scene", imgSrc: "/poster15.jpg", videoSrc: "/preview15.mp4", fullSrc: "/clip15.mp4" },
+  { id: "s13", title: "Morning Light", imgSrc: "/poster13.jpg", videoSrc: "/preview13.mp4", fullSrc: "/clip13.mp4" },
+  { id: "s3", title: "The Meeting", imgSrc: "/poster3.jpg", videoSrc: "/preview3.mp4", fullSrc: "/clip3.mp4" },
+  { id: "s4", title: "Side by Side", imgSrc: "/poster4.jpg", videoSrc: "/preview4.mp4", fullSrc: "/clip4.mp4" },
+  { id: "s6", title: "A Quiet Walk", imgSrc: "/poster6.jpg", videoSrc: "/preview6.mp4", fullSrc: "/clip6.mp4" },
+  { id: "s2", title: "City Lights", imgSrc: "/poster2.jpg", videoSrc: "/preview2.mp4", fullSrc: "/clip2.mp4" },
+  { id: "s8", title: "The Promise", imgSrc: "/poster8.jpg", videoSrc: "/preview8.mp4", fullSrc: "/clip8.mp4" },
+  // s14 is the same footage as s2 — keep them apart even across the loop seam
+  { id: "s14", title: "Stars Above", imgSrc: "/poster14.jpg", videoSrc: "/preview14.mp4", fullSrc: "/clip14.mp4" },
+  { id: "s10", title: "Golden Hour", imgSrc: "/poster10.jpg", videoSrc: "/preview10.mp4", fullSrc: "/clip10.mp4" },
+  { id: "s11", title: "Almost Said", imgSrc: "/poster11.jpg", videoSrc: "/preview11.mp4", fullSrc: "/clip11.mp4" },
 ];
 
 function usePrefersReducedMotion() {
@@ -54,32 +58,48 @@ function SprocketRow() {
   );
 }
 
-/** Mounted only on the hovered frame; fades in over the poster. */
-function HoverVideo({ src }: { src: string }) {
+/** Every frame plays its clip continuously — but each cell watches its own
+ *  viewport intersection, so only the ~handful of frames actually on screen
+ *  decode video. The rest sit paused on their poster. */
+function CellVideo({
+  shot,
+  allowed,
+}: {
+  shot: ReelShot;
+  allowed: boolean;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
-  const [ready, setReady] = useState(false);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
-    v.play().catch(() => {});
-    return () => v.pause();
+    const io = new IntersectionObserver(
+      ([e]) => setVisible(e.isIntersecting),
+      { threshold: 0.05 }
+    );
+    io.observe(v);
+    return () => io.disconnect();
   }, []);
+
+  const playing = allowed && visible;
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    if (playing) v.play().catch(() => {});
+    else v.pause();
+  }, [playing]);
 
   return (
     <video
       ref={ref}
-      src={src}
+      src={shot.videoSrc}
+      poster={shot.imgSrc}
       muted
       loop
       playsInline
-      autoPlay
-      preload="none"
-      onPlaying={() => setReady(true)}
-      className={cn(
-        "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
-        ready ? "opacity-100" : "opacity-0"
-      )}
+      preload="metadata"
+      className="aspect-video w-full object-cover"
     />
   );
 }
@@ -89,7 +109,6 @@ export function ShowreelGallery() {
   const sectionRef = useRef<HTMLElement>(null);
   const [inView, setInView] = useState(true);
   const [pageVisible, setPageVisible] = useState(true);
-  const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<ReelShot | null>(null);
 
   const running = inView && pageVisible;
@@ -125,21 +144,21 @@ export function ShowreelGallery() {
     return (
       <div key={key} className="shrink-0 snap-start pr-3">
         <button
-          onMouseEnter={() => setHoverKey(key)}
-          onMouseLeave={() => setHoverKey(null)}
           onClick={() => setLightbox(shot)}
           aria-label={`Watch ${shot.title}`}
           className="relative block w-[280px] max-w-[70vw] overflow-hidden rounded-sm border border-zinc-800 bg-zinc-900 transition-all duration-300 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-violet-400/60 outline-none"
         >
-          <img
-            src={shot.imgSrc}
-            alt={shot.title}
-            loading="lazy"
-            draggable={false}
-            className="aspect-video w-full object-cover"
-          />
-          {hoverKey === key && shot.videoSrc && !reduced && (
-            <HoverVideo src={shot.videoSrc} />
+          {shot.videoSrc ? (
+            <CellVideo shot={shot} allowed={running && !reduced} />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={shot.imgSrc}
+              alt={shot.title}
+              loading="lazy"
+              draggable={false}
+              className="aspect-video w-full object-cover"
+            />
           )}
         </button>
       </div>
@@ -223,9 +242,9 @@ export function ShowreelGallery() {
             className="flex flex-col items-center gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            {lightbox.videoSrc ? (
+            {lightbox.fullSrc || lightbox.videoSrc ? (
               <video
-                src={lightbox.videoSrc}
+                src={lightbox.fullSrc ?? lightbox.videoSrc}
                 autoPlay
                 loop
                 muted
