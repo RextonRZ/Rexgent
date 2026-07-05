@@ -42,7 +42,12 @@ function Settings() {
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <span className="text-base">←</span>
-            <span className="font-semibold text-foreground">Rexgent</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/rexgent_wordmark.png"
+              alt="Rexgent"
+              className="h-4 w-auto"
+            />
           </Link>
           <UserMenu />
         </div>

@@ -18,8 +18,13 @@ export function AuthShell({
     <main className="min-h-screen flex flex-col">
       <header className="border-b hairline">
         <div className="mx-auto max-w-6xl w-full px-6 h-14 flex items-center">
-          <Link href="/" className="font-bold tracking-tight">
-            Rexgent
+          <Link href="/">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/rexgent_wordmark.png"
+              alt="Rexgent"
+              className="h-4 w-auto"
+            />
           </Link>
         </div>
       </header>
