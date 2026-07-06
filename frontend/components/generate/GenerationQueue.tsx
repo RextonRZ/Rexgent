@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useGenerationStore } from "@/stores/generationStore";
 import { useStoryboard, type SceneShots } from "@/hooks/useStoryboard";
 import { useLatestJobClips } from "@/hooks/useClips";
+import { useProject } from "@/hooks/useProjects";
 import { clipStatusChip } from "@/lib/clipStatus";
 import type { ClipReference, Shot } from "@/lib/types";
 
@@ -54,7 +55,11 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
   const live = useGenerationStore((s) => s.clips);
   const { data: storyboard } = useStoryboard(projectId);
   const { data: persisted } = useLatestJobClips(projectId);
+  const { data: project } = useProject(projectId);
   const scenes = storyboard?.scenes ?? [];
+  // frame the tiles the way THIS drama renders — vertical unless 16:9 was picked
+  const vertical = project?.video_ratio !== "16:9";
+  const mediaBox = vertical ? "relative aspect-[9/16] bg-black" : "relative aspect-video bg-black";
 
   // Merge persisted clips (survive navigation/refresh) with the live progress store.
   const byShot = useMemo(() => {
@@ -134,9 +139,9 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
     const score = tile.score;
     return (
       <div key={shot.id} className="rounded-xl border hairline bg-card overflow-hidden">
-        {/* fixed-height media box: portrait 9:16 clips centre with gutters,
-            legacy landscape clips letterbox — both read cleanly */}
-        <div className="relative h-[400px] bg-black">
+        {/* media box follows the drama's delivery format so clips fill the frame
+            they were generated for (portrait for 9:16, widescreen for 16:9) */}
+        <div className={mediaBox}>
           {tile.url ? (
             <video
               src={`${tile.url}#t=0.1`}
@@ -233,7 +238,7 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
                   key={sid}
                   className="rounded-xl border hairline bg-card overflow-hidden"
                 >
-                  <div className="relative h-[320px] bg-black">
+                  <div className={mediaBox}>
                     <video
                       src={`${tile.url}#t=0.1`}
                       controls
