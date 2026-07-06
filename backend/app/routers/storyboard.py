@@ -2,13 +2,39 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.graph.sync import sync_scenes
 from app.models.script import Script, Scene
 from app.models.shot import Shot
 from app.models.character import Character
 from app.schemas.shot import ShotResponse
+from app.services.script_structurer import ScriptStructurer
 from app.services.storyboard_generator import StoryboardGenerator, plan_shot_budget
 
 router = APIRouter(prefix="/api/storyboard", tags=["storyboard"])
+
+
+def persist_scenes(db: Session, script: Script, structured: dict) -> dict:
+    """Materialize Scene rows from a structured script; {number: uuid}."""
+    rows: list[Scene] = []
+    for sc in structured.get("scenes", []):
+        scene = Scene(
+            script_id=script.id,
+            number=sc.get("scene_number", 0),
+            title=sc.get("heading", ""),
+            heading=sc.get("heading", ""),
+            location=sc.get("location", ""),
+            time_of_day=sc.get("time_of_day", ""),
+            characters_json=sc.get("characters_present", []),
+            description=sc.get("summary", ""),
+            emotional_beat=sc.get("emotional_beat", ""),
+            dialogue_json=sc.get("dialogue_lines", []),
+            stage_directions=sc.get("stage_directions", []),
+        )
+        db.add(scene)
+        rows.append(scene)
+    if rows:
+        db.flush()  # ids are assigned at flush, not construction
+    return {s.number: str(s.id) for s in rows}
 
 
 @router.post("/generate")
@@ -29,12 +55,34 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
     else:
         raise HTTPException(status_code=400, detail="script_id or project_id is required")
 
-    if not script or not script.structured_json:
+    if not script:
         raise HTTPException(status_code=404, detail="Script not found")
 
     scenes = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
+
+    if not scenes and (script.raw_text or "").strip():
+        # Self-heal: a script can exist with zero Scene rows — its first
+        # structuring pass found none, or it was edited in the editor (Save
+        # bumps the version but never re-parses). Structure the CURRENT text
+        # and materialize the scenes before giving up.
+        structured = await ScriptStructurer().structure(script.raw_text)
+        scene_uuids = persist_scenes(db, script, structured)
+        if scene_uuids:
+            script.structured_json = structured
+            db.commit()
+            sync_scenes(str(script.project_id), structured, scene_uuids=scene_uuids)
+            scenes = (
+                db.query(Scene)
+                .filter(Scene.script_id == script.id)
+                .order_by(Scene.number)
+                .all()
+            )
+
     if not scenes:
-        raise HTTPException(status_code=400, detail="Script has no scenes")
+        raise HTTPException(
+            status_code=400,
+            detail="No scenes found in the script. Rewrite it with clear scene headings (INT./EXT. or Scene 1, Scene 2...), then try again.",
+        )
 
     characters = db.query(Character).filter(Character.project_id == script.project_id).all()
     char_map = {
