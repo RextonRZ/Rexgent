@@ -31,6 +31,8 @@ export interface BudgetResult {
   llm?: { input_tokens: number; output_tokens: number; cost_usd: number };
   llm_by_model?: Record<string, { tokens: number; usd: number }>;
   llm_cost_usd?: number;
+  image_cost_usd?: number;
+  tts_cost_usd?: number;
   grand_total_cost?: number;
   within_budget?: boolean;
 }
