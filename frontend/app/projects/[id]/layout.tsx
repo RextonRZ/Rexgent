@@ -5,6 +5,8 @@ import { PipelineNav } from "@/components/shared/PipelineNav";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { DockRail } from "@/components/shared/DockRail";
+import { AmbientBackdrop } from "@/components/shared/AmbientBackdrop";
+import { SiteFooter } from "@/components/shared/SiteFooter";
 
 export default function ProjectLayout({
   children,
@@ -15,7 +17,8 @@ export default function ProjectLayout({
 }) {
   return (
     <AuthGate>
-      <div className="min-h-screen">
+      <div className="relative min-h-screen">
+        <AmbientBackdrop />
         <header className="sticky top-0 z-40 glass border-b hairline">
           <div className="mx-auto max-w-7xl px-4 h-14 flex items-center justify-between gap-4">
             <Link
@@ -49,6 +52,9 @@ export default function ProjectLayout({
         <div className="flex items-start gap-4">
           <main className="flex-1 min-w-0 px-6 lg:px-10 py-8">
             <div className="mx-auto max-w-7xl">{children}</div>
+            <div className="mx-auto max-w-7xl">
+              <SiteFooter />
+            </div>
           </main>
           <DockRail projectId={params.id} />
         </div>

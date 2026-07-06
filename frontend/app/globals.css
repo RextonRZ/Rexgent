@@ -259,3 +259,28 @@
 .scroll-clean::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--muted-foreground) / 0.45);
 }
+
+/* Ambient page atmosphere — slow drifting violet aurora behind app pages,
+   so the studio never opens on dead flat black like the landing page never does. */
+@keyframes aurora-drift {
+  0%   { transform: translate3d(-6%, -3%, 0) scale(1);    opacity: 0.9; }
+  50%  { transform: translate3d(6%, 4%, 0) scale(1.15);   opacity: 1; }
+  100% { transform: translate3d(-6%, -3%, 0) scale(1);    opacity: 0.9; }
+}
+@keyframes aurora-drift-slow {
+  0%   { transform: translate3d(5%, 2%, 0) scale(1.1);  opacity: 0.8; }
+  50%  { transform: translate3d(-5%, -4%, 0) scale(1);  opacity: 1; }
+  100% { transform: translate3d(5%, 2%, 0) scale(1.1);  opacity: 0.8; }
+}
+/* Staggered entrance for cards/rows — a gentle rise + fade, like footage cut in. */
+@keyframes card-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.card-rise {
+  opacity: 0;
+  animation: card-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-rise { opacity: 1; animation: none; }
+}

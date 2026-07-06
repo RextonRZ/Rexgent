@@ -46,6 +46,8 @@ import {
 } from "@/components/dashboard/ProjectCards";
 import { PosterPicker } from "@/components/dashboard/PosterPicker";
 import { Skeleton } from "@/components/shared/Skeleton";
+import { AmbientBackdrop } from "@/components/shared/AmbientBackdrop";
+import { SiteFooter } from "@/components/shared/SiteFooter";
 import { cn } from "@/lib/utils";
 import {
   useDeleteProject,
@@ -207,10 +209,11 @@ function Dashboard() {
   };
 
   return (
-    <main className="min-h-screen">
+    <main className="relative min-h-screen">
+      <AmbientBackdrop />
       <header className="sticky top-0 z-40 glass border-b hairline">
         <div className="mx-auto max-w-7xl px-6 h-14 flex items-center justify-between">
-          <Link href="/">
+          <Link href="/" className="transition-opacity hover:opacity-80">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/rexgent_wordmark.png"
@@ -366,21 +369,34 @@ function Dashboard() {
               </div>
             ) : view === "grid" ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                <NewProjectTile onClick={() => setNewOpen(true)} />
-                {filtered.map((p) => (
-                  <ProjectCard
+                <div className="card-rise">
+                  <NewProjectTile onClick={() => setNewOpen(true)} />
+                </div>
+                {filtered.map((p, i) => (
+                  <div
                     key={p.id}
-                    project={p}
-                    previewing={previewId === p.id}
-                    onPreview={setPreviewId}
-                    onAction={handleAction}
-                  />
+                    className="card-rise"
+                    style={{ animationDelay: `${Math.min(i + 1, 10) * 45}ms` }}
+                  >
+                    <ProjectCard
+                      project={p}
+                      previewing={previewId === p.id}
+                      onPreview={setPreviewId}
+                      onAction={handleAction}
+                    />
+                  </div>
                 ))}
               </div>
             ) : (
               <div className="space-y-2">
-                {filtered.map((p) => (
-                  <ProjectRow key={p.id} project={p} onAction={handleAction} />
+                {filtered.map((p, i) => (
+                  <div
+                    key={p.id}
+                    className="card-rise"
+                    style={{ animationDelay: `${Math.min(i, 10) * 35}ms` }}
+                  >
+                    <ProjectRow project={p} onAction={handleAction} />
+                  </div>
                 ))}
               </div>
             )}
@@ -392,6 +408,8 @@ function Dashboard() {
           </div>
         </section>
       </div>
+
+      <SiteFooter />
 
       <NewProjectModal open={newOpen} onOpenChange={setNewOpen} />
       <RenameDialog
