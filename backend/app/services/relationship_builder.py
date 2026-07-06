@@ -18,5 +18,5 @@ class RelationshipBuilder:
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user_content},
         ]
-        result = await self.qwen.chat_json(messages=messages, temperature=0.2)
+        result = await self.qwen.chat_json(messages=messages, temperature=0.2, task="relationships")
         return result if isinstance(result, list) else []

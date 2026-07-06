@@ -6,6 +6,7 @@ import logging
 import httpx
 from openai import AsyncOpenAI
 from app.config import Settings, get_settings
+from app.services.model_router import resolve_model
 from app.services.usage_tracker import record_usage
 
 logger = logging.getLogger(__name__)
@@ -24,21 +25,36 @@ class QwenClient:
     async def chat(
         self,
         messages: list[dict],
-        model: str = "qwen-max",
+        model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        task: str | None = None,
+        json_mode: bool = False,
     ) -> str:
+        # No explicit model -> the router picks the cheapest tier the task
+        # allows (creative work stays on qwen-max; structuring runs on flash).
+        resolved = resolve_model(task, model)
+        use_json = json_mode
         for attempt in range(self.max_retries):
             try:
-                response = await self.client.chat.completions.create(
-                    model=model,
+                kwargs: dict = dict(
+                    model=resolved,
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
-                record_usage(getattr(response, "usage", None))
+                if use_json:
+                    kwargs["response_format"] = {"type": "json_object"}
+                response = await self.client.chat.completions.create(**kwargs)
+                record_usage(getattr(response, "usage", None), model=resolved, task=task)
                 return response.choices[0].message.content
             except Exception as e:
+                if use_json:
+                    # Some models/prompts reject response_format — fall back to
+                    # prompt-level JSON discipline rather than failing the call.
+                    use_json = False
+                    logger.warning(f"JSON mode rejected ({e}); retrying without response_format")
+                    continue
                 if attempt == self.max_retries - 1:
                     raise
                 wait = 2 ** attempt
@@ -48,15 +64,18 @@ class QwenClient:
     async def chat_json(
         self,
         messages: list[dict],
-        model: str = "qwen-max",
+        model: str | None = None,
         temperature: float = 0.3,
         max_tokens: int = 4096,
+        task: str | None = None,
     ) -> dict | list:
         # Truncation guard: if the response is cut off, retry once with more tokens.
-        content = await self.chat(messages, model, temperature, max_tokens)
+        content = await self.chat(messages, model, temperature, max_tokens,
+                                  task=task, json_mode=True)
         if self._looks_truncated(content):
             logger.warning("Truncated JSON response — retrying with larger max_tokens")
-            content = await self.chat(messages, model, temperature, max_tokens * 2)
+            content = await self.chat(messages, model, temperature, max_tokens * 2,
+                                      task=task, json_mode=True)
         return self._parse_json(content)
 
     @staticmethod
@@ -71,6 +90,7 @@ class QwenClient:
         messages: list[dict],
         model: str = "qwen-vl-max",
         max_tokens: int = 2048,
+        task: str | None = None,
     ) -> str:
         for attempt in range(self.max_retries):
             try:
@@ -79,7 +99,7 @@ class QwenClient:
                     messages=messages,
                     max_tokens=max_tokens,
                 )
-                record_usage(getattr(response, "usage", None))
+                record_usage(getattr(response, "usage", None), model=model, task=task)
                 return response.choices[0].message.content
             except Exception as e:
                 if attempt == self.max_retries - 1:
@@ -107,8 +127,9 @@ class QwenClient:
         messages: list[dict],
         model: str = "qwen-vl-max",
         max_tokens: int = 2048,
+        task: str | None = None,
     ) -> dict | list:
-        content = await self.chat_vision(messages, model, max_tokens)
+        content = await self.chat_vision(messages, model, max_tokens, task=task)
         return self._parse_json(content)
 
     # ── Video generation (DashScope native async API) ──────────────

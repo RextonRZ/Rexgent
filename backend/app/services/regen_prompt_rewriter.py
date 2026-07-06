@@ -20,7 +20,7 @@ class RegenPromptRewriter:
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user_content},
         ]
-        result = await self.qwen.chat_json(messages=messages, temperature=0.3)
+        result = await self.qwen.chat_json(messages=messages, temperature=0.3, task="regen_rewrite")
         if not isinstance(result, dict):
             return {"revised_prompt": original_prompt, "changes_made": [], "confidence": 0}
         # Keep the revised prompt free of text/numbers/names too.

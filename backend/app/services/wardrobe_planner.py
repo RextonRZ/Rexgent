@@ -1,4 +1,5 @@
 from app.services.qwen_client import QwenClient
+from app.services.context_compressor import script_digest
 from app.services.prompt_loader import load_prompt
 from app.config import get_settings
 
@@ -10,11 +11,13 @@ class WardrobePlanner:
 
     async def plan(self, structured: dict, characters: list[dict]) -> dict:
         names = [c.get("name") for c in characters]
-        user = f"Characters: {names}\nScript JSON: {structured}"
+        # Wardrobe reads scene-level facts only — the digest drops dialogue and
+        # stage directions, cutting prompt tokens on long scripts.
+        user = f"Characters: {names}\nScript JSON: {script_digest(structured)}"
         result = await self.qwen.chat_json(messages=[
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user},
-        ], temperature=0.3)
+        ], temperature=0.3, task="wardrobe")
         out: dict[str, list] = {}
         if isinstance(result, dict):
             for ch in result.get("characters", []):

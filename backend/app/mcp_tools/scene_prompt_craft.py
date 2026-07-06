@@ -45,7 +45,7 @@ class ScenePromptCraft:
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user_content},
         ]
-        result = await self.qwen.chat_json(messages=messages, temperature=0.3)
+        result = await self.qwen.chat_json(messages=messages, temperature=0.3, task="prompt_craft")
         if not isinstance(result, dict):
             return {"prompt": "", "negative_prompt": "", "model_parameters": {}}
 

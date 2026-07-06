@@ -36,4 +36,5 @@ class ScriptGenerator:
         messages = [
             {"role": "user", "content": user_prompt},
         ]
-        return await self.qwen.chat(messages=messages, model=model, temperature=0.8, max_tokens=8192)
+        return await self.qwen.chat(messages=messages, model=model, temperature=0.8,
+                                    max_tokens=8192, task="script")

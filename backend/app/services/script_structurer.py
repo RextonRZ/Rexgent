@@ -15,4 +15,4 @@ class ScriptStructurer:
             {"role": "system", "content": system},
             {"role": "user", "content": raw_text},
         ]
-        return await self.qwen.chat_json(messages=messages, temperature=0.2)
+        return await self.qwen.chat_json(messages=messages, temperature=0.2, task="structure")

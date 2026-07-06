@@ -66,7 +66,8 @@ class ContinuityAgent:
                 content.append({"type": "image_url", "image_url": {"url": char_plate["plate_image_url"]}})
             if loc_plate:
                 content.append({"type": "image_url", "image_url": {"url": loc_plate}})
-            vl = await self.qwen.chat_vision_json(messages=[{"role": "user", "content": content}], model=self.vl_model)
+            vl = await self.qwen.chat_vision_json(messages=[{"role": "user", "content": content}],
+                                                  model=self.vl_model, task="continuity")
             if isinstance(vl, dict):
                 outfit = vl.get("outfit_score")
                 background = vl.get("background_score")

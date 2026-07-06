@@ -9,10 +9,21 @@ calls). For the single-project hackathon demo this gives an accurate
 "LLM tokens used" figure.
 """
 import contextvars
+from contextlib import contextmanager
 
 from app.config import get_settings
 
 current_project: contextvars.ContextVar = contextvars.ContextVar("current_project", default=None)
+
+
+@contextmanager
+def track_project(project_id, db):
+    """Attribute every LLM call inside the block to this project's ledger."""
+    token = current_project.set((str(project_id), db))
+    try:
+        yield
+    finally:
+        current_project.reset(token)
 
 
 class UsageTracker:
@@ -55,12 +66,14 @@ def global_usage() -> UsageTracker:
     return _global
 
 
-def record_usage(usage) -> None:
+def record_usage(usage, model: str | None = None, task: str | None = None) -> None:
     """Record a response.usage object (OpenAI-compatible).
 
     If a project is active (see ``current_project``), the usage is written as
-    an ``llm`` cost_event on that project's ledger. Otherwise it falls back to
-    the process-global in-memory tracker (non-project calls).
+    an ``llm`` cost_event on that project's ledger — tagged with the model
+    that ran and the task it served, so the token dashboard can show spend
+    per stage and per model tier. Otherwise it falls back to the
+    process-global in-memory tracker (non-project calls).
     """
     if usage is None:
         return
@@ -71,7 +84,8 @@ def record_usage(usage) -> None:
             from app.services.cost_ledger import record_llm
             record_llm(db, project_id,
                        getattr(usage, "prompt_tokens", 0) or 0,
-                       getattr(usage, "completion_tokens", 0) or 0)
+                       getattr(usage, "completion_tokens", 0) or 0,
+                       stage=(task or "script"), model=model)
             return
         except Exception:  # noqa: BLE001
             pass

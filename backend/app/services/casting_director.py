@@ -30,7 +30,7 @@ async def style_from_request(qwen, prompt_template: str, free_text: str) -> dict
     result = await qwen.chat_json(messages=[
         {"role": "system", "content": prompt_template},
         {"role": "user", "content": free_text or "cinematic realistic drama"},
-    ], temperature=0.4)
+    ], temperature=0.4, task="style")
     return result if isinstance(result, dict) else {"style_tags": [], "prompt": free_text, "negative_prompt": ""}
 
 
@@ -110,12 +110,14 @@ class CastingDirector:
         characters = self.db.query(Character).filter(Character.project_id == project_id).all()
         scene_dicts = [{"number": s.number, "location": s.location} for s in scenes]
 
-        plan = await self.planner.plan(script.structured_json or {},
-                                       [{"name": c.name} for c in characters])
-        emit("casting.wardrobe_plan.completed", {"variant_count": sum(len(v) for v in plan.values())}, pid)
+        from app.services.usage_tracker import track_project
+        with track_project(pid, self.db):
+            plan = await self.planner.plan(script.structured_json or {},
+                                           [{"name": c.name} for c in characters])
+            emit("casting.wardrobe_plan.completed", {"variant_count": sum(len(v) for v in plan.values())}, pid)
 
-        locations = distinct_locations(scene_dicts)
-        style = await style_from_request(self.plates.qwen, self.style_prompt, self._style_input(project_id))
+            locations = distinct_locations(scene_dicts)
+            style = await style_from_request(self.plates.qwen, self.style_prompt, self._style_input(project_id))
 
         total = 1 + len(locations) + sum(max(1, len(plan.get(c.name, []))) for c in characters)
         idx = 0

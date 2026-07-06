@@ -16,7 +16,7 @@ class PlotGapDetector:
             {"role": "system", "content": self.prompt_template + language_instruction(language)},
             {"role": "user", "content": json.dumps(script_json, ensure_ascii=False)},
         ]
-        flags_raw = await self.qwen.chat_json(messages=messages, temperature=0.2)
+        flags_raw = await self.qwen.chat_json(messages=messages, temperature=0.2, task="plot_gap")
         if not isinstance(flags_raw, list):
             flags_raw = []
 

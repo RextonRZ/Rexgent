@@ -49,9 +49,8 @@ async def generate_script_op(
     tone: str = "dramatic", episode_count: int = 1, target_length: int = 30,
     language: str = "en",
 ) -> dict:
-    from app.services.usage_tracker import current_project
-    _tok = current_project.set((str(project_id), db))
-    try:
+    from app.services.usage_tracker import track_project
+    with track_project(project_id, db):
         clean_premise = InputSanitizer().sanitize(premise, max_length=300)
         raw_text = await ScriptGenerator().generate(
             genre=genre, premise=clean_premise, tone=tone,
@@ -61,20 +60,15 @@ async def generate_script_op(
         script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
         sync_scenes(project_id, structured, scene_uuids=scene_uuids)
         return {"script_id": str(script.id), "structured": structured}
-    finally:
-        current_project.reset(_tok)
 
 
 async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = False) -> list[dict]:
     script = db.query(Script).filter(Script.id == uuid.UUID(script_id)).first()
     if not script or not script.structured_json:
         return []
-    from app.services.usage_tracker import current_project
-    _tok = current_project.set((str(script.project_id), db))
-    try:
+    from app.services.usage_tracker import track_project
+    with track_project(script.project_id, db):
         data = await CharacterExtractor().extract(script.structured_json)
-    finally:
-        current_project.reset(_tok)
     db.query(Character).filter(Character.project_id == script.project_id).delete()
     created = []
     for cd in data:
@@ -111,10 +105,9 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
 
     shots_per_scene, shot_seconds = plan_shot_budget(len(scenes), target_length)
     gen = StoryboardGenerator()
-    created = []
-    from app.services.usage_tracker import current_project
-    _tok = current_project.set((str(script.project_id), db))
-    try:
+    created: list[tuple[Shot, int]] = []
+    from app.services.usage_tracker import track_project
+    with track_project(script.project_id, db):
         for scene in scenes:
             scene_chars = [char_map.get(str(n).upper(), {"name": n}) for n in (scene.characters_json or [])]
             shots = await gen.generate_for_scene(
@@ -136,15 +129,17 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     notes=sd.get("notes"),
                 )
                 db.add(shot)
-                created.append(shot)
-    finally:
-        current_project.reset(_tok)
+                created.append((shot, scene.number))
     db.commit()
+    # scene_number rides along so the budget allocator can protect the hook
+    # (scene 1) when it fits the plan to the spend cap.
     return [{"shot_id": str(s.id), "shot_type": s.shot_type,
+             "scene_number": scene_no,
              "emotional_beat": s.emotional_beat,
              "characters_in_frame": s.characters_in_frame or [],
              "dialogue": s.dialogue,
-             "estimated_duration_seconds": s.estimated_duration_seconds} for s in created]
+             "estimated_duration_seconds": s.estimated_duration_seconds}
+            for s, scene_no in created]
 
 
 def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_usd: float | None = None) -> dict:
@@ -217,9 +212,11 @@ async def clarify_op(db: Session, project_id: str) -> dict:
     script = (db.query(Script).filter(Script.project_id == uuid.UUID(str(project_id)))
               .order_by(Script.created_at.desc()).first())
     chars = db.query(Character).filter(Character.project_id == uuid.UUID(str(project_id))).all()
-    assessment = await ClarificationAgent().assess(
-        (script.structured_json if script else {}) or {},
-        [{"name": c.name, "physical_description": c.physical_description} for c in chars])
+    from app.services.usage_tracker import track_project
+    with track_project(project_id, db):
+        assessment = await ClarificationAgent().assess(
+            (script.structured_json if script else {}) or {},
+            [{"name": c.name, "physical_description": c.physical_description} for c in chars])
     project = db.query(Project).filter(Project.id == uuid.UUID(str(project_id))).first()
     pause = needs_pause(assessment, bool(project.auto_clarify) if project else False)
     report_agent(db, project_id, agent="clarification", stage="clarify",

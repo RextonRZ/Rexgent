@@ -14,7 +14,7 @@ class NarrativeJudge:
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": json.dumps(script_json)},
         ]
-        raw = await self.qwen.chat_json(messages=messages, temperature=0.3)
+        raw = await self.qwen.chat_json(messages=messages, temperature=0.3, task="judge")
         if not isinstance(raw, dict):
             raw = {}
 

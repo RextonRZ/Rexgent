@@ -9,6 +9,7 @@ from app.models.character import Character
 from app.schemas.shot import ShotResponse
 from app.services.script_structurer import ScriptStructurer
 from app.services.storyboard_generator import StoryboardGenerator, plan_shot_budget
+from app.services.usage_tracker import track_project
 
 router = APIRouter(prefix="/api/storyboard", tags=["storyboard"])
 
@@ -65,7 +66,8 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
         # structuring pass found none, or it was edited in the editor (Save
         # bumps the version but never re-parses). Structure the CURRENT text
         # and materialize the scenes before giving up.
-        structured = await ScriptStructurer().structure(script.raw_text)
+        with track_project(script.project_id, db):
+            structured = await ScriptStructurer().structure(script.raw_text)
 
         if not structured.get("scenes"):
             # The text isn't a screenplay at all — premise notes, character
@@ -78,13 +80,14 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
             project = (
                 db.query(Project).filter(Project.id == script.project_id).first()
             )
-            screenplay = await ScriptGenerator().generate(
-                genre=(project.genre if project else None) or "drama",
-                premise=script.raw_text[:300],
-                notes=script.raw_text,
-                target_length=target_length,
-            )
-            structured = await ScriptStructurer().structure(screenplay)
+            with track_project(script.project_id, db):
+                screenplay = await ScriptGenerator().generate(
+                    genre=(project.genre if project else None) or "drama",
+                    premise=script.raw_text[:300],
+                    notes=script.raw_text,
+                    target_length=target_length,
+                )
+                structured = await ScriptStructurer().structure(screenplay)
             if structured.get("scenes"):
                 script = Script(
                     project_id=script.project_id,
@@ -149,10 +152,11 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
             "dialogue": scene.dialogue_json or [],
         }
 
-        shots_data = await generator.generate_for_scene(
-            scene_data, scene_chars,
-            max_shots=shots_per_scene, shot_seconds=shot_seconds,
-        )
+        with track_project(script.project_id, db):
+            shots_data = await generator.generate_for_scene(
+                scene_data, scene_chars,
+                max_shots=shots_per_scene, shot_seconds=shot_seconds,
+            )
 
         for shot_data in shots_data:
             shot = Shot(

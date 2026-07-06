@@ -3,6 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { getSocket } from "@/lib/websocket";
 
+export interface LedgerLlm {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  by_model: Record<string, { tokens: number; usd: number }>;
+  tokens_by_stage: Record<string, number>;
+}
+
 export interface Ledger {
   by_category: Record<string, number>;
   by_stage: Record<string, number>;
@@ -10,6 +18,7 @@ export interface Ledger {
   budget: number;
   within_budget: boolean;
   remaining: number;
+  llm?: LedgerLlm;
 }
 
 export function useLedger(projectId: string) {

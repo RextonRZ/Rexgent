@@ -6,6 +6,7 @@ import { GenerationLauncher } from "@/components/generate/GenerationLauncher";
 import { GenerationQueue } from "@/components/generate/GenerationQueue";
 import { ActivityFeed } from "@/components/casting/ActivityFeed";
 import { ClarificationModal } from "@/components/agents/ClarificationModal";
+import { TokenDashboard } from "@/components/budget/TokenDashboard";
 
 export default function GeneratePage({ params }: { params: { id: string } }) {
   useWebSocket(params.id);
@@ -20,6 +21,9 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
           Watch the studio render your drama, shot by shot.
         </p>
       </div>
+
+      {/* the token engineering, front and center */}
+      <TokenDashboard projectId={params.id} />
 
       {/* launcher (left) beside the activity feed (right) */}
       <div className="grid gap-6 lg:grid-cols-3 items-start">

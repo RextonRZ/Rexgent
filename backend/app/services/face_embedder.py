@@ -27,7 +27,7 @@ class FaceEmbedder:
                 )},
             ],
         }]
-        description = await self.qwen.chat_vision_json(messages=messages)
+        description = await self.qwen.chat_vision_json(messages=messages, task="face")
         if not isinstance(description, dict):
             description = {"face_description": "", "embedding_keywords": []}
 

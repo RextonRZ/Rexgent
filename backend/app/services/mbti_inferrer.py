@@ -26,7 +26,7 @@ class MBTIInferrer:
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user_content},
         ]
-        result = await self.qwen.chat_json(messages=messages, temperature=0.3)
+        result = await self.qwen.chat_json(messages=messages, temperature=0.3, task="mbti")
         if not isinstance(result, dict):
             return {"mbti_type": None, "confidence": None}
         return result

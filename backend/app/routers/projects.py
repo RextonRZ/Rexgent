@@ -210,6 +210,7 @@ async def _llm_title(premise: str) -> str:
         ],
         temperature=0.8,
         max_tokens=32,
+        task="title",
     )
 
 

@@ -100,7 +100,7 @@ class ConsistencyGuard:
                 )},
             ],
         }]
-        result = await self.qwen.chat_vision_json(messages=messages)
+        result = await self.qwen.chat_vision_json(messages=messages, task="continuity")
         if not isinstance(result, dict):
             return {"reason": "unknown", "suggested_change": "Reseed and emphasise facial features."}
         return result

@@ -71,7 +71,7 @@ class StoryboardGenerator:
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user_content},
         ]
-        result = await self.qwen.chat_json(messages=messages, temperature=0.4)
+        result = await self.qwen.chat_json(messages=messages, temperature=0.4, task="storyboard")
         shots = result if isinstance(result, list) else []
 
         shots = shots[:cap]

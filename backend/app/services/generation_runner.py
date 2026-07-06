@@ -131,7 +131,8 @@ class GenerationRunner:
                  str(job.project_id))
             return
 
-        job.total_shots = len(shots)
+        # Deferred shots were cut by the allocator to fit the spend cap.
+        job.total_shots = len([s for s in shots if (s.quality_tier or "") != "deferred"])
         self.db.commit()
 
         pid = str(job.project_id)
@@ -149,7 +150,11 @@ class GenerationRunner:
         self._cost_lock = asyncio.Lock()
         self._cancelled = False
 
-        await self._run_scenes_concurrently(scenes, bible)
+        # Prompt-craft and continuity LLM calls inside the scene tasks inherit
+        # this context, so their tokens land on this drama's ledger too.
+        from app.services.usage_tracker import track_project
+        with track_project(pid, self.db):
+            await self._run_scenes_concurrently(scenes, bible)
 
         # Reconcile counters from the DB (per-scene sessions wrote clips + cost events
         # independently, so recompute authoritative totals here to avoid lost updates).
@@ -217,6 +222,8 @@ class GenerationRunner:
             for shot in shots:
                 if self._cancelled:
                     break
+                if (shot.quality_tier or "") == "deferred":
+                    continue  # the allocator cut this shot to fit the spend cap
                 prev_last_frame = await r2._process_shot(
                     job2, shot, char_by_name, bible, scene.number, prev_last_frame)
                 amt = video_cost(shot.estimated_duration_seconds, shot.quality_tier or "happyhorse")

@@ -13,9 +13,11 @@ def _as_uuid(project_id):
         return project_id
 
 
-def record(db, project_id, category, stage, unit, quantity, amount_usd, ref_id=None):
+def record(db, project_id, category, stage, unit, quantity, amount_usd, ref_id=None,
+           model=None, input_tokens=None, output_tokens=None):
     ev = CostEvent(project_id=_as_uuid(project_id), category=category, stage=stage,
-                   unit=unit, quantity=quantity, amount_usd=amount_usd, ref_id=ref_id)
+                   unit=unit, quantity=quantity, amount_usd=amount_usd, ref_id=ref_id,
+                   model=model, input_tokens=input_tokens, output_tokens=output_tokens)
     db.add(ev)
     db.commit()
     # Distinct event name: the aggregate payload here differs from the generation
@@ -37,14 +39,33 @@ def aggregate(db, project_id, budget=None) -> dict:
     rows = db.query(CostEvent).filter(CostEvent.project_id == _as_uuid(project_id)).all()
     by_cat: dict = {}
     by_stage: dict = {}
+    llm_in = llm_out = llm_total = 0
+    llm_by_model: dict = {}
+    llm_tokens_by_stage: dict = {}
     for r in rows:
         by_cat[r.category] = round(by_cat.get(r.category, 0.0) + (r.amount_usd or 0.0), 4)
         if r.stage:
             by_stage[r.stage] = round(by_stage.get(r.stage, 0.0) + (r.amount_usd or 0.0), 4)
+        if r.category == "llm":
+            ti = int(r.input_tokens or 0)
+            to = int(r.output_tokens or 0)
+            tq = int(r.quantity or 0) or (ti + to)
+            llm_in += ti
+            llm_out += to
+            llm_total += tq
+            m = (getattr(r, "model", None) or "qwen-max")
+            entry = llm_by_model.setdefault(m, {"tokens": 0, "usd": 0.0})
+            entry["tokens"] += tq
+            entry["usd"] = round(entry["usd"] + (r.amount_usd or 0.0), 4)
+            if r.stage:
+                llm_tokens_by_stage[r.stage] = llm_tokens_by_stage.get(r.stage, 0) + tq
     grand = round(sum(by_cat.values()), 4)
     return {"by_category": by_cat, "by_stage": by_stage, "grand_total": grand,
             "budget": budget, "within_budget": grand <= budget,
-            "remaining": round(budget - grand, 4)}
+            "remaining": round(budget - grand, 4),
+            "llm": {"input_tokens": llm_in, "output_tokens": llm_out,
+                    "total_tokens": llm_total, "by_model": llm_by_model,
+                    "tokens_by_stage": llm_tokens_by_stage}}
 
 
 def record_video(db, project_id, seconds, model, ref_id=None):
@@ -60,6 +81,8 @@ def record_tts(db, project_id, chars):
     return record(db, project_id, "tts", "audio", "char", chars, tts_cost(chars))
 
 
-def record_llm(db, project_id, in_tokens, out_tokens, stage="script"):
+def record_llm(db, project_id, in_tokens, out_tokens, stage="script", model=None):
+    from app.services.model_router import llm_cost_for
+    amount = llm_cost_for(model, in_tokens, out_tokens) if model else llm_cost(in_tokens, out_tokens)
     return record(db, project_id, "llm", stage, "tokens", in_tokens + out_tokens,
-                  llm_cost(in_tokens, out_tokens))
+                  amount, model=model, input_tokens=in_tokens, output_tokens=out_tokens)

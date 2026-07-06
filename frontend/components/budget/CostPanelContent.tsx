@@ -4,6 +4,25 @@ import { useLedger } from "@/hooks/useLedger";
 import { useActivityFeed } from "@/hooks/useActivityFeed";
 import { cn } from "@/lib/utils";
 
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
+  return String(n);
+}
+
+const TIER_DOT: Record<string, string> = {
+  flash: "bg-emerald-400",
+  plus: "bg-sky-400",
+  max: "bg-violet-400",
+};
+
+function tierOf(model: string): string {
+  const m = model.toLowerCase();
+  if (m.includes("flash") || m.includes("turbo")) return "flash";
+  if (m.includes("plus")) return "plus";
+  return "max";
+}
+
 const CATEGORIES = [
   { key: "llm", label: "LLM" },
   { key: "image", label: "Image" },
@@ -78,6 +97,26 @@ export function CostPanelContent({ projectId }: { projectId: string }) {
           />
         </div>
       </div>
+
+      {ledger?.llm && ledger.llm.total_tokens > 0 && (
+        <div className="rounded-lg bg-white/[0.03] px-3 py-2">
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs text-muted-foreground">Tokens</span>
+            <span className="text-sm font-semibold tabular-nums">
+              {fmtTokens(ledger.llm.total_tokens)}
+            </span>
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+            {Object.entries(ledger.llm.by_model).map(([model, v]) => (
+              <span key={model} className="inline-flex items-center gap-1 text-[11px]">
+                <span className={cn("h-1.5 w-1.5 rounded-full", TIER_DOT[tierOf(model)])} />
+                <span className="text-muted-foreground">{model}</span>
+                <span className="tabular-nums">{fmtTokens(v.tokens)}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-1.5">
         {CATEGORIES.map((c) => {

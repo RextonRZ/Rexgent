@@ -15,7 +15,7 @@ class CharacterExtractor:
             {"role": "system", "content": self.prompt_template + language_instruction(language)},
             {"role": "user", "content": json.dumps(script_json, ensure_ascii=False)},
         ]
-        result = await self.qwen.chat_json(messages=messages, temperature=0.2)
+        result = await self.qwen.chat_json(messages=messages, temperature=0.2, task="characters")
         if not isinstance(result, list):
             return []
         return result

@@ -34,11 +34,13 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
 
     scenes = db.query(Scene).filter(Scene.script_id == script.id).all()
     scene_ids = [s.id for s in scenes]
+    scene_number_by_id = {s.id: s.number for s in scenes}
     shots = db.query(Shot).filter(Shot.scene_id.in_(scene_ids)).order_by(Shot.number).all()
 
     shots_data = [{
         "shot_id": str(s.id),
         "shot_type": s.shot_type,
+        "scene_number": scene_number_by_id.get(s.scene_id),
         "emotional_beat": s.emotional_beat,
         "characters_in_frame": s.characters_in_frame or [],
         "dialogue": s.dialogue,
@@ -56,8 +58,17 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
             shot.quality_tier = tier
     db.commit()
 
-    # Qwen-Max LLM cost so far (this process) alongside projected video cost.
-    llm = global_usage().snapshot()
+    # LLM tokens/cost from THIS drama's ledger (all models, all entry paths);
+    # the in-memory tracker only covers calls that never had a project set.
+    agg = aggregate(db, project_id, budget)
+    ledger_llm = agg.get("llm") or {}
+    if ledger_llm.get("total_tokens"):
+        llm = {"input_tokens": ledger_llm["input_tokens"],
+               "output_tokens": ledger_llm["output_tokens"],
+               "cost_usd": round(agg["by_category"].get("llm", 0.0), 4)}
+        result["llm_by_model"] = ledger_llm.get("by_model", {})
+    else:
+        llm = global_usage().snapshot()
     video_cost = result["video_cost_usd"]
     grand_total = round(video_cost + llm["cost_usd"], 2)
     result["llm"] = llm

@@ -3,14 +3,14 @@
 import { cn } from "@/lib/utils";
 import type { BudgetResult } from "@/hooks/useBudget";
 
-const VOUCHER = 40;
-
 export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
   const llmCost = budget.llm_cost_usd ?? 0;
   const videoCost = budget.video_cost_usd;
   const total = budget.grand_total_cost ?? budget.total_estimated_cost + llmCost;
-  const pct = Math.min((total / VOUCHER) * 100, 100);
-  const over = total > VOUCHER;
+  // this drama's own spend cap, not a global voucher constant
+  const cap = budget.budget_usd ?? 40;
+  const pct = Math.min((total / cap) * 100, 100);
+  const over = total > cap;
 
   return (
     <div className="glass rounded-xl p-5 space-y-4">
@@ -23,7 +23,7 @@ export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
             ${total.toFixed(2)}
             <span className="text-base font-normal text-muted-foreground">
               {" "}
-              / ${VOUCHER}
+              / ${cap.toFixed(0)}
             </span>
           </p>
         </div>
@@ -45,13 +45,13 @@ export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <Stat label="LLM (Qwen-Max)" value={`$${llmCost.toFixed(2)}`} />
+        <Stat label="LLM (tiered)" value={`$${llmCost.toFixed(2)}`} />
         <Stat label="Video" value={`$${videoCost.toFixed(2)}`} />
         <Stat label="Shots" value={`${budget.total_shots}`} />
         <Stat label="Seconds" value={`${budget.total_estimated_seconds}s`} />
       </div>
 
-      <div className="flex items-center gap-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-wan/15 text-wan px-2 py-0.5">
           <span className="h-1.5 w-1.5 rounded-full bg-wan" />
           {budget.wan_shots} Wan
@@ -60,6 +60,18 @@ export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
           <span className="h-1.5 w-1.5 rounded-full bg-hh" />
           {budget.happyhorse_shots} HappyHorse
         </span>
+        {(budget.hook_shots ?? 0) > 0 && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 text-primary px-2 py-0.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+            {budget.hook_shots} hook protected
+          </span>
+        )}
+        {(budget.deferred_shots ?? 0) > 0 && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-warn/15 text-warn px-2 py-0.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-warn" />
+            {budget.deferred_shots} deferred to fit the cap
+          </span>
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground border-t hairline pt-3">

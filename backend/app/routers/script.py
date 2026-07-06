@@ -17,6 +17,7 @@ from app.services.script_parser import ScriptParser
 from app.services.script_structurer import ScriptStructurer
 from app.services.script_generator import ScriptGenerator
 from app.services.guardrails import InputSanitizer
+from app.services.usage_tracker import track_project
 from app.graph.sync import sync_scenes
 from app.mcp_tools.registry import get_tool
 
@@ -38,7 +39,8 @@ async def parse_script(
     raw_text = parser.parse_bytes(content, file.filename)
 
     structurer = ScriptStructurer()
-    structured = await structurer.structure(raw_text)
+    with track_project(project_id, db):
+        structured = await structurer.structure(raw_text)
 
     script = Script(
         project_id=uuid.UUID(project_id),
@@ -91,19 +93,20 @@ async def generate_script(
     clean_premise = InputSanitizer().sanitize(request.premise, max_length=300)
 
     generator = ScriptGenerator()
-    raw_text = await generator.generate(
-        genre=request.genre,
-        premise=clean_premise,
-        tone=request.tone,
-        episode_count=request.episode_count,
-        target_length=request.target_length,
-        notes=request.notes or "",
-        language=request.language,
-        model=request.model,
-    )
+    with track_project(request.project_id, db):
+        raw_text = await generator.generate(
+            genre=request.genre,
+            premise=clean_premise,
+            tone=request.tone,
+            episode_count=request.episode_count,
+            target_length=request.target_length,
+            notes=request.notes or "",
+            language=request.language,
+            model=request.model,
+        )
 
-    structurer = ScriptStructurer()
-    structured = await structurer.structure(raw_text, language=request.language)
+        structurer = ScriptStructurer()
+        structured = await structurer.structure(raw_text, language=request.language)
 
     script = Script(
         project_id=request.project_id,
@@ -197,8 +200,9 @@ async def analyze_script(script_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Script has no structured data")
 
     # Call the shared tool registry — same code path the MCP server serves.
-    gaps = await get_tool("plot_gap_detector")({"script": script.structured_json})
-    ending = await get_tool("ending_engine")({"script": script.structured_json})
+    with track_project(script.project_id, db):
+        gaps = await get_tool("plot_gap_detector")({"script": script.structured_json})
+        ending = await get_tool("ending_engine")({"script": script.structured_json})
 
     # Persist plot flags so they can be acknowledged/dismissed later.
     # Re-running analysis replaces any previously stored flags for this script.
@@ -257,4 +261,5 @@ async def judge_script(script_id: str, db: Session = Depends(get_db)):
     if not script.structured_json:
         raise HTTPException(status_code=400, detail="Script has no structured data")
 
-    return await get_tool("narrative_judge")({"script": script.structured_json})
+    with track_project(script.project_id, db):
+        return await get_tool("narrative_judge")({"script": script.structured_json})

@@ -55,12 +55,22 @@ async def regen_clip(request: RegenRequest, db: Session = Depends(get_db)):
     if not clip or not flag:
         raise HTTPException(status_code=404, detail="Clip or flag not found")
 
+    job = db.query(GenerationJob).filter(GenerationJob.id == clip.job_id).first()
     rewriter = RegenPromptRewriter()
-    rewrite = await rewriter.rewrite(
-        original_prompt=clip.prompt or "",
-        flag_description=flag.description,
-        flag_type=flag.flag_type,
-    )
+    if job:
+        from app.services.usage_tracker import track_project
+        with track_project(job.project_id, db):
+            rewrite = await rewriter.rewrite(
+                original_prompt=clip.prompt or "",
+                flag_description=flag.description,
+                flag_type=flag.flag_type,
+            )
+    else:
+        rewrite = await rewriter.rewrite(
+            original_prompt=clip.prompt or "",
+            flag_description=flag.description,
+            flag_type=flag.flag_type,
+        )
     revised_prompt = rewrite.get("revised_prompt", clip.prompt)
 
     qwen = QwenClient(get_settings())
@@ -73,7 +83,6 @@ async def regen_clip(request: RegenRequest, db: Session = Depends(get_db)):
     )
     new_url = await qwen.poll_video_task(task_id)
     # DashScope URLs expire (~24h) — keep our own copy on OSS
-    job = db.query(GenerationJob).filter(GenerationJob.id == clip.job_id).first()
     if job:
         new_url = await asyncio.to_thread(
             persist_clip_url, str(job.project_id), f"shot_{clip.shot_id}_regen", new_url)

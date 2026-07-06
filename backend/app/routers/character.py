@@ -11,6 +11,7 @@ from app.services.mbti_inferrer import MBTIInferrer
 from app.services.face_embedder import FaceEmbedder
 from app.services.appearance_generator import AppearanceGenerator
 from app.services.oss_manager import OSSManager
+from app.services.usage_tracker import track_project
 from app.graph.sync import sync_characters
 
 router = APIRouter(prefix="/api/characters", tags=["characters"])
@@ -41,7 +42,8 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
     infer_mbti = bool(request.get("infer_mbti", False))
 
     extractor = CharacterExtractor()
-    characters_data = await extractor.extract(script.structured_json)
+    with track_project(script.project_id, db):
+        characters_data = await extractor.extract(script.structured_json)
 
     inferrer = MBTIInferrer() if infer_mbti else None
     created = []
@@ -52,12 +54,13 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
     for char_data in characters_data:
         mbti_result = {}
         if inferrer is not None:
-            mbti_result = await inferrer.infer(
-                character_name=char_data.get("name", "Unknown"),
-                dialogue_samples=char_data.get("key_dialogue_samples", []),
-                personality_summary=char_data.get("personality_summary", ""),
-                actions_summary=", ".join(char_data.get("relationships", [])),
-            )
+            with track_project(script.project_id, db):
+                mbti_result = await inferrer.infer(
+                    character_name=char_data.get("name", "Unknown"),
+                    dialogue_samples=char_data.get("key_dialogue_samples", []),
+                    personality_summary=char_data.get("personality_summary", ""),
+                    actions_summary=", ".join(char_data.get("relationships", [])),
+                )
 
         character = Character(
             project_id=script.project_id,
@@ -146,7 +149,8 @@ async def upload_face(
     image_url = oss.upload_bytes(content, oss_key, content_type="image/jpeg")
 
     embedder = FaceEmbedder()
-    result = await embedder.extract(image_bytes=content, image_url=image_url)
+    with track_project(character.project_id, db):
+        result = await embedder.extract(image_bytes=content, image_url=image_url)
     description = result["description"]
 
     character.reference_image_url = image_url
@@ -167,13 +171,14 @@ async def generate_appearance(character_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Character not found")
 
     generator = AppearanceGenerator()
-    appearance = await generator.generate(
-        character_name=character.name,
-        role=character.role or "SUPPORTING",
-        personality=character.personality_summary or "",
-        mbti=character.mbti or "",
-        physical_desc=character.physical_description or "",
-    )
+    with track_project(character.project_id, db):
+        appearance = await generator.generate(
+            character_name=character.name,
+            role=character.role or "SUPPORTING",
+            personality=character.personality_summary or "",
+            mbti=character.mbti or "",
+            physical_desc=character.physical_description or "",
+        )
 
     character.visual_description = appearance.get("full_description", "")
     character.video_prompt_fragment = appearance.get("video_prompt_fragment", "")
