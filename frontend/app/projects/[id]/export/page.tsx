@@ -1,17 +1,15 @@
 "use client";
 
 import { ExportEditor } from "@/components/export/ExportEditor";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 export default function ExportPage({ params }: { params: { id: string } }) {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Edit &amp; Export</h1>
-        <p className="text-sm text-muted-foreground">
-          Arrange your shots, AI-edit any take (click a clip → ✏️), preview the
-          cut, then render the final film.
-        </p>
-      </div>
+      <PageHeader
+        title="Edit & Export"
+        sub="Arrange your shots, fix any take with AI, preview the cut in a phone frame, then render the episode."
+      />
       <ExportEditor projectId={params.id} />
     </div>
   );

@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NextStepButton } from "@/components/shared/NextStepButton";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { LiveStageStrip } from "@/components/shared/LiveStageStrip";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { Skeleton } from "@/components/shared/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StoryboardView } from "@/components/storyboard/StoryboardView";
@@ -75,17 +77,14 @@ export default function StoryboardPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Storyboard</h1>
-          <p className="text-sm text-muted-foreground">
-            Shot-by-shot breakdown, story map, and the world your drama lives in.
-          </p>
-        </div>
+      <PageHeader
+        title="Storyboard"
+        sub="Shot-by-shot breakdown, story map, and the world your drama lives in."
+      >
         <Button onClick={handleGenerate} disabled={generateStoryboard.isPending}>
           {generateStoryboard.isPending ? "Directing…" : "Generate storyboard"}
         </Button>
-      </div>
+      </PageHeader>
 
       <LiveStageStrip
         projectId={params.id}
@@ -121,7 +120,15 @@ export default function StoryboardPage({
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               {isLoading ? (
-                <p className="text-muted-foreground">Loading storyboard…</p>
+                <Skeleton className="h-64 rounded-2xl" />
+              ) : !hasShots && !generateStoryboard.isPending ? (
+                <EmptyState
+                  icon="🎬"
+                  title="No storyboard yet"
+                  line="The director breaks your script into shots: framing, blocking, lighting and the set every scene must keep. Generate it to see your drama shot by shot."
+                >
+                  <Button onClick={handleGenerate}>Generate storyboard</Button>
+                </EmptyState>
               ) : (
                 <StoryboardView
                   scenes={scenes}

@@ -3,24 +3,33 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import {
+  useProjectProgress,
+  type ProjectProgress,
+} from "@/hooks/useProjectProgress";
 
-const STEPS = [
-  { n: 1, label: "Script", path: "script" },
-  { n: 2, label: "Characters", path: "characters" },
-  { n: 3, label: "Storyboard", path: "storyboard" },
-  { n: 4, label: "Generate", path: "generate" },
-  { n: 5, label: "Edit & Export", path: "export" },
+const STEPS: { n: number; label: string; path: string; key: keyof ProjectProgress }[] = [
+  { n: 1, label: "Script", path: "script", key: "script" },
+  { n: 2, label: "Characters", path: "characters", key: "characters" },
+  { n: 3, label: "Storyboard", path: "storyboard", key: "storyboard" },
+  { n: 4, label: "Generate", path: "generate", key: "generate" },
+  { n: 5, label: "Edit & Export", path: "export", key: "export" },
 ];
 
 export function PipelineNav({ projectId }: { projectId: string }) {
   const pathname = usePathname() || "";
+  const progress = useProjectProgress(projectId);
   const activeIndex = STEPS.findIndex((s) => pathname.includes(`/${s.path}`));
 
   return (
     <nav className="flex items-center gap-0.5 sm:gap-1">
       {STEPS.map((step, i) => {
         const isActive = i === activeIndex;
-        const isDone = activeIndex > -1 && i < activeIndex;
+        // done means the stage's artifact actually exists — not merely that
+        // the user has walked past the page
+        const isDone = progress
+          ? progress[step.key]
+          : activeIndex > -1 && i < activeIndex;
         return (
           <div key={step.path} className="flex items-center">
             <Link
@@ -40,7 +49,7 @@ export function PipelineNav({ projectId }: { projectId: string }) {
                     : "bg-secondary text-muted-foreground"
                 )}
               >
-                {isDone ? "✓" : step.n}
+                {isDone && !isActive ? "✓" : step.n}
               </span>
               <span
                 className={cn(
@@ -55,10 +64,7 @@ export function PipelineNav({ projectId }: { projectId: string }) {
             </Link>
             {i < STEPS.length - 1 && (
               <span
-                className={cn(
-                  "h-px w-2 sm:w-4",
-                  isDone ? "bg-ok/40" : "bg-border"
-                )}
+                className={cn("h-px w-2 sm:w-4", isDone ? "bg-ok/40" : "bg-border")}
               />
             )}
           </div>

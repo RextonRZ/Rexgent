@@ -5,7 +5,9 @@ import { NextStepButton } from "@/components/shared/NextStepButton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CharacterList } from "@/components/characters/CharacterList";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { LiveStageStrip } from "@/components/shared/LiveStageStrip";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { RelationshipGraph } from "@/components/characters/RelationshipGraph";
 import { RelationshipEdgePanel } from "@/components/characters/RelationshipEdgePanel";
 import { Skeleton } from "@/components/shared/Skeleton";
@@ -77,37 +79,30 @@ export default function CharactersPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Characters</h1>
-          <p className="text-sm text-muted-foreground">
-            Build the cast and lock each face before generating.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button onClick={handleExtract} disabled={extractCharacters.isPending}>
-            {extractCharacters.isPending
-              ? "Extracting..."
-              : "Extract from Script"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => runCasting.mutate()}
-            disabled={runCasting.isPending}
-            title="Generate costume, location & style plates for the whole cast"
-          >
-            {runCasting.isPending ? "Generating…" : "Generate Plates"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => buildGraph.mutate(params.id)}
-            disabled={buildGraph.isPending || characters.length < 2}
-            title="Re-extract character relationships from the current script"
-          >
-            {buildGraph.isPending ? "Building…" : "Rebuild Relationships"}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Characters"
+        sub="Build the cast and lock each face before generating."
+      >
+        <Button onClick={handleExtract} disabled={extractCharacters.isPending}>
+          {extractCharacters.isPending ? "Extracting…" : "Extract from Script"}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => runCasting.mutate()}
+          disabled={runCasting.isPending}
+          title="Generate costume, location & style plates for the whole cast"
+        >
+          {runCasting.isPending ? "Generating…" : "Generate Plates"}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => buildGraph.mutate(params.id)}
+          disabled={buildGraph.isPending || characters.length < 2}
+          title="Re-extract character relationships from the current script"
+        >
+          {buildGraph.isPending ? "Building…" : "Rebuild Relationships"}
+        </Button>
+      </PageHeader>
 
       <LiveStageStrip
         projectId={params.id}
@@ -153,6 +148,14 @@ export default function CharactersPage({
                 <Skeleton key={i} className="h-64 rounded-xl" />
               ))}
             </div>
+          ) : characters.length === 0 && !extractCharacters.isPending ? (
+            <EmptyState
+              icon="🎭"
+              title="No cast yet"
+              line="The casting director reads your script and builds a profile for every character: face, wardrobe, voice and personality. Extract them to start casting."
+            >
+              <Button onClick={handleExtract}>Extract from Script</Button>
+            </EmptyState>
           ) : (
             <CharacterList
               characters={characters}

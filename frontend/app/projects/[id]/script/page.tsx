@@ -16,6 +16,7 @@ import {
   type JudgeResult,
 } from "@/components/script/NarrativeJudgeReport";
 import { AutoRunPanel } from "@/components/agent/AutoRunPanel";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -104,12 +105,10 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Script</h1>
-        <p className="text-sm text-muted-foreground">
-          Write it, then let the AI critique it before a cent is spent on video.
-        </p>
-      </div>
+      <PageHeader
+        title="Script"
+        sub="Write it, then let the AI critique it before a cent is spent on video."
+      />
 
       {!scriptData ? (
         <div className="max-w-4xl">

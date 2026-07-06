@@ -341,6 +341,39 @@ async def update_project(
     return project
 
 
+@router.get("/{project_id}/progress")
+def project_progress(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Which pipeline stages have real artifacts — drives the step nav, so
+    done means done (data exists), not merely visited."""
+    project = _get_owned_project(project_id, db, current_user)
+    from app.models.script import Script, Scene
+    from app.models.shot import Shot
+    from app.models.character import Character
+    from app.models.final_export import FinalExport
+
+    pid = project.id
+    script = (db.query(Script).filter(Script.project_id == pid)
+              .order_by(Script.created_at.desc()).first())
+    has_script = bool(script and (script.raw_text or "").strip())
+    has_characters = db.query(Character).filter(Character.project_id == pid).count() > 0
+    has_shots = False
+    if script:
+        scene_ids = [s.id for s in db.query(Scene.id).filter(Scene.script_id == script.id).all()]
+        if scene_ids:
+            has_shots = db.query(Shot).filter(Shot.scene_id.in_(scene_ids)).count() > 0
+    job_ids = [j.id for j in db.query(GenerationJob.id)
+               .filter(GenerationJob.project_id == pid).all()]
+    has_clips = bool(job_ids) and db.query(GeneratedClip).filter(
+        GeneratedClip.job_id.in_(job_ids), GeneratedClip.url.isnot(None)).count() > 0
+    has_export = db.query(FinalExport).filter(FinalExport.project_id == pid).count() > 0
+    return {"script": has_script, "characters": has_characters,
+            "storyboard": has_shots, "generate": has_clips, "export": has_export}
+
+
 @router.post("/{project_id}/duplicate", response_model=ProjectResponse)
 async def duplicate_project(
     project_id: str,
