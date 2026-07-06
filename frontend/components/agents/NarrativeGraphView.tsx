@@ -1,10 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ElementType } from "react";
 import { forceCollide } from "d3";
-import { useGraph } from "@/hooks/useGraph";
+import { useGraph, type GraphLink, type GraphNode } from "@/hooks/useGraph";
 
-function Face({ node, size = 12 }: { node: any; size?: number }) {
+// force-graph hydrates our data: nodes gain sim coordinates, link endpoints
+// may be raw ids or the hydrated node objects
+type FGNode = GraphNode & { x?: number; y?: number };
+type FGLink = Omit<GraphLink, "source" | "target"> & {
+  source: string | FGNode;
+  target: string | FGNode;
+};
+type ForceLike = {
+  distance?: (n: number) => ForceLike;
+  strength?: (n: number) => ForceLike;
+};
+interface ForceGraphHandle {
+  d3Force(name: string): ForceLike | undefined;
+  d3Force(name: string, force: unknown): void;
+  d3ReheatSimulation?: () => void;
+}
+
+function Face({ node, size = 12 }: { node: FGNode | undefined; size?: number }) {
   const px = size * 4; // tailwind units → px
   return node?.img ? (
     // eslint-disable-next-line @next/next/no-img-element
@@ -32,9 +50,9 @@ function ConnectionDrawer({
   target,
   onClose,
 }: {
-  link: any;
-  source: any;
-  target: any;
+  link: FGLink;
+  source: FGNode | undefined;
+  target: FGNode | undefined;
   onClose: () => void;
 }) {
   const isRel = link.kind === "relationship";
@@ -121,20 +139,20 @@ function ConnectionDrawer({
 export function NarrativeGraphView({ projectId }: { projectId: string }) {
   const { nodes, links } = useGraph(projectId);
   const containerRef = useRef<HTMLDivElement>(null);
-  const fgRef = useRef<any>(null);
+  const fgRef = useRef<ForceGraphHandle | null>(null);
   const [width, setWidth] = useState(0);
-  const [selLink, setSelLink] = useState<any | null>(null);
-  const [hoverLink, setHoverLink] = useState<any | null>(null);
+  const [selLink, setSelLink] = useState<FGLink | null>(null);
+  const [hoverLink, setHoverLink] = useState<FGLink | null>(null);
   // stable identity so hover/select re-renders don't re-heat the layout
   const graphData = useMemo(() => ({ nodes, links }), [nodes, links]);
 
   // link.source/target may be raw ids or hydrated node objects
-  const endNode = (end: any) =>
+  const endNode = (end: string | FGNode | undefined): FGNode | undefined =>
     typeof end === "object" ? end : nodes.find((n) => n.id === end);
 
   // Client-only import that supports refs (next/dynamic doesn't forward them),
   // so we can spread the force layout out for readability.
-  const [FG, setFG] = useState<any>(null);
+  const [FG, setFG] = useState<ElementType | null>(null);
   useEffect(() => {
     let alive = true;
     import("react-force-graph-2d").then((m) => {
@@ -149,8 +167,8 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    fg.d3Force("link")?.distance(140);
-    fg.d3Force("charge")?.strength(-320);
+    fg.d3Force("link")?.distance?.(140);
+    fg.d3Force("charge")?.strength?.(-320);
     fg.d3Force("collide", forceCollide(48));
   }, [FG, nodes.length]);
 
@@ -205,23 +223,23 @@ export function NarrativeGraphView({ projectId }: { projectId: string }) {
             width={width}
             height={420}
             nodeId="id"
-            linkColor={(l: any) =>
+            linkColor={(l: FGLink) =>
               l === selLink
                 ? "rgba(139,92,246,0.95)" // selected: violet
                 : l === hoverLink
                 ? "rgba(236,72,153,0.9)" // hovered: pink
                 : "rgba(148,163,184,0.35)"
             }
-            linkWidth={(l: any) => (l === selLink || l === hoverLink ? 3 : 1.5)}
-            onLinkHover={(l: any) => {
+            linkWidth={(l: FGLink) => (l === selLink || l === hoverLink ? 3 : 1.5)}
+            onLinkHover={(l: FGLink | null) => {
               setHoverLink(l);
               if (containerRef.current)
                 containerRef.current.style.cursor = l ? "pointer" : "default";
             }}
-            onLinkClick={(l: any) => setSelLink(l)}
+            onLinkClick={(l: FGLink) => setSelLink(l)}
             onBackgroundClick={() => setSelLink(null)}
             backgroundColor="rgba(0,0,0,0)"
-            nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, scale: number) => {
+            nodeCanvasObject={(node: FGNode, ctx: CanvasRenderingContext2D, scale: number) => {
               const x = node.x ?? 0;
               const y = node.y ?? 0;
               const isChar = node.group === "character";

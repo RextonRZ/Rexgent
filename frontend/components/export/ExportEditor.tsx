@@ -58,8 +58,9 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   }, [projectId, refetchJob]);
 
   const jobId = latestJob.data?.id ?? null;
-  const scenes = storyboard.data?.scenes ?? [];
-  const clips = clipsQuery.data?.clips ?? [];
+  // stable identities so downstream memos don't recompute every render
+  const scenes = useMemo(() => storyboard.data?.scenes ?? [], [storyboard.data]);
+  const clips = useMemo(() => clipsQuery.data?.clips ?? [], [clipsQuery.data]);
 
   const clipsByShot = useMemo(() => buildClipsByShot(clips), [clips]);
   // takes whose shot no longer exists (storyboard regenerated) — still usable
