@@ -169,6 +169,20 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
     for s in all_shots:
         db.refresh(s)
 
+    # Location plates ride along: the scenes exist now, so every location
+    # gets a background plate for the story map and reference stacks. Plates
+    # are an enhancement — never fail the storyboard over them.
+    try:
+        from app.services.casting_director import ensure_location_plates
+
+        await ensure_location_plates(db, script.project_id)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "location plate generation failed after storyboard", exc_info=True
+        )
+
     return {
         "total_shots": len(all_shots),
         "shots": [ShotResponse.model_validate(s) for s in all_shots],

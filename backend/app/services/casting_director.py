@@ -40,6 +40,48 @@ from app.services.voice_catalog import FEMALE_DEFAULTS, MALE_DEFAULTS, default_v
 VOICE_POOL = FEMALE_DEFAULTS + MALE_DEFAULTS
 
 
+async def ensure_location_plates(db: Session, project_id) -> int:
+    """Generate background plates for scene locations that don't have one
+    yet. Idempotent — existing plates are never touched — so the storyboard
+    flow can call it after every (re)generation. Returns how many were made."""
+    script = (db.query(Script).filter(Script.project_id == project_id)
+              .order_by(Script.created_at.desc()).first())
+    if not script:
+        return 0
+    scenes = (db.query(Scene).filter(Scene.script_id == script.id)
+              .order_by(Scene.number).all())
+    scene_dicts = [{"number": s.number, "location": s.location} for s in scenes]
+
+    existing = {p.location_key for p in db.query(LocationPlate)
+                .filter(LocationPlate.project_id == project_id).all()}
+    missing = [loc for loc in distinct_locations(scene_dicts)
+               if loc["location_key"] not in existing
+               and (loc["description"] or "").strip()]
+    if not missing:
+        return 0
+
+    pid = str(project_id)
+    plates = PlateGenerator(db)
+    style = db.query(StylePreset).filter(StylePreset.project_id == project_id).first()
+    tags = list(style.style_tags or []) if style else []
+
+    for idx, loc in enumerate(missing, start=1):
+        emit("casting.plate.started",
+             {"kind": "location", "key": loc["location_key"], "index": idx, "total": len(missing)}, pid)
+        prompt = f"{loc['description']} background plate"
+        if tags:
+            prompt += f". {', '.join(tags)}"
+        url, _ = await plates.generate_and_store_plate(pid, "location", loc["location_key"], prompt)
+        db.add(LocationPlate(project_id=project_id, location_key=loc["location_key"],
+                             description=loc["description"], plate_image_url=url,
+                             scene_numbers=loc["scene_numbers"]))
+        emit("casting.plate.completed",
+             {"kind": "location", "key": loc["location_key"], "index": idx, "total": len(missing)}, pid)
+
+    db.commit()
+    return len(missing)
+
+
 def assign_voice(char, index: int = 0) -> None:
     """Assign a preset TTS voice (qwen3-tts-flash timbre), matched to the
     character's gender and rotated by index so each gets a distinct one.

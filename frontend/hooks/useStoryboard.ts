@@ -34,6 +34,8 @@ export function useGenerateStoryboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["storyboard"] });
+      // location plates are generated alongside the storyboard
+      queryClient.invalidateQueries({ queryKey: ["bible"] });
     },
   });
 }
