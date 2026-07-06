@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -16,6 +16,8 @@ class GenerationJob(Base):
     completed_shots = Column(Integer, default=0)
     estimated_cost = Column(Float, nullable=True)
     actual_cost = Column(Float, default=0.0)
+    # full-auto runs export the finished episode as soon as the job completes
+    auto_export = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
 

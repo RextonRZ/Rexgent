@@ -106,11 +106,15 @@ async def answer(project_id: str, body: dict, db: Session = Depends(get_db)):
                 c.visual_description = f"{c.visual_description or ''}. {text}".strip(". ")
     db.commit()
     emit("clarification.resolved", {}, project_id)
-    # Continue the pipeline: run the storyboard now that ambiguity is resolved.
+    # Continue the pipeline: storyboard, then fit the budget — the resumed
+    # plan lands in the same reviewed state a non-paused run reaches.
     script = (db.query(Script).filter(Script.project_id == uuid.UUID(project_id))
               .order_by(Script.created_at.desc()).first())
     if script:
-        await generate_storyboard_op(db, str(script.id))
+        from app.agent.pipeline_ops import allocate_budget_op
+        shots = await generate_storyboard_op(db, str(script.id))
+        if shots:
+            allocate_budget_op(db, project_id, shots)
     return {"resumed": True}
 
 

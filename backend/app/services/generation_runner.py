@@ -184,6 +184,15 @@ class GenerationRunner:
             "total_clips": job.completed_shots,
             "total_cost": round(job.actual_cost, 2),
         }, pid)
+        # Full-auto: the finished episode renders itself — dialogue placed,
+        # captions burned, vertical canvas — with no click in between.
+        if getattr(job, "auto_export", False):
+            try:
+                from app.workers.export_worker import run_export
+                run_export.delay(pid, str(job.id))
+                emit("export.autostarted", {"job_id": str(job.id)}, pid)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"auto-export dispatch failed: {e}")
 
     async def _run_scenes_concurrently(self, scenes, bible):
         # Scenes run in parallel for speed. Shots WITHIN a scene stay sequential and

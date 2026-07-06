@@ -16,7 +16,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAutoRun, type AutoRunResult } from "@/hooks/useAgent";
+import { useProject } from "@/hooks/useProjects";
 import { getSocket } from "@/lib/websocket";
+import { cn } from "@/lib/utils";
 
 const NODE_LABELS: Record<string, string> = {
   generate_script: "Writing script",
@@ -43,15 +45,18 @@ export function AutoRunPanel({
   initialTargetLength?: number;
 }) {
   const router = useRouter();
+  const { data: project } = useProject(projectId);
   const [premise, setPremise] = useState(initialPremise);
   const [genre, setGenre] = useState(initialGenre || "sci-fi");
   const [language, setLanguage] = useState("en");
   const [targetLength, setTargetLength] = useState(initialTargetLength || 30); // seconds
   const [episodeCount, setEpisodeCount] = useState(initialEpisodes || 1);
+  const [fullAuto, setFullAuto] = useState(false);
   const [trace, setTrace] = useState<string[]>([]);
   const [result, setResult] = useState<AutoRunResult | null>(null);
   const [touched, setTouched] = useState(false);
   const autoRun = useAutoRun();
+  const cap = project?.credit_budget ?? 40;
 
   // Rough pre-flight scope estimate (the agent computes the real budget).
   // ~1 short scene per 15s, ~3 shots per scene.
@@ -90,7 +95,9 @@ export function AutoRunPanel({
       language,
       target_length: targetLength,
       episode_count: episodeCount,
-      dispatch_video: false, // plan only — the user spends on the Generate tab
+      // Full Auto renders + exports the finished episode under the spend cap;
+      // otherwise plan only — the user spends on the Generate tab.
+      dispatch_video: fullAuto,
     });
     setResult(res);
   };
@@ -178,20 +185,53 @@ export function AutoRunPanel({
             {estScenes} scenes · ~{estShots} shots at this length.
           </p>
           <p>
-            Scripting is cheap — your <span className="text-foreground">$40</span>{" "}
-            voucher caps how much <em>video</em> renders, not how long you write.
-            A bigger story renders as more, shorter shots; the agent tiers
-            premium generation to fit and tells you the real budget before you
-            spend.
+            Scripting is cheap — this drama&apos;s{" "}
+            <span className="text-foreground">${cap.toFixed(0)}</span> cap limits
+            how much <em>video</em> renders, not how long you write. A bigger
+            story renders as more, shorter shots; the agent tiers premium
+            generation to fit and tells you the real budget before you spend.
           </p>
         </div>
+
+        <button
+          onClick={() => setFullAuto((v) => !v)}
+          className={cn(
+            "w-full rounded-lg border p-3 text-left transition-all",
+            fullAuto
+              ? "border-primary bg-primary/10"
+              : "border-border hover:border-primary/40"
+          )}
+        >
+          <span className="flex items-center justify-between text-sm font-semibold">
+            <span>⚡ Full Auto: premise → finished episode</span>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                fullAuto ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"
+              )}
+            >
+              {fullAuto ? "ON" : "OFF"}
+            </span>
+          </span>
+          <span className="mt-0.5 block text-[11px] text-muted-foreground">
+            {fullAuto
+              ? `Casts, voices, renders and exports the episode automatically under the $${cap.toFixed(0)} cap. This spends your voucher.`
+              : "Off: the agent plans everything but spends nothing until you press generate."}
+          </span>
+        </button>
 
         <Button
           onClick={handleRun}
           disabled={!premise || autoRun.isPending}
           className="w-full"
         >
-          {autoRun.isPending ? "Planning…" : "Plan my drama (no spend)"}
+          {autoRun.isPending
+            ? fullAuto
+              ? "Producing your episode…"
+              : "Planning…"
+            : fullAuto
+            ? "Produce my episode (spends voucher)"
+            : "Plan my drama (no spend)"}
         </Button>
 
         {trace.length > 0 && (
@@ -230,7 +270,7 @@ export function AutoRunPanel({
                     result.budget.total_estimated_cost ??
                     0).toFixed(2)}
                 </span>{" "}
-                / $40 · {result.budget.wan_shots} Wan /{" "}
+                / ${cap.toFixed(0)} · {result.budget.wan_shots} Wan /{" "}
                 {result.budget.happyhorse_shots} HappyHorse
               </p>
             )}

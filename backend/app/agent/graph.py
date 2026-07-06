@@ -31,12 +31,25 @@ def build_pipeline_graph(db=None):
         _emit_node(state, "generate_script")
         if db is None:
             return state
+        # On a revision pass, feed the judge's actual critique back in — a
+        # regeneration that ignores WHY the draft failed just rolls the dice.
+        notes = ""
+        if state.get("revise_count", 0) > 0 and state.get("judgement"):
+            j = state["judgement"]
+            points = list(j.get("blocking_issues") or []) + list(j.get("top_weaknesses") or [])
+            if points:
+                notes = (
+                    "REVISION PASS — the previous draft was rejected by the script "
+                    "judge. Fix these specific problems while keeping what worked:\n- "
+                    + "\n- ".join(str(p) for p in points[:6])
+                )
         out = await pipeline_ops.generate_script_op(
             db, state["project_id"], state["premise"], state.get("genre", "drama"),
             state.get("tone", "dramatic"),
             episode_count=state.get("episode_count", 1),
             target_length=state.get("target_length", 30),
             language=state.get("language", "en"),
+            notes=notes,
         )
         state["script_id"] = out["script_id"]
         state["structured"] = out["structured"]
@@ -58,6 +71,14 @@ def build_pipeline_graph(db=None):
     async def n_revise(state: PipelineState) -> PipelineState:
         _emit_node(state, "revise")
         state["revise_count"] = state.get("revise_count", 0) + 1
+        if db is not None and state.get("project_id"):
+            from app.agents.reporter import report_agent
+            j = state.get("judgement") or {}
+            report_agent(db, state["project_id"], agent="script_reviser", stage="revise",
+                         decision={"feeding_back": (j.get("blocking_issues") or [])
+                                   + (j.get("top_weaknesses") or [])},
+                         rationale="Rewriting with the judge's critique as revision notes",
+                         confidence=float(j.get("overall", 0) or 0) / 10.0)
         return state
 
     async def n_extract_characters(state: PipelineState) -> PipelineState:
@@ -120,7 +141,9 @@ def build_pipeline_graph(db=None):
         if db is None:
             return state
         if dispatch:
-            state["job_id"] = pipeline_ops.dispatch_generation_op(db, state["project_id"])
+            # full-auto: the job auto-exports the finished episode on completion
+            state["job_id"] = pipeline_ops.dispatch_generation_op(
+                db, state["project_id"], auto_export=True)
         state["report"] = {
             "judgement": state.get("judgement"),
             "characters": len(state.get("characters", [])),

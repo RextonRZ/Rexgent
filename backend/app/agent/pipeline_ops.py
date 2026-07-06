@@ -47,7 +47,7 @@ def _persist_script(db: Session, project_id: str, raw_text: str, structured: dic
 async def generate_script_op(
     db: Session, project_id: str, premise: str, genre: str,
     tone: str = "dramatic", episode_count: int = 1, target_length: int = 30,
-    language: str = "en",
+    language: str = "en", notes: str = "",
 ) -> dict:
     from app.services.usage_tracker import track_project
     with track_project(project_id, db):
@@ -55,6 +55,7 @@ async def generate_script_op(
         raw_text = await ScriptGenerator().generate(
             genre=genre, premise=clean_premise, tone=tone,
             episode_count=episode_count, target_length=target_length, language=language,
+            notes=notes,
         )
         structured = await ScriptStructurer().structure(raw_text, language=language)
         script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
@@ -241,8 +242,10 @@ async def clarify_op(db: Session, project_id: str) -> dict:
     return {"pause": pause, "assessment": assessment}
 
 
-def dispatch_generation_op(db: Session, project_id: str) -> str:
-    job = GenerationJob(project_id=uuid.UUID(project_id))
+def dispatch_generation_op(db: Session, project_id: str, auto_export: bool = False) -> str:
+    # auto_export: full-auto runs render the final episode as soon as the last
+    # clip lands — one premise in, one finished MP4 out, zero clicks between.
+    job = GenerationJob(project_id=uuid.UUID(project_id), auto_export=auto_export)
     db.add(job)
     db.commit()
     db.refresh(job)
