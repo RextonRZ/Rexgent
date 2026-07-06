@@ -1,0 +1,18 @@
+# Local development overlay — auto-loaded by `docker compose up`.
+# Adds live-reload volumes and dev servers on top of the production base.
+# Deployment uses the base only: docker compose -f docker-compose.yml up -d
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+    command: sh -c "alembic upgrade head && uvicorn app.main:socket_app --host 0.0.0.0 --port 8000 --reload"
+
+  worker:
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev

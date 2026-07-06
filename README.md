@@ -211,6 +211,26 @@ REDIS_URL=redis://localhost:6379/0
 SECRET_KEY=your_secret_key
 ```
 
+### Deploy (Alibaba Cloud ECS)
+
+One instance runs everything via the production compose base (the dev overlay
+is only loaded locally):
+
+```bash
+# on an Ubuntu 22.04 ECS instance (>= 2 vCPU / 8 GB, ap-southeast-1), ports 3000 + 8000 open
+sudo apt update && sudo apt install -y docker.io docker-compose-v2 git
+git clone https://github.com/RZRexton/Rexgent.git && cd Rexgent
+# copy your backend/.env onto the server (scp) — never commit it
+
+export PUBLIC_API_URL="http://<server-ip>:8000"      # baked into the frontend build
+export FRONTEND_ORIGIN="http://<server-ip>:3000"     # added to CORS (HTTP + websocket)
+docker compose -f docker-compose.yml up -d --build
+```
+
+Migrations run automatically on backend start. Open `http://<server-ip>:3000`.
+With a domain, put Caddy or Nginx in front for HTTPS and set both URLs to the
+https origin instead.
+
 ### MCP Server (real Model Context Protocol)
 
 The 7 tools are served over the **real MCP protocol** (official Python SDK, stdio), so any MCP client — Claude Desktop included — can discover and call Rexgent's showrunner tools:

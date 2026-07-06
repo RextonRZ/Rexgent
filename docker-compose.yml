@@ -1,3 +1,9 @@
+# Production-shaped base. Local dev is layered on by docker-compose.override.yml
+# (auto-loaded), which adds live-reload volumes and dev commands — so plain
+# `docker compose up` keeps working exactly as before.
+#
+# Deploy (server): docker compose -f docker-compose.yml up -d --build
+#   with PUBLIC_API_URL / FRONTEND_ORIGIN exported (see README → Deploy).
 services:
   backend:
     build:
@@ -7,14 +13,14 @@ services:
       - "8000:8000"
     env_file:
       - ./backend/.env
+    environment:
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
-    command: uvicorn app.main:socket_app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "alembic upgrade head && uvicorn app.main:socket_app --host 0.0.0.0 --port 8000"
 
   worker:
     build:
@@ -27,20 +33,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
     command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* is baked at build time — set to the server's API URL.
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm run dev
+    command: npm run start
 
   postgres:
     image: pgvector/pgvector:pg16

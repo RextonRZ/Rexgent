@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     secret_key: str = "change-me-in-production"
     environment: str = "development"
+    # Deployed frontend origin (e.g. http://47.x.x.x:3000 or https://rexgent.app)
+    # — appended to the CORS allow-list alongside localhost.
+    frontend_origin: str = ""
 
     # Neo4j (narrative graph)
     neo4j_uri: str = "bolt://localhost:7687"

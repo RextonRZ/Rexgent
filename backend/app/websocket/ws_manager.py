@@ -10,10 +10,13 @@ settings = get_settings()
 
 # AsyncRedisManager lets multiple processes share the same Socket.IO namespace.
 mgr = socketio.AsyncRedisManager(settings.redis_url)
+_ws_origins = ["http://localhost:3000"]
+if settings.frontend_origin:
+    _ws_origins.append(settings.frontend_origin.rstrip("/"))
 sio = socketio.AsyncServer(
     async_mode="asgi",
     client_manager=mgr,
-    cors_allowed_origins=["http://localhost:3000"],
+    cors_allowed_origins=_ws_origins,
 )
 
 
