@@ -52,6 +52,11 @@ function Bubble({ m }: { m: ChatMessage }) {
       <div className="flex items-center gap-1.5">
         <span className={cn("h-1.5 w-1.5 rounded-full", AGENT_DOT[agent] ?? "bg-secondary")} />
         <span className="text-[10px] font-medium text-muted-foreground">{agent}</span>
+        {m._count && m._count > 1 && (
+          <span className="rounded-full bg-white/[0.06] px-1.5 text-[9px] tabular-nums text-muted-foreground">
+            ×{m._count}
+          </span>
+        )}
         {typeof m.pct === "number" && m.pct > 0 && (
           <span className="text-[9px] tabular-nums text-muted-foreground/70">{m.pct}%</span>
         )}
@@ -288,12 +293,14 @@ export function AgentChat({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <PipelineFlow current={stage} />
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="shrink-0">
+        <PipelineFlow current={stage} />
+      </div>
 
       <div
         ref={scrollRef}
-        className="max-h-[46vh] space-y-2.5 overflow-y-auto pr-0.5"
+        className="scroll-clean min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1"
       >
         {messages.length === 0 && running.length === 0 ? (
           <p className="text-[11px] leading-5 text-muted-foreground">
@@ -416,7 +423,7 @@ export function AgentChat({ projectId }: { projectId: string }) {
           e.preventDefault();
           ask();
         }}
-        className="flex items-center gap-1.5 border-t hairline pt-2.5"
+        className="flex shrink-0 items-center gap-1.5 border-t hairline pt-2.5"
       >
         <Input
           value={question}

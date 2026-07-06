@@ -238,3 +238,24 @@
     background-position: 0 0;
   }
 }
+
+/* Modern thin scrollbar — subtle rounded thumb, invisible track (Claude-style),
+   replacing the OS chunky bar inside dock panels and chat feeds. */
+.scroll-clean {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.28) transparent;
+}
+.scroll-clean::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-clean::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-clean::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.28);
+  border-radius: 9999px;
+}
+.scroll-clean::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.45);
+}

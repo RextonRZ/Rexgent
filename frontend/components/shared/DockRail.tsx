@@ -13,13 +13,27 @@ function PanelSection({
   title,
   onClose,
   children,
+  grow = false,
+  scroll = false,
+  className,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  /** take all remaining column height (the child manages its own scroll) */
+  grow?: boolean;
+  /** the section body scrolls itself (for fixed-height sections) */
+  scroll?: boolean;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col min-h-0">
+    <div
+      className={cn(
+        "flex min-h-0 flex-col overflow-x-hidden",
+        grow ? "flex-1" : "shrink-0",
+        className
+      )}
+    >
       <div className="flex items-center justify-between pl-4 pr-3 py-2.5 border-b hairline shrink-0">
         <span className="text-xs font-semibold">{title}</span>
         <button
@@ -30,8 +44,14 @@ function PanelSection({
           ✕
         </button>
       </div>
-      {/* generous bottom padding so stacked panels don't butt against each other */}
-      <div className="px-4 pt-3 pb-6 overflow-x-hidden">{children}</div>
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-x-hidden px-4 pt-3",
+          scroll ? "scroll-clean overflow-y-auto pb-5" : "pb-3"
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -72,14 +92,22 @@ export function DockRail({ projectId }: { projectId: string }) {
   return (
     <aside className="hidden md:flex sticky top-14 h-[calc(100vh-3.5rem)] shrink-0 items-stretch">
       {anyOpen && (
-        <div className="w-80 border-l hairline bg-card flex flex-col divide-y divide-border overflow-y-auto">
+        // one flex column, no outer scroll: the chat owns the only always-on
+        // scrollbar and expands to the full height when cost is hidden
+        <div className="flex w-80 min-h-0 flex-col divide-y divide-border overflow-hidden border-l hairline bg-card">
           {open.agent && (
-            <PanelSection title="Showrunner" onClose={() => toggle("agent")}>
+            <PanelSection title="Showrunner" grow onClose={() => toggle("agent")}>
               <AgentChat projectId={projectId} />
             </PanelSection>
           )}
           {open.cost && (
-            <PanelSection title="Live cost" onClose={() => toggle("cost")}>
+            <PanelSection
+              title="Live cost"
+              onClose={() => toggle("cost")}
+              grow={!open.agent}
+              scroll
+              className={open.agent ? "max-h-[44%]" : undefined}
+            >
               <CostPanelContent projectId={projectId} />
             </PanelSection>
           )}

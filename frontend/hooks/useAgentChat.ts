@@ -21,6 +21,8 @@ export interface ChatMessage {
   text: string;
   detail?: string;
   pct?: number;
+  /** how many identical lines collapsed into this one (>=2 shows a badge) */
+  _count?: number;
 }
 
 export interface RunningStage {
@@ -187,7 +189,20 @@ export function useAgentChat(projectId: string) {
     }
     out.push(...ephemeral);
     out.sort((a, b) => a.at - b.at);
-    return out.slice(-60);
+
+    // Collapse a run of identical done-lines (e.g. "Continuity passed" x4) into
+    // one bubble with a count, so the feed reads like a process log not a wall.
+    const merged: ChatMessage[] = [];
+    for (const m of out) {
+      const last = merged[merged.length - 1];
+      if (last && last.agent === m.agent && last.kind === m.kind && last.text === m.text) {
+        const n = (last._count ?? 1) + 1;
+        merged[merged.length - 1] = { ...last, _count: n, pct: m.pct, at: m.at };
+      } else {
+        merged.push(m);
+      }
+    }
+    return merged.slice(-60);
   }, [reports, feed, ephemeral]);
 
   return { messages, running, pushLocal };
