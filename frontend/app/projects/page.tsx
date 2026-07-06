@@ -369,13 +369,13 @@ function Dashboard() {
               </div>
             ) : view === "grid" ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                <div className="card-rise">
+                <div className="card-rise h-full">
                   <NewProjectTile onClick={() => setNewOpen(true)} />
                 </div>
                 {filtered.map((p, i) => (
                   <div
                     key={p.id}
-                    className="card-rise"
+                    className="card-rise h-full"
                     style={{ animationDelay: `${Math.min(i + 1, 10) * 45}ms` }}
                   >
                     <ProjectCard

@@ -192,7 +192,7 @@ export function ProjectCard({
       tabIndex={0}
       onClick={() => onAction("open", project)}
       onKeyDown={(e) => e.key === "Enter" && onAction("open", project)}
-      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-zinc-900/60 outline-none transition-all duration-250 hover:-translate-y-0.5 hover:border-white/15 focus-visible:ring-2 focus-visible:ring-violet-400/60"
+      className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-zinc-900/60 outline-none transition-all duration-300 hover:-translate-y-1 hover:border-violet-500/30 hover:shadow-[0_12px_40px_-12px_rgba(139,92,246,0.4)] focus-visible:ring-2 focus-visible:ring-violet-400/60"
     >
       <div
         className="relative aspect-video overflow-hidden bg-zinc-950"
@@ -201,7 +201,12 @@ export function ProjectCard({
         }
         onMouseLeave={() => onPreview(null)}
       >
-        <PosterImage project={project} />
+        <PosterImage
+          project={project}
+          className="transition-transform duration-500 group-hover:scale-105"
+        />
+        {/* poster gradient scrim so the title area reads on busy stills */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         {previewing && project.preview_clip_url && (
           <video
             src={project.preview_clip_url}

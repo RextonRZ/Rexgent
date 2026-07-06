@@ -24,17 +24,15 @@ function greeting(): string {
   return "Good evening";
 }
 
-function ShelfSprockets({ className }: { className?: string }) {
+/** Vertical film perforations down one edge — matches the landing FilmstripHero. */
+function Sprockets() {
   return (
     <div
       aria-hidden
-      className={cn(
-        "absolute inset-y-0 z-10 flex flex-col items-center justify-evenly opacity-30",
-        className
-      )}
+      className="flex w-6 shrink-0 flex-col items-center justify-center gap-4 py-2"
     >
-      {Array.from({ length: 10 }).map((_, i) => (
-        <span key={i} className="h-[7px] w-[6px] rounded-[1px] bg-white/30" />
+      {Array.from({ length: 9 }).map((_, i) => (
+        <span key={i} className="h-[9px] w-[7px] rounded-[2px] bg-zinc-700" />
       ))}
     </div>
   );
@@ -204,53 +202,61 @@ export function RecapShelf({
     overview?.projects.find((p) => p.poster_url)?.poster_url ?? "/still12.jpg";
 
   const screenInner = (
-    <div className="relative aspect-video">
-      {hasClips ? (
-        reduced ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={staticPoster}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        ) : (
-          <video
-            ref={videoRef}
-            key={current?.url}
-            src={current?.url}
-            muted
-            loop
-            playsInline
-            autoPlay
-            preload="metadata"
-            className={cn(
-              "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
-              visible ? "opacity-100" : "opacity-0"
-            )}
-          />
-        )
-      ) : (
-        <PremiereAwaits reduced={reduced} />
-      )}
-      <ShelfSprockets className="left-1.5" />
-      <ShelfSprockets className="right-1.5" />
+    // exact FilmstripHero film frame: sprockets down both edges, video inset
+    <div className="flex items-stretch">
+      <Sprockets />
+      <div className="relative my-2 min-w-0 flex-1 overflow-hidden rounded-[3px] bg-zinc-900">
+        <div className="relative aspect-video">
+          {hasClips ? (
+            reduced ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={staticPoster}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <video
+                ref={videoRef}
+                key={current?.url}
+                src={current?.url}
+                muted
+                loop
+                playsInline
+                autoPlay
+                preload="metadata"
+                className={cn(
+                  "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
+                  visible ? "opacity-100" : "opacity-0"
+                )}
+              />
+            )
+          ) : (
+            <PremiereAwaits reduced={reduced} />
+          )}
 
-      {!reduced && current && (
-        <div className="absolute bottom-2 left-8 z-10 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white/90 backdrop-blur-sm">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-          <span className="truncate">
-            <span className="font-medium text-primary">
-              EP {(idx % clips.length) + 1}
-            </span>{" "}
-            · {current.project_title}
-          </span>
+          {!reduced && current && (
+            <>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/70 to-transparent" />
+              <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white/90 backdrop-blur-sm">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                <span className="truncate">
+                  <span className="font-medium text-primary">
+                    EP {(idx % clips.length) + 1}
+                  </span>{" "}
+                  · {current.project_title}
+                </span>
+              </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
+      <Sprockets />
     </div>
   );
 
   const screenChrome =
-    "relative block w-full overflow-hidden rounded-xl border border-zinc-800 bg-black text-left shadow-2xl shadow-black/60";
+    "relative block w-full rounded-md border border-zinc-800 bg-zinc-950 text-left shadow-2xl shadow-black/60";
 
   return (
     <section
