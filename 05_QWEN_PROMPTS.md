@@ -1,4 +1,6 @@
-# ShowMind — Qwen Prompt Templates
+> **Historical design doc** from the original build plan — kept for provenance. The shipped architecture (LangGraph agent, model tiering, production bible, set dresser, budget fitting, 9:16 export) is described in [README.md](README.md) and [SUBMISSION.md](SUBMISSION.md).
+
+# Rexgent — Qwen Prompt Templates
 
 All prompts used across the pipeline. Every prompt follows the same structure: system role + task instruction + output schema + constraints.
 

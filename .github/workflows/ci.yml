@@ -9,14 +9,43 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: rexgent
+          POSTGRES_PASSWORD: rexgent_dev
+          POSTGRES_DB: rexgent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rexgent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://rexgent:rexgent_dev@localhost:5432/rexgent
+      REDIS_URL: redis://localhost:6379/0
+      QWEN_API_KEY: test-key
+      SECRET_KEY: ci-secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
       - run: pip install -r backend/requirements.txt
-      - run: cd backend && python -m py_compile app/main.py
-      - run: cd backend && python -m py_compile app/config.py
+      - run: cd backend && python -m alembic upgrade head
+      - run: cd backend && python -m pytest tests/ -q
 
   frontend:
     runs-on: ubuntu-latest

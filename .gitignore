@@ -39,3 +39,8 @@ htmlcov/
 
 # Build
 *.log
+
+# Private local notes (submission prep stays on the laptop)
+SUBMISSION.md
+docs/
+.superpowers/

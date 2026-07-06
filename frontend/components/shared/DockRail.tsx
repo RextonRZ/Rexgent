@@ -46,7 +46,14 @@ export function DockRail({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("rx.dock.open") || "{}");
+      const raw = localStorage.getItem("rx.dock.open");
+      if (raw === null) {
+        // first visit: the live agent activity + cost panels ARE the pitch —
+        // open by default so nobody has to discover the rail
+        setOpen({ agent: true, cost: true });
+        return;
+      }
+      const saved = JSON.parse(raw);
       setOpen({ agent: !!saved.agent, cost: !!saved.cost });
     } catch {
       /* older string format or bad value — start closed */

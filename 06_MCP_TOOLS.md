@@ -1,6 +1,8 @@
-# ShowMind — MCP Tools Specification
+> **Historical design doc** from the original build plan — kept for provenance. The shipped architecture (LangGraph agent, model tiering, production bible, set dresser, budget fitting, 9:16 export) is described in [README.md](README.md) and [SUBMISSION.md](SUBMISSION.md).
 
-6 custom MCP tools that form the AI intelligence layer of ShowMind. Each is a distinct engineering contribution, not a wrapper around an existing API.
+# Rexgent — MCP Tools Specification
+
+6 custom MCP tools that form the AI intelligence layer of Rexgent. Each is a distinct engineering contribution, not a wrapper around an existing API.
 
 ---
 
@@ -95,13 +97,13 @@ class ScenePromptCraft:
 **Input schema:**
 ```json
 {
-  "clip_url": "https://oss.showmind.ai/clips/clip_007.mp4",
+  "clip_url": "https://oss.rexgent.ai/clips/clip_007.mp4",
   "expected_characters": [
     {
       "name": "Detective Yuki",
       "face_embedding": [0.23, -0.14, 0.87, ...],
       "face_keywords": ["sharp cheekbones", "almond eyes", "short black hair"],
-      "reference_image_url": "https://oss.showmind.ai/characters/yuki/reference.jpg"
+      "reference_image_url": "https://oss.rexgent.ai/characters/yuki/reference.jpg"
     }
   ],
   "sample_frame_count": 3,
@@ -449,7 +451,7 @@ from .narrative_judge import router as nj_router
 from .plot_gap_detector import router as pgd_router
 from .ending_engine import router as ee_router
 
-mcp_app = FastAPI(title="ShowMind MCP Tools")
+mcp_app = FastAPI(title="Rexgent MCP Tools")
 mcp_app.include_router(spc_router, prefix="/tools/scene-prompt-craft")
 mcp_app.include_router(cg_router, prefix="/tools/consistency-guard")
 mcp_app.include_router(to_router, prefix="/tools/token-optimizer")

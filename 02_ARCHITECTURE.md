@@ -1,4 +1,6 @@
-# ShowMind — System Architecture
+> **Historical design doc** from the original build plan — kept for provenance. The shipped architecture (LangGraph agent, model tiering, production bible, set dresser, budget fitting, 9:16 export) is described in [README.md](README.md) and [SUBMISSION.md](SUBMISSION.md).
+
+# Rexgent — System Architecture
 
 **Version:** 1.0  
 **Stack:** Next.js 14 · FastAPI · Alibaba Cloud · Qwen Cloud APIs
@@ -182,7 +184,7 @@ FinalExport     (id, project_id, url, duration_seconds, created_at)
 The Master Orchestrator is a Python class that wraps all Qwen-Max calls and maintains the Narrative Memory Graph across the session.
 
 ```python
-class ShowMindOrchestrator:
+class RexgentOrchestrator:
     def __init__(self, project_id: str):
         self.project_id = project_id
         self.memory_graph = NarrativeMemoryGraph()
@@ -388,7 +390,7 @@ async def generate_happyhorse(
 ## 7. Storage Architecture (Alibaba Cloud OSS)
 
 ```
-oss://showmind-{region}/
+oss://rexgent-{region}/
   projects/
     {project_id}/
       scripts/
@@ -436,7 +438,7 @@ compute:
 
 storage:
   - type: OSS
-    bucket: showmind-assets
+    bucket: rexgent-assets
     region: ap-southeast-1
     acl: private
     

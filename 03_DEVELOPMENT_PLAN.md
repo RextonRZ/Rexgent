@@ -1,4 +1,6 @@
-# ShowMind — Development Plan
+> **Historical design doc** from the original build plan — kept for provenance. The shipped architecture (LangGraph agent, model tiering, production bible, set dresser, budget fitting, 9:16 export) is described in [README.md](README.md) and [SUBMISSION.md](SUBMISSION.md).
+
+# Rexgent — Development Plan
 
 **Version:** 1.0  
 **Total estimated build time:** 10–12 days (solo) / 5–6 days (2-person team)  
@@ -92,7 +94,7 @@ backend/
 │   │
 │   ├── orchestrator/
 │   │   ├── __init__.py
-│   │   ├── orchestrator.py              → ShowMindOrchestrator class
+│   │   ├── orchestrator.py              → RexgentOrchestrator class
 │   │   └── memory_graph.py              → NarrativeMemoryGraph dataclass
 │   │
 │   └── mcp_tools/

@@ -1,4 +1,6 @@
-# ShowMind — Product Specification
+> **Historical design doc** from the original build plan — kept for provenance. The shipped architecture (LangGraph agent, model tiering, production bible, set dresser, budget fitting, 9:16 export) is described in [README.md](README.md) and [SUBMISSION.md](SUBMISSION.md).
+
+# Rexgent — Product Specification
 
 **Version:** 1.0  
 **Track:** Global AI Hackathon Series with Qwen Cloud — Track 2: AI Showrunner  
@@ -11,13 +13,13 @@
 
 Creating a short drama today means bouncing between 5–10 tools: a writing app, a storyboard tool, an image generator for characters, a video generation API, a video editor, a caption tool. Every handoff loses context. Characters drift visually between scenes. Plot holes only get caught during editing — too late. Solo creators and small studios waste 80% of their time on orchestration, not storytelling.
 
-**ShowMind collapses the entire pipeline into one AI-native workspace.** From a single premise or an imported script, it autonomously handles scriptwriting, character building, storyboarding, video generation, and iterative editing — with a live token budget dashboard and a narrative intelligence layer that catches problems before they become expensive.
+**Rexgent collapses the entire pipeline into one AI-native workspace.** From a single premise or an imported script, it autonomously handles scriptwriting, character building, storyboarding, video generation, and iterative editing — with a live token budget dashboard and a narrative intelligence layer that catches problems before they become expensive.
 
 ---
 
 ## 2. Target Users
 
-| User Type | Pain Point | How ShowMind Solves It |
+| User Type | Pain Point | How Rexgent Solves It |
 |---|---|---|
 | Solo indie creator | No production team, too many tools | End-to-end pipeline in one workspace |
 | Small content studio | Character inconsistency across episodes | Face-lock system via Qwen-VL |
@@ -97,7 +99,7 @@ All clips generated → Editor view opens
       1. Trim: drag to select the bad segment
       2. Extract: isolate the clip
       3. Flag: type what needs to change ("make the lighting darker", "character looks wrong")
-      4. Regen: ShowMind rewrites the prompt + regenerates just that clip
+      4. Regen: Rexgent rewrites the prompt + regenerates just that clip
       5. Repeat until satisfied
   → Final render: clips stitched, captions added, audio synced
   → Export as MP4
@@ -325,7 +327,7 @@ Visual prompt keywords: [used in every scene this character appears in]
   - Additional direction: any extra instruction for the next generation attempt
 
 **Regen loop**
-- ShowMind rewrites the original prompt based on the flag description
+- Rexgent rewrites the original prompt based on the flag description
 - Calls Qwen-Max to incorporate the change instruction into the prompt
 - Regenerates only the flagged clip (not the whole scene)
 - New clip appears alongside old clip for A/B comparison
@@ -417,7 +419,7 @@ Visual prompt keywords: [used in every scene this character appears in]
 The demo should show a judge this sequence in under 3 minutes:
 
 1. Paste a one-line premise: *"A detective in 2047 Tokyo discovers her partner is an AI."*
-2. ShowMind generates a 3-scene script in real time
+2. Rexgent generates a 3-scene script in real time
 3. Plot gap detector flags one issue (AI partner's origin is unestablished)
 4. AI fixes it with one click
 5. Character cards appear — user uploads a reference photo for the detective

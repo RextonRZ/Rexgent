@@ -1,6 +1,8 @@
-# ShowMind — Narrative Memory Graph
+> **Historical design doc** from the original build plan — kept for provenance. The shipped architecture (LangGraph agent, model tiering, production bible, set dresser, budget fitting, 9:16 export) is described in [README.md](README.md) and [SUBMISSION.md](SUBMISSION.md).
 
-The Narrative Memory Graph (NMG) is the central shared state that makes ShowMind coherent across all pipeline stages. Without it, each AI call is stateless — the storyboard generator doesn't know what the script analyser found, the video prompt builder doesn't know what the character extractor established. The NMG is what makes ShowMind an *agent*, not a collection of API calls.
+# Rexgent — Narrative Memory Graph
+
+The Narrative Memory Graph (NMG) is the central shared state that makes Rexgent coherent across all pipeline stages. Without it, each AI call is stateless — the storyboard generator doesn't know what the script analyser found, the video prompt builder doesn't know what the character extractor established. The NMG is what makes Rexgent an *agent*, not a collection of API calls.
 
 ---
 

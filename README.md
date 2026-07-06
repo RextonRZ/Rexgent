@@ -1,99 +1,125 @@
 # Rexgent
 
-> Give me a story idea. I'll hand you back a short drama.
+> Give me a story idea. I'll hand you back a finished vertical episode.
 
-Rexgent is an autonomous AI-powered short drama production pipeline built on **Qwen Cloud**. Type a one-line premise and Rexgent handles the rest — scriptwriting, character building, storyboarding, video generation, and iterative editing — all in a single workspace.
+Rexgent is an **autonomous AI showrunner** built on **Qwen Cloud**. Type a one-line premise and an agent runs the whole production: script, self-critique and revision, casting, storyboarding, budget allocation, video generation, dialogue, and a final 9:16 episode with burned-in subtitles — while a live dashboard shows every token and cent it spends.
 
 **Built for:** [Global AI Hackathon Series with Qwen Cloud](https://qwencloud-hackathon.devpost.com/) — Track 2: AI Showrunner
 
 ---
 
-## Demo
+## What a run looks like
 
-<!-- Replace with your actual demo video link before submission -->
-[![Demo Video](https://img.shields.io/badge/Watch-Demo%20Video-red?style=for-the-badge&logo=youtube)](https://youtube.com)
-
-**Demo flow (under 3 minutes):**
-
-1. Paste a premise: *"A detective in 2047 Tokyo discovers her partner is an AI."*
-2. Rexgent generates a 3-scene screenplay in real time
-3. Plot gap detector flags an issue — AI fixes it in one click
-4. Character cards appear with MBTI inference — upload a reference photo
-5. Relationship graph renders (detective ↔ AI partner: trust → betrayal)
-6. Storyboard generates with budget breakdown (Wan + HappyHorse split)
-7. Video generation runs with live progress dashboard
-8. ConsistencyGuard catches face drift → auto-retries → passes
-9. User trims a scene, flags "lighting too bright", regenerates → approves
-10. Final render: 45 seconds of coherent short drama from a one-liner
+1. Create a drama: premise + genre + format (9:16 vertical) + a **spend cap** — a live panel projects the tokens and dollars this drama will cost before anything runs
+2. Flip **Full Auto** and watch the agent: write → judge (8 axes incl. hook strength) → revise with the judge's own critique → extract characters → storyboard
+3. The **beat sheet** shows the ladder: logline → scene beats, with the 3-second hook and the cliffhanger tagged
+4. Casting builds the **production bible**: identity plates, per-outfit costume plates, location plates, one style plate, a voice per character
+5. The **set dresser** pins each scene's props — and tracks state ("from shot 3: the vase lies shattered")
+6. Budget allocation **fits the plan to the cap**: hook shots protected on Wan 2.7, supporting shots downgraded to HappyHorse, the least important deferred — all visible
+7. Generation runs live: every clip shows its **reference provenance** (the exact plates that conditioned it) and a continuity score from real ArcFace embeddings
+8. The **token dashboard** shows the engineering: most tokens ran on qwen-flash, Qwen-Max only wrote
+9. Export renders itself: dialogue placed on the exact shots that speak it, BGM ducking under speech, captions burned in, vertical 1080×1920
+10. One premise in → one watchable episode out, with a production report proving it stayed under budget
 
 ---
 
-## What It Does
+## The Autonomous Agent
 
-```
-One-line premise
-      │
-      ▼
-┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Script      │────▶│  Characters  │────▶│  Storyboard  │
-│  Generation  │     │  + MBTI      │     │  + Budget     │
-│  + Analysis  │     │  + Face Lock │     │  Allocation   │
-└─────────────┘     └──────────────┘     └──────────────┘
-                                               │
-      ┌────────────────────────────────────────┘
-      ▼
-┌─────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Video       │────▶│  Editing     │────▶│  Final       │
-│  Generation  │     │  Loop        │     │  Render      │
-│  + Guard     │     │  (Trim/Regen)│     │  + Export    │
-└─────────────┘     └──────────────┘     └──────────────┘
+A real LangGraph state machine — not a linear script. The judge can reject a draft and the rewrite receives the judge's actual critique as revision notes.
+
+```mermaid
+flowchart LR
+    START((premise)) --> W[write script]
+    W --> J{judge<br/>8 axes}
+    J -- "weak hook / flat ending" --> R[revise with<br/>judge critique]
+    R --> W
+    J -- pass --> X[extract<br/>characters]
+    X --> C{clarify}
+    C -- "ambiguous" --> PAUSE([ask the user,<br/>resume on answer])
+    C -- clear --> SB[storyboard<br/>+ set dresser]
+    SB --> CAST[casting:<br/>bible plates + voices]
+    CAST --> AUD[dialogue TTS]
+    AUD --> B[budget: fit plan<br/>to spend cap]
+    B --> V[generate video<br/>per-shot references]
+    V --> E[auto export:<br/>9:16 + subtitles]
+    E --> DONE((episode))
 ```
 
-| Stage | What Happens |
-|-------|-------------|
-| **Script** | Generate from premise or import PDF/Word. AI detects plot gaps, missing endings, and scores quality on 5 axes before spending tokens on video. |
-| **Characters** | Auto-extract profiles with MBTI inference. Upload reference photos for face-lock via Qwen-VL. Build relationship graphs with plot evidence. |
-| **Storyboard** | Shot-by-shot cinematic breakdown. TokenOptimizer scores scenes by emotional weight and allocates Wan 2.7 (hero) vs HappyHorse 1.1 (transitions) within the $40 budget. |
-| **Generation** | Async video generation with ConsistencyGuard — frame-level face validation with auto-retry. Live progress via WebSocket. |
-| **Editing** | Timeline editor with trim, flag, and regen. Qwen-Max surgically rewrites prompts based on user feedback. A/B comparison for every regen. |
-| **Export** | FFmpeg stitches approved clips, adds captions from script dialogue, exports MP4 with production cost report. |
+Plan-only by default (nothing is spent until you approve); **Full Auto** runs the whole graph and the finished episode renders itself the moment the last clip lands.
+
+---
+
+## Maximizing Quality Under a Token Budget
+
+The track's core constraint, treated as an engineering problem:
+
+| Lever | How Rexgent does it |
+|-------|--------------------|
+| **Model tiering** | A `ModelRouter` sends each task to the cheapest capable Qwen tier: **qwen-max only writes** (script, storyboard), **qwen-plus judges** (narrative judge, plot gaps, prompt craft), **qwen-flash does deterministic work** (structuring, extraction, wardrobe, set dressing, titles) |
+| **Attribution** | Every LLM call lands on the drama's cost ledger with its model and task — spend per stage, per tier, live |
+| **Structured output** | Native JSON mode with graceful fallback + array unwrapping; truncation retry; trailing-comma repair |
+| **Context compression** | Non-creative agents receive a scene digest, not the full script JSON |
+| **Adaptive allocation** | `TokenOptimizer` scores every shot's narrative importance, protects the hook (the opening shots that stop the scroll) on Wan 2.7, and **fits the plan to the user's spend cap**: downgrade least-important Wan shots to HappyHorse, then defer what still doesn't fit |
+| **Visible** | A live token dashboard on the Generate page: tokens vs cap, per-model tier chips, cheap-tier share, per-stage bars |
+
+---
+
+## The Consistency Engine
+
+The #1 quality problem in AI video is drift — faces, outfits, and rooms that change between shots. Rexgent's production bible conditions every clip, and makes it **provable**:
+
+- **Identity plates + per-outfit costume plates** (image-edited *from* the face so identity carries), **location plates**, one **style plate** per drama
+- **Reference stacks** per shot, in a deliberate order: identity → scene costume → previous-shot frame → scene anchor frame → location (wide shots only) → style
+- **Set dresser**: per scene, the props every shot must render identically — with **prop state tracking** (a vase broken in shot 3 stays broken in shot 4; the pristine location plate is dropped once the state changes)
+- **Deterministic seeds** per shot (same shot, same seed — re-renders differ only by what you changed)
+- **Continuity scoring** after every clip: real ArcFace embeddings (insightface) + a Qwen-VL outfit/background check; weak clips are flagged for review, never silently shipped
+- **Provenance on screen**: every clip tile shows the exact reference images that conditioned it
 
 ---
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Frontend                              │
-│           Next.js 14 (App Router) + React                │
-│  Script Editor │ Character Engine │ Storyboard │ Editor  │
-└──────────────────────┬──────────────────────────────────┘
-                       │ HTTPS / WebSocket
-┌──────────────────────▼──────────────────────────────────┐
-│                API Gateway (FastAPI)                      │
-│             Deployed on Alibaba Cloud ECS                │
-│  /script  /characters  /storyboard  /generate  /edit    │
-└──────────┬───────────────────────────────┬──────────────┘
-           │                               │
-┌──────────▼───────────┐     ┌─────────────▼──────────────┐
-│   Orchestrator       │     │    MCP Tool Server          │
-│   (Qwen-Max)         │     │  ScenePromptCraft           │
-│   Narrative Memory   │     │  ConsistencyGuard           │
-│   Graph              │     │  TokenOptimizer             │
-│                      │     │  NarrativeJudge             │
-│   AI Guardrails      │     │  PlotGapDetector            │
-│   Layer              │     │  EndingEngine               │
-└──────────┬───────────┘     └─────────────┬──────────────┘
-           │                               │
-┌──────────▼───────────────────────────────▼──────────────┐
-│                   Qwen Cloud APIs                        │
-│  Qwen-Max │ Qwen-VL │ Wan 2.7 │ HappyHorse 1.1         │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│               Alibaba Cloud Infrastructure               │
-│  OSS (videos, images) │ RDS PostgreSQL │ ApsaraDB Redis  │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph FE[Frontend — Next.js 14]
+        UI[Script · Characters · Storyboard · Generate · Export]
+        TD[Live token + cost dashboard]
+        SM[Story map · Beat sheet · Bible panels]
+    end
+    FE <-- "HTTP + Socket.IO" --> API
+
+    subgraph API[FastAPI + Socket.IO]
+        AG[LangGraph agent]
+        RT[Stage routers]
+    end
+
+    subgraph TOOLS[Shared tool registry — HTTP and MCP stdio]
+        NJ[narrative_judge] & PG[plot_gap_detector] & EE[ending_engine]
+        TO[token_optimizer] & SP[scene_prompt_craft] & SD[set_dresser] & CG[consistency_guard]
+    end
+    API --> TOOLS
+
+    subgraph WK[Celery workers]
+        GEN[generation runner<br/>reference stacks · seeds · continuity]
+        CASTW[casting worker<br/>bible plates · voices]
+        EXP[export worker<br/>stitch · captions · audio mix]
+    end
+    API --> WK
+
+    subgraph QWEN[Qwen Cloud / DashScope intl]
+        LLM[qwen-max · qwen-plus · qwen-flash]
+        VID[wan2.7 t2v/i2v · happyhorse-1.1 t2v/i2v/r2v]
+        IMG[wan2.6-t2i · qwen-image-edit-max]
+        VL[qwen3-vl-plus] & TTS[qwen3-tts-flash · voice cloning]
+    end
+    TOOLS --> LLM
+    WK --> QWEN
+
+    subgraph INFRA[Infrastructure]
+        PG2[(PostgreSQL + pgvector)] & RD[(Redis)] & OSS[(Alibaba OSS)] & N4J[(Neo4j)]
+    end
+    API --> INFRA
+    WK --> INFRA
 ```
 
 ---
@@ -102,37 +128,39 @@ One-line premise
 
 | Component | Qwen Model | Purpose |
 |-----------|-----------|---------|
-| Script generation + structuring | Qwen-Max | Generate and parse screenplays |
-| Plot gap detection + ending analysis | Qwen-Max | Narrative intelligence layer |
-| Character extraction + MBTI | Qwen-Max | Profile building from dialogue patterns |
-| Face embedding + frame validation | Qwen-VL | Visual consistency across scenes |
-| Storyboard + cinematic prompts | Qwen-Max | Shot breakdown + prompt DSL |
-| Hero scene video | Wan 2.7 | High-quality 1080p for climax scenes |
-| Draft + transition video | HappyHorse 1.1 | Fast generation with native audio |
-| Video-to-video editing | HappyHorse 1.1 V2V | Surgical clip regeneration |
-| Prompt rewriting | Qwen-Max | Incorporates user feedback into prompts |
+| Script + storyboard writing | Qwen-Max | The only creative-writing tier |
+| Judging, plot gaps, endings, prompt craft | Qwen-Plus | Analysis at a third of the cost |
+| Structuring, extraction, wardrobe, set dressing, titles | Qwen-Flash | Deterministic JSON work, ~15x cheaper output |
+| Hero + hook shots | Wan 2.7 (t2v/i2v) | Premium 1080P, native 9:16, seeded |
+| Supporting shots | HappyHorse 1.1 (t2v/i2v/r2v) | Reference-to-video with up to 9 reference images |
+| Clip surgery (regen loop) | HappyHorse 1.0 video-edit | Video-to-video fixes from user flags |
+| Bible plates | wan2.6-t2i + qwen-image-edit-max | Costume plates edited FROM the face so identity carries |
+| Continuity vision check | qwen3-vl-plus | Outfit + background scoring per clip |
+| Dialogue | qwen3-tts-flash + voice enrollment | Preset voices per character, or clone from a sample (realtime WS) |
 
-### 6 Custom MCP Tools
+### 7 Custom Tools — one registry, two transports
+
+Served identically over FastAPI HTTP **and** a real MCP stdio server (official `mcp` SDK), from one shared registry ([`backend/app/mcp_tools/registry.py`](backend/app/mcp_tools/registry.py)):
 
 | Tool | Innovation |
 |------|-----------|
-| `ScenePromptCraft` | Cinematic prompt DSL — structured intermediate representation enforcing cinematography rules before prompt generation |
-| `ConsistencyGuard` | Frame-level face similarity validation using Qwen-VL embeddings with tiered retry strategies |
-| `TokenOptimizer` | Budget-aware scene scoring — turns the $40 token constraint into a quality allocation feature |
-| `NarrativeJudge` | LLM-as-critic — second Qwen-Max call scoring scripts on 5 axes, blocking generation if quality is too low |
-| `PlotGapDetector` | Typed narrative problem detection with inline annotations (like code linting for scripts) |
-| `EndingEngine` | Ending completeness checker with branching alternative generation |
+| `NarrativeJudge` | LLM-as-critic on 8 axes including **hook_strength** and **cliffhanger_pull** — a weak opening blocks generation and drives the revision loop |
+| `TokenOptimizer` | Budget fitting, not budget reporting: hook protection, tier downgrades, deferrals — the plan always fits the cap |
+| `SetDresser` | Persistent set dressing + prop **state** tracking per scene (a broken vase stays broken) |
+| `ScenePromptCraft` | Cinematic prompt DSL with anti-text sanitization, DoF-by-framing rules, and scene-setting injection |
+| `ConsistencyGuard` | Face verification via real ArcFace embeddings with VLM diagnosis |
+| `PlotGapDetector` | Typed narrative problem detection — like linting for scripts |
+| `EndingEngine` | Ending completeness + branching alternatives |
 
 ### AI Guardrails
 
 | Guardrail | What It Prevents |
 |-----------|-----------------|
-| `PromptSanitizer` | Text/number hallucination in video — strips dialogue, scene numbers, injects anti-text negative prompts |
-| `JsonOutputValidator` | Malformed JSON, truncated responses, prompt leakage, suspicious repetition |
-| `ClipQualityValidator` | Black frames, frozen video, wrong duration |
-| `CostCircuitBreaker` | Budget overrun — hard stop at 85%, $2/shot cap, 15 retry limit |
+| `PromptSanitizer` | Text/number hallucination in video — strips quotes, scene numbers, names; injects anti-text negative prompts |
+| `CostCircuitBreaker` | Budget overrun — hard stop at 85% of the drama's own spend cap |
 | `InputSanitizer` | Prompt injection in user inputs |
-| `PreGenerationValidator` | Missing character visuals, empty storyboards |
+| `PreGenerationValidator` | Missing character visuals, empty storyboards — blocks before spending |
+| Continuity review queue | Weak clips flagged `NEEDS_REVIEW`, never silently shipped (and never retry-spammed) |
 
 ---
 
@@ -140,88 +168,71 @@ One-line premise
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 20+
-- Docker & Docker Compose (recommended)
-- [Qwen Cloud](https://www.qwencloud.com/) API key
-- Alibaba Cloud account (OSS, RDS, Redis)
+- Python 3.11+ · Node.js 20+ · Docker & Docker Compose
+- [Qwen Cloud](https://www.qwencloud.com/) API key (international / dashscope-intl)
+- Alibaba Cloud OSS bucket
 
 ### Quick Start (Docker)
 
 ```bash
 git clone https://github.com/RZRexton/Rexgent.git
 cd Rexgent
-cp backend/.env.example backend/.env
-# Edit backend/.env with your API keys
-docker-compose up --build
+cp backend/.env.example backend/.env   # add your keys
+docker-compose up --build              # api + worker + frontend + postgres + redis + neo4j
 ```
 
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API docs: http://localhost:8000/docs
+- Frontend: http://localhost:3000 · API: http://localhost:8000 · API docs: http://localhost:8000/docs
 
 ### Manual Setup
 
-**Backend:**
-
 ```bash
+# backend
 cd backend
 pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with your API keys
+cp .env.example .env                   # add your keys
 alembic upgrade head
-uvicorn app.main:app --reload --port 8000
-```
+uvicorn app.main:socket_app --reload --port 8000
 
-**Celery worker** (separate terminal):
-
-```bash
-cd backend
+# celery worker (separate terminal — generation/casting/export run here)
 celery -A app.workers.celery_app worker --loglevel=info
-```
 
-**Frontend:**
-
-```bash
-cd frontend
-npm install
-npm run dev
+# frontend
+cd frontend && npm install && npm run dev
 ```
 
 ### Environment Variables
 
 ```bash
-# Qwen Cloud
 QWEN_API_KEY=your_qwen_api_key
-QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-
-# Alibaba Cloud OSS
-OSS_ACCESS_KEY_ID=your_key_id
-OSS_ACCESS_KEY_SECRET=your_secret
-OSS_BUCKET_NAME=rexgent-assets
-OSS_ENDPOINT=https://oss-ap-southeast-1.aliyuncs.com
-
-# Database
+QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+OSS_ACCESS_KEY_ID=... / OSS_ACCESS_KEY_SECRET=... / OSS_BUCKET_NAME=... / OSS_ENDPOINT=...
 DATABASE_URL=postgresql://user:password@localhost:5432/rexgent
 REDIS_URL=redis://localhost:6379/0
-
-# App
 SECRET_KEY=your_secret_key
-ENVIRONMENT=development
 ```
 
 ### MCP Server (real Model Context Protocol)
 
-The 6 custom tools are also served over the **real MCP protocol** via the MCP Python SDK, so any MCP client (Claude Desktop, etc.) can discover and call them. The HTTP routes and the MCP server share **one tool registry** (`backend/app/mcp_tools/registry.py`) — one implementation, two transports.
-
-The MCP server runs in its own venv (the `mcp` SDK pins a starlette version that conflicts with FastAPI; MCP servers run as standalone processes anyway):
+The 7 tools are served over the **real MCP protocol** (official Python SDK, stdio), so any MCP client — Claude Desktop included — can discover and call Rexgent's showrunner tools:
 
 ```bash
 cd backend
-python -m venv .venv-mcp
-.venv-mcp/Scripts/activate          # Windows  (source .venv-mcp/bin/activate on macOS/Linux)
+python -m venv .venv-mcp && .venv-mcp/Scripts/activate   # own venv: the mcp SDK pins starlette
 pip install -r mcp_requirements.txt
-python mcp_server_entry.py          # serves 6 tools over MCP stdio
+python mcp_server_entry.py
+```
+
+Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "rexgent": {
+      "command": "C:/path/to/Rexgent/backend/.venv-mcp/Scripts/python.exe",
+      "args": ["C:/path/to/Rexgent/backend/mcp_server_entry.py"]
+    }
+  }
+}
 ```
 
 ---
@@ -232,36 +243,22 @@ python mcp_server_entry.py          # serves 6 tools over MCP stdio
 Rexgent/
 ├── backend/                    # FastAPI + Python 3.11
 │   ├── app/
-│   │   ├── main.py             # FastAPI app entry
-│   │   ├── config.py           # Pydantic Settings
-│   │   ├── database.py         # SQLAlchemy setup
-│   │   ├── models/             # 12 ORM models
-│   │   ├── schemas/            # Pydantic request/response schemas
-│   │   ├── routers/            # API endpoints
-│   │   ├── services/           # Business logic + Qwen API calls + guardrails
-│   │   ├── orchestrator/       # Master orchestrator + Narrative Memory Graph
-│   │   ├── mcp_tools/          # 6 custom MCP tools
-│   │   ├── workers/            # Celery async tasks
-│   │   └── websocket/          # Socket.IO real-time events
-│   ├── prompts/                # 12 Qwen-Max system prompt templates
-│   ├── migrations/             # Alembic database migrations
-│   └── tests/                  # Backend test suite
-├── frontend/                   # Next.js 14 + TypeScript
-│   ├── app/                    # App Router pages
-│   │   └── projects/[id]/      # Script → Characters → Storyboard → Generate → Edit → Export
-│   ├── components/             # React components by feature
-│   ├── hooks/                  # Custom React hooks
-│   ├── stores/                 # Zustand state stores
-│   └── lib/                    # API client, WebSocket, TypeScript types
-├── docs/                       # Full documentation
-│   ├── 01_PRODUCT_SPEC.md
-│   ├── 02_ARCHITECTURE.md
-│   ├── 03_DEVELOPMENT_PLAN.md
-│   ├── 05_QWEN_PROMPTS.md
-│   ├── 06_MCP_TOOLS.md
-│   └── 08_NARRATIVE_MEMORY_GRAPH.md
-├── docker-compose.yml
-└── LICENSE                     # MIT
+│   │   ├── agent/              # LangGraph pipeline (graph, state, ops)
+│   │   ├── models/             # 18 ORM models (bible, clips, cost events, ...)
+│   │   ├── routers/            # API endpoints per stage
+│   │   ├── services/           # model router · reference stacks · set dresser ·
+│   │   │                       # generation runner · stitcher · cost ledger · guardrails
+│   │   ├── mcp_tools/          # 7 shared tools (HTTP + MCP)
+│   │   ├── mcp_server/         # real MCP stdio server (official SDK)
+│   │   ├── workers/            # Celery: generation, casting, export
+│   │   └── websocket/          # Socket.IO events (Redis emitter)
+│   ├── prompts/                # 17 prompt templates
+│   ├── migrations/             # Alembic (13 revisions)
+│   └── tests/                  # 311 unit tests
+├── frontend/                   # Next.js 14 + TypeScript + Tailwind
+│   └── app/projects/[id]/      # Script → Characters → Storyboard → Generate → Export
+├── docker-compose.yml          # api + worker + frontend + postgres + redis + neo4j
+└── README.md
 ```
 
 ---
@@ -270,62 +267,21 @@ Rexgent/
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14, React 18, Tailwind CSS, shadcn/ui, Zustand, React Query, D3.js, Socket.IO client, Monaco Editor |
-| Backend | FastAPI, Python 3.11, SQLAlchemy 2.0, Alembic, Celery, Redis |
-| AI | Qwen-Max, Qwen-VL, Wan 2.7, HappyHorse 1.1 (all via Qwen Cloud) |
-| Infrastructure | Alibaba Cloud ECS, OSS, RDS PostgreSQL, ApsaraDB Redis, SLB, CDN |
-| Video Processing | FFmpeg |
+| Frontend | Next.js 14, React 18, Tailwind, Zustand, React Query, D3 force graphs, Socket.IO, Monaco |
+| Backend | FastAPI, LangGraph, SQLAlchemy 2.0, Alembic, Celery, Redis, Socket.IO |
+| AI | qwen-max / plus / flash, qwen3-vl-plus, Wan 2.7, HappyHorse 1.1, qwen3-tts (+ voice cloning), insightface ArcFace |
+| Infrastructure | Alibaba Cloud OSS, PostgreSQL + pgvector, Redis, Neo4j, FFmpeg |
 
 ---
 
-## Deployment (Alibaba Cloud)
+## Highlights
 
-Backend deployed on **Alibaba Cloud ECS** (Singapore region, `ap-southeast-1`).
-
-| Service | Alibaba Cloud Product |
-|---------|----------------------|
-| Compute | ECS (API + Celery workers) |
-| Object Storage | OSS (videos, images, exports) |
-| Database | RDS PostgreSQL 15 |
-| Cache/Queue | ApsaraDB Redis |
-| Load Balancer | SLB (HTTPS termination) |
-| CDN | CDN (video delivery) |
-
-**Proof of Alibaba Cloud deployment:** [`backend/app/services/oss_manager.py`](backend/app/services/oss_manager.py) — uses the `oss2` SDK to upload generated clips and exports to Alibaba Cloud OSS.
-
----
-
-## Documentation
-
-| Document | Contents |
-|----------|---------|
-| [Product Spec](01_PRODUCT_SPEC.md) | Full feature specification, 6 user flows, acceptance criteria |
-| [Architecture](02_ARCHITECTURE.md) | System architecture, DB schema, API routes, deployment config |
-| [Development Plan](03_DEVELOPMENT_PLAN.md) | Phase-by-phase build plan with all file paths |
-| [Qwen Prompts](05_QWEN_PROMPTS.md) | All 12 Qwen-Max system prompt templates |
-| [MCP Tools](06_MCP_TOOLS.md) | All 6 MCP tool specs with input/output schemas |
-| [Narrative Memory Graph](08_NARRATIVE_MEMORY_GRAPH.md) | NMG design, read/write patterns, persistence |
-
----
-
-## Hackathon Submission
-
-| | |
-|---|---|
-| **Track** | Track 2 — AI Showrunner |
-| **Platform** | [Global AI Hackathon Series with Qwen Cloud](https://qwencloud-hackathon.devpost.com/) |
-| **Deadline** | July 9, 2026 (2:00 PM Pacific Time) |
-| **Demo Video** | [YouTube link] |
-| **Blog Post** | [Blog link] |
-
-### Judging Criteria Alignment
-
-| Criterion | Weight | Rexgent Coverage |
-|-----------|--------|-----------------|
-| Innovation & AI Creativity | 30% | 6 custom MCP tools, Narrative Memory Graph, cinematic prompt DSL, LLM-as-critic, AI guardrails |
-| Technical Depth & Engineering | 30% | Orchestrator architecture, async Celery pipeline, ConsistencyGuard, cost circuit breakers |
-| Problem Value & Impact | 25% | Solves real creator pain: tool fragmentation, character drift, plot holes, budget waste |
-| Presentation & Documentation | 15% | Full architecture docs, 12 prompt templates, production cost report |
+- **Self-correcting agent** — the judge's critique feeds the rewrite; weak hooks and flat endings never reach generation
+- **Budget fitting, not budget reporting** — hook protection, tier downgrades, deferrals; the plan always fits the user's cap
+- **Provable consistency** — a production bible conditions every clip, and each clip shows the exact references it used
+- **A finished product** — one premise becomes a watchable 9:16 episode with placed dialogue, ducked music, and burned-in subtitles
+- **The engineering is on screen** — live token dashboard, agent activity feed, story map, beat sheet, per-clip provenance
+- **311 unit tests**, CI against Postgres, 13 migrations, graceful degradation on every external dependency
 
 ---
 
