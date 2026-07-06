@@ -72,7 +72,8 @@ class StoryboardGenerator:
             {"role": "user", "content": user_content},
         ]
         result = await self.qwen.chat_json(messages=messages, temperature=0.4, task="storyboard")
-        shots = result if isinstance(result, list) else []
+        # JSON mode may wrap the array in an object — unwrap it
+        shots = QwenClient.as_list(result)
 
         shots = shots[:cap]
         # Clip length follows the spoken line, not a uniform target — a long line

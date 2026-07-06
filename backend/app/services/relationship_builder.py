@@ -19,4 +19,5 @@ class RelationshipBuilder:
             {"role": "user", "content": user_content},
         ]
         result = await self.qwen.chat_json(messages=messages, temperature=0.2, task="relationships")
-        return result if isinstance(result, list) else []
+        # JSON mode may wrap the array in an object — unwrap it
+        return QwenClient.as_list(result)

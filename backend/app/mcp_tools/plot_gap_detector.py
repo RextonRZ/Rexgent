@@ -17,8 +17,8 @@ class PlotGapDetector:
             {"role": "user", "content": json.dumps(script_json, ensure_ascii=False)},
         ]
         flags_raw = await self.qwen.chat_json(messages=messages, temperature=0.2, task="plot_gap")
-        if not isinstance(flags_raw, list):
-            flags_raw = []
+        # JSON mode may wrap the array in an object — unwrap it
+        flags_raw = QwenClient.as_list(flags_raw)
 
         for flag in flags_raw:
             flag["flag_id"] = f"flag_{uuid.uuid4().hex[:8]}"

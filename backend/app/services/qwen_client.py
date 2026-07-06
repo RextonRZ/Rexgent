@@ -109,6 +109,19 @@ class QwenClient:
                 await asyncio.sleep(wait)
 
     @staticmethod
+    def as_list(result) -> list:
+        """Native JSON mode guarantees an OBJECT, so a list-shaped answer often
+        comes back wrapped ({"relationships": [...]}). Unwrap the first list
+        value; pass real lists through; anything else is an empty list."""
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict):
+            for value in result.values():
+                if isinstance(value, list):
+                    return value
+        return []
+
+    @staticmethod
     def _parse_json(content: str) -> dict | list:
         cleaned = content.strip()
         if cleaned.startswith("```json"):
