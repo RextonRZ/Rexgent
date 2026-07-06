@@ -76,6 +76,34 @@ export function SceneSection({
               </div>
             )}
             <div className="flex-1 min-w-0 space-y-3">
+              {/* the set dresser's contract: these props render identically in
+                  every shot; state changes persist (a broken prop stays broken) */}
+              {(scene.set_items?.length ?? 0) > 0 && (
+                <div className="rounded-lg border hairline bg-background/40 px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground mr-0.5">
+                      Set
+                    </span>
+                    {scene.set_items!.map((item) => (
+                      <span
+                        key={item}
+                        className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[11px] text-muted-foreground"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                  {(scene.state_changes?.length ?? 0) > 0 && (
+                    <div className="mt-1.5 space-y-0.5">
+                      {scene.state_changes!.map((c, i) => (
+                        <p key={i} className="text-[11px] text-warn">
+                          from shot {c.from_shot}: {c.state}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {scene.shots.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No shots.</p>
               ) : (

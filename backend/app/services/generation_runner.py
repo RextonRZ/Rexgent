@@ -12,7 +12,8 @@ from app.services.qwen_client import QwenClient
 from app.services.oss_manager import OSSManager
 from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
 from app.services.guardrails import CostCircuitBreaker, PreGenerationValidator
-from app.services.reference_stack import build_reference_stack_labeled
+from app.services.reference_stack import WIDE_FRAMINGS, build_reference_stack_labeled
+from app.services.set_dresser import setting_for_shot
 from app.services.clip_store import persist_clip_url
 from app.services.frame_sampler import extract_last_frame
 from app.services.cost_ledger import record_video
@@ -224,13 +225,24 @@ class GenerationRunner:
                             db2.query(Character).filter(Character.project_id == job2.project_id).all()}
             shots = db2.query(Shot).filter(Shot.scene_id == scene.id).order_by(Shot.number).all()
 
+            scene_anchor = None
+            set_json = getattr(scene, "set_json", None)
             for shot in shots:
                 if self._cancelled:
                     break
                 if (shot.quality_tier or "") == "deferred":
                     continue  # the allocator cut this shot to fit the spend cap
+                scene_setting, state_changed = setting_for_shot(
+                    set_json, scene.location, shot.number)
                 prev_last_frame = await r2._process_shot(
-                    job2, shot, char_by_name, bible, scene.number, prev_last_frame)
+                    job2, shot, char_by_name, bible, scene.number, prev_last_frame,
+                    scene_anchor_url=scene_anchor, scene_setting=scene_setting,
+                    suppress_location=state_changed)
+                # the first wide shot's closing frame anchors the room for the
+                # rest of the scene — a run of close-ups can't erase the set
+                if (scene_anchor is None and prev_last_frame
+                        and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
+                    scene_anchor = prev_last_frame
                 amt = video_cost(shot.estimated_duration_seconds, shot.quality_tier or "happyhorse")
                 async with self._cost_lock:
                     self._spent += amt
@@ -244,7 +256,7 @@ class GenerationRunner:
             db2.close()
         return prev_last_frame
 
-    async def _craft_prompt(self, shot, char_by_name) -> str:
+    async def _craft_prompt(self, shot, char_by_name, scene_setting=None) -> str:
         in_frame = shot.characters_in_frame or []
         shot_chars = [char_by_name[n] for n in in_frame if n in char_by_name]
         character_visuals = {
@@ -259,6 +271,7 @@ class GenerationRunner:
                   "estimated_duration_seconds": shot.estimated_duration_seconds},
             character_visuals=character_visuals,
             target_model=shot.quality_tier or "happyhorse",
+            scene_setting=scene_setting,
         )
         return result.get("prompt", "")
 
@@ -273,7 +286,9 @@ class GenerationRunner:
             logger.warning(f"last-frame extract failed for shot {shot.id}: {e}")
             return None
 
-    async def _process_shot(self, job, shot, char_by_name, bible, scene_number, prev_last_frame_url):
+    async def _process_shot(self, job, shot, char_by_name, bible, scene_number,
+                            prev_last_frame_url, scene_anchor_url=None,
+                            scene_setting=None, suppress_location=False):
         pid = str(job.project_id)
         in_frame = shot.characters_in_frame or []
         is_wan = shot.quality_tier == "wan"
@@ -281,7 +296,8 @@ class GenerationRunner:
         ref_stack, ref_provenance = build_reference_stack_labeled(
             characters_in_frame=in_frame, scene_number=scene_number, bible=bible,
             prev_last_frame_url=prev_last_frame_url, model_cap=model_cap,
-            shot_type=shot.shot_type)
+            shot_type=shot.shot_type, scene_anchor_url=scene_anchor_url,
+            suppress_location=suppress_location)
         seed = stable_seed(pid, shot.id)
 
         emit("generation.shot.started", {"scene_number": scene_number,
@@ -294,7 +310,7 @@ class GenerationRunner:
 
         for attempt in range(MAX_RETRIES + 1):
             try:
-                prompt = await self._craft_prompt(shot, char_by_name)
+                prompt = await self._craft_prompt(shot, char_by_name, scene_setting)
                 if is_wan:
                     task_id = await self.qwen.generate_video_wan(
                         prompt=prompt, duration=shot.estimated_duration_seconds,

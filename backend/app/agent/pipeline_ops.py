@@ -117,6 +117,17 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 max_shots=shots_per_scene,
                 shot_seconds=shot_seconds,
             )
+            # set dressing: pins props + prop state per scene (enhancement only)
+            try:
+                from app.services.set_dresser import SetDresser
+                scene.set_json = await SetDresser().dress(
+                    {"scene_number": scene.number, "heading": scene.heading,
+                     "location": scene.location, "description": scene.description,
+                     "stage_directions": scene.stage_directions or []},
+                    [{"shot_number": sd.get("shot_number"), "action": sd.get("action"),
+                      "dialogue": sd.get("dialogue")} for sd in shots])
+            except Exception:  # noqa: BLE001
+                pass
             for sd in shots:
                 shot = Shot(
                     scene_id=scene.id, number=sd.get("shot_number", 1),

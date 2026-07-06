@@ -104,3 +104,32 @@ def test_labeled_cap_trims_provenance_too():
         characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
         prev_last_frame_url="prev", model_cap=2)
     assert len(media) == len(prov) == 2
+
+
+def test_scene_anchor_rides_after_prev_frame():
+    media, prov = build_reference_stack_labeled(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url="prev", model_cap=9, shot_type="CU",
+        scene_anchor_url="anchor")
+    urls = [m["url"] for m in media]
+    # a close-up keeps the room via the anchor even though location is dropped
+    assert urls == ["mia_uniform", "prev", "anchor", "style"]
+    assert next(p for p in prov if p["url"] == "anchor")["role"] == "scene_anchor"
+
+
+def test_scene_anchor_dedupes_against_prev_frame():
+    # second shot of the scene: the anchor IS the previous frame — no duplicate
+    media, _ = build_reference_stack_labeled(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url="frame1", model_cap=9, scene_anchor_url="frame1")
+    assert [m["url"] for m in media].count("frame1") == 1
+
+
+def test_state_change_suppresses_location_plate():
+    # once the vase is broken the pristine location plate would contradict
+    # the story — it must not anchor the remaining wide shots
+    media, _ = build_reference_stack_labeled(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url="prev", model_cap=9, shot_type="LS",
+        suppress_location=True)
+    assert "loc1" not in [m["url"] for m in media]

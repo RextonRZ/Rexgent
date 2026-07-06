@@ -101,6 +101,27 @@ async def test_clip_records_reference_provenance_and_seed(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_scene_anchor_and_setting_flow_into_shot(monkeypatch):
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    setting = {"location": "living room",
+               "set_items": ["blue vase on the oak table"]}
+    await runner._process_shot(job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
+                               "prevframe", scene_anchor_url="anchorframe",
+                               scene_setting=setting)
+    added = runner.db.add.call_args[0][0]
+    roles = {p["role"] for p in added.references_json}
+    assert "scene_anchor" in roles
+    # the crafted prompt received the scene setting (rule 13 injection)
+    craft_kwargs = runner.prompt_crafter.craft.await_args.kwargs
+    assert craft_kwargs["scene_setting"] == setting
+
+
+@pytest.mark.asyncio
 async def test_low_continuity_flags_not_retries(monkeypatch):
     runner = make_runner()
     runner.continuity.validate = AsyncMock(return_value={

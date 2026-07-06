@@ -5,6 +5,10 @@ import type { Shot } from "@/lib/types";
 export interface SceneShots {
   scene_number: number;
   heading: string | null;
+  /** props every shot of this scene must render identically (set dresser) */
+  set_items?: string[];
+  /** prop state changes the action causes, e.g. a vase breaking mid scene */
+  state_changes?: { from_shot: number; state: string }[];
   shots: Shot[];
 }
 

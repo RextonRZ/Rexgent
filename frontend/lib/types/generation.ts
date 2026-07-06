@@ -13,7 +13,7 @@ export interface GenerationJob {
 /** One bible reference that conditioned a clip's generation. */
 export interface ClipReference {
   url: string;
-  role: "identity" | "costume" | "prev_frame" | "location" | "style";
+  role: "identity" | "costume" | "prev_frame" | "scene_anchor" | "location" | "style";
   character?: string;
 }
 

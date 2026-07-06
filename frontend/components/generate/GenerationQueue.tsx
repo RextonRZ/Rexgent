@@ -18,6 +18,7 @@ const REF_LABELS: Record<ClipReference["role"], string> = {
   identity: "identity plate",
   costume: "costume plate",
   prev_frame: "previous shot frame",
+  scene_anchor: "scene anchor frame",
   location: "location plate",
   style: "style plate",
 };

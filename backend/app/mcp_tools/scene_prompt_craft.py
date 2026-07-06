@@ -33,9 +33,16 @@ class ScenePromptCraft:
         character_visuals: dict,
         target_model: str = "wan",
         style_bible: dict | None = None,
+        scene_setting: dict | None = None,
     ) -> dict:
+        setting_block = (
+            f"Scene setting (rule 13 — render this SAME room and these SAME props):\n"
+            f"{json.dumps(scene_setting, ensure_ascii=False)}\n\n"
+            if scene_setting else ""
+        )
         user_content = (
             f"Shot data:\n{json.dumps(shot)}\n\n"
+            f"{setting_block}"
             f"Character visual descriptions (use these, NOT names):\n{json.dumps(character_visuals)}\n\n"
             f"Target model: {target_model}\n"
             f"Duration: {shot.get('estimated_duration_seconds', 5)}s\n"

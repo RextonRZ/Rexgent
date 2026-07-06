@@ -9,11 +9,18 @@ WIDE_FRAMINGS = {"MS", "FS", "LS", "EWS", "WS"}
 
 
 def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
-                                  prev_last_frame_url, model_cap, shot_type=None):
+                                  prev_last_frame_url, model_cap, shot_type=None,
+                                  scene_anchor_url=None, suppress_location=False):
     """Same stack as build_reference_stack, but each reference keeps its role
-    (identity | costume | prev_frame | location | style) and, where relevant,
-    the character it belongs to. The provenance list is persisted per clip so
-    cross-shot reuse of the bible is provable, not asserted.
+    (identity | costume | prev_frame | scene_anchor | location | style) and,
+    where relevant, the character it belongs to. The provenance list is
+    persisted per clip so cross-shot reuse of the bible is provable, not asserted.
+
+    scene_anchor_url is the last frame of the scene's first wide shot: unlike
+    the prev-frame chain it survives a run of close-ups (whose frames carry no
+    background), so the room's set dressing doesn't get reinvented mid-scene.
+    suppress_location drops the location plate once the scene's set STATE has
+    changed (a broken vase must not be re-anchored to its pristine plate).
 
     Returns (media, provenance): media is the API payload, provenance the
     matching [{"url", "role", "character"?}] records in the same order."""
@@ -32,8 +39,11 @@ def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
             entries.append((scene_variant["plate_image_url"], "costume", name))
     if prev_last_frame_url:
         entries.append((prev_last_frame_url, "prev_frame", None))
+    if scene_anchor_url:
+        entries.append((scene_anchor_url, "scene_anchor", None))
     # location plate only on wide framings (or when the shot type is unknown)
-    include_location = shot_type is None or str(shot_type).upper() in WIDE_FRAMINGS
+    include_location = ((shot_type is None or str(shot_type).upper() in WIDE_FRAMINGS)
+                        and not suppress_location)
     loc = (bible.get("location_by_scene") or {}).get(scene_number)
     if loc and include_location:
         entries.append((loc, "location", None))

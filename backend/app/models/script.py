@@ -36,6 +36,10 @@ class Scene(Base):
     emotional_beat = Column(String(255), nullable=True)
     dialogue_json = Column(JSONB, nullable=True)
     stage_directions = Column(JSONB, nullable=True)
+    # set dressing: {"set_items": [...], "state_changes": [{from_shot, state}]}
+    # — props every shot of the scene must render identically, and how the
+    # action changes them (a broken vase stays broken)
+    set_json = Column(JSONB, nullable=True)
 
     script = relationship("Script", back_populates="scenes")
     shots = relationship("Shot", back_populates="scene", cascade="all, delete-orphan")

@@ -30,6 +30,7 @@ TASK_MODELS: dict[str, str] = {
     "structure": STRUCTURED,
     "characters": STRUCTURED,
     "wardrobe": STRUCTURED,
+    "set_dress": STRUCTURED,
     "relationships": STRUCTURED,
     "mbti": STRUCTURED,
     "clarify": STRUCTURED,

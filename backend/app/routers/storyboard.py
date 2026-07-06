@@ -157,6 +157,20 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
                 scene_data, scene_chars,
                 max_shots=shots_per_scene, shot_seconds=shot_seconds,
             )
+            # Pin the background down: which props every shot of this scene
+            # must render identically, and how the action changes them.
+            # An enhancement — never fail the storyboard over it.
+            try:
+                from app.services.set_dresser import SetDresser
+
+                scene.set_json = await SetDresser().dress(
+                    scene_data,
+                    [{"shot_number": sd.get("shot_number"),
+                      "action": sd.get("action"),
+                      "dialogue": sd.get("dialogue")} for sd in shots_data],
+                )
+            except Exception:
+                pass
 
         for shot_data in shots_data:
             shot = Shot(
@@ -215,9 +229,12 @@ async def list_shots(project_id: str, db: Session = Depends(get_db)):
     result = []
     for scene in scenes:
         shots = db.query(Shot).filter(Shot.scene_id == scene.id).order_by(Shot.number).all()
+        set_json = getattr(scene, "set_json", None) or {}
         result.append({
             "scene_number": scene.number,
             "heading": scene.heading,
+            "set_items": set_json.get("set_items") or [],
+            "state_changes": set_json.get("state_changes") or [],
             "shots": [ShotResponse.model_validate(s).model_dump() for s in shots],
         })
     return {"scenes": result}
