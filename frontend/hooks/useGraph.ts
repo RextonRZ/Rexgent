@@ -133,7 +133,7 @@ export function useGraph(projectId: string) {
 
     return () => {
       socket.off("agent:report", handler);
-      socket.disconnect();
+      // no socket.disconnect() — the socket is shared app-wide
     };
   }, [projectId, queryClient]);
 

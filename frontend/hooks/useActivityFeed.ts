@@ -42,7 +42,7 @@ export function useActivityFeed(projectId: string) {
 
     return () => {
       handlers.forEach(([event, handler]) => socket.off(event, handler));
-      socket.disconnect();
+      // no socket.disconnect() — the socket is shared app-wide
     };
   }, [projectId]);
 

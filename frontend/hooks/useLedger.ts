@@ -18,6 +18,8 @@ export function useLedger(projectId: string) {
     queryFn: async () =>
       (await api.get(`/api/budget/ledger/${projectId}`)).data,
     enabled: !!projectId,
+    // fallback freshness if the websocket drops
+    refetchInterval: 15000,
   });
 
   const [live, setLive] = useState<Ledger | null>(null);
@@ -32,7 +34,7 @@ export function useLedger(projectId: string) {
 
     return () => {
       socket.off("ledger:updated", handler);
-      socket.disconnect();
+      // no socket.disconnect() — the socket is shared app-wide
     };
   }, [projectId]);
 

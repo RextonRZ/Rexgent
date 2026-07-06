@@ -39,9 +39,17 @@ export function useAgentReports(projectId: string) {
     queryFn: async () =>
       (await api.get(`/api/agent/reports/${projectId}`)).data,
     enabled: !!projectId,
+    // fallback freshness if the websocket drops
+    refetchInterval: 15000,
   });
 
   const [live, setLive] = useState<AgentReport[]>([]);
+
+  // Each poll already contains everything that arrived over the socket —
+  // absorb the live buffer so reports don't show twice.
+  useEffect(() => {
+    setLive([]);
+  }, [q.dataUpdatedAt]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -54,7 +62,7 @@ export function useAgentReports(projectId: string) {
 
     return () => {
       socket.off("agent:report", handler);
-      socket.disconnect();
+      // no socket.disconnect() — the socket is shared app-wide
     };
   }, [projectId]);
 
@@ -95,7 +103,7 @@ export function useClarifications(projectId: string) {
       cancelled = true;
       socket.off("clarification.awaiting", onAwaiting);
       socket.off("clarification.resolved", onResolved);
-      socket.disconnect();
+      // no socket.disconnect() — the socket is shared app-wide
     };
   }, [projectId]);
 

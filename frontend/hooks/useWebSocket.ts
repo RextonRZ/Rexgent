@@ -38,7 +38,7 @@ export function useWebSocket(projectId: string) {
       socket.off("clip:completed");
       socket.off("cost:updated");
       socket.off("job:completed");
-      socket.disconnect();
+      // no socket.disconnect() — the socket is shared app-wide
     };
   }, [projectId, upsertClip, setCost, setComplete]);
 }
