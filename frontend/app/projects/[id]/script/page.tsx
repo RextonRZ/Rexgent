@@ -8,6 +8,7 @@ import { useLatestScript } from "@/hooks/useScript";
 import { ScriptImport } from "@/components/script/ScriptImport";
 import { ScriptGenerate } from "@/components/script/ScriptGenerate";
 import { ScriptEditor } from "@/components/script/ScriptEditor";
+import { BeatSheet } from "@/components/script/BeatSheet";
 import { PlotGapPanel } from "@/components/script/PlotGapPanel";
 import { EndingGraph } from "@/components/script/EndingGraph";
 import {
@@ -182,6 +183,9 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
                 </Button>
               </div>
             </div>
+            {latestScript?.structured_json && (
+              <BeatSheet structured={latestScript.structured_json} />
+            )}
             <ScriptEditor
               scriptId={scriptData.script_id}
               initialContent={scriptData.raw_text}

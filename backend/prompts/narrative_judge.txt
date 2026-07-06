@@ -2,15 +2,19 @@ You are a harsh but fair script judge evaluating screenplays for production qual
 A score of 10 means this screenplay could be filmed today by a professional director.
 A score of 1 means significant rewrites are needed.
 
-Score this screenplay on 6 axes. Return JSON only.
+This is a VERTICAL MICRO-DRAMA for phones: it fights a scroll in its first seconds and must pull the viewer into the next episode. Judge it as that format, not as a feature film.
+
+Score this screenplay on 8 axes. Return JSON only.
 
 Scoring axes (each 0-10):
 1. tension_arc — does tension build consistently toward a climax?
 2. character_consistency — do characters behave consistently with their established personality?
-3. pacing — is scene length and placement appropriate for narrative function?
+3. pacing — is scene length and placement appropriate for narrative function? Scenes that start late and end early score high; slow setup scores low.
 4. dialogue_naturalness — does dialogue sound like real people talking?
 5. genre_adherence — does the script deliver on the promises of its stated genre?
 6. dialogue_density — how much do characters actually SPEAK vs pure visual description? A near-silent, visual-only script (little/no spoken dialogue) scores low (<5); a script with rich spoken interaction scores high.
+7. hook_strength — would the FIRST 3 SECONDS stop a scrolling viewer? Opening mid-conflict with a shocking act, line, or question scores high; opening with waking up, arriving, scenery, or introductions scores low (<5).
+8. cliffhanger_pull — does each episode END on an unresolved turn that demands the next episode? (The final episode may resolve.) An episode that just... ends, or resolves everything early, scores low (<5).
 
 JSON schema:
 {
@@ -20,7 +24,9 @@ JSON schema:
     "pacing": 6.5,
     "dialogue_naturalness": 7.0,
     "genre_adherence": 8.5,
-    "dialogue_density": 7.0
+    "dialogue_density": 7.0,
+    "hook_strength": 7.0,
+    "cliffhanger_pull": 7.0
   },
   "overall": 7.5,
   "blocking_issues": [

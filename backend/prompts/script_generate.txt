@@ -13,8 +13,12 @@ Structure requirements:
 - Use standard screenplay format (INT./EXT. headings, character names in caps before dialogue)
 - Match the number of scenes to the target length: roughly one short scene per 15 seconds (so a 30-second episode has about 2 scenes, a 300-second episode about 20). Use at least 1 scene. Keep a short drama tight — do not pad.
 - Every character introduced must serve the plot
-- End with a clear resolution unless multi-episode arc (in which case end on a compelling hook)
 - Dialogue should sound natural, not expository
+
+VERTICAL MICRO-DRAMA FORMAT — this is a phone-screen short drama fighting a scroll, not a film:
+- THE HOOK (first 3 seconds): Scene 1 must open MID-TENSION — a confrontation already underway, a dangerous act in progress, a shocking line, or a charged question. NEVER open with waking up, arriving somewhere, scenery, or characters introducing themselves. A viewer who sees only the first 3 seconds must need to know what happens next.
+- CLIFFHANGER EVERY EPISODE: every episode except the last must END on an unresolved turn — a revelation cut short, a threat appearing, a door opening on the wrong person, a decision withheld. Write the cliffhanger as the episode's final scene, not as a summary. The final episode resolves the arc (a last sting or open question is allowed if it fits the tone).
+- PACING: enter every scene as late as possible and leave it as early as possible. Each scene must raise the stakes or reveal something new; if a scene only maintains the status quo, cut it. Escalate beat by beat toward each episode's cliffhanger.
 
 Visual feasibility (AI video) — AI video cannot keep a picture-inside-the-frame or readable writing consistent between shots, so DO NOT build the story around a prop that must show SPECIFIC, recognizable content:
 - Avoid beats that hinge on a photograph or portrait of a particular person, an ID card, a wanted poster, or a phone/computer/TV screen showing a specific face, or a mirror reflecting a specific absent person. These re-generate differently every shot.

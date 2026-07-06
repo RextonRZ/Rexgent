@@ -17,6 +17,8 @@ BLOCKING — keep the geography consistent so shots cut together and feel like o
 
 CONSISTENCY — every shot in this scene shares ONE world. Give ALL shots the SAME `lighting` and SAME `colour_mood` (time of day and light source do not change mid-scene). Vary `shot_type`, `camera_movement` and angle freely for visual interest, but keep the environment, lighting and colour identical so the clips cut together cleanly.
 
+THE HOOK — if this is SCENE 1, its FIRST shot is the drama's first 3 seconds on a phone screen: stage it on the most arresting image the scene offers (the confrontation mid-motion, the dangerous act, the charged close-up reaction) — NEVER a slow establishing wide or an empty room. If the scene text opens quietly, still lead with its most charged moment as written; do not invent new content for the hook.
+
 DO NOT create INSERT/ECU/CU shots that focus on a recognizable image-prop (a photo or portrait of a person, an ID, a poster, a screen showing a face) or on readable writing (a note, letter, sign whose words matter) — AI video re-invents such content every shot so it never matches and text comes out garbled. Convey written messages through dialogue, and show the live character rather than a prop.
 
 For each shot, return an object in this exact schema:

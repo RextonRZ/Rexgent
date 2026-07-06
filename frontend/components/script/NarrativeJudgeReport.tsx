@@ -26,6 +26,9 @@ const AXIS_LABELS: Record<string, string> = {
   pacing: "Pacing",
   dialogue_naturalness: "Dialogue",
   genre_adherence: "Genre Adherence",
+  dialogue_density: "Dialogue Density",
+  hook_strength: "Hook",
+  cliffhanger_pull: "Cliffhanger",
 };
 
 const REC_COLORS: Record<string, string> = {
