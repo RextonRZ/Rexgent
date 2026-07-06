@@ -16,6 +16,10 @@ def plan_shot_budget(num_scenes: int, target_length: int) -> tuple[int, int]:
 
 
 class StoryboardGenerator:
+    # Never balloon a single scene past this many shots, even if it is very
+    # dialogue-heavy — keeps cost and length sane.
+    _HARD_CAP = 12
+
     def __init__(self):
         self.qwen = QwenClient(get_settings())
         self.prompt_template = load_prompt("storyboard_generate.txt")
@@ -28,22 +32,27 @@ class StoryboardGenerator:
         max_shots: int = 4,
         shot_seconds: int = 5,
     ) -> list[dict]:
+        # Grow the budget so no scripted line is dropped: the scene's dialogue is
+        # covered in order, roughly one line (or a short exchange) per shot.
+        lines = scene_json.get("dialogue") or []
+        cap = min(max(max_shots, len(lines)), self._HARD_CAP)
+
         user_content = (
-            f"Scene details:\n{json.dumps(scene_json)}\n\n"
-            f"Characters involved:\n{json.dumps(characters_in_scene)}\n\n"
-            f"Director's style bible:\n{json.dumps(style_bible or {})}\n\n"
-            f"Produce at most {max_shots} shot(s) for this scene, each about "
-            f"{shot_seconds} seconds. Keep it tight — no filler shots."
+            f"Scene details:\n{json.dumps(scene_json, ensure_ascii=False)}\n\n"
+            f"Characters involved:\n{json.dumps(characters_in_scene, ensure_ascii=False)}\n\n"
+            f"Director's style bible:\n{json.dumps(style_bible or {}, ensure_ascii=False)}\n\n"
+            f"This scene has {len(lines)} dialogue line(s). Produce at most {cap} "
+            f"shot(s), each about {shot_seconds} seconds. Preserve EVERY dialogue "
+            f"line verbatim and in order; do not invent beats or endings."
         )
         messages = [
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user_content},
         ]
-        result = await self.qwen.chat_json(messages=messages, temperature=0.5)
+        result = await self.qwen.chat_json(messages=messages, temperature=0.4)
         shots = result if isinstance(result, list) else []
 
-        # Hard-cap so the storyboard can't exceed the target length.
-        shots = shots[:max_shots]
+        shots = shots[:cap]
         for s in shots:
             if isinstance(s, dict):
                 raw = s.get("estimated_duration_seconds", shot_seconds)

@@ -135,11 +135,18 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
             char_map.get(str(name).upper(), {"name": name})
             for name in (scene.characters_json or [])
         ]
+        # Feed the generator the ACTUAL scene — its written dialogue, stage
+        # directions, cast and location — not just a one-line summary. Without
+        # this the shot-writer invents shots and paraphrases the dialogue.
         scene_data = {
             "scene_number": scene.number,
             "heading": scene.heading,
+            "location": scene.location,
             "description": scene.description,
             "emotional_beat": scene.emotional_beat,
+            "characters_present": scene.characters_json or [],
+            "stage_directions": scene.stage_directions or [],
+            "dialogue": scene.dialogue_json or [],
         }
 
         shots_data = await generator.generate_for_scene(
