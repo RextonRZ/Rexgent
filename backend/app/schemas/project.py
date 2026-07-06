@@ -25,6 +25,7 @@ class ProjectUpdate(BaseModel):
     premise: Optional[str] = None
     poster_url: Optional[str] = None
     credit_budget: Optional[float] = None  # raise the spend cap mid-flight
+    video_ratio: Optional[str] = None      # "9:16" | "16:9"
 
 
 class PosterFromClipRequest(BaseModel):

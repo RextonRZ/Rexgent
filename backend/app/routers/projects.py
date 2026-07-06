@@ -334,6 +334,8 @@ async def update_project(
     changes = request.model_dump(exclude_unset=True)
     if "credit_budget" in changes and changes["credit_budget"] is not None:
         changes["credit_budget"] = max(1.0, float(changes["credit_budget"]))
+    if "video_ratio" in changes and changes["video_ratio"] not in ("9:16", "16:9"):
+        changes.pop("video_ratio")  # ignore anything but the two valid formats
     for field, value in changes.items():
         setattr(project, field, value)
     db.commit()
