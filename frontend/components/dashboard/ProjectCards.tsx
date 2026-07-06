@@ -173,11 +173,15 @@ export function ProjectCard({
   previewing,
   onPreview,
   onAction,
+  className,
+  style,
 }: {
   project: ProjectOverviewItem;
   previewing: boolean;
   onPreview: (id: string | null) => void;
   onAction: (action: ProjectAction, project: ProjectOverviewItem) => void;
+  className?: string;
+  style?: React.CSSProperties;
 }) {
   // Prompt-like titles get a sparkle: one click asks the LLM for a clean
   // title, offered inline with Accept / Keep. Never renames on its own.
@@ -192,7 +196,11 @@ export function ProjectCard({
       tabIndex={0}
       onClick={() => onAction("open", project)}
       onKeyDown={(e) => e.key === "Enter" && onAction("open", project)}
-      className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-zinc-900/60 outline-none transition-all duration-300 hover:-translate-y-1 hover:border-violet-500/30 hover:shadow-[0_12px_40px_-12px_rgba(139,92,246,0.4)] focus-visible:ring-2 focus-visible:ring-violet-400/60"
+      style={style}
+      className={cn(
+        "group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-zinc-900/60 outline-none transition-all duration-300 hover:-translate-y-1 hover:border-violet-500/30 hover:shadow-[0_12px_40px_-12px_rgba(139,92,246,0.4)] focus-visible:ring-2 focus-visible:ring-violet-400/60",
+        className
+      )}
     >
       <div
         className="relative aspect-video overflow-hidden bg-zinc-950"
@@ -300,9 +308,13 @@ export function ProjectCard({
 export function ProjectRow({
   project,
   onAction,
+  className,
+  style,
 }: {
   project: ProjectOverviewItem;
   onAction: (action: ProjectAction, project: ProjectOverviewItem) => void;
+  className?: string;
+  style?: React.CSSProperties;
 }) {
   return (
     <div
@@ -310,7 +322,11 @@ export function ProjectRow({
       tabIndex={0}
       onClick={() => onAction("open", project)}
       onKeyDown={(e) => e.key === "Enter" && onAction("open", project)}
-      className="group flex cursor-pointer items-center gap-4 rounded-xl border border-white/[0.08] bg-zinc-900/60 p-3 outline-none transition-colors hover:border-white/15 focus-visible:ring-2 focus-visible:ring-violet-400/60"
+      style={style}
+      className={cn(
+        "group flex cursor-pointer items-center gap-4 rounded-xl border border-white/[0.08] bg-zinc-900/60 p-3 outline-none transition-colors hover:border-white/15 focus-visible:ring-2 focus-visible:ring-violet-400/60",
+        className
+      )}
     >
       <div className="h-16 w-28 shrink-0 overflow-hidden rounded-md bg-zinc-950">
         <PosterImage project={project} />
@@ -339,14 +355,28 @@ export function ProjectRow({
   );
 }
 
-export function NewProjectTile({ onClick }: { onClick: () => void }) {
+export function NewProjectTile({
+  onClick,
+  className,
+  style,
+}: {
+  onClick: () => void;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   return (
     <button
       onClick={onClick}
-      className="group flex h-full min-h-[200px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border text-muted-foreground transition-all duration-250 hover:-translate-y-0.5 hover:border-violet-500/60 hover:bg-violet-500/5 hover:text-foreground"
+      style={style}
+      className={cn(
+        "group flex h-full min-h-[200px] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border text-muted-foreground transition-all duration-300 hover:-translate-y-1 hover:border-violet-500/60 hover:bg-violet-500/5 hover:text-foreground",
+        className
+      )}
     >
-      <Plus className="size-6" />
-      <span className="text-sm font-medium">Start new project</span>
+      <span className="flex size-11 items-center justify-center rounded-full border border-dashed border-violet-500/40 transition-colors group-hover:border-violet-500/70 group-hover:bg-violet-500/10">
+        <Plus className="size-5" />
+      </span>
+      <span className="text-sm font-medium">Start new drama</span>
     </button>
   );
 }

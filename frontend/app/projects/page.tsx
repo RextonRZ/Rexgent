@@ -369,34 +369,32 @@ function Dashboard() {
               </div>
             ) : view === "grid" ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                <div className="card-rise h-full">
-                  <NewProjectTile onClick={() => setNewOpen(true)} />
-                </div>
+                <NewProjectTile
+                  className="card-rise"
+                  onClick={() => setNewOpen(true)}
+                />
                 {filtered.map((p, i) => (
-                  <div
+                  <ProjectCard
                     key={p.id}
-                    className="card-rise h-full"
+                    project={p}
+                    previewing={previewId === p.id}
+                    onPreview={setPreviewId}
+                    onAction={handleAction}
+                    className="card-rise"
                     style={{ animationDelay: `${Math.min(i + 1, 10) * 45}ms` }}
-                  >
-                    <ProjectCard
-                      project={p}
-                      previewing={previewId === p.id}
-                      onPreview={setPreviewId}
-                      onAction={handleAction}
-                    />
-                  </div>
+                  />
                 ))}
               </div>
             ) : (
               <div className="space-y-2">
                 {filtered.map((p, i) => (
-                  <div
+                  <ProjectRow
                     key={p.id}
+                    project={p}
+                    onAction={handleAction}
                     className="card-rise"
                     style={{ animationDelay: `${Math.min(i, 10) * 35}ms` }}
-                  >
-                    <ProjectRow project={p} onAction={handleAction} />
-                  </div>
+                  />
                 ))}
               </div>
             )}
