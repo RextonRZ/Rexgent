@@ -236,7 +236,7 @@ class GenerationRunner:
             shot={"shot_type": shot.shot_type, "camera_movement": shot.camera_movement,
                   "action": shot.action, "lighting": shot.lighting,
                   "colour_mood": shot.colour_mood, "emotional_beat": shot.emotional_beat,
-                  "dialogue": shot.dialogue,
+                  "dialogue": shot.dialogue, "notes": getattr(shot, "notes", None),
                   "estimated_duration_seconds": shot.estimated_duration_seconds},
             character_visuals=character_visuals,
             target_model=shot.quality_tier or "happyhorse",
@@ -261,7 +261,8 @@ class GenerationRunner:
         model_cap = 5 if is_wan else 9
         ref_stack = build_reference_stack(
             characters_in_frame=in_frame, scene_number=scene_number, bible=bible,
-            prev_last_frame_url=prev_last_frame_url, model_cap=model_cap)
+            prev_last_frame_url=prev_last_frame_url, model_cap=model_cap,
+            shot_type=shot.shot_type)
 
         emit("generation.shot.started", {"scene_number": scene_number,
              "shot_number": shot.number, "index": job.completed_shots + 1,

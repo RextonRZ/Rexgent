@@ -44,3 +44,29 @@ def test_no_chain_entry_when_prev_none():
         characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
         prev_last_frame_url=None, model_cap=9)
     assert all(m["url"] != "prev" for m in stack)
+
+
+def test_wide_shot_keeps_location_plate():
+    stack = build_reference_stack(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url="prev", model_cap=9, shot_type="LS")
+    urls = [m["url"] for m in stack]
+    assert "loc1" in urls
+
+
+def test_tight_shot_drops_location_plate():
+    # a close-up must not anchor the whole wide room — it reads as a flat backdrop
+    stack = build_reference_stack(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url="prev", model_cap=9, shot_type="MCU")
+    urls = [m["url"] for m in stack]
+    assert "loc1" not in urls
+    # identity, outfit-continuity and the last-frame chain still anchor it
+    assert urls == ["mia_uniform", "prev", "style"]
+
+
+def test_unknown_shot_type_keeps_location_for_backcompat():
+    stack = build_reference_stack(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url=None, model_cap=9)
+    assert "loc1" in [m["url"] for m in stack]
