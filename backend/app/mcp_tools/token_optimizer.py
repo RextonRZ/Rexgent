@@ -14,6 +14,9 @@ class TokenOptimizer:
     HH_COST_PER_SEC = 0.108
     RESERVE_PCT = 0.15
     HOOK_SCENE = 1
+    # The hook is the OPENING BEATS, not the whole first scene — a one-scene
+    # drama would otherwise protect every shot and make the cap unfittable.
+    HOOK_MAX_SHOTS = 2
 
     # Model ids the generation runner actually dispatches (qwen_client).
     WAN_MODEL = "wan2.7-t2v"
@@ -56,8 +59,15 @@ class TokenOptimizer:
 
     def allocate(self, shots: list[dict], budget_usd: float = 40.0) -> dict:
         available = budget_usd * (1 - self.RESERVE_PCT)
+        # Hook = the first HOOK_MAX_SHOTS shots of scene 1 (by shot_number when
+        # given, else list order) — the seconds that stop the scroll.
+        scene1 = sorted(
+            (i for i, s in enumerate(shots) if s.get("scene_number") == self.HOOK_SCENE),
+            key=lambda i: shots[i].get("shot_number") or 10 ** 9,
+        )
+        hook_indices = set(scene1[:self.HOOK_MAX_SHOTS])
         scored = []
-        for shot in shots:
+        for i, shot in enumerate(shots):
             importance = self.score_shot(shot)
             if importance >= 7:
                 tier, model = "wan", self.WAN_MODEL
@@ -71,7 +81,7 @@ class TokenOptimizer:
                 "importance_score": importance,
                 "quality_tier": tier,
                 "model": model,
-                "is_hook": shot.get("scene_number") == self.HOOK_SCENE,
+                "is_hook": i in hook_indices,
                 "duration": duration,
                 "estimated_cost_usd": round(self._cost_of(tier, duration), 3),
                 "reasoning": f"Score {importance}/10 -> {tier}",

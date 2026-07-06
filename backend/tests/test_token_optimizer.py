@@ -94,6 +94,32 @@ def test_hook_shots_never_downgraded_or_deferred():
     assert result["hook_shots"] == 2
 
 
+def test_single_scene_drama_still_fits_the_cap():
+    # a one-scene drama: EVERY shot is scene 1. Only the opening beats are
+    # the hook — the rest must stay downgradable or the cap is unfittable.
+    optimizer = TokenOptimizer()
+    shots = [{**_hero(f"s{i}", scene=1), "shot_number": i + 1} for i in range(7)]
+    result = optimizer.allocate(shots, budget_usd=5.0)  # available $4.25
+    assert result["hook_shots"] == 2
+    assert result["fits_budget"] is True
+    assert result["video_cost_usd"] <= result["budget_available"]
+    by_number = {s["shot_id"]: s for s in result["scored_shots"]}
+    # the first two shots keep premium quality
+    assert by_number["s0"]["quality_tier"] == "wan"
+    assert by_number["s1"]["quality_tier"] == "wan"
+
+
+def test_hook_follows_shot_number_not_list_order():
+    optimizer = TokenOptimizer()
+    shots = [{**_hero("late", scene=1), "shot_number": 3},
+             {**_hero("first", scene=1), "shot_number": 1},
+             {**_hero("second", scene=1), "shot_number": 2}]
+    result = optimizer.allocate(shots, budget_usd=40.0)
+    by_id = {s["shot_id"]: s for s in result["scored_shots"]}
+    assert by_id["first"]["is_hook"] and by_id["second"]["is_hook"]
+    assert not by_id["late"]["is_hook"]
+
+
 def test_generous_budget_changes_nothing():
     optimizer = TokenOptimizer()
     shots = [_hero(f"s{i}") for i in range(3)]

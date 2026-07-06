@@ -39,6 +39,7 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
 
     shots_data = [{
         "shot_id": str(s.id),
+        "shot_number": s.number,
         "shot_type": s.shot_type,
         "scene_number": scene_number_by_id.get(s.scene_id),
         "emotional_beat": s.emotional_beat,

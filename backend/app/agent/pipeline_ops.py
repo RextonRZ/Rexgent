@@ -142,9 +142,11 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 db.add(shot)
                 created.append((shot, scene.number))
     db.commit()
-    # scene_number rides along so the budget allocator can protect the hook
-    # (scene 1) when it fits the plan to the spend cap.
+    # scene_number + shot_number ride along so the budget allocator can
+    # protect the hook (the opening shots of scene 1) when it fits the plan
+    # to the spend cap.
     return [{"shot_id": str(s.id), "shot_type": s.shot_type,
+             "shot_number": s.number,
              "scene_number": scene_no,
              "emotional_beat": s.emotional_beat,
              "characters_in_frame": s.characters_in_frame or [],
