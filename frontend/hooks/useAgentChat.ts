@@ -37,6 +37,16 @@ export interface RunningStage {
 let _mid = 0;
 const nextId = () => `m${++_mid}`;
 
+/** Server timestamps are naive UTC (datetime.utcnow); without a zone marker the
+ * browser reads them as LOCAL time, shifting them by the tz offset so a fresh
+ * answer sorts BEFORE the message that prompted it. Anchor them to UTC. */
+function parseServerTime(s?: string): number {
+  if (!s) return Date.now();
+  const hasZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(s);
+  const t = Date.parse(hasZone ? s : `${s}Z`);
+  return Number.isNaN(t) ? Date.now() : t;
+}
+
 /** Live "who is working right now" from stage:progress events. Started/update
  * upsert the running entry (keeping the original start time); completed and
  * failed clear it and hand a message to the caller. */
@@ -176,7 +186,7 @@ export function useAgentChat(projectId: string) {
       const passed = /pass/i.test(r.rationale ?? "") || (r.confidence ?? 0) >= 0.7;
       out.push({
         id: `r-${r.created_at ?? ""}-${r.agent}-${out.length}`,
-        at: r.created_at ? Date.parse(r.created_at) : Date.now(),
+        at: parseServerTime(r.created_at),
         agent: r.agent,
         kind: passed ? "done" : "warn",
         text: r.rationale || r.stage,
