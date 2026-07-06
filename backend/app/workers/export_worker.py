@@ -26,10 +26,13 @@ logger = logging.getLogger(__name__)
 def build_dialogue_segments(line_rows, scene_plan):
     """Place per-line dialogue audio on the global timeline, aligning each line to
     the shot that speaks it. line_rows: dicts with scene_number, line_index,
-    audio_local, duration_seconds. scene_plan: ordered per-scene shot layout."""
+    audio_local, duration_seconds (+ optional text/character_name, which ride
+    along so burned captions share the voice's exact timing). scene_plan:
+    ordered per-scene shot layout."""
     rows = [
         {"scene_number": r["scene_number"], "line_index": r["line_index"],
-         "audio_path": r["audio_local"], "duration": r["duration_seconds"]}
+         "audio_path": r["audio_local"], "duration": r["duration_seconds"],
+         "text": r.get("text"), "character": r.get("character_name")}
         for r in line_rows
     ]
     return place_dialogue(rows, scene_plan)
@@ -116,14 +119,6 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             })
             duration_by_clip[str(clip.id)] = dur
 
-        # Captions
-        srt = caption_gen.generate_srt(clips_with_dialogue)
-        srt_path = os.path.join(tempfile.mkdtemp(), "captions.srt")
-        with open(srt_path, "w", encoding="utf-8") as f:
-            f.write(srt)
-        srt_key = oss.get_project_path(project_id, "exports", "captions.srt")
-        srt_url = oss.upload_file(srt_path, srt_key)
-
         # Production report (token fields populated by Phase 5 token tracking)
         wall_minutes = (
             (datetime.now(timezone.utc) - job.created_at.replace(tzinfo=timezone.utc)).total_seconds() / 60
@@ -169,11 +164,11 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         final_local = os.path.join(workdir, "final.mp4")
         stitcher.stitch(stitch_inputs, final_local)
 
-        # Build the dialogue track (continuous per-scene segments at global offsets) +
-        # an optional BGM bed that ducks under speech, then mix onto the silent cut.
+        # ── Dialogue placement: each line aligned to the shot that speaks it ──
+        dialogue_segments: list = []
+        bgm_local = None
         try:
             from app.models.script import Script, Scene
-            from app.websocket.emitter import emit
 
             # Make sure voice lines exist before we try to place them.
             _ensure_voice_lines(db, project_id)
@@ -206,12 +201,12 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     with open(lp, "wb") as fh:
                         fh.write(lr.content)
                     line_rows.append({"scene_number": row.scene_number, "line_index": row.line_index,
-                                      "audio_local": lp, "duration_seconds": row.duration_seconds or 0.0})
+                                      "audio_local": lp, "duration_seconds": row.duration_seconds or 0.0,
+                                      "text": row.text, "character_name": row.character_name})
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"Export: could not download line audio {row.audio_url}: {e}")
             dialogue_segments = build_dialogue_segments(line_rows, scene_plan)
 
-            bgm_local = None
             if audio and audio.get("url"):
                 ext = audio["url"].rsplit(".", 1)[-1].split("?")[0].lower() or "mp3"
                 bgm_local = os.path.join(workdir, f"music.{ext}")
@@ -219,7 +214,32 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 a.raise_for_status()
                 with open(bgm_local, "wb") as fh:
                     fh.write(a.content)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Export: audio prep skipped: {e}")
 
+        # ── Captions: timed to the placed voice lines when they exist, else to
+        # shot durations. Burned into the picture (short dramas are watched
+        # muted-first) AND uploaded as a sidecar .srt.
+        srt_url = None
+        try:
+            spoken = [s for s in dialogue_segments if s.get("text")]
+            srt = (caption_gen.generate_srt_from_segments(spoken) if spoken
+                   else caption_gen.generate_srt(clips_with_dialogue))
+            if srt.strip():
+                srt_path = os.path.join(workdir, "captions.srt")
+                with open(srt_path, "w", encoding="utf-8") as f:
+                    f.write(srt)
+                srt_key = oss.get_project_path(project_id, "exports", "captions.srt")
+                srt_url = oss.upload_file(srt_path, srt_key)
+                burned = os.path.join(workdir, "final_subbed.mp4")
+                stitcher.burn_subtitles(final_local, srt_path, burned)
+                final_local = burned
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Export: subtitle burn skipped: {e}")
+
+        # ── Mix: dialogue track + optional BGM bed ducking under speech ──
+        try:
+            from app.websocket.emitter import emit
             if dialogue_segments or bgm_local:
                 emit("audio.mix.started", {}, project_id)
                 mixed = os.path.join(workdir, "final_audio.mp4")

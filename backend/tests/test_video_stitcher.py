@@ -2,6 +2,24 @@ from unittest.mock import patch
 from app.services.video_stitcher import VideoStitcher
 
 
+def test_normalise_canvas_is_vertical_9_16():
+    # the delivery format: portrait 1080x1920, mixed sources letterboxed in
+    assert "scale=1080:1920" in VideoStitcher._NORM_VF
+    assert "pad=1080:1920" in VideoStitcher._NORM_VF
+
+
+def test_burn_subtitles_styles_and_reencodes():
+    st = VideoStitcher()
+    with patch("subprocess.run") as run:
+        run.return_value.returncode = 0
+        st.burn_subtitles("/tmp/v.mp4", "/tmp/captions.srt", "/tmp/out.mp4")
+        args = run.call_args[0][0]
+    joined = " ".join(args)
+    assert "subtitles=captions.srt" in joined   # relative name, cwd-based
+    assert "force_style" in joined
+    assert "libx264" in joined                   # burning requires re-encode
+
+
 def test_mix_tracks_builds_duck_filter():
     st = VideoStitcher()
     with patch("subprocess.run") as run:

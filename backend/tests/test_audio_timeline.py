@@ -36,7 +36,17 @@ def test_place_dialogue_aligns_lines_to_shots():
     ]
     rows = [{"scene_number": 1, "line_index": 0, "audio_path": "a", "duration": 2.0}]
     segs = place_dialogue(rows, scene_plan)
-    assert segs == [{"audio_path": "a", "start": 5.0}]
+    assert segs == [{"audio_path": "a", "start": 5.0, "duration": 2.0}]
+
+
+def test_place_dialogue_carries_text_for_burned_captions():
+    scene_plan = [{"scene_number": 1, "shots": [{"duration": 5.0, "has_dialogue": True}]}]
+    rows = [{"scene_number": 1, "line_index": 0, "audio_path": "a", "duration": 2.0,
+             "text": "We need to move.", "character": "YUKI"}]
+    segs = place_dialogue(rows, scene_plan)
+    assert segs[0]["text"] == "We need to move."
+    assert segs[0]["character"] == "YUKI"
+    assert segs[0]["start"] == 0.0
 
 
 def test_assemble_scene_segment_places_lines_back_to_back():

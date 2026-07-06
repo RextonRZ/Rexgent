@@ -13,7 +13,16 @@ def test_lines_land_on_their_dialogue_shots():
         {"duration": 5.0, "has_dialogue": True},
     ])]
     segs = build_dialogue_segments(line_rows, scene_plan)
-    assert segs == [{"audio_path": "a", "start": 5.0}]
+    assert segs == [{"audio_path": "a", "start": 5.0, "duration": 2.0}]
+
+
+def test_segments_carry_text_for_burned_captions():
+    line_rows = [{"scene_number": 1, "line_index": 0, "audio_local": "a",
+                  "duration_seconds": 2.0, "text": "Run.", "character_name": "MEI"}]
+    scene_plan = [_scene(1, [{"duration": 5.0, "has_dialogue": True}])]
+    segs = build_dialogue_segments(line_rows, scene_plan)
+    assert segs[0]["text"] == "Run."
+    assert segs[0]["character"] == "MEI"
 
 
 def test_lines_align_across_scenes():

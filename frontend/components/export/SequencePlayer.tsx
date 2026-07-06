@@ -79,7 +79,7 @@ export function SequencePlayer({
 
   if (!current) {
     return (
-      <div className="aspect-video w-full rounded-2xl border hairline bg-black/60 flex items-center justify-center text-sm text-muted-foreground">
+      <div className="mx-auto aspect-[9/16] w-full max-w-[360px] rounded-2xl border hairline bg-black/60 flex items-center justify-center px-6 text-center text-sm text-muted-foreground">
         Add clips to the timeline to preview your cut.
       </div>
     );
@@ -87,7 +87,8 @@ export function SequencePlayer({
 
   return (
     <div className="space-y-2">
-      <div className="relative aspect-video w-full overflow-hidden rounded-2xl border hairline bg-black">
+      {/* vertical 9:16 frame — the episode plays the way it ships */}
+      <div className="relative mx-auto aspect-[9/16] w-full max-w-[360px] overflow-hidden rounded-2xl border hairline bg-black">
         <video
           ref={ref}
           className="h-full w-full object-contain"

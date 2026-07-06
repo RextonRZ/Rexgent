@@ -55,6 +55,14 @@ def place_dialogue(line_rows: list[dict], scene_plan: list[dict], gap: float = 0
                 start = prev_end
             else:
                 start = starts[0] if starts else 0.0
-            out.append({"audio_path": ln["audio_path"], "start": round(start, 3)})
+            seg = {"audio_path": ln["audio_path"], "start": round(start, 3),
+                   "duration": round(float(ln.get("duration") or 0.0), 3)}
+            # text/character ride along so burned captions share the exact
+            # timing of the voice they subtitle
+            if ln.get("text"):
+                seg["text"] = ln["text"]
+            if ln.get("character"):
+                seg["character"] = ln["character"]
+            out.append(seg)
             prev_end = start + float(ln.get("duration") or 0.0) + gap
     return out

@@ -98,6 +98,8 @@ async def test_clip_records_reference_provenance_and_seed(monkeypatch):
     assert added.seed == gr.stable_seed("p1", "shot1")
     kwargs = runner.qwen.generate_video_happyhorse.await_args.kwargs
     assert kwargs["seed"] == added.seed
+    # every clip renders vertical — the short-drama delivery format
+    assert kwargs["ratio"] == "9:16"
 
 
 @pytest.mark.asyncio

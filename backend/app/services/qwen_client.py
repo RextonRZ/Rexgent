@@ -168,6 +168,7 @@ class QwenClient:
         reference_media: list[dict] | None = None,
         model: str | None = None,
         seed: int | None = None,
+        ratio: str | None = None,
     ) -> str:
         # wan2.7-t2v (text) or wan2.7-i2v (image-to-video when a reference image exists)
         chosen = model or ("wan2.7-i2v" if (reference_media or reference_image_url) else "wan2.7-t2v")
@@ -179,6 +180,10 @@ class QwenClient:
         params: dict = {"resolution": "1080P", "duration": duration}
         if seed is not None:
             params["seed"] = seed
+        if ratio:
+            # "9:16" renders true portrait (1080*1920 at 1080P) — see the
+            # wan2.7 API reference; prompt text alone can't change aspect.
+            params["ratio"] = ratio
         return await self._dispatch_video(chosen, input_obj, params)
 
     async def generate_video_happyhorse(
@@ -192,6 +197,7 @@ class QwenClient:
         edit_instruction: str | None = None,
         model: str | None = None,
         seed: int | None = None,
+        ratio: str | None = None,
     ) -> str:
         model_map = {
             "t2v": "happyhorse-1.1-t2v",
@@ -216,6 +222,8 @@ class QwenClient:
         }
         if seed is not None:
             params["seed"] = seed
+        if ratio:
+            params["ratio"] = ratio
         return await self._dispatch_video(chosen, input_obj, params)
 
     @staticmethod

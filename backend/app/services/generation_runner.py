@@ -27,6 +27,7 @@ MAX_RETRIES = 1           # at most one self-correcting re-render per shot (cost
 WAN_COST_PER_SEC = 0.15   # real Wan2.7 pricing (high end)
 HH_COST_PER_SEC = 0.108   # real HappyHorse-1.1 pricing (high end)
 BUDGET_CEILING_PCT = 0.85  # cost circuit breaker
+VIDEO_RATIO = "9:16"       # vertical short-drama delivery format
 
 
 def stable_seed(project_id: str, shot_id) -> int:
@@ -314,12 +315,12 @@ class GenerationRunner:
                 if is_wan:
                     task_id = await self.qwen.generate_video_wan(
                         prompt=prompt, duration=shot.estimated_duration_seconds,
-                        reference_media=ref_stack or None, seed=seed)
+                        reference_media=ref_stack or None, seed=seed, ratio=VIDEO_RATIO)
                 else:
                     task_id = await self.qwen.generate_video_happyhorse(
                         prompt=prompt, duration=shot.estimated_duration_seconds,
                         mode="r2v" if ref_stack else "t2v", reference_media=ref_stack or None,
-                        seed=seed)
+                        seed=seed, ratio=VIDEO_RATIO)
                 clip_url = await self.qwen.poll_video_task(task_id)
                 # DashScope URLs are signed and expire (~24h) — keep our own copy
                 clip_url = await asyncio.to_thread(

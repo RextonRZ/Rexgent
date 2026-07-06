@@ -134,7 +134,9 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
     const score = tile.score;
     return (
       <div key={shot.id} className="rounded-xl border hairline bg-card overflow-hidden">
-        <div className="relative aspect-video bg-black">
+        {/* fixed-height media box: portrait 9:16 clips centre with gutters,
+            legacy landscape clips letterbox — both read cleanly */}
+        <div className="relative h-[400px] bg-black">
           {tile.url ? (
             <video
               src={`${tile.url}#t=0.1`}
@@ -231,7 +233,7 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
                   key={sid}
                   className="rounded-xl border hairline bg-card overflow-hidden"
                 >
-                  <div className="relative aspect-video bg-black">
+                  <div className="relative h-[320px] bg-black">
                     <video
                       src={`${tile.url}#t=0.1`}
                       controls

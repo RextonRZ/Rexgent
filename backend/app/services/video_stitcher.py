@@ -5,9 +5,11 @@ import os
 
 class VideoStitcher:
     # Common canvas so clips of any source resolution concatenate cleanly.
+    # VERTICAL 9:16 — the short-drama delivery format. Legacy landscape clips
+    # letterbox onto the portrait canvas instead of breaking the concat.
     _NORM_VF = (
-        "scale=1280:720:force_original_aspect_ratio=decrease,"
-        "pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=24,format=yuv420p"
+        "scale=1080:1920:force_original_aspect_ratio=decrease,"
+        "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,fps=24,format=yuv420p"
     )
 
     def stitch(self, clips: list, output_path: str) -> str:
@@ -15,10 +17,11 @@ class VideoStitcher:
 
         `clips` is a list of paths (str) or dicts
         {"path": str, "in": float|None, "out": float|None} for per-clip trim.
-        Each clip is first normalised to a common 1280x720/24fps canvas (and
-        trimmed), so mixed-resolution / imported media join cleanly; the
-        normalised parts are then concatenated with a stream copy. Audio is
-        dropped (captions ship separately as an .srt; music is mixed later).
+        Each clip is first normalised to a common 1080x1920/24fps vertical
+        canvas (and trimmed), so mixed-resolution / imported media join
+        cleanly; the normalised parts are then concatenated with a stream
+        copy. Audio is dropped (captions are burned + shipped as an .srt;
+        dialogue and music are mixed later).
         """
         norm_dir = tempfile.mkdtemp()
         norm_paths = []
@@ -145,9 +148,21 @@ class VideoStitcher:
         return output_path
 
     def burn_subtitles(self, video_path: str, srt_path: str, output_path: str) -> str:
+        """Burn captions into the picture — non-negotiable for the vertical
+        format (short dramas are watched muted-first). Styled for a phone
+        screen: bold, outlined, bottom-centred, raised clear of player UI.
+        Runs with cwd at the .srt so the filter arg needs no path escaping
+        (Windows drive colons break ffmpeg filter parsing)."""
+        style = ("FontSize=14,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+                 "Outline=2,Shadow=0,Bold=1,Alignment=2,MarginV=120")
         cmd = [
             "ffmpeg", "-y", "-i", video_path,
-            "-vf", f"subtitles={srt_path}", "-c:a", "copy", output_path,
+            "-vf", f"subtitles={os.path.basename(srt_path)}:force_style='{style}'",
+            "-c:v", "libx264", "-crf", "20", "-c:a", "copy",
+            "-movflags", "+faststart", output_path,
         ]
-        subprocess.run(cmd, check=True, capture_output=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              cwd=os.path.dirname(srt_path) or ".")
+        if proc.returncode != 0:
+            raise RuntimeError(f"ffmpeg subtitle burn failed: {proc.stderr[-800:]}")
         return output_path
