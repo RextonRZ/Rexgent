@@ -16,26 +16,37 @@ from app.services.caption_generator import CaptionGenerator
 from app.services.production_report import build_report
 from app.services.oss_manager import OSSManager
 from app.services.usage_tracker import global_usage
-from app.services.audio_timeline import scene_offsets, assemble_scene_segment
+from app.services.audio_timeline import place_dialogue
 from app.models.line_audio import LineAudio
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 
-def build_dialogue_segments(line_rows, scene_numbers, shot_durations):
-    """Place per-line dialogue audio on the global timeline: group by scene, lay each
-    scene's lines back-to-back from that scene's offset. line_rows: dicts with
-    scene_number, line_index, audio_local, duration_seconds. Returns [{audio_path, start}]."""
-    offs = scene_offsets(scene_numbers, shot_durations)
-    by_scene: dict = {}
-    for r in sorted(line_rows, key=lambda x: (x["scene_number"], x["line_index"])):
-        by_scene.setdefault(r["scene_number"], []).append(
-            {"audio_path": r["audio_local"], "duration": r["duration_seconds"]})
-    segments = []
-    for n in scene_numbers:
-        segments += assemble_scene_segment(by_scene.get(n, []), offs.get(n, 0.0))
-    return segments
+def build_dialogue_segments(line_rows, scene_plan):
+    """Place per-line dialogue audio on the global timeline, aligning each line to
+    the shot that speaks it. line_rows: dicts with scene_number, line_index,
+    audio_local, duration_seconds. scene_plan: ordered per-scene shot layout."""
+    rows = [
+        {"scene_number": r["scene_number"], "line_index": r["line_index"],
+         "audio_path": r["audio_local"], "duration": r["duration_seconds"]}
+        for r in line_rows
+    ]
+    return place_dialogue(rows, scene_plan)
+
+
+def _ensure_voice_lines(db, project_id: str) -> None:
+    """The manual Generate flow never synthesizes dialogue, so a first export
+    would be silent. If no voice lines exist yet, synthesize them now (assigning
+    preset voices to any character that skipped casting)."""
+    if db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(project_id)).count():
+        return
+    try:
+        import asyncio
+        from app.agent.pipeline_ops import synth_dialogue_op
+        asyncio.run(synth_dialogue_op(db, project_id))
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Export: dialogue synth skipped: {e}")
 
 
 @celery_app.task(bind=True, name="run_export")
@@ -163,15 +174,27 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         try:
             from app.models.script import Script, Scene
             from app.websocket.emitter import emit
+
+            # Make sure voice lines exist before we try to place them.
+            _ensure_voice_lines(db, project_id)
+
             script = (db.query(Script).filter(Script.project_id == uuid.UUID(project_id))
                       .order_by(Script.created_at.desc()).first())
-            scene_numbers, shot_durations = [], {}
+            # Per-scene shot layout (duration + which shots carry dialogue) so voice
+            # lines land on the matching picture.
+            scene_plan = []
             if script:
                 scenes = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
-                scene_numbers = [s.number for s in scenes]
                 for s in scenes:
                     sh = db.query(Shot).filter(Shot.scene_id == s.id).order_by(Shot.number).all()
-                    shot_durations[s.number] = [x.estimated_duration_seconds for x in sh]
+                    scene_plan.append({
+                        "scene_number": s.number,
+                        "shots": [
+                            {"duration": x.estimated_duration_seconds or 5,
+                             "has_dialogue": bool((x.dialogue or "").strip())}
+                            for x in sh
+                        ],
+                    })
             line_rows = []
             for row in db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(project_id)).all():
                 if not row.audio_url:
@@ -186,7 +209,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                                       "audio_local": lp, "duration_seconds": row.duration_seconds or 0.0})
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"Export: could not download line audio {row.audio_url}: {e}")
-            dialogue_segments = build_dialogue_segments(line_rows, scene_numbers, shot_durations)
+            dialogue_segments = build_dialogue_segments(line_rows, scene_plan)
 
             bgm_local = None
             if audio and audio.get("url"):

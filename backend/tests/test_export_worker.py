@@ -1,21 +1,60 @@
 from app.workers.export_worker import build_dialogue_segments
 
 
-def test_build_dialogue_segments_places_by_scene_offset():
-    line_rows = [{"scene_number": 1, "line_index": 0, "audio_local": "a", "duration_seconds": 2.0},
-                 {"scene_number": 2, "line_index": 0, "audio_local": "b", "duration_seconds": 1.0}]
-    shot_durations = {1: [5.0], 2: [5.0]}
-    segs = build_dialogue_segments(line_rows, [1, 2], shot_durations)
+def _scene(n, shots):
+    return {"scene_number": n, "shots": shots}
+
+
+def test_lines_land_on_their_dialogue_shots():
+    # scene 1: shot0 silent (5s), shot1 speaks (5s) -> line starts at 5.0
+    line_rows = [{"scene_number": 1, "line_index": 0, "audio_local": "a", "duration_seconds": 2.0}]
+    scene_plan = [_scene(1, [
+        {"duration": 5.0, "has_dialogue": False},
+        {"duration": 5.0, "has_dialogue": True},
+    ])]
+    segs = build_dialogue_segments(line_rows, scene_plan)
+    assert segs == [{"audio_path": "a", "start": 5.0}]
+
+
+def test_lines_align_across_scenes():
+    line_rows = [
+        {"scene_number": 1, "line_index": 0, "audio_local": "a", "duration_seconds": 2.0},
+        {"scene_number": 2, "line_index": 0, "audio_local": "b", "duration_seconds": 1.0},
+    ]
+    scene_plan = [
+        _scene(1, [{"duration": 5.0, "has_dialogue": True}]),
+        _scene(2, [{"duration": 5.0, "has_dialogue": True}]),
+    ]
+    segs = build_dialogue_segments(line_rows, scene_plan)
     starts = {s["audio_path"]: s["start"] for s in segs}
     assert starts["a"] == 0.0
-    assert starts["b"] == 5.0   # scene 2 starts after scene 1's 5s of shots
+    assert starts["b"] == 5.0  # scene 2's speaking shot starts after scene 1's 5s
 
 
-def test_build_dialogue_segments_orders_lines_within_scene():
-    line_rows = [{"scene_number": 1, "line_index": 1, "audio_local": "second", "duration_seconds": 1.0},
-                 {"scene_number": 1, "line_index": 0, "audio_local": "first", "duration_seconds": 2.0}]
-    shot_durations = {1: [10.0]}
-    segs = build_dialogue_segments(line_rows, [1], shot_durations)
-    # sorted by line_index: first at scene offset 0, second after first (2.0 + 0.2 gap)
-    assert segs[0] == {"audio_path": "first", "start": 0.0}
-    assert segs[1] == {"audio_path": "second", "start": 2.2}
+def test_each_line_maps_to_its_own_shot_in_order():
+    # two speaking shots -> two lines land on shot starts, not crammed back-to-back
+    line_rows = [
+        {"scene_number": 1, "line_index": 0, "audio_local": "first", "duration_seconds": 2.0},
+        {"scene_number": 1, "line_index": 1, "audio_local": "second", "duration_seconds": 1.0},
+    ]
+    scene_plan = [_scene(1, [
+        {"duration": 5.0, "has_dialogue": True},
+        {"duration": 5.0, "has_dialogue": True},
+    ])]
+    segs = build_dialogue_segments(line_rows, scene_plan)
+    starts = {s["audio_path"]: s["start"] for s in segs}
+    assert starts["first"] == 0.0
+    assert starts["second"] == 5.0  # its own shot, not 2.2s back-to-back
+
+
+def test_extra_lines_fall_back_back_to_back():
+    # a shot folded two lines: 2 lines, 1 dialogue shot -> second continues after first
+    line_rows = [
+        {"scene_number": 1, "line_index": 0, "audio_local": "one", "duration_seconds": 2.0},
+        {"scene_number": 1, "line_index": 1, "audio_local": "two", "duration_seconds": 1.0},
+    ]
+    scene_plan = [_scene(1, [{"duration": 5.0, "has_dialogue": True}])]
+    segs = build_dialogue_segments(line_rows, scene_plan)
+    starts = {s["audio_path"]: s["start"] for s in segs}
+    assert starts["one"] == 0.0
+    assert starts["two"] == 2.2  # 0 + 2.0 + 0.2 gap
