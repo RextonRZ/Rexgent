@@ -20,6 +20,8 @@ interface ScriptGenerateProps {
   projectId: string;
   initialPremise?: string;
   initialGenre?: string;
+  initialEpisodes?: number;
+  initialTargetLength?: number;
   onSuccess: (data: {
     script_id: string;
     raw_text: string;
@@ -33,6 +35,8 @@ export function ScriptGenerate({
   projectId,
   initialPremise = "",
   initialGenre = "",
+  initialEpisodes,
+  initialTargetLength,
   onSuccess,
 }: ScriptGenerateProps) {
   const [genre, setGenre] = useState(initialGenre || "sci-fi");
@@ -48,8 +52,8 @@ export function ScriptGenerate({
     if (initialGenre && !touched) setGenre(initialGenre);
   }, [initialGenre, touched]);
 
-  const [episodeCount, setEpisodeCount] = useState(1);
-  const [targetLength, setTargetLength] = useState(30); // seconds
+  const [episodeCount, setEpisodeCount] = useState(initialEpisodes || 1);
+  const [targetLength, setTargetLength] = useState(initialTargetLength || 30); // seconds
   const [language, setLanguage] = useState("en");
   const [model, setModel] = useState("qwen-max");
   const generateScript = useGenerateScript();

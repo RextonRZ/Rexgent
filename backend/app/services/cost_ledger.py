@@ -25,7 +25,15 @@ def record(db, project_id, category, stage, unit, quantity, amount_usd, ref_id=N
     return amount_usd
 
 
-def aggregate(db, project_id, budget=40.0) -> dict:
+def aggregate(db, project_id, budget=None) -> dict:
+    if budget is None:
+        # read this drama's budget; fall back to the historical default
+        try:
+            from app.models.project import Project
+            project = db.query(Project).filter(Project.id == _as_uuid(project_id)).first()
+            budget = float(project.credit_budget) if project and project.credit_budget else 40.0
+        except Exception:  # noqa: BLE001
+            budget = 40.0
     rows = db.query(CostEvent).filter(CostEvent.project_id == _as_uuid(project_id)).all()
     by_cat: dict = {}
     by_stage: dict = {}

@@ -5,6 +5,8 @@ export interface Project {
   premise: string | null;
   status: string;
   poster_url: string | null;
+  credit_budget: number | null;
+  token_budget: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -13,6 +15,15 @@ export interface ProjectCreate {
   title: string;
   genre?: string;
   premise?: string;
+  credit_budget?: number;
+  token_budget?: number;
+}
+
+export interface BudgetEstimate {
+  scope: { episodes: number; scenes: number; shots: number; video_seconds: number };
+  credit_usd: number;
+  credit_breakdown: { video: number; image: number; tts: number };
+  llm_tokens: number;
 }
 
 export interface ProjectOverviewItem extends Project {

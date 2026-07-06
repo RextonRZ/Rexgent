@@ -11,6 +11,7 @@ from app.models.cost_event import CostEvent
 from app.models.generation_job import GenerationJob
 from app.models.generated_clip import GeneratedClip
 from app.schemas.project import (
+    BudgetEstimateRequest,
     PosterFromClipRequest,
     ProjectCreate,
     ProjectResponse,
@@ -46,10 +47,28 @@ async def create_project(
         genre=request.genre,
         premise=request.premise,
     )
+    if request.credit_budget is not None:
+        project.credit_budget = max(1.0, float(request.credit_budget))
+    if request.token_budget is not None:
+        project.token_budget = max(0, int(request.token_budget))
     db.add(project)
     db.commit()
     db.refresh(project)
     return project
+
+
+@router.post("/estimate_budget")
+async def estimate_project_budget(
+    request: BudgetEstimateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Projected tokens + $ for a drama of this scope — powers the live budget
+    panel in the create flow."""
+    from app.services.budget_estimator import estimate_budget
+
+    return estimate_budget(
+        request.episode_count, request.target_length, request.characters
+    )
 
 
 @router.get("")

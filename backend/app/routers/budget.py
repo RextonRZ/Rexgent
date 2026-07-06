@@ -14,9 +14,14 @@ router = APIRouter(prefix="/api/budget", tags=["budget"])
 @router.post("/calculate")
 async def calculate_budget(request: dict, db: Session = Depends(get_db)):
     project_id = request.get("project_id")
-    budget = request.get("budget_usd", 40.0)
     if not project_id:
         raise HTTPException(status_code=400, detail="project_id required")
+
+    budget = request.get("budget_usd")
+    if budget is None:
+        from app.models.project import Project
+        project = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+        budget = float(project.credit_budget) if project and project.credit_budget else 40.0
 
     script = (
         db.query(Script)

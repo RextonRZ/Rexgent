@@ -1,6 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import type { Project, ProjectsOverview } from "@/lib/types";
+import type { BudgetEstimate, Project, ProjectsOverview } from "@/lib/types";
+
+export function useBudgetEstimate(params: {
+  episode_count: number;
+  target_length: number;
+  characters?: number;
+}) {
+  return useQuery<BudgetEstimate>({
+    queryKey: ["budget-estimate", params],
+    queryFn: async () => {
+      const { data } = await api.post("/api/projects/estimate_budget", params);
+      return data;
+    },
+    staleTime: 60_000,
+  });
+}
 
 export function useProjects() {
   return useQuery<{ projects: Project[] }>({
@@ -124,6 +139,8 @@ export function useCreateProject() {
       title: string;
       genre?: string;
       premise?: string;
+      credit_budget?: number;
+      token_budget?: number;
     }) => {
       const { data } = await api.post<Project>("/api/projects", params);
       return data;

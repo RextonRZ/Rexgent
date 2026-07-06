@@ -27,6 +27,10 @@ import {
 export default function ScriptPage({ params }: { params: { id: string } }) {
   const searchParams = useSearchParams();
   const mode = searchParams.get("mode"); // "auto" | "guided" | null
+  // scope carried from the create modal's budget panel, so the drama that
+  // generates matches the one they budgeted for
+  const epParam = Number(searchParams.get("ep")) || undefined;
+  const lenParam = Number(searchParams.get("len")) || undefined;
   const { data: project } = useProject(params.id);
   const projectPremise = project?.premise ?? "";
   const projectGenre = project?.genre ?? "";
@@ -119,6 +123,8 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
                 projectId={params.id}
                 initialPremise={projectPremise}
                 initialGenre={projectGenre}
+                initialEpisodes={epParam}
+                initialTargetLength={lenParam}
               />
             </TabsContent>
             <TabsContent value="generate">
@@ -126,6 +132,8 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
                 projectId={params.id}
                 initialPremise={projectPremise}
                 initialGenre={projectGenre}
+                initialEpisodes={epParam}
+                initialTargetLength={lenParam}
                 onSuccess={(data) =>
                   setScriptData({
                     script_id: data.script_id,

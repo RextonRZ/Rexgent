@@ -100,6 +100,13 @@ class GenerationRunner:
         job.status = "RUNNING"
         self.db.commit()
 
+        # Spend ceiling comes from THIS drama's budget, not a global default.
+        from app.models.project import Project
+        project = self.db.query(Project).filter(Project.id == job.project_id).first()
+        if project and project.credit_budget:
+            self.breaker = CostCircuitBreaker(budget=float(project.credit_budget))
+            self.budget_ceiling = self.breaker.ceiling
+
         shots = self._ordered_shots(job.project_id)
         characters = self.db.query(Character).filter(Character.project_id == job.project_id).all()
         char_by_name = {c.name: c for c in characters}

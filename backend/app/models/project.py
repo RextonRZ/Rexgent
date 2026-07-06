@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, Boolean
+from sqlalchemy import Column, String, Text, DateTime, Boolean, Float, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -16,6 +16,11 @@ class Project(Base):
     premise = Column(Text, nullable=True)
     status = Column(String(50), default="draft")
     poster_url = Column(String(500), nullable=True)
+    # per-drama budget the user sets at creation; drives the generation ceiling
+    # and the Wan/HappyHorse allocation. token_budget is the hackathon's judged
+    # LLM allowance, shown as a target.
+    credit_budget = Column(Float, default=40.0)
+    token_budget = Column(Integer, default=2_000_000)
     auto_approve_casting = Column(Boolean, default=False)
     auto_clarify = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

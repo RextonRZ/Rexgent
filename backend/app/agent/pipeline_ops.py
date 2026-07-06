@@ -147,7 +147,11 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
              "estimated_duration_seconds": s.estimated_duration_seconds} for s in created]
 
 
-def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_usd: float = 40.0) -> dict:
+def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_usd: float | None = None) -> dict:
+    if budget_usd is None:
+        from app.models.project import Project
+        project = db.query(Project).filter(Project.id == uuid.UUID(str(project_id))).first()
+        budget_usd = float(project.credit_budget) if project and project.credit_budget else 40.0
     result = TokenOptimizer().allocate(shots, budget_usd)
     tier_by_id = {s["shot_id"]: s["quality_tier"] for s in result["scored_shots"]}
     for sid, tier in tier_by_id.items():

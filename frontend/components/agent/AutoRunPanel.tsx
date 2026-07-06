@@ -33,17 +33,21 @@ export function AutoRunPanel({
   projectId,
   initialPremise = "",
   initialGenre = "sci-fi",
+  initialEpisodes,
+  initialTargetLength,
 }: {
   projectId: string;
   initialPremise?: string;
   initialGenre?: string;
+  initialEpisodes?: number;
+  initialTargetLength?: number;
 }) {
   const router = useRouter();
   const [premise, setPremise] = useState(initialPremise);
   const [genre, setGenre] = useState(initialGenre || "sci-fi");
   const [language, setLanguage] = useState("en");
-  const [targetLength, setTargetLength] = useState(30); // seconds
-  const [episodeCount, setEpisodeCount] = useState(1);
+  const [targetLength, setTargetLength] = useState(initialTargetLength || 30); // seconds
+  const [episodeCount, setEpisodeCount] = useState(initialEpisodes || 1);
   const [trace, setTrace] = useState<string[]>([]);
   const [result, setResult] = useState<AutoRunResult | null>(null);
   const [touched, setTouched] = useState(false);

@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -20,7 +21,17 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { GENRES } from "@/lib/genres";
-import { useCreateProject, useSuggestTitle } from "@/hooks/useProjects";
+import {
+  useBudgetEstimate,
+  useCreateProject,
+  useSuggestTitle,
+} from "@/hooks/useProjects";
+
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
+  return String(n);
+}
 
 export function NewProjectModal({
   open,
@@ -35,6 +46,22 @@ export function NewProjectModal({
   const [premise, setPremise] = useState("");
   const [genre, setGenre] = useState("sci-fi");
   const [mode, setMode] = useState<"auto" | "guided">("auto");
+  const [episodes, setEpisodes] = useState(1);
+  const [length, setLength] = useState(30);
+  const [budgetOverride, setBudgetOverride] = useState<number | null>(null);
+
+  const { data: estimate } = useBudgetEstimate({
+    episode_count: episodes,
+    target_length: length,
+  });
+
+  // The spend cap defaults to the projection plus ~20% headroom (rounded up to
+  // a clean number), but the user can set their own.
+  const suggestedBudget = estimate
+    ? Math.max(5, Math.ceil((estimate.credit_usd * 1.2) / 5) * 5)
+    : 40;
+  const budget = budgetOverride ?? suggestedBudget;
+  const overBudget = Boolean(estimate && estimate.credit_usd > budget);
 
   const pending = createProject.isPending || suggestTitle.isPending;
 
@@ -50,8 +77,16 @@ export function NewProjectModal({
         title = p.slice(0, 60);
       }
     }
-    const project = await createProject.mutateAsync({ title, genre, premise });
-    router.push(`/projects/${project.id}/script?mode=${mode}`);
+    const project = await createProject.mutateAsync({
+      title,
+      genre,
+      premise,
+      credit_budget: budget,
+      token_budget: estimate?.llm_tokens,
+    });
+    router.push(
+      `/projects/${project.id}/script?mode=${mode}&ep=${episodes}&len=${length}`
+    );
   };
 
   return (
@@ -91,6 +126,110 @@ export function NewProjectModal({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* scope */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground">Episodes</Label>
+              <Input
+                type="number"
+                min={1}
+                max={20}
+                value={episodes}
+                onChange={(e) =>
+                  setEpisodes(Math.max(1, Number(e.target.value) || 1))
+                }
+                className="mt-1 bg-background/50"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">
+                Length (sec/ep)
+              </Label>
+              <Input
+                type="number"
+                min={10}
+                max={600}
+                step={5}
+                value={length}
+                onChange={(e) =>
+                  setLength(Math.max(10, Number(e.target.value) || 10))
+                }
+                className="mt-1 bg-background/50"
+              />
+            </div>
+          </div>
+
+          {/* budget projection for this drama */}
+          <div className="rounded-lg border hairline bg-background/40 p-3 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium">Budget for this drama</span>
+              {estimate && (
+                <span className="text-[11px] text-muted-foreground">
+                  ≈ {estimate.scope.scenes} scenes · {estimate.scope.shots} shots
+                  · {estimate.scope.video_seconds}s
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-md bg-white/[0.03] px-2.5 py-1.5">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Tokens (LLM)
+                </p>
+                <p className="font-mono text-sm">
+                  {estimate ? fmtTokens(estimate.llm_tokens) : "—"}
+                </p>
+              </div>
+              <div className="rounded-md bg-white/[0.03] px-2.5 py-1.5">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Generation
+                </p>
+                <p className="font-mono text-sm">
+                  {estimate ? `$${estimate.credit_usd.toFixed(2)}` : "—"}
+                </p>
+              </div>
+            </div>
+
+            {estimate && (
+              <p className="text-[10px] text-muted-foreground">
+                Video ${estimate.credit_breakdown.video.toFixed(2)} · Images $
+                {estimate.credit_breakdown.image.toFixed(2)} · Voice $
+                {estimate.credit_breakdown.tts.toFixed(2)}
+              </p>
+            )}
+
+            <div className="flex items-center gap-2 pt-0.5">
+              <Label className="text-[11px] text-muted-foreground shrink-0">
+                Spend cap
+              </Label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  $
+                </span>
+                <Input
+                  type="number"
+                  min={5}
+                  step={5}
+                  value={budget}
+                  onChange={(e) =>
+                    setBudgetOverride(Math.max(5, Number(e.target.value) || 5))
+                  }
+                  className="h-8 w-24 bg-background/50 pl-5 text-sm"
+                />
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                the agent fits generation under this
+              </span>
+            </div>
+
+            {overBudget && (
+              <p className="text-[11px] text-warn">
+                Projected spend is above your cap — the agent will render fewer
+                or shorter shots to fit.
+              </p>
+            )}
           </div>
 
           <div>
