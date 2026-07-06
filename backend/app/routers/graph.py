@@ -11,6 +11,26 @@ from app.graph.sync import sync_relationships
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
 
+def _resolve_character(char_map: dict, name) -> object | None:
+    """Match an LLM-returned name to a cast member, tolerating cue names.
+    Screenplays cue dialogue with short names (REN) while the cast stores
+    full names (Ren Ishida) — an exact-only lookup silently drops the edge.
+    Tries exact, then first-name/cue-prefix matching (unambiguous only)."""
+    key = str(name or "").strip().upper()
+    if not key:
+        return None
+    if key in char_map:
+        return char_map[key]
+    candidates = [
+        c for full, c in char_map.items()
+        if full.startswith(key + " ")          # "REN" -> "REN ISHIDA"
+        or key.startswith(full + " ")          # "REN ISHIDA" -> "REN"
+        or full.split()[0] == key              # first name match
+        or key.split()[0] == full              # full given, cast stores cue
+    ]
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def _serialize_rel(r: CharacterRelationship) -> dict:
     return {
         "id": str(r.id),
@@ -64,9 +84,9 @@ async def build_relationship_graph(request: dict, db: Session = Depends(get_db))
 
     created = []
     for rel in relationships:
-        from_char = char_map.get(str(rel.get("from_character", "")).upper())
-        to_char = char_map.get(str(rel.get("to_character", "")).upper())
-        if not from_char or not to_char:
+        from_char = _resolve_character(char_map, rel.get("from_character"))
+        to_char = _resolve_character(char_map, rel.get("to_character"))
+        if not from_char or not to_char or from_char is to_char:
             continue
 
         db_rel = CharacterRelationship(

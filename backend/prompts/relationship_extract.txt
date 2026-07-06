@@ -17,4 +17,6 @@ Return a JSON array of relationship objects, each in this exact schema:
 
 Include ALL named relationships. If a relationship is bidirectional but asymmetric (e.g. mentor->student feels differently than student->mentor), include two separate objects.
 
+Use from_character/to_character names EXACTLY as they appear in the provided CHARACTERS list (full names, not the screenplay's short dialogue cues).
+
 Return ONLY the JSON array.
