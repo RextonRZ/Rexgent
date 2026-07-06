@@ -44,3 +44,12 @@ def test_resolve_ambiguous_or_unknown_is_none():
     assert _resolve_character(cast, "REN") is None  # ambiguous — never guess
     assert _resolve_character(CAST, "AKIRA") is None
     assert _resolve_character(CAST, "") is None
+
+
+def test_scene_cue_names_canonicalized_for_story_map():
+    from app.routers.graph import _canonical_names
+    # story map links match by exact name: cues must become cast names
+    assert _canonical_names(CAST, ["REN", "KAITO"]) == ["Ren Ishida", "Kaito"]
+    # unknown names pass through; duplicates collapse
+    assert _canonical_names(CAST, ["REN", "Ren Ishida", "GHOST"]) == ["Ren Ishida", "GHOST"]
+    assert _canonical_names(CAST, None) == []

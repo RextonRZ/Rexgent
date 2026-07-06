@@ -31,6 +31,17 @@ def _resolve_character(char_map: dict, name) -> object | None:
     return candidates[0] if len(candidates) == 1 else None
 
 
+def _canonical_names(char_map: dict, names) -> list[str]:
+    """Rewrite scene cue names to the cast's canonical names so name-keyed
+    consumers (story map appears-in links, scene flow) actually connect.
+    Unresolved names pass through; duplicates collapse."""
+    out = []
+    for n in names or []:
+        c = _resolve_character(char_map, n)
+        out.append(c.name if c else n)
+    return list(dict.fromkeys(out))
+
+
 def _serialize_rel(r: CharacterRelationship) -> dict:
     return {
         "id": str(r.id),
@@ -141,12 +152,15 @@ async def get_graphs(project_id: str, db: Session = Depends(get_db)):
 
     scenes = []
     if script:
+        # scenes store the screenplay's short cue names (REN); the cast stores
+        # full names (Ren Ishida) — canonicalize so name-keyed links connect
+        char_map = {c.name.upper(): c for c in characters}
         scene_rows = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
         scenes = [
             {
                 "number": s.number,
                 "heading": s.heading,
-                "characters": s.characters_json or [],
+                "characters": _canonical_names(char_map, s.characters_json),
                 "image": plate_by_scene.get(s.number),
                 "description": s.description,
                 "emotional_beat": s.emotional_beat,
