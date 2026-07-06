@@ -23,9 +23,13 @@ export function useGenerateStoryboard() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (projectId: string) => {
-      const { data } = await api.post("/api/storyboard/generate", {
-        project_id: projectId,
-      });
+      // Can include writing the screenplay first when the saved text has no
+      // scenes yet — give it room beyond the default timeout.
+      const { data } = await api.post(
+        "/api/storyboard/generate",
+        { project_id: projectId },
+        { timeout: 420000 }
+      );
       return data;
     },
     onSuccess: () => {

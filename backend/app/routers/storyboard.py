@@ -66,6 +66,34 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
         # bumps the version but never re-parses). Structure the CURRENT text
         # and materialize the scenes before giving up.
         structured = await ScriptStructurer().structure(script.raw_text)
+
+        if not structured.get("scenes"):
+            # The text isn't a screenplay at all — premise notes, character
+            # intros, an outline. That's still a valid starting point: write
+            # the screenplay from it, keep the user's original text as the
+            # older script version.
+            from app.models.project import Project
+            from app.services.script_generator import ScriptGenerator
+
+            project = (
+                db.query(Project).filter(Project.id == script.project_id).first()
+            )
+            screenplay = await ScriptGenerator().generate(
+                genre=(project.genre if project else None) or "drama",
+                premise=script.raw_text[:300],
+                notes=script.raw_text,
+                target_length=target_length,
+            )
+            structured = await ScriptStructurer().structure(screenplay)
+            if structured.get("scenes"):
+                script = Script(
+                    project_id=script.project_id,
+                    raw_text=screenplay,
+                    structured_json=structured,
+                )
+                db.add(script)
+                db.flush()
+
         scene_uuids = persist_scenes(db, script, structured)
         if scene_uuids:
             script.structured_json = structured

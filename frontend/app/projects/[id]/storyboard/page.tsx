@@ -88,7 +88,13 @@ export default function StoryboardPage({
 
       {generateStoryboard.isError && (
         <p className="text-sm text-bad">
-          Error: {(generateStoryboard.error as Error).message}
+          Error:{" "}
+          {(
+            generateStoryboard.error as {
+              response?: { data?: { detail?: string } };
+            }
+          )?.response?.data?.detail ??
+            (generateStoryboard.error as Error).message}
         </p>
       )}
 
