@@ -3,12 +3,19 @@ from unittest.mock import AsyncMock, patch
 from app.mcp_tools.registry import TOOL_DEFINITIONS, get_tool
 
 
-def test_six_tools_registered():
+def test_seven_tools_registered():
     names = {t["name"] for t in TOOL_DEFINITIONS}
     assert names == {
         "scene_prompt_craft", "consistency_guard", "token_optimizer",
         "narrative_judge", "plot_gap_detector", "ending_engine",
+        "set_dresser",
     }
+
+
+def test_every_definition_has_a_callable():
+    # a tool advertised over MCP but missing from _TOOLS would 500 on call
+    for t in TOOL_DEFINITIONS:
+        assert callable(get_tool(t["name"])), t["name"]
 
 
 def test_definitions_have_schemas():
