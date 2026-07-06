@@ -83,8 +83,17 @@ async def build_relationship_graph(request: dict, db: Session = Depends(get_db))
 
     chars_json = [{"name": c.name, "role": c.role} for c in characters]
 
+    from app.websocket.emitter import emit
+    pid = str(script.project_id)
+    emit("stage:progress", {"stage": "relationships", "status": "started",
+         "agent": "Story Analyst", "label": "Mapping character relationships"}, pid)
     builder = RelationshipBuilder()
-    relationships = await builder.extract(script.structured_json, chars_json)
+    try:
+        relationships = await builder.extract(script.structured_json, chars_json)
+    except Exception:
+        emit("stage:progress", {"stage": "relationships", "status": "failed",
+             "agent": "Story Analyst", "label": "Relationship mapping failed"}, pid)
+        raise
 
     char_map = {c.name.upper(): c for c in characters}
 
@@ -121,6 +130,9 @@ async def build_relationship_graph(request: dict, db: Session = Depends(get_db))
 
     name_by_id = {str(c.id): c.name for c in characters}
     sync_relationships(str(script.project_id), created, name_by_id)
+
+    emit("stage:progress", {"stage": "relationships", "status": "completed", "agent": "Story Analyst",
+         "label": f"{len(created)} relationship(s) mapped"}, pid)
 
     return {"relationships": [_serialize_rel(r) for r in created]}
 

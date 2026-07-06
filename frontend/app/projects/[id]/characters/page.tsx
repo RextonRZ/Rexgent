@@ -5,6 +5,7 @@ import { NextStepButton } from "@/components/shared/NextStepButton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CharacterList } from "@/components/characters/CharacterList";
+import { LiveStageStrip } from "@/components/shared/LiveStageStrip";
 import { RelationshipGraph } from "@/components/characters/RelationshipGraph";
 import { RelationshipEdgePanel } from "@/components/characters/RelationshipEdgePanel";
 import { Skeleton } from "@/components/shared/Skeleton";
@@ -108,10 +109,29 @@ export default function CharactersPage({
         </div>
       </div>
 
-      {buildGraph.isPending && (
-        <p className="text-xs text-muted-foreground">
-          Building character relationships…
-        </p>
+      <LiveStageStrip
+        projectId={params.id}
+        stage="characters"
+        pending={extractCharacters.isPending}
+        fallback={["Reading the cast from the script", "Profiling each character"]}
+      />
+      <LiveStageStrip
+        projectId={params.id}
+        stage="relationships"
+        pending={buildGraph.isPending}
+        fallback={["Mapping character relationships", "Finding the evidence lines"]}
+      />
+      {runCasting.isPending && (
+        <LiveStageStrip
+          projectId={params.id}
+          stage="casting"
+          pending
+          fallback={[
+            "Casting the production bible",
+            "Painting identity and costume plates",
+            "Plates take a minute or two each",
+          ]}
+        />
       )}
       {runCasting.isSuccess && (
         <p className="text-xs text-muted-foreground">

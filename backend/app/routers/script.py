@@ -20,6 +20,7 @@ from app.services.guardrails import InputSanitizer
 from app.services.usage_tracker import track_project
 from app.graph.sync import sync_scenes
 from app.mcp_tools.registry import get_tool
+from app.websocket.emitter import emit
 
 router = APIRouter(prefix="/api/script", tags=["script"])
 
@@ -38,9 +39,13 @@ async def parse_script(
     parser = ScriptParser()
     raw_text = parser.parse_bytes(content, file.filename)
 
+    emit("stage:progress", {"stage": "script", "status": "started",
+         "agent": "Screenwriter", "label": "Reading your imported script"}, project_id)
     structurer = ScriptStructurer()
     with track_project(project_id, db):
         structured = await structurer.structure(raw_text)
+    emit("stage:progress", {"stage": "script", "status": "completed", "agent": "Screenwriter",
+         "label": f"Imported: {len(structured.get('scenes', []))} scene(s) found"}, project_id)
 
     script = Script(
         project_id=uuid.UUID(project_id),
@@ -92,21 +97,31 @@ async def generate_script(
 
     clean_premise = InputSanitizer().sanitize(request.premise, max_length=300)
 
+    pid = str(request.project_id)
+    emit("stage:progress", {"stage": "script", "status": "started",
+         "agent": "Screenwriter", "label": "Writing your screenplay"}, pid)
     generator = ScriptGenerator()
-    with track_project(request.project_id, db):
-        raw_text = await generator.generate(
-            genre=request.genre,
-            premise=clean_premise,
-            tone=request.tone,
-            episode_count=request.episode_count,
-            target_length=request.target_length,
-            notes=request.notes or "",
-            language=request.language,
-            model=request.model,
-        )
+    try:
+        with track_project(request.project_id, db):
+            raw_text = await generator.generate(
+                genre=request.genre,
+                premise=clean_premise,
+                tone=request.tone,
+                episode_count=request.episode_count,
+                target_length=request.target_length,
+                notes=request.notes or "",
+                language=request.language,
+                model=request.model,
+            )
 
-        structurer = ScriptStructurer()
-        structured = await structurer.structure(raw_text, language=request.language)
+            emit("stage:progress", {"stage": "script", "status": "update",
+                 "agent": "Screenwriter", "label": "Structuring scenes and beats"}, pid)
+            structurer = ScriptStructurer()
+            structured = await structurer.structure(raw_text, language=request.language)
+    except Exception:
+        emit("stage:progress", {"stage": "script", "status": "failed",
+             "agent": "Screenwriter", "label": "Script generation failed"}, pid)
+        raise
 
     script = Script(
         project_id=request.project_id,
@@ -140,6 +155,9 @@ async def generate_script(
     db.refresh(script)
 
     sync_scenes(str(script.project_id), structured, scene_uuids=scene_uuids)
+
+    emit("stage:progress", {"stage": "script", "status": "completed", "agent": "Screenwriter",
+         "label": f"Script ready: {len(structured.get('scenes', []))} scene(s)"}, pid)
 
     return ScriptGenerateResponse(
         script_id=script.id,

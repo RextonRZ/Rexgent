@@ -16,6 +16,12 @@ from app.services.storyboard_generator import StoryboardGenerator, plan_shot_bud
 from app.services.guardrails import InputSanitizer
 from app.mcp_tools.token_optimizer import TokenOptimizer
 from app.graph.sync import sync_scenes, sync_characters
+from app.websocket.emitter import emit
+
+
+def _progress(pid, stage: str, status: str, agent: str, label: str, **extra) -> None:
+    emit("stage:progress", {"stage": stage, "status": status,
+                            "agent": agent, "label": label, **extra}, str(pid))
 
 
 def _persist_script(db: Session, project_id: str, raw_text: str, structured: dict) -> tuple[Script, dict]:
@@ -50,6 +56,8 @@ async def generate_script_op(
     language: str = "en", notes: str = "",
 ) -> dict:
     from app.services.usage_tracker import track_project
+    _progress(project_id, "script", "started", "Screenwriter",
+              "Rewriting with the judge's notes" if notes else "Writing your screenplay")
     with track_project(project_id, db):
         clean_premise = InputSanitizer().sanitize(premise, max_length=300)
         raw_text = await ScriptGenerator().generate(
@@ -57,9 +65,12 @@ async def generate_script_op(
             episode_count=episode_count, target_length=target_length, language=language,
             notes=notes,
         )
+        _progress(project_id, "script", "update", "Screenwriter", "Structuring scenes and beats")
         structured = await ScriptStructurer().structure(raw_text, language=language)
         script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
         sync_scenes(project_id, structured, scene_uuids=scene_uuids)
+        _progress(project_id, "script", "completed", "Screenwriter",
+                  f"Script ready: {len(structured.get('scenes', []))} scene(s)")
         return {"script_id": str(script.id), "structured": structured}
 
 
@@ -68,6 +79,8 @@ async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = 
     if not script or not script.structured_json:
         return []
     from app.services.usage_tracker import track_project
+    _progress(script.project_id, "characters", "started", "Casting Director",
+              "Reading the cast from the script")
     with track_project(script.project_id, db):
         data = await CharacterExtractor().extract(script.structured_json)
     db.query(Character).filter(Character.project_id == script.project_id).delete()
@@ -90,6 +103,8 @@ async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = 
     for c in created:
         db.refresh(c)
     sync_characters(str(script.project_id), created, script.structured_json)
+    _progress(script.project_id, "characters", "completed", "Casting Director",
+              f"{len(created)} character(s) cast")
     return [{"id": str(c.id), "name": c.name, "role": c.role} for c in created]
 
 
@@ -108,8 +123,13 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
     gen = StoryboardGenerator()
     created: list[tuple[Shot, int]] = []
     from app.services.usage_tracker import track_project
+    _progress(script.project_id, "storyboard", "started", "Director",
+              "Breaking the script into shots")
     with track_project(script.project_id, db):
-        for scene in scenes:
+        for scene_index, scene in enumerate(scenes, start=1):
+            _progress(script.project_id, "storyboard", "update", "Director",
+                      f"Scene {scene.number}: staging shots and set dressing",
+                      index=scene_index, total=len(scenes))
             scene_chars = [char_map.get(str(n).upper(), {"name": n}) for n in (scene.characters_json or [])]
             shots = await gen.generate_for_scene(
                 {"scene_number": scene.number, "heading": scene.heading,
@@ -143,6 +163,8 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 db.add(shot)
                 created.append((shot, scene.number))
     db.commit()
+    _progress(script.project_id, "storyboard", "completed", "Director",
+              f"Storyboard ready: {len(created)} shots across {len(scenes)} scene(s)")
     # scene_number + shot_number ride along so the budget allocator can
     # protect the hook (the opening shots of scene 1) when it fits the plan
     # to the spend cap.

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useLedger } from "@/hooks/useLedger";
 import { CostPanelContent } from "@/components/budget/CostPanelContent";
-import { AgentPanelContent } from "@/components/agents/AgentPanelContent";
+import { AgentChat } from "@/components/agents/AgentChat";
 
 type PanelKey = "agent" | "cost";
 type OpenState = Record<PanelKey, boolean>;
@@ -74,8 +74,8 @@ export function DockRail({ projectId }: { projectId: string }) {
       {anyOpen && (
         <div className="w-80 border-l hairline bg-card flex flex-col divide-y divide-border overflow-y-auto">
           {open.agent && (
-            <PanelSection title="Agent activity" onClose={() => toggle("agent")}>
-              <AgentPanelContent projectId={projectId} />
+            <PanelSection title="Showrunner" onClose={() => toggle("agent")}>
+              <AgentChat projectId={projectId} />
             </PanelSection>
           )}
           {open.cost && (

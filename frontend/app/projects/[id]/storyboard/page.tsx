@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NextStepButton } from "@/components/shared/NextStepButton";
 import { Button } from "@/components/ui/button";
+import { LiveStageStrip } from "@/components/shared/LiveStageStrip";
 import { Skeleton } from "@/components/shared/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StoryboardView } from "@/components/storyboard/StoryboardView";
@@ -82,9 +83,21 @@ export default function StoryboardPage({
           </p>
         </div>
         <Button onClick={handleGenerate} disabled={generateStoryboard.isPending}>
-          {generateStoryboard.isPending ? "Generating…" : "Generate storyboard"}
+          {generateStoryboard.isPending ? "Directing…" : "Generate storyboard"}
         </Button>
       </div>
+
+      <LiveStageStrip
+        projectId={params.id}
+        stage="storyboard"
+        pending={generateStoryboard.isPending}
+        fallback={[
+          "Breaking the script into shots",
+          "Staging each scene",
+          "Set dressing the world",
+          "Long scripts take a few minutes",
+        ]}
+      />
 
       {generateStoryboard.isError && (
         <p className="text-sm text-bad">

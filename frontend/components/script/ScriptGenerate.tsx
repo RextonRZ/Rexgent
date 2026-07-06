@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { GENRES as GENRE_DEFS } from "@/lib/genres";
+import { LiveStageStrip } from "@/components/shared/LiveStageStrip";
 import { useGenerateScript } from "@/hooks/useScript";
 
 interface ScriptGenerateProps {
@@ -187,10 +188,18 @@ export function ScriptGenerate({
           disabled={!premise || generateScript.isPending}
           className="w-full"
         >
-          {generateScript.isPending
-            ? "Generating with Qwen-Max..."
-            : "Generate Script"}
+          {generateScript.isPending ? "Writing…" : "Generate Script"}
         </Button>
+        <LiveStageStrip
+          projectId={projectId}
+          stage="script"
+          pending={generateScript.isPending}
+          fallback={[
+            "Writing your screenplay",
+            "Dialogue and beats take a moment",
+            "Structuring scenes",
+          ]}
+        />
         {generateScript.isError && (
           <p className="text-sm text-destructive">
             Error: {(generateScript.error as Error).message}

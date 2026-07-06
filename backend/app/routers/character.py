@@ -13,6 +13,7 @@ from app.services.appearance_generator import AppearanceGenerator
 from app.services.oss_manager import OSSManager
 from app.services.usage_tracker import track_project
 from app.graph.sync import sync_characters
+from app.websocket.emitter import emit
 
 router = APIRouter(prefix="/api/characters", tags=["characters"])
 
@@ -41,9 +42,17 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
     # MBTI is a "for fun" extra — off by default so it does not burn Qwen-Max tokens.
     infer_mbti = bool(request.get("infer_mbti", False))
 
+    pid = str(script.project_id)
+    emit("stage:progress", {"stage": "characters", "status": "started",
+         "agent": "Casting Director", "label": "Reading the cast from the script"}, pid)
     extractor = CharacterExtractor()
-    with track_project(script.project_id, db):
-        characters_data = await extractor.extract(script.structured_json)
+    try:
+        with track_project(script.project_id, db):
+            characters_data = await extractor.extract(script.structured_json)
+    except Exception:
+        emit("stage:progress", {"stage": "characters", "status": "failed",
+             "agent": "Casting Director", "label": "Character extraction failed"}, pid)
+        raise
 
     inferrer = MBTIInferrer() if infer_mbti else None
     created = []
@@ -83,6 +92,9 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
         db.refresh(c)
 
     sync_characters(str(script.project_id), created, script.structured_json)
+
+    emit("stage:progress", {"stage": "characters", "status": "completed", "agent": "Casting Director",
+         "label": f"{len(created)} character(s) cast"}, pid)
 
     return {"characters": [CharacterResponse.model_validate(c) for c in created]}
 

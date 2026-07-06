@@ -10,6 +10,7 @@ from app.schemas.shot import ShotResponse
 from app.services.script_structurer import ScriptStructurer
 from app.services.storyboard_generator import StoryboardGenerator, plan_shot_budget
 from app.services.usage_tracker import track_project
+from app.websocket.emitter import emit
 
 router = APIRouter(prefix="/api/storyboard", tags=["storyboard"])
 
@@ -59,9 +60,15 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
 
+    pid = str(script.project_id)
+    emit("stage:progress", {"stage": "storyboard", "status": "started",
+         "agent": "Director", "label": "Breaking the script into shots"}, pid)
+
     scenes = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
 
     if not scenes and (script.raw_text or "").strip():
+        emit("stage:progress", {"stage": "storyboard", "status": "update", "agent": "Director",
+             "label": "The saved text reads as notes, writing the screenplay first"}, pid)
         # Self-heal: a script can exist with zero Scene rows — its first
         # structuring pass found none, or it was edited in the editor (Save
         # bumps the version but never re-parses). Structure the CURRENT text
@@ -110,6 +117,8 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
             )
 
     if not scenes:
+        emit("stage:progress", {"stage": "storyboard", "status": "failed", "agent": "Director",
+             "label": "No scenes found in the script"}, pid)
         raise HTTPException(
             status_code=400,
             detail="No scenes found in the script. Rewrite it with clear scene headings (INT./EXT. or Scene 1, Scene 2...), then try again.",
@@ -133,7 +142,10 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
     generator = StoryboardGenerator()
     all_shots = []
 
-    for scene in scenes:
+    for scene_index, scene in enumerate(scenes, start=1):
+        emit("stage:progress", {"stage": "storyboard", "status": "update", "agent": "Director",
+             "label": f"Scene {scene.number}: staging shots and set dressing",
+             "index": scene_index, "total": len(scenes)}, pid)
         scene_chars = [
             char_map.get(str(name).upper(), {"name": name})
             for name in (scene.characters_json or [])
@@ -200,6 +212,8 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
     try:
         from app.services.casting_director import ensure_location_plates
 
+        emit("stage:progress", {"stage": "storyboard", "status": "update", "agent": "Director",
+             "label": "Painting location plates"}, pid)
         await ensure_location_plates(db, script.project_id)
     except Exception:
         import logging
@@ -207,6 +221,9 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
         logging.getLogger(__name__).warning(
             "location plate generation failed after storyboard", exc_info=True
         )
+
+    emit("stage:progress", {"stage": "storyboard", "status": "completed", "agent": "Director",
+         "label": f"Storyboard ready: {len(all_shots)} shots across {len(scenes)} scene(s)"}, pid)
 
     return {
         "total_shots": len(all_shots),
