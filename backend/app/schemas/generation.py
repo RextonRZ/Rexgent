@@ -24,6 +24,9 @@ class ClipResult(BaseModel):
     model_used: Optional[str] = None
     url: Optional[str] = None
     consistency_score: Optional[float] = None
+    # bible references that conditioned this clip ([{url, role, character?}])
+    references_json: Optional[list] = None
+    seed: Optional[int] = None
     status: str
     retries: int = 0
     cost_usd: Optional[float] = None

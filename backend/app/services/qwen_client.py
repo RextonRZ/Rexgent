@@ -167,6 +167,7 @@ class QwenClient:
         reference_image_url: str | None = None,
         reference_media: list[dict] | None = None,
         model: str | None = None,
+        seed: int | None = None,
     ) -> str:
         # wan2.7-t2v (text) or wan2.7-i2v (image-to-video when a reference image exists)
         chosen = model or ("wan2.7-i2v" if (reference_media or reference_image_url) else "wan2.7-t2v")
@@ -175,7 +176,9 @@ class QwenClient:
             input_obj["media"] = reference_media
         elif reference_image_url:
             input_obj["media"] = self._reference_media(reference_image_url)
-        params = {"resolution": "1080P", "duration": duration}
+        params: dict = {"resolution": "1080P", "duration": duration}
+        if seed is not None:
+            params["seed"] = seed
         return await self._dispatch_video(chosen, input_obj, params)
 
     async def generate_video_happyhorse(
@@ -188,6 +191,7 @@ class QwenClient:
         source_video_url: str | None = None,
         edit_instruction: str | None = None,
         model: str | None = None,
+        seed: int | None = None,
     ) -> str:
         model_map = {
             "t2v": "happyhorse-1.1-t2v",
@@ -204,12 +208,14 @@ class QwenClient:
             input_obj["media"] = self._reference_media(reference_image_url)
         if source_video_url:
             input_obj["media"] = [{"type": "reference_video", "url": source_video_url}]
-        params = {
+        params: dict = {
             "resolution": "1080P",
             "duration": duration,
             "prompt_extend": True,
             "watermark": False,
         }
+        if seed is not None:
+            params["seed"] = seed
         return await self._dispatch_video(chosen, input_obj, params)
 
     @staticmethod

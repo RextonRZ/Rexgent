@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, Integer, Float, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Integer, Float, DateTime, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -19,6 +19,10 @@ class GeneratedClip(Base):
     face_score = Column(Float, nullable=True)
     outfit_score = Column(Float, nullable=True)
     background_score = Column(Float, nullable=True)
+    # which bible references conditioned this clip ([{url, role, character?}])
+    # and the deterministic seed it rendered with — consistency, provable
+    references_json = Column(JSON, nullable=True)
+    seed = Column(Integer, nullable=True)
     status = Column(String(20), default="PENDING")
     retries = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)

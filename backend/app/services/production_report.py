@@ -29,7 +29,9 @@ def build_report(
     )
     grand_total = video_cost_usd + llm_cost_usd
 
-    passed = sum(1 for c in clips if (c.consistency_score or 0) >= 0.6)
+    # Continuity scores are 0-100 (see ContinuityAgent.PASS_THRESHOLD).
+    from app.mcp_tools.continuity_agent import PASS_THRESHOLD
+    passed = sum(1 for c in clips if (c.consistency_score or 0) >= PASS_THRESHOLD)
     pass_rate = round(passed / len(clips), 2) if clips else 1.0
 
     return {

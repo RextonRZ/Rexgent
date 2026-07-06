@@ -5,12 +5,43 @@ import { useGenerationStore } from "@/stores/generationStore";
 import { useStoryboard, type SceneShots } from "@/hooks/useStoryboard";
 import { useLatestJobClips } from "@/hooks/useClips";
 import { clipStatusChip } from "@/lib/clipStatus";
-import type { Shot } from "@/lib/types";
+import type { ClipReference, Shot } from "@/lib/types";
 
 interface Tile {
   url?: string;
   status: string;
   score?: number | null;
+  refs?: ClipReference[] | null;
+}
+
+const REF_LABELS: Record<ClipReference["role"], string> = {
+  identity: "identity plate",
+  costume: "costume plate",
+  prev_frame: "previous shot frame",
+  location: "location plate",
+  style: "style plate",
+};
+
+/** The consistency engine, provable: the exact bible references this clip
+ * was conditioned on, in the order they were sent to the video model. */
+function ReferenceStrip({ refs }: { refs: ClipReference[] }) {
+  return (
+    <div className="mt-2 flex items-center gap-1">
+      <span className="mr-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+        refs
+      </span>
+      {refs.map((r, i) => (
+        <img
+          key={`${r.url}-${i}`}
+          src={r.url}
+          alt={REF_LABELS[r.role] ?? r.role}
+          title={`${REF_LABELS[r.role] ?? r.role}${r.character ? ` · ${r.character}` : ""}`}
+          loading="lazy"
+          className="h-7 w-7 rounded border hairline object-cover"
+        />
+      ))}
+    </div>
+  );
 }
 
 interface SceneBlock {
@@ -35,7 +66,13 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
         !cur ||
         (c.status === "APPROVED" && cur.status !== "APPROVED") ||
         (c.consistency_score ?? 0) > (cur.score ?? 0);
-      if (better) map[c.shot_id] = { url: c.url, status: c.status, score: c.consistency_score };
+      if (better)
+        map[c.shot_id] = {
+          url: c.url,
+          status: c.status,
+          score: c.consistency_score,
+          refs: c.references_json,
+        };
     }
     // 2) overlay live progress (a shot mid-generation wins)
     for (const [sid, cp] of Object.entries(live)) {
@@ -43,6 +80,7 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
         url: cp.clip_url ?? map[sid]?.url,
         status: cp.status,
         score: cp.consistency_score ?? map[sid]?.score,
+        refs: map[sid]?.refs,
       };
     }
     return map;
@@ -142,6 +180,7 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
               “{shot.dialogue}”
             </p>
           )}
+          {tile.refs && tile.refs.length > 0 && <ReferenceStrip refs={tile.refs} />}
         </div>
       </div>
     );

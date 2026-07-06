@@ -80,6 +80,27 @@ async def test_process_shot_records_video_cost(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_clip_records_reference_provenance_and_seed(monkeypatch):
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    await runner._process_shot(job, make_shot(), {"Yuki": make_char()}, BIBLE, 1, "prevframe")
+    added = runner.db.add.call_args[0][0]
+    roles = {p["role"] for p in added.references_json}
+    # CU shot: identity plate + last-frame chain + style; NO location plate
+    assert roles == {"identity", "prev_frame", "style"}
+    ident = next(p for p in added.references_json if p["role"] == "identity")
+    assert ident["character"] == "Yuki"
+    # deterministic seed, stored AND sent to the video model
+    assert added.seed == gr.stable_seed("p1", "shot1")
+    kwargs = runner.qwen.generate_video_happyhorse.await_args.kwargs
+    assert kwargs["seed"] == added.seed
+
+
+@pytest.mark.asyncio
 async def test_low_continuity_flags_not_retries(monkeypatch):
     runner = make_runner()
     runner.continuity.validate = AsyncMock(return_value={

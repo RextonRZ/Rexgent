@@ -12,7 +12,7 @@ from app.services.qwen_client import QwenClient
 from app.services.oss_manager import OSSManager
 from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
 from app.services.guardrails import CostCircuitBreaker, PreGenerationValidator
-from app.services.reference_stack import build_reference_stack
+from app.services.reference_stack import build_reference_stack_labeled
 from app.services.clip_store import persist_clip_url
 from app.services.frame_sampler import extract_last_frame
 from app.services.cost_ledger import record_video
@@ -26,10 +26,15 @@ MAX_RETRIES = 1           # at most one self-correcting re-render per shot (cost
 WAN_COST_PER_SEC = 0.15   # real Wan2.7 pricing (high end)
 HH_COST_PER_SEC = 0.108   # real HappyHorse-1.1 pricing (high end)
 BUDGET_CEILING_PCT = 0.85  # cost circuit breaker
-# Cosine threshold for "same person". A real photo vs an AI-generated frame
-# tops out well below photo-to-photo (~0.5), so 0.6 was too strict and caused
-# needless re-renders. 0.4 still rejects a clearly-wrong face (<0.3).
-CONSISTENCY_THRESHOLD = 0.4
+
+
+def stable_seed(project_id: str, shot_id) -> int:
+    """Deterministic per-shot seed: the same shot always renders with the
+    same seed, so a re-render differs only by what changed on purpose
+    (prompt, references) — not by RNG luck."""
+    import hashlib
+    digest = hashlib.sha1(f"{project_id}:{shot_id}".encode()).hexdigest()
+    return int(digest[:8], 16) % 2_147_483_647
 
 
 class GenerationRunner:
@@ -273,10 +278,11 @@ class GenerationRunner:
         in_frame = shot.characters_in_frame or []
         is_wan = shot.quality_tier == "wan"
         model_cap = 5 if is_wan else 9
-        ref_stack = build_reference_stack(
+        ref_stack, ref_provenance = build_reference_stack_labeled(
             characters_in_frame=in_frame, scene_number=scene_number, bible=bible,
             prev_last_frame_url=prev_last_frame_url, model_cap=model_cap,
             shot_type=shot.shot_type)
+        seed = stable_seed(pid, shot.id)
 
         emit("generation.shot.started", {"scene_number": scene_number,
              "shot_number": shot.number, "index": job.completed_shots + 1,
@@ -292,11 +298,12 @@ class GenerationRunner:
                 if is_wan:
                     task_id = await self.qwen.generate_video_wan(
                         prompt=prompt, duration=shot.estimated_duration_seconds,
-                        reference_media=ref_stack or None)
+                        reference_media=ref_stack or None, seed=seed)
                 else:
                     task_id = await self.qwen.generate_video_happyhorse(
                         prompt=prompt, duration=shot.estimated_duration_seconds,
-                        mode="r2v" if ref_stack else "t2v", reference_media=ref_stack or None)
+                        mode="r2v" if ref_stack else "t2v", reference_media=ref_stack or None,
+                        seed=seed)
                 clip_url = await self.qwen.poll_video_task(task_id)
                 # DashScope URLs are signed and expire (~24h) — keep our own copy
                 clip_url = await asyncio.to_thread(
@@ -324,6 +331,7 @@ class GenerationRunner:
                     consistency_score=guard["continuity_score"],
                     face_score=guard.get("face_score"), outfit_score=guard.get("outfit_score"),
                     background_score=guard.get("background_score"),
+                    references_json=ref_provenance, seed=seed,
                     status=status, retries=attempt)
                 self.db.add(clip)
                 job.completed_shots += 1
@@ -348,6 +356,7 @@ class GenerationRunner:
                     self.db.add(GeneratedClip(
                         job_id=job.id, shot_id=shot.id,
                         model_used=shot.quality_tier or "happyhorse", prompt="",
+                        references_json=ref_provenance, seed=seed,
                         status="NEEDS_REVIEW", retries=attempt))
                     job.completed_shots += 1
                     self.db.commit()

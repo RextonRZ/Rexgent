@@ -10,6 +10,13 @@ export interface GenerationJob {
   completed_at: string | null;
 }
 
+/** One bible reference that conditioned a clip's generation. */
+export interface ClipReference {
+  url: string;
+  role: "identity" | "costume" | "prev_frame" | "location" | "style";
+  character?: string;
+}
+
 export interface GeneratedClip {
   id: string;
   job_id: string;
@@ -18,6 +25,8 @@ export interface GeneratedClip {
   prompt: string | null;
   url: string | null;
   consistency_score: number | null;
+  references_json?: ClipReference[] | null;
+  seed?: number | null;
   cost_usd?: number | null;
   status: ClipStatus;
   retries: number;

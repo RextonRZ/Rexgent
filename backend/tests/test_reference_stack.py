@@ -1,4 +1,6 @@
-from app.services.reference_stack import build_reference_stack
+from app.services.reference_stack import (
+    build_reference_stack, build_reference_stack_labeled,
+)
 
 CHAR = {"Mia": {"variants": [
     {"plate_image_url": "mia_uniform", "scene_numbers": [1], "is_default": True},
@@ -70,3 +72,35 @@ def test_unknown_shot_type_keeps_location_for_backcompat():
         characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
         prev_last_frame_url=None, model_cap=9)
     assert "loc1" in [m["url"] for m in stack]
+
+
+def test_labeled_provenance_matches_media_and_carries_roles():
+    media, prov = build_reference_stack_labeled(
+        characters_in_frame=["Mia"], scene_number=2, bible=_bible(),
+        prev_last_frame_url="prev", model_cap=9)
+    assert [m["url"] for m in media] == [p["url"] for p in prov]
+    by_url = {p["url"]: p for p in prov}
+    assert by_url["mia_uniform"]["role"] == "identity"
+    assert by_url["mia_uniform"]["character"] == "Mia"
+    assert by_url["mia_dress"]["role"] == "costume"
+    assert by_url["prev"]["role"] == "prev_frame"
+    assert by_url["loc2"]["role"] == "location"
+    assert by_url["style"]["role"] == "style"
+
+
+def test_labeled_dedupe_keeps_first_role():
+    # in the default-outfit scene the identity plate IS the costume plate;
+    # provenance keeps the identity role (the reason it is in the stack first)
+    _, prov = build_reference_stack_labeled(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url=None, model_cap=9)
+    uniform = [p for p in prov if p["url"] == "mia_uniform"]
+    assert len(uniform) == 1
+    assert uniform[0]["role"] == "identity"
+
+
+def test_labeled_cap_trims_provenance_too():
+    media, prov = build_reference_stack_labeled(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url="prev", model_cap=2)
+    assert len(media) == len(prov) == 2
