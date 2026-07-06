@@ -142,6 +142,13 @@ export function useAgentChat(projectId: string) {
     setEphemeral((cur) => [...cur.slice(-40), msg])
   );
 
+  // e.g. the user's own chat question, shown immediately
+  const pushLocal = (m: Omit<ChatMessage, "id" | "at">) =>
+    setEphemeral((cur) => [
+      ...cur.slice(-40),
+      { ...m, id: nextId(), at: Date.now() },
+    ]);
+
   // Auto-run trace: node hops read as terse "moving on" lines.
   useEffect(() => {
     const socket = getSocket();
@@ -183,5 +190,5 @@ export function useAgentChat(projectId: string) {
     return out.slice(-60);
   }, [reports, feed, ephemeral]);
 
-  return { messages, running };
+  return { messages, running, pushLocal };
 }

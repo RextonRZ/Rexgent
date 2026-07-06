@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getSocket } from "@/lib/websocket";
 import { PipelineFlow } from "./PipelineFlow";
@@ -15,6 +16,7 @@ import { useUpdateProject } from "@/hooks/useProjects";
 
 // a stable tint per agent so the feed reads like a room of specialists
 const AGENT_DOT: Record<string, string> = {
+  You: "bg-foreground/70",
   Screenwriter: "bg-violet-400",
   Director: "bg-sky-400",
   "Casting Director": "bg-pink-400",
@@ -205,7 +207,9 @@ interface BudgetFit {
 
 export function AgentChat({ projectId }: { projectId: string }) {
   const router = useRouter();
-  const { messages, running } = useAgentChat(projectId);
+  const { messages, running, pushLocal } = useAgentChat(projectId);
+  const [question, setQuestion] = useState("");
+  const [thinking, setThinking] = useState(false);
   const approveCasting = useApproveCasting(projectId);
   const updateProject = useUpdateProject();
   const recalcBudget = useCalculateBudget();
@@ -253,6 +257,26 @@ export function AgentChat({ projectId }: { projectId: string }) {
 
   const stage = running[0]?.stage ?? null;
 
+  const ask = async () => {
+    const q = question.trim();
+    if (!q || thinking) return;
+    pushLocal({ agent: "You", kind: "info", text: q });
+    setQuestion("");
+    setThinking(true);
+    try {
+      // the answer lands as a persistent Showrunner report over the socket
+      await api.post(`/api/agent/${projectId}/chat`, { question: q });
+    } catch {
+      pushLocal({
+        agent: "Showrunner",
+        kind: "fail",
+        text: "I could not answer that just now. Try again in a moment.",
+      });
+    } finally {
+      setThinking(false);
+    }
+  };
+
   const raiseCap = async () => {
     if (!budgetFit) return;
     await updateProject.mutateAsync({
@@ -292,6 +316,15 @@ export function AgentChat({ projectId }: { projectId: string }) {
             now={now}
           />
         ))}
+
+        {thinking && (
+          <TypingBubble
+            agent="Showrunner"
+            label="Thinking it over"
+            since={now}
+            now={now}
+          />
+        )}
 
         <ClarificationCard projectId={projectId} />
 
@@ -377,6 +410,30 @@ export function AgentChat({ projectId }: { projectId: string }) {
           </ActionCard>
         )}
       </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          ask();
+        }}
+        className="flex items-center gap-1.5 border-t hairline pt-2.5"
+      >
+        <Input
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          placeholder="Ask the showrunner about this drama…"
+          className="h-8 bg-background/50 text-[11px]"
+        />
+        <Button
+          type="submit"
+          size="sm"
+          className="h-8 shrink-0 px-2.5 text-xs"
+          disabled={!question.trim() || thinking}
+          aria-label="Send"
+        >
+          ➤
+        </Button>
+      </form>
     </div>
   );
 }

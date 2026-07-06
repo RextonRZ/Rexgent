@@ -118,6 +118,68 @@ async def answer(project_id: str, body: dict, db: Session = Depends(get_db)):
     return {"resumed": True}
 
 
+@router.post("/{project_id}/chat")
+async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depends(get_db)):
+    """Ask the showrunner about THIS drama. Answers are grounded in a compact
+    context pack (script digest, cast, spend, recent agent decisions) on the
+    mid tier model, and persisted as an agent report so the conversation
+    survives a reload."""
+    import json as _json
+    question = (body.get("question") or "").strip()[:500]
+    if not question:
+        raise HTTPException(status_code=400, detail="question required")
+    project = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.models.script import Script
+    from app.services.context_compressor import script_digest
+    from app.services.cost_ledger import aggregate
+    from app.services.qwen_client import QwenClient
+    from app.services.usage_tracker import track_project
+    from app.config import get_settings
+
+    script = (db.query(Script).filter(Script.project_id == project.id)
+              .order_by(Script.created_at.desc()).first())
+    chars = db.query(Character).filter(Character.project_id == project.id).all()
+    reports = (db.query(AgentReport).filter(AgentReport.project_id == project.id)
+               .order_by(AgentReport.created_at.desc()).limit(10).all())
+    agg = aggregate(db, project_id)
+    context = {
+        "title": project.title, "genre": project.genre, "premise": project.premise,
+        "format": getattr(project, "video_ratio", "9:16"),
+        "spend_cap_usd": project.credit_budget,
+        "script": script_digest(script.structured_json) if script and script.structured_json else {},
+        "cast": [{"name": c.name, "role": c.role} for c in chars],
+        "spend": {"total_usd": agg.get("grand_total"),
+                  "by_category": agg.get("by_category"),
+                  "llm_tokens": (agg.get("llm") or {}).get("total_tokens")},
+        "recent_agent_decisions": [
+            {"agent": r.agent, "stage": r.stage, "note": r.rationale}
+            for r in reversed(reports)
+        ],
+    }
+    system = (
+        "You are the Showrunner of this AI short drama production. Answer the "
+        "user's question about THIS production only, grounded strictly in the "
+        "context given. Be concrete and brief: two to four plain sentences, no "
+        "markdown, no lists. If the context does not contain the answer, say "
+        "so and suggest which page of the studio would."
+    )
+    qwen = QwenClient(get_settings())
+    with track_project(project_id, db):
+        answer = await qwen.chat(
+            [{"role": "system", "content": system},
+             {"role": "user",
+              "content": f"Production context:\n{_json.dumps(context, ensure_ascii=False)}\n\nQuestion: {question}"}],
+            task="chat", temperature=0.4, max_tokens=400,
+        )
+    from app.agents.reporter import report_agent
+    report_agent(db, project_id, agent="Showrunner", stage="chat",
+                 decision={"question": question}, rationale=answer, confidence=1.0)
+    return {"answer": answer}
+
+
 @router.patch("/{project_id}/auto-clarify")
 def set_auto_clarify(project_id: str, enabled: bool, db: Session = Depends(get_db)):
     p = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()

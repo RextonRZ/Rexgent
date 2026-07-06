@@ -21,6 +21,7 @@ TASK_MODELS: dict[str, str] = {
     "storyboard": CREATIVE,
     # judgment / analysis — mid tier
     "judge": ANALYSIS,
+    "chat": ANALYSIS,
     "plot_gap": ANALYSIS,
     "ending": ANALYSIS,
     "prompt_craft": ANALYSIS,
