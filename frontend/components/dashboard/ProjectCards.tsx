@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Clapperboard, MoreVertical, Plus } from "lucide-react";
+import { MoreVertical, Plus } from "lucide-react";
+import { genreDef, posterGradient } from "@/lib/genres";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -130,18 +131,31 @@ function PosterImage({
       />
     );
   }
+  // genre-tinted duotone placeholder — barely-there color, large cropped icon
+  const def = genreDef(project.genre);
   return (
     <div
-      className={cn(
-        "flex h-full w-full flex-col items-center justify-center gap-1.5 bg-zinc-950",
-        className
-      )}
+      className={cn("relative h-full w-full overflow-hidden", className)}
+      style={{ background: posterGradient(project.genre) }}
     >
-      <Clapperboard className="size-5 text-zinc-600" />
-      {project.genre && (
-        <span className="text-[11px] text-zinc-500">{project.genre}</span>
-      )}
+      <def.icon
+        aria-hidden
+        className="absolute -bottom-3 -right-3 size-16 rotate-[-8deg] text-white opacity-20"
+        strokeWidth={1.25}
+      />
     </div>
+  );
+}
+
+function GenreTag({ genre }: { genre: string }) {
+  return (
+    <span className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ background: genreDef(genre).dot }}
+      />
+      {genre}
+    </span>
   );
 }
 
@@ -190,11 +204,7 @@ export function ProjectCard({
           {project.title}
         </p>
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
-          {project.genre && (
-            <span className="rounded bg-white/5 px-1.5 py-0.5 text-zinc-400">
-              {project.genre}
-            </span>
-          )}
+          {project.genre && <GenreTag genre={project.genre} />}
           <StatusPill project={project} />
           <span className="ml-auto text-muted-foreground">
             Edited {relTime(project.updated_at)}
@@ -233,8 +243,8 @@ export function ProjectRow({
         {project.title}
       </p>
       {project.genre && (
-        <span className="hidden rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-zinc-400 sm:inline">
-          {project.genre}
+        <span className="hidden sm:inline">
+          <GenreTag genre={project.genre} />
         </span>
       )}
       <StatusPill project={project} />
@@ -257,7 +267,7 @@ export function NewProjectTile({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="group flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border text-muted-foreground transition-all duration-250 hover:-translate-y-0.5 hover:border-violet-500/60 hover:bg-violet-500/5 hover:text-foreground"
+      className="group flex h-full min-h-[200px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border text-muted-foreground transition-all duration-250 hover:-translate-y-0.5 hover:border-violet-500/60 hover:bg-violet-500/5 hover:text-foreground"
     >
       <Plus className="size-6" />
       <span className="text-sm font-medium">Start new project</span>

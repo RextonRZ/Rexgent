@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -156,6 +157,94 @@ async def projects_overview(
             "clips": total_clips,
             "film_seconds": total_clips * CLIP_SECONDS,
             "spent_usd": round(sum(spent_by_project.values()), 2),
+        },
+    }
+
+
+@router.get("/stats")
+async def studio_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Studio stats drawer: daily generation activity for the heatmap,
+    per-agent report breakdown, cost split by category, and totals.
+    Aggregation happens in python — the row counts are tiny."""
+    from app.models.agent_report import AgentReport
+
+    projects = (
+        db.query(Project)
+        .filter(Project.user_id == str(current_user.id))
+        .all()
+    )
+    ids = [p.id for p in projects]
+    cutoff = datetime.utcnow() - timedelta(weeks=26)
+
+    days: dict[str, dict] = {}
+    total_clips = 0
+    if ids:
+        jobs = db.query(GenerationJob).filter(GenerationJob.project_id.in_(ids)).all()
+        job_ids = [j.id for j in jobs]
+        if job_ids:
+            clip_rows = (
+                db.query(GeneratedClip)
+                .filter(
+                    GeneratedClip.job_id.in_(job_ids),
+                    GeneratedClip.url.isnot(None),
+                )
+                .all()
+            )
+            total_clips = len(clip_rows)
+            for c in clip_rows:
+                if c.created_at and c.created_at >= cutoff:
+                    key = c.created_at.date().isoformat()
+                    d = days.setdefault(key, {"clips": 0, "spent": 0.0})
+                    d["clips"] += 1
+
+    cost_split = {"llm": 0.0, "image": 0.0, "video": 0.0, "tts": 0.0}
+    total_spent = 0.0
+    if ids:
+        for e in db.query(CostEvent).filter(CostEvent.project_id.in_(ids)).all():
+            amount = float(e.amount_usd or 0)
+            total_spent += amount
+            if e.category in cost_split:
+                cost_split[e.category] += amount
+            if e.created_at and e.created_at >= cutoff:
+                key = e.created_at.date().isoformat()
+                d = days.setdefault(key, {"clips": 0, "spent": 0.0})
+                d["spent"] += amount
+
+    agents: dict[str, dict] = {}
+    if ids:
+        for r in (
+            db.query(AgentReport).filter(AgentReport.project_id.in_(ids)).all()
+        ):
+            a = agents.setdefault(r.agent, {"runs": 0, "conf_sum": 0.0, "conf_n": 0})
+            a["runs"] += 1
+            if r.confidence is not None:
+                a["conf_sum"] += float(r.confidence)
+                a["conf_n"] += 1
+
+    return {
+        "days": [
+            {"date": k, "clips": v["clips"], "spent": round(v["spent"], 2)}
+            for k, v in sorted(days.items())
+        ],
+        "agents": [
+            {
+                "agent": name,
+                "runs": a["runs"],
+                "avg_confidence": round(a["conf_sum"] / a["conf_n"], 3)
+                if a["conf_n"]
+                else None,
+            }
+            for name, a in sorted(agents.items())
+        ],
+        "cost_split": {k: round(v, 2) for k, v in cost_split.items()},
+        "totals": {
+            "dramas": len(projects),
+            "clips": total_clips,
+            "film_seconds": total_clips * CLIP_SECONDS,
+            "spent_usd": round(total_spent, 2),
         },
     }
 

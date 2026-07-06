@@ -19,9 +19,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { GENRES } from "@/lib/genres";
 import { useCreateProject } from "@/hooks/useProjects";
-
-const GENRES = ["sci-fi", "thriller", "drama", "romance", "horror", "comedy"];
 
 export function NewProjectModal({
   open,
@@ -72,8 +71,9 @@ export function NewProjectModal({
               </SelectTrigger>
               <SelectContent>
                 {GENRES.map((g) => (
-                  <SelectItem key={g} value={g}>
-                    {g}
+                  <SelectItem key={g.value} value={g.value}>
+                    <g.icon className="size-3.5 text-muted-foreground" />
+                    {g.label}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -191,6 +191,23 @@
     opacity: 0.92;
   }
 }
+/* dashboard premiere leader: clock-hand sweep, one revolution per number */
+@keyframes leader-hand {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* 3 → 2 → 1 windows: each number owns a third of the 6s loop */
+@keyframes leader-num {
+  0%,
+  32% {
+    opacity: 1;
+  }
+  33%,
+  100% {
+    opacity: 0;
+  }
+}
 /* final CTA — film grain shimmer: jump between offsets, never tween */
 @keyframes film-grain {
   0% {

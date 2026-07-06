@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { GENRES as GENRE_DEFS } from "@/lib/genres";
 import { useGenerateScript } from "@/hooks/useScript";
 
 interface ScriptGenerateProps {
@@ -26,17 +27,7 @@ interface ScriptGenerateProps {
   }) => void;
 }
 
-const GENRES = [
-  "sci-fi",
-  "thriller",
-  "drama",
-  "comedy",
-  "horror",
-  "romance",
-  "action",
-  "mystery",
-  "fantasy",
-];
+const GENRES = GENRE_DEFS.map((g) => g.value);
 
 export function ScriptGenerate({
   projectId,

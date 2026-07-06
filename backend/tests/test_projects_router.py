@@ -42,11 +42,12 @@ def _entity_name(entity):
 
 
 class FakeDB:
-    def __init__(self, projects=(), jobs=(), clips=(), costs=()):
+    def __init__(self, projects=(), jobs=(), clips=(), costs=(), reports=()):
         self.projects = list(projects)
         self.jobs = list(jobs)
         self.clips = list(clips)
         self.costs = list(costs)
+        self.reports = list(reports)
         self.added = []
         self.deleted = []
         self.committed = False
@@ -61,6 +62,8 @@ class FakeDB:
             return FakeQuery(self.clips)
         if name == "CostEvent":
             return FakeQuery(self.costs)
+        if name == "AgentReport":
+            return FakeQuery(self.reports)
         return FakeQuery([])
 
     def add(self, obj):
@@ -249,6 +252,62 @@ def test_overview_counts_clips_and_spend():
     assert p["spent_usd"] == 1.25
     # shelf montage caps at 2 clips per drama
     assert len(body["recent_clips"]) == 2
+
+
+def test_stats_empty_studio():
+    db = FakeDB([])
+    _override(db)
+    try:
+        r = client.get("/api/projects/stats")
+    finally:
+        _clear()
+    assert r.status_code == 200
+    body = r.json()
+    assert body["days"] == []
+    assert body["agents"] == []
+    assert body["totals"]["dramas"] == 0
+    assert body["cost_split"] == {"llm": 0.0, "image": 0.0, "video": 0.0, "tts": 0.0}
+
+
+def test_stats_aggregates_activity_agents_and_costs():
+    project = _project(USER_ID)
+    job = SimpleNamespace(id=uuid.uuid4(), project_id=project.id, status="COMPLETE")
+    now = datetime.utcnow()
+    clips = [
+        SimpleNamespace(job_id=job.id, url=f"https://oss/c{i}.mp4", created_at=now)
+        for i in range(2)
+    ]
+    costs = [
+        SimpleNamespace(
+            project_id=project.id, category="video", amount_usd=1.5, created_at=now
+        ),
+        SimpleNamespace(
+            project_id=project.id, category="llm", amount_usd=0.25, created_at=now
+        ),
+    ]
+    reports = [
+        SimpleNamespace(agent="continuity", confidence=0.9),
+        SimpleNamespace(agent="continuity", confidence=0.7),
+        SimpleNamespace(agent="budget_allocator", confidence=None),
+    ]
+    db = FakeDB([project], jobs=[job], clips=clips, costs=costs, reports=reports)
+    _override(db)
+    try:
+        r = client.get("/api/projects/stats")
+    finally:
+        _clear()
+    assert r.status_code == 200
+    body = r.json()
+    today = now.date().isoformat()
+    assert body["days"] == [{"date": today, "clips": 2, "spent": 1.75}]
+    agents = {a["agent"]: a for a in body["agents"]}
+    assert agents["continuity"]["runs"] == 2
+    assert agents["continuity"]["avg_confidence"] == 0.8
+    assert agents["budget_allocator"]["avg_confidence"] is None
+    assert body["cost_split"]["video"] == 1.5
+    assert body["cost_split"]["llm"] == 0.25
+    assert body["totals"]["clips"] == 2
+    assert body["totals"]["spent_usd"] == 1.75
 
 
 def test_overview_flags_generating_projects():

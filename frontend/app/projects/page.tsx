@@ -4,12 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ChevronDown,
   Clapperboard,
   LayoutGrid,
   List,
   Search,
   Trash2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -241,7 +248,10 @@ function Dashboard() {
               </div>
               <Select value={sort} onValueChange={(v) => v && setSort(v)}>
                 <SelectTrigger className="h-9 w-44">
-                  <SelectValue />
+                  {/* base-ui renders the raw value otherwise ("az", "edited") */}
+                  <SelectValue>
+                    {SORTS.find((s) => s.value === sort)?.label}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {SORTS.map((s) => (
@@ -276,20 +286,36 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* filter chips */}
+          {/* filters: genre multi-select + status chips */}
           {(allGenres.length > 0 || allStatuses.length > 0) && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {allGenres.map((g) => (
-                <Chip
-                  key={g}
-                  active={genres.includes(g)}
-                  onClick={() => toggle(genres, setGenres, g)}
-                >
-                  {g}
-                </Chip>
-              ))}
-              {allGenres.length > 0 && allStatuses.length > 0 && (
-                <span className="h-4 w-px bg-white/10" />
+              {allGenres.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className={cn(
+                      "flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs outline-none transition-colors",
+                      genres.length > 0
+                        ? "border-violet-500 bg-violet-500/10 text-violet-300"
+                        : "border-white/10 text-zinc-400 hover:border-white/25 hover:text-zinc-300"
+                    )}
+                  >
+                    Genre{genres.length > 0 && ` · ${genres.length}`}
+                    <ChevronDown className="size-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-44 glass">
+                    {allGenres.map((g) => (
+                      <DropdownMenuCheckboxItem
+                        key={g}
+                        checked={genres.includes(g)}
+                        closeOnClick={false}
+                        onCheckedChange={() => toggle(genres, setGenres, g)}
+                        className="capitalize"
+                      >
+                        {g}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               {allStatuses.map((s) => (
                 <Chip
@@ -309,7 +335,7 @@ function Dashboard() {
                   }}
                   className="text-xs text-zinc-500 underline-offset-2 transition-colors hover:text-zinc-300 hover:underline"
                 >
-                  Clear
+                  Clear all
                 </button>
               )}
             </div>
