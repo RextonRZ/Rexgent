@@ -1,6 +1,51 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from app.services.storyboard_generator import StoryboardGenerator
+from app.services.storyboard_generator import (
+    StoryboardGenerator,
+    fit_duration_to_dialogue,
+)
+
+
+def test_short_line_gets_base_clip_length():
+    assert fit_duration_to_dialogue("Riku! What did you do?") == 5
+
+
+def test_no_dialogue_action_beat_is_base_length():
+    assert fit_duration_to_dialogue(None) == 5
+    assert fit_duration_to_dialogue("") == 5
+
+
+def test_long_line_gets_a_longer_clip():
+    long_line = (
+        "And so, the great Riku Sato, master of mischief, faced his greatest "
+        "challenge yet, standing tall against the towering fury of his mother "
+        "and the shattered remains of the family vase."
+    )
+    assert fit_duration_to_dialogue(long_line) == 10
+
+
+@pytest.mark.asyncio
+async def test_generate_sizes_clips_to_their_dialogue():
+    gen = StoryboardGenerator.__new__(StoryboardGenerator)
+    long_line = " ".join(["word"] * 40)  # ~15s of speech -> capped tier
+    gen.qwen = MagicMock()
+    gen.qwen.chat_json = AsyncMock(return_value=[
+        {"shot_number": 1, "shot_type": "MS", "camera_movement": "STATIC",
+         "characters_in_frame": [], "action": "x", "dialogue": "Short line.",
+         "lighting": "NATURAL", "colour_mood": "WARM", "emotional_beat": "x",
+         "estimated_duration_seconds": 99, "notes": ""},
+        {"shot_number": 2, "shot_type": "MS", "camera_movement": "STATIC",
+         "characters_in_frame": [], "action": "x", "dialogue": long_line,
+         "lighting": "NATURAL", "colour_mood": "WARM", "emotional_beat": "x",
+         "estimated_duration_seconds": 1, "notes": ""},
+    ])
+    gen.prompt_template = "placeholder"
+    shots = await gen.generate_for_scene(
+        scene_json={"dialogue": [{"line": "Short line."}, {"line": long_line}]},
+        characters_in_scene=[])
+    # LLM's own number is ignored; length is derived from the line
+    assert shots[0]["estimated_duration_seconds"] == 5
+    assert shots[1]["estimated_duration_seconds"] == 10
 
 
 @pytest.mark.asyncio
