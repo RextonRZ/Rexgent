@@ -243,7 +243,7 @@ function Dashboard() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search dramas"
-                  className="h-9 w-64 rounded-lg border border-white/10 bg-zinc-900 pl-8 pr-3 text-sm placeholder:text-zinc-500 outline-none transition-colors focus:border-violet-500/40 focus:ring-2 focus:ring-violet-500/25"
+                  className="h-9 w-64 rounded-lg border border-white/10 bg-zinc-900 pl-8 pr-3 text-sm placeholder:text-zinc-500 outline-none transition-colors focus-visible:border-violet-500/40 focus-visible:ring-2 focus-visible:ring-violet-500/25"
                 />
               </div>
               <Select value={sort} onValueChange={(v) => v && setSort(v)}>

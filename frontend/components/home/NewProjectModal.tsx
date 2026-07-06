@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { GENRES } from "@/lib/genres";
-import { useCreateProject } from "@/hooks/useProjects";
+import { useCreateProject, useSuggestTitle } from "@/hooks/useProjects";
 
 export function NewProjectModal({
   open,
@@ -31,12 +31,25 @@ export function NewProjectModal({
 }) {
   const router = useRouter();
   const createProject = useCreateProject();
+  const suggestTitle = useSuggestTitle();
   const [premise, setPremise] = useState("");
   const [genre, setGenre] = useState("sci-fi");
   const [mode, setMode] = useState<"auto" | "guided">("auto");
 
+  const pending = createProject.isPending || suggestTitle.isPending;
+
   const handleCreate = async () => {
-    const title = premise.trim().slice(0, 60) || "Untitled Drama";
+    // The card never wears the raw prompt: derive a short evocative title,
+    // keep the premise stored separately on the project.
+    const p = premise.trim();
+    let title = "Untitled Drama";
+    if (p) {
+      try {
+        title = await suggestTitle.mutateAsync(p);
+      } catch {
+        title = p.slice(0, 60);
+      }
+    }
     const project = await createProject.mutateAsync({ title, genre, premise });
     router.push(`/projects/${project.id}/script?mode=${mode}`);
   };
@@ -100,11 +113,11 @@ export function NewProjectModal({
 
           <Button
             onClick={handleCreate}
-            disabled={createProject.isPending}
+            disabled={pending}
             className="w-full glow"
             size="lg"
           >
-            {createProject.isPending ? "Creating…" : "Create drama →"}
+            {pending ? "Creating…" : "Create drama →"}
           </Button>
         </div>
       </DialogContent>

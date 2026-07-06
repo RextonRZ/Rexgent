@@ -39,10 +39,17 @@ const AGENT_LABELS: Record<string, string> = {
 
 const SPLIT_ORDER: { key: string; label: string; color: string }[] = [
   { key: "video", label: "Video", color: "bg-violet-500" },
-  { key: "image", label: "Image", color: "bg-violet-700" },
-  { key: "llm", label: "LLM", color: "bg-violet-900" },
-  { key: "tts", label: "TTS", color: "bg-zinc-600" },
+  { key: "image", label: "Image", color: "bg-pink-400" },
+  { key: "llm", label: "LLM", color: "bg-blue-400" },
+  { key: "tts", label: "TTS", color: "bg-zinc-500" },
 ];
+
+function confTone(c: number | null): string {
+  if (c === null) return "text-muted-foreground";
+  if (c >= 0.9) return "text-zinc-200";
+  if (c >= 0.7) return "text-amber-400";
+  return "text-red-400";
+}
 
 function cellTone(clips: number): string {
   if (clips <= 0) return "bg-white/5";
@@ -71,6 +78,8 @@ function CountNum({
   return <>{format ? format(v) : Math.round(v)}</>;
 }
 
+const DAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
+
 /** GitHub-style activity grid: 26 weeks of daily generation. */
 function Heatmap({ days }: { days: DayStat[] }) {
   const byDate = new Map(days.map((d) => [d.date, d]));
@@ -89,34 +98,74 @@ function Heatmap({ days }: { days: DayStat[] }) {
     weeks.push(week);
   }
 
+  // label a column when its month differs from the previous column's
+  const monthLabels = weeks.map((week, wi) => {
+    const m = week[0].getMonth();
+    const prev = wi > 0 ? weeks[wi - 1][0].getMonth() : -1;
+    return m !== prev
+      ? week[0].toLocaleString("en", { month: "short" })
+      : null;
+  });
+
   return (
     <div>
-      <div className="flex gap-[3px] overflow-x-auto pb-1">
-        {weeks.map((week, wi) => (
-          <div key={wi} className="flex flex-col gap-[3px]">
-            {week.map((day) => {
-              const key = day.toISOString().slice(0, 10);
-              const stat = byDate.get(key);
-              const future = day > today;
-              return (
-                <span
-                  key={key}
-                  title={
-                    future
-                      ? undefined
-                      : `${key}: ${stat?.clips ?? 0} clips · $${(
-                          stat?.spent ?? 0
-                        ).toFixed(2)}`
-                  }
-                  className={cn(
-                    "h-2.5 w-2.5 rounded-[2px]",
-                    future ? "opacity-0" : cellTone(stat?.clips ?? 0)
-                  )}
-                />
-              );
-            })}
-          </div>
+      <div className="mb-1 flex gap-[3px] pl-[30px]">
+        {monthLabels.map((label, i) => (
+          <span
+            key={i}
+            className="w-2.5 shrink-0 overflow-visible whitespace-nowrap text-[10px] leading-none text-zinc-500"
+          >
+            {label ?? ""}
+          </span>
         ))}
+      </div>
+      <div className="flex">
+        <div className="mr-1 flex w-[26px] shrink-0 flex-col gap-[3px]">
+          {DAY_LABELS.map((d, i) => (
+            <span
+              key={i}
+              className="flex h-2.5 items-center text-[10px] leading-none text-zinc-500"
+            >
+              {d}
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-[3px] overflow-x-auto pb-1">
+          {weeks.map((week, wi) => (
+            <div key={wi} className="flex flex-col gap-[3px]">
+              {week.map((day) => {
+                const key = day.toISOString().slice(0, 10);
+                const stat = byDate.get(key);
+                const future = day > today;
+                return (
+                  <span
+                    key={key}
+                    title={
+                      future
+                        ? undefined
+                        : `${key}: ${stat?.clips ?? 0} clips · $${(
+                            stat?.spent ?? 0
+                          ).toFixed(2)}`
+                    }
+                    className={cn(
+                      "h-2.5 w-2.5 rounded-[2px]",
+                      future ? "opacity-0" : cellTone(stat?.clips ?? 0)
+                    )}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-2 flex items-center justify-end gap-1.5 text-[10px] text-zinc-500">
+        Less
+        {["bg-white/5", "bg-violet-900", "bg-violet-700", "bg-violet-500"].map(
+          (c) => (
+            <span key={c} className={cn("h-2.5 w-2.5 rounded-[2px]", c)} />
+          )
+        )}
+        More
       </div>
       {days.length === 0 && (
         <p className="mt-2 text-xs text-muted-foreground">
@@ -220,7 +269,12 @@ export function StudioStatsDrawer({
                           }}
                         />
                       </div>
-                      <span className="w-10 shrink-0 text-right font-mono text-[11px] text-muted-foreground">
+                      <span
+                        className={cn(
+                          "w-10 shrink-0 text-right font-mono text-[11px] tabular-nums",
+                          confTone(a.avg_confidence)
+                        )}
+                      >
                         {a.avg_confidence !== null
                           ? `${Math.round(a.avg_confidence * 100)}%`
                           : "–"}
@@ -240,7 +294,7 @@ export function StudioStatsDrawer({
                 </p>
               ) : (
                 <>
-                  <div className="flex h-2.5 overflow-hidden rounded-full bg-white/5">
+                  <div className="flex h-2.5 gap-px overflow-hidden rounded-full bg-white/5">
                     {SPLIT_ORDER.map((s) => {
                       const v = data.cost_split[s.key] ?? 0;
                       if (v <= 0) return null;

@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BTN_PRIMARY, BTN_SECONDARY, CtaArrow } from "@/components/ui/cta";
+import { BTN_PRIMARY, CtaArrow } from "@/components/ui/cta";
 import { GRAIN } from "@/components/landing/CtaBackdrop";
 import { StudioStatsDrawer } from "@/components/dashboard/StudioStats";
+import { PosterImage, statusOf } from "@/components/dashboard/ProjectCards";
 import { cn } from "@/lib/utils";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useCountUp } from "@/hooks/useCountUp";
-import { fmtFilm } from "@/components/dashboard/format";
+import { fmtFilm, relTime } from "@/components/dashboard/format";
 import type { ProjectsOverview } from "@/lib/types";
 
 const CYCLE_MS = 3800;
@@ -40,13 +41,7 @@ function ShelfSprockets({ className }: { className?: string }) {
 }
 
 /** Vintage countdown leader for studios with no footage yet. */
-function PremiereAwaits({
-  reduced,
-  onNewDrama,
-}: {
-  reduced: boolean;
-  onNewDrama: () => void;
-}) {
+function PremiereAwaits({ reduced }: { reduced: boolean }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#050308]">
       {/* projector cone from above */}
@@ -98,13 +93,6 @@ function PremiereAwaits({
           Finish generating a drama and its clips will play here.
         </p>
       </div>
-      <Button
-        variant="outline"
-        onClick={onNewDrama}
-        className={cn("relative h-9", BTN_SECONDARY)}
-      >
-        Start a new drama
-      </Button>
     </div>
   );
 }
@@ -242,7 +230,7 @@ export function RecapShelf({
           />
         )
       ) : (
-        <PremiereAwaits reduced={reduced} onNewDrama={onNewDrama} />
+        <PremiereAwaits reduced={reduced} />
       )}
       <ShelfSprockets className="left-1.5" />
       <ShelfSprockets className="right-1.5" />
@@ -267,9 +255,9 @@ export function RecapShelf({
   return (
     <section
       ref={rootRef}
-      className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0a0812] px-6 py-8 lg:px-10"
+      className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0a0812] px-6 py-7 lg:px-10"
     >
-      <div className="grid items-center gap-8 lg:grid-cols-[2fr_3fr]">
+      <div className="grid items-center gap-8 lg:grid-cols-[1fr_1fr]">
         {/* greeting + stats + CTA */}
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -306,6 +294,48 @@ export function RecapShelf({
             Start a new drama
             <CtaArrow />
           </Button>
+
+          {/* jump back in: the most recently edited dramas */}
+          {(overview?.projects.length ?? 0) > 0 && (
+            <div className="mt-6">
+              <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                Jump back in
+              </p>
+              <div className="mt-2 space-y-1">
+                {overview!.projects.slice(0, 3).map((p) => {
+                  const s = statusOf(p);
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => router.push(`/projects/${p.id}/script`)}
+                      className="flex w-full items-center gap-3 rounded-lg p-1.5 pr-2 text-left outline-none transition-colors hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-violet-400/60"
+                    >
+                      <span className="h-10 w-[71px] shrink-0 overflow-hidden rounded-md bg-zinc-950">
+                        <PosterImage project={p} />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {p.title}
+                      </span>
+                      <span
+                        aria-label={s}
+                        className={cn(
+                          "h-1.5 w-1.5 shrink-0 rounded-full",
+                          s === "generating"
+                            ? "animate-pulse bg-violet-400"
+                            : s === "complete"
+                            ? "bg-emerald-400"
+                            : "bg-zinc-500"
+                        )}
+                      />
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {relTime(p.updated_at)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* the screen */}

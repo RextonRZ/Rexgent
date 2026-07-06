@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MoreVertical, Plus } from "lucide-react";
+import { Loader2, MoreVertical, Plus, Sparkles } from "lucide-react";
 import { genreDef, posterGradient } from "@/lib/genres";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,8 +21,17 @@ import { BTN_PRIMARY } from "@/components/ui/cta";
 import { FIELD } from "@/components/auth/AuthShell";
 import { cn } from "@/lib/utils";
 import { relTime } from "@/components/dashboard/format";
-import { useUpdateProject } from "@/hooks/useProjects";
+import { useSuggestTitle, useUpdateProject } from "@/hooks/useProjects";
 import type { ProjectOverviewItem } from "@/lib/types";
+
+/** Titles that are really the raw prompt: long, screenplay-ish, or trailing off. */
+export function isPromptLikeTitle(title: string): boolean {
+  return (
+    title.split(/\s+/).length > 8 ||
+    /\b(INT|EXT)\./.test(title) ||
+    title.trimEnd().endsWith("...")
+  );
+}
 
 export type ProjectAction = "open" | "poster" | "rename" | "duplicate" | "delete";
 
@@ -113,7 +122,7 @@ function KebabMenu({
   );
 }
 
-function PosterImage({
+export function PosterImage({
   project,
   className,
 }: {
@@ -170,6 +179,13 @@ export function ProjectCard({
   onPreview: (id: string | null) => void;
   onAction: (action: ProjectAction, project: ProjectOverviewItem) => void;
 }) {
+  // Prompt-like titles get a sparkle: one click asks the LLM for a clean
+  // title, offered inline with Accept / Keep. Never renames on its own.
+  const promptLike = isPromptLikeTitle(project.title);
+  const suggest = useSuggestTitle();
+  const update = useUpdateProject();
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+
   return (
     <div
       role="button"
@@ -200,9 +216,64 @@ export function ProjectCard({
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-4">
-        <p title={project.title} className="truncate text-sm font-medium">
-          {project.title}
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p
+            title={project.title}
+            className="min-w-0 flex-1 truncate text-sm font-medium"
+          >
+            {project.title}
+          </p>
+          {promptLike && !suggestion && (
+            <button
+              title="Suggest a title"
+              aria-label="Suggest a title"
+              disabled={suggest.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                suggest
+                  .mutateAsync(project.premise?.trim() || project.title)
+                  .then(setSuggestion)
+                  .catch(() => {});
+              }}
+              className="shrink-0 rounded text-violet-300/70 outline-none transition-colors hover:text-violet-300 focus-visible:ring-2 focus-visible:ring-violet-400/60"
+            >
+              {suggest.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="size-3.5" />
+              )}
+            </button>
+          )}
+        </div>
+        {suggestion && (
+          <div
+            className="flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2 py-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="min-w-0 flex-1 truncate text-xs text-violet-200">
+              {suggestion}
+            </span>
+            <button
+              className="text-xs font-medium text-violet-300 transition-colors hover:text-violet-200"
+              disabled={update.isPending}
+              onClick={async () => {
+                await update.mutateAsync({
+                  projectId: project.id,
+                  title: suggestion,
+                });
+                setSuggestion(null);
+              }}
+            >
+              {update.isPending ? "Saving..." : "Accept"}
+            </button>
+            <button
+              className="text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+              onClick={() => setSuggestion(null)}
+            >
+              Keep
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
           {project.genre && <GenreTag genre={project.genre} />}
           <StatusPill project={project} />

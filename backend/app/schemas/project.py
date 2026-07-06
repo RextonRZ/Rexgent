@@ -22,6 +22,10 @@ class PosterFromClipRequest(BaseModel):
     timestamp: float = 0.0
 
 
+class TitleSuggestRequest(BaseModel):
+    premise: str
+
+
 class ProjectResponse(BaseModel):
     id: UUID
     title: str

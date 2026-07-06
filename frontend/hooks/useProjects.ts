@@ -92,6 +92,18 @@ export function useSetPosterFromClip() {
   });
 }
 
+export function useSuggestTitle() {
+  return useMutation({
+    mutationFn: async (premise: string) => {
+      const { data } = await api.post<{ title: string }>(
+        "/api/projects/suggest_title",
+        { premise }
+      );
+      return data.title;
+    },
+  });
+}
+
 export function useDeleteProject() {
   const queryClient = useQueryClient();
   return useMutation({

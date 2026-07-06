@@ -15,6 +15,7 @@ from app.schemas.project import (
     ProjectCreate,
     ProjectResponse,
     ProjectUpdate,
+    TitleSuggestRequest,
 )
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -159,6 +160,57 @@ async def projects_overview(
             "spent_usd": round(sum(spent_by_project.values()), 2),
         },
     }
+
+
+def _clean_title(raw: str) -> str:
+    title = (raw or "").strip().splitlines()[0].strip().strip('"“”\'')
+    words = title.split()
+    if len(words) > 8:  # runaway response guard
+        title = " ".join(words[:8])
+    return title[:60]
+
+
+async def _llm_title(premise: str) -> str:
+    """Ask qwen for a short evocative series title. Wrapped so tests can
+    patch it without a live API key."""
+    from app.config import get_settings
+    from app.services.qwen_client import QwenClient
+
+    qwen = QwenClient(get_settings())
+    return await qwen.chat(
+        [
+            {
+                "role": "user",
+                "content": (
+                    "Suggest a title for a short drama series with this premise:\n"
+                    f"{premise}\n\n"
+                    "Rules: at most 5 words, evocative, Title Case, no quotes, "
+                    "no punctuation at the end. Reply with the title only."
+                ),
+            }
+        ],
+        temperature=0.8,
+        max_tokens=32,
+    )
+
+
+@router.post("/suggest_title")
+async def suggest_title(
+    request: TitleSuggestRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """One evocative title from a premise — used when creating a drama and
+    by the clean-up-titles affordance on the dashboard."""
+    premise = request.premise.strip()
+    if not premise:
+        raise HTTPException(status_code=422, detail="Premise is empty")
+    try:
+        title = _clean_title(await _llm_title(premise))
+    except Exception:
+        raise HTTPException(status_code=502, detail="Could not suggest a title")
+    if not title:
+        raise HTTPException(status_code=502, detail="Could not suggest a title")
+    return {"title": title}
 
 
 @router.get("/stats")

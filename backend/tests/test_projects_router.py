@@ -310,6 +310,48 @@ def test_stats_aggregates_activity_agents_and_costs():
     assert body["totals"]["spent_usd"] == 1.75
 
 
+def test_suggest_title_returns_cleaned_llm_output(monkeypatch):
+    import app.routers.projects as pr
+
+    async def fake_llm(premise):
+        return '"Embers Of The Signal"\nextra line'
+
+    monkeypatch.setattr(pr, "_llm_title", fake_llm)
+    _override(FakeDB([]))
+    try:
+        r = client.post(
+            "/api/projects/suggest_title", json={"premise": "a detective in 2047"}
+        )
+    finally:
+        _clear()
+    assert r.status_code == 200
+    assert r.json()["title"] == "Embers Of The Signal"
+
+
+def test_suggest_title_rejects_empty_premise():
+    _override(FakeDB([]))
+    try:
+        r = client.post("/api/projects/suggest_title", json={"premise": "   "})
+    finally:
+        _clear()
+    assert r.status_code == 422
+
+
+def test_suggest_title_502_when_llm_fails(monkeypatch):
+    import app.routers.projects as pr
+
+    async def broken(premise):
+        raise RuntimeError("no api key")
+
+    monkeypatch.setattr(pr, "_llm_title", broken)
+    _override(FakeDB([]))
+    try:
+        r = client.post("/api/projects/suggest_title", json={"premise": "x"})
+    finally:
+        _clear()
+    assert r.status_code == 502
+
+
 def test_overview_flags_generating_projects():
     project = _project(USER_ID)
     job = SimpleNamespace(id=uuid.uuid4(), project_id=project.id, status="RUNNING")
