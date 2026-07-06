@@ -55,6 +55,7 @@ export function useUpdateProject() {
       projectId: string;
       title?: string;
       poster_url?: string;
+      credit_budget?: number;
     }) => {
       const { projectId, ...body } = params;
       const { data } = await api.patch<Project>(

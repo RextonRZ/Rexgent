@@ -90,6 +90,10 @@ class TokenOptimizer:
         def total() -> float:
             return sum(s["estimated_cost_usd"] for s in scored)
 
+        # what the full plan would cost before any fitting — the number a
+        # user needs when deciding whether to raise the cap instead
+        unfitted_cost = round(total(), 2)
+
         # Fit to the cap. Pass 1: downgrade the least important non-hook Wan
         # shots to HappyHorse. Pass 2: defer the least important non-hook
         # shots entirely (the runner skips tier == "deferred").
@@ -143,6 +147,7 @@ class TokenOptimizer:
             "hook_shots": hook_count,
             "downgraded_shots": downgraded,
             "deferred_shots": deferred,
+            "unfitted_cost_usd": unfitted_cost,
             "fits_budget": video_cost <= available,
             "video_cost_usd": round(video_cost, 2),
             "total_estimated_cost": round(video_cost, 2),

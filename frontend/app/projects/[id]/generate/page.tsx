@@ -5,7 +5,6 @@ import { NextStepButton } from "@/components/shared/NextStepButton";
 import { GenerationLauncher } from "@/components/generate/GenerationLauncher";
 import { GenerationQueue } from "@/components/generate/GenerationQueue";
 import { ActivityFeed } from "@/components/casting/ActivityFeed";
-import { ClarificationModal } from "@/components/agents/ClarificationModal";
 import { TokenDashboard } from "@/components/budget/TokenDashboard";
 
 export default function GeneratePage({ params }: { params: { id: string } }) {
@@ -13,8 +12,6 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
 
   return (
     <div className="space-y-6">
-      <ClarificationModal projectId={params.id} />
-
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Generate</h1>
         <p className="text-sm text-muted-foreground">

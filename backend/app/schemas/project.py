@@ -24,6 +24,7 @@ class ProjectUpdate(BaseModel):
     genre: Optional[str] = None
     premise: Optional[str] = None
     poster_url: Optional[str] = None
+    credit_budget: Optional[float] = None  # raise the spend cap mid-flight
 
 
 class PosterFromClipRequest(BaseModel):

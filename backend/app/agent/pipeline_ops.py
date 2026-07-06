@@ -195,6 +195,17 @@ def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_u
                  decision={"wan": result.get("wan_shots"), "happyhorse": result.get("happyhorse_shots")}
                          if isinstance(result, dict) else {},
                  rationale="Allocated quality tiers under the cap", confidence=1.0)
+    # Tell the chat what fitting cost the plan, so the user can decide to
+    # raise the cap instead of losing shots.
+    if result.get("deferred_shots") or result.get("downgraded_shots"):
+        import math
+        emit("budget:fitted", {
+            "deferred": result.get("deferred_shots", 0),
+            "downgraded": result.get("downgraded_shots", 0),
+            "cap": result.get("budget_usd", budget_usd),
+            "suggested_cap": math.ceil(
+                (result.get("unfitted_cost_usd", 0) or 0) / (1 - TokenOptimizer.RESERVE_PCT) + 0.999),
+        }, str(project_id))
     return result
 
 

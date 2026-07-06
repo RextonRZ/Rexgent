@@ -270,6 +270,12 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         )
         db.add(export)
         db.commit()
+        try:
+            from app.websocket.emitter import emit
+            emit("export.completed", {"url": final_url,
+                 "duration": report["total_duration_seconds"]}, project_id)
+        except Exception:  # noqa: BLE001
+            pass
     except Exception as e:  # noqa: BLE001
         logger.error(f"Export failed: {e}")
     finally:

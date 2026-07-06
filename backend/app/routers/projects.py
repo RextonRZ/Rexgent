@@ -332,6 +332,8 @@ async def update_project(
 ):
     project = _get_owned_project(project_id, db, current_user)
     changes = request.model_dump(exclude_unset=True)
+    if "credit_budget" in changes and changes["credit_budget"] is not None:
+        changes["credit_budget"] = max(1.0, float(changes["credit_budget"]))
     for field, value in changes.items():
         setattr(project, field, value)
     db.commit()
