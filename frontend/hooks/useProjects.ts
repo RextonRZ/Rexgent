@@ -141,6 +141,7 @@ export function useCreateProject() {
       premise?: string;
       credit_budget?: number;
       token_budget?: number;
+      video_ratio?: "9:16" | "16:9";
     }) => {
       const { data } = await api.post<Project>("/api/projects", params);
       return data;

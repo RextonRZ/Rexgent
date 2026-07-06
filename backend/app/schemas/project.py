@@ -10,6 +10,7 @@ class ProjectCreate(BaseModel):
     premise: Optional[str] = None
     credit_budget: Optional[float] = None
     token_budget: Optional[int] = None
+    video_ratio: Optional[str] = None  # "9:16" (default) | "16:9"
 
 
 class BudgetEstimateRequest(BaseModel):
@@ -43,6 +44,7 @@ class ProjectResponse(BaseModel):
     poster_url: Optional[str] = None
     credit_budget: Optional[float] = None
     token_budget: Optional[int] = None
+    video_ratio: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

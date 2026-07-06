@@ -98,8 +98,22 @@ async def test_clip_records_reference_provenance_and_seed(monkeypatch):
     assert added.seed == gr.stable_seed("p1", "shot1")
     kwargs = runner.qwen.generate_video_happyhorse.await_args.kwargs
     assert kwargs["seed"] == added.seed
-    # every clip renders vertical — the short-drama delivery format
+    # vertical by default — the short-drama delivery format
     assert kwargs["ratio"] == "9:16"
+
+
+@pytest.mark.asyncio
+async def test_landscape_drama_renders_16_9(monkeypatch):
+    runner = make_runner()
+    runner._video_ratio = "16:9"  # the user picked landscape at creation
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    await runner._process_shot(job, make_shot(), {"Yuki": make_char()}, BIBLE, 1, None)
+    kwargs = runner.qwen.generate_video_happyhorse.await_args.kwargs
+    assert kwargs["ratio"] == "16:9"
 
 
 @pytest.mark.asyncio

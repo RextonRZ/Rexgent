@@ -27,7 +27,7 @@ MAX_RETRIES = 1           # at most one self-correcting re-render per shot (cost
 WAN_COST_PER_SEC = 0.15   # real Wan2.7 pricing (high end)
 HH_COST_PER_SEC = 0.108   # real HappyHorse-1.1 pricing (high end)
 BUDGET_CEILING_PCT = 0.85  # cost circuit breaker
-VIDEO_RATIO = "9:16"       # vertical short-drama delivery format
+VIDEO_RATIO = "9:16"       # default delivery format (per-drama override on Project)
 
 
 def stable_seed(project_id: str, shot_id) -> int:
@@ -113,6 +113,8 @@ class GenerationRunner:
         if project and project.credit_budget:
             self.breaker = CostCircuitBreaker(budget=float(project.credit_budget))
             self.budget_ceiling = self.breaker.ceiling
+        # Delivery format the user picked at creation (vertical by default).
+        self._video_ratio = (getattr(project, "video_ratio", None) or VIDEO_RATIO)
 
         shots = self._ordered_shots(job.project_id)
         characters = self.db.query(Character).filter(Character.project_id == job.project_id).all()
@@ -217,6 +219,7 @@ class GenerationRunner:
             r2.continuity = self.continuity
             r2.prompt_crafter = self.prompt_crafter
             r2.budget_ceiling = self.budget_ceiling
+            r2._video_ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
 
             job2 = db2.query(GenerationJob).filter(GenerationJob.id == self._job_id).first()
             if job2 is None:
@@ -311,16 +314,17 @@ class GenerationRunner:
 
         for attempt in range(MAX_RETRIES + 1):
             try:
+                ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
                 prompt = await self._craft_prompt(shot, char_by_name, scene_setting)
                 if is_wan:
                     task_id = await self.qwen.generate_video_wan(
                         prompt=prompt, duration=shot.estimated_duration_seconds,
-                        reference_media=ref_stack or None, seed=seed, ratio=VIDEO_RATIO)
+                        reference_media=ref_stack or None, seed=seed, ratio=ratio)
                 else:
                     task_id = await self.qwen.generate_video_happyhorse(
                         prompt=prompt, duration=shot.estimated_duration_seconds,
                         mode="r2v" if ref_stack else "t2v", reference_media=ref_stack or None,
-                        seed=seed, ratio=VIDEO_RATIO)
+                        seed=seed, ratio=ratio)
                 clip_url = await self.qwen.poll_video_task(task_id)
                 # DashScope URLs are signed and expire (~24h) — keep our own copy
                 clip_url = await asyncio.to_thread(

@@ -51,6 +51,8 @@ async def create_project(
         project.credit_budget = max(1.0, float(request.credit_budget))
     if request.token_budget is not None:
         project.token_budget = max(0, int(request.token_budget))
+    if request.video_ratio in ("9:16", "16:9"):
+        project.video_ratio = request.video_ratio
     db.add(project)
     db.commit()
     db.refresh(project)

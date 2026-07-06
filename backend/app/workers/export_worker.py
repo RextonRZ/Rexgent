@@ -160,9 +160,14 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             logger.error("Export: no segments could be downloaded; aborting")
             return
 
+        # The drama's delivery format (chosen at creation) sets the canvas.
+        from app.models.project import Project
+        project = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+        ratio = (getattr(project, "video_ratio", None) or "9:16")
+
         stitcher = VideoStitcher()
         final_local = os.path.join(workdir, "final.mp4")
-        stitcher.stitch(stitch_inputs, final_local)
+        stitcher.stitch(stitch_inputs, final_local, ratio=ratio)
 
         # ── Dialogue placement: each line aligned to the shot that speaks it ──
         dialogue_segments: list = []

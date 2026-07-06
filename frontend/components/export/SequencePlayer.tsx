@@ -15,20 +15,28 @@ export interface TimelineItem {
   external?: boolean; // imported media (not a generated clip)
 }
 
-/** Plays the timeline clips back-to-back, respecting each clip's trim. */
+/** Plays the timeline clips back-to-back, respecting each clip's trim.
+ * The frame follows the drama's delivery format (vertical phone frame by
+ * default; widescreen when the drama was created 16:9). */
 export function SequencePlayer({
   items,
   index,
   onIndexChange,
   onDuration,
   onProgress,
+  ratio = "9:16",
 }: {
   items: TimelineItem[];
   index: number;
   onIndexChange: (i: number) => void;
   onDuration?: (index: number, seconds: number) => void;
   onProgress?: (index: number, currentTime: number) => void;
+  ratio?: "9:16" | "16:9";
 }) {
+  const frameClass =
+    ratio === "16:9"
+      ? "relative aspect-video w-full overflow-hidden rounded-2xl border hairline bg-black"
+      : "relative mx-auto aspect-[9/16] w-full max-w-[360px] overflow-hidden rounded-2xl border hairline bg-black";
   const ref = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
 
@@ -79,7 +87,13 @@ export function SequencePlayer({
 
   if (!current) {
     return (
-      <div className="mx-auto aspect-[9/16] w-full max-w-[360px] rounded-2xl border hairline bg-black/60 flex items-center justify-center px-6 text-center text-sm text-muted-foreground">
+      <div
+        className={
+          ratio === "16:9"
+            ? "aspect-video w-full rounded-2xl border hairline bg-black/60 flex items-center justify-center text-sm text-muted-foreground"
+            : "mx-auto aspect-[9/16] w-full max-w-[360px] rounded-2xl border hairline bg-black/60 flex items-center justify-center px-6 text-center text-sm text-muted-foreground"
+        }
+      >
         Add clips to the timeline to preview your cut.
       </div>
     );
@@ -87,8 +101,8 @@ export function SequencePlayer({
 
   return (
     <div className="space-y-2">
-      {/* vertical 9:16 frame — the episode plays the way it ships */}
-      <div className="relative mx-auto aspect-[9/16] w-full max-w-[360px] overflow-hidden rounded-2xl border hairline bg-black">
+      {/* the episode plays the way it ships */}
+      <div className={frameClass}>
         <video
           ref={ref}
           className="h-full w-full object-contain"

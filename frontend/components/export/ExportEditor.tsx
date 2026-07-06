@@ -13,6 +13,7 @@ import { MediaBin, type MediaAsset } from "./MediaBin";
 import { ClipEditModal } from "./ClipEditModal";
 import { useLatestJob } from "@/hooks/useGeneration";
 import { useLatestJobClips } from "@/hooks/useClips";
+import { useProject } from "@/hooks/useProjects";
 import { useStoryboard } from "@/hooks/useStoryboard";
 import {
   useRenderExport,
@@ -42,6 +43,7 @@ function buildClipsByShot(clips: GeneratedClip[]): Record<string, GeneratedClip[
 
 export function ExportEditor({ projectId }: { projectId: string }) {
   const latestJob = useLatestJob(projectId);
+  const { data: project } = useProject(projectId);
   const storyboard = useStoryboard(projectId);
   const clipsQuery = useLatestJobClips(projectId);
   const render = useRenderExport();
@@ -290,6 +292,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
             onIndexChange={selectClip}
             onDuration={handleDuration}
             onProgress={handleProgress}
+            ratio={project?.video_ratio === "16:9" ? "16:9" : "9:16"}
           />
         </div>
         <ShotLibrary

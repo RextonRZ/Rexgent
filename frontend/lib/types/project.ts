@@ -1,3 +1,5 @@
+export type VideoRatio = "9:16" | "16:9";
+
 export interface Project {
   id: string;
   title: string;
@@ -7,6 +9,7 @@ export interface Project {
   poster_url: string | null;
   credit_budget: number | null;
   token_budget: number | null;
+  video_ratio?: VideoRatio | null;
   created_at: string;
   updated_at: string;
 }
@@ -17,6 +20,7 @@ export interface ProjectCreate {
   premise?: string;
   credit_budget?: number;
   token_budget?: number;
+  video_ratio?: VideoRatio;
 }
 
 export interface BudgetEstimate {

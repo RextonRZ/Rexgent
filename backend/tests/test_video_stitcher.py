@@ -2,10 +2,13 @@ from unittest.mock import patch
 from app.services.video_stitcher import VideoStitcher
 
 
-def test_normalise_canvas_is_vertical_9_16():
-    # the delivery format: portrait 1080x1920, mixed sources letterboxed in
-    assert "scale=1080:1920" in VideoStitcher._NORM_VF
-    assert "pad=1080:1920" in VideoStitcher._NORM_VF
+def test_normalise_canvas_follows_delivery_format():
+    # vertical by default; landscape when the drama was created 16:9
+    assert "scale=1080:1920" in VideoStitcher._vf_for("9:16")
+    assert "pad=1080:1920" in VideoStitcher._vf_for("9:16")
+    assert "scale=1920:1080" in VideoStitcher._vf_for("16:9")
+    # unknown ratios fall back to the vertical default
+    assert "scale=1080:1920" in VideoStitcher._vf_for("weird")
 
 
 def test_burn_subtitles_styles_and_reencodes():

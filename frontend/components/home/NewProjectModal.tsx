@@ -46,6 +46,7 @@ export function NewProjectModal({
   const [premise, setPremise] = useState("");
   const [genre, setGenre] = useState("sci-fi");
   const [mode, setMode] = useState<"auto" | "guided">("auto");
+  const [ratio, setRatio] = useState<"9:16" | "16:9">("9:16");
   const [episodes, setEpisodes] = useState(1);
   const [length, setLength] = useState(30);
   const [budgetOverride, setBudgetOverride] = useState<number | null>(null);
@@ -83,6 +84,7 @@ export function NewProjectModal({
       premise,
       credit_budget: budget,
       token_budget: estimate?.llm_tokens,
+      video_ratio: ratio,
     });
     router.push(
       `/projects/${project.id}/script?mode=${mode}&ep=${episodes}&len=${length}`
@@ -126,6 +128,27 @@ export function NewProjectModal({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* delivery format: drives generation ratio, export canvas, player */}
+          <div>
+            <Label className="text-xs text-muted-foreground">Format</Label>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              <FormatCard
+                active={ratio === "9:16"}
+                onClick={() => setRatio("9:16")}
+                title="9:16 Vertical"
+                desc="Short drama for phones. Recommended."
+                frameClass="h-7 w-4"
+              />
+              <FormatCard
+                active={ratio === "16:9"}
+                onClick={() => setRatio("16:9")}
+                title="16:9 Landscape"
+                desc="Widescreen for desktop and TV."
+                frameClass="h-4 w-7"
+              />
+            </div>
           </div>
 
           {/* scope */}
@@ -261,6 +284,44 @@ export function NewProjectModal({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function FormatCard({
+  active,
+  onClick,
+  title,
+  desc,
+  frameClass,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  desc: string;
+  frameClass: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2.5 rounded-lg border p-2.5 text-left transition-all",
+        active
+          ? "border-primary bg-primary/10"
+          : "border-border hover:border-primary/40"
+      )}
+    >
+      <span
+        className={cn(
+          "shrink-0 rounded-[3px] border",
+          frameClass,
+          active ? "border-primary bg-primary/25" : "border-muted-foreground/50"
+        )}
+      />
+      <span>
+        <span className="block text-xs font-semibold">{title}</span>
+        <span className="block text-[10px] text-muted-foreground">{desc}</span>
+      </span>
+    </button>
   );
 }
 

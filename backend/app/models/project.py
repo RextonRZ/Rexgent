@@ -21,6 +21,8 @@ class Project(Base):
     # LLM allowance, shown as a target.
     credit_budget = Column(Float, default=40.0)
     token_budget = Column(Integer, default=2_000_000)
+    # delivery format chosen at creation: "9:16" (vertical, default) or "16:9"
+    video_ratio = Column(String(8), default="9:16")
     auto_approve_casting = Column(Boolean, default=False)
     auto_clarify = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -4,24 +4,26 @@ import os
 
 
 class VideoStitcher:
-    # Common canvas so clips of any source resolution concatenate cleanly.
-    # VERTICAL 9:16 — the short-drama delivery format. Legacy landscape clips
-    # letterbox onto the portrait canvas instead of breaking the concat.
-    _NORM_VF = (
-        "scale=1080:1920:force_original_aspect_ratio=decrease,"
-        "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,fps=24,format=yuv420p"
-    )
+    # Canvas per delivery format; clips of any source resolution letterbox
+    # onto it instead of breaking the concat.
+    _CANVAS = {"9:16": (1080, 1920), "16:9": (1920, 1080)}
 
-    def stitch(self, clips: list, output_path: str) -> str:
+    @classmethod
+    def _vf_for(cls, ratio: str) -> str:
+        w, h = cls._CANVAS.get(ratio, cls._CANVAS["9:16"])
+        return (f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,fps=24,format=yuv420p")
+
+    def stitch(self, clips: list, output_path: str, ratio: str = "9:16") -> str:
         """Concatenate clips into one MP4.
 
         `clips` is a list of paths (str) or dicts
         {"path": str, "in": float|None, "out": float|None} for per-clip trim.
-        Each clip is first normalised to a common 1080x1920/24fps vertical
-        canvas (and trimmed), so mixed-resolution / imported media join
-        cleanly; the normalised parts are then concatenated with a stream
-        copy. Audio is dropped (captions are burned + shipped as an .srt;
-        dialogue and music are mixed later).
+        Each clip is first normalised to the drama's delivery canvas
+        (vertical 1080x1920 by default) at 24fps (and trimmed), so
+        mixed-resolution / imported media join cleanly; the normalised parts
+        are then concatenated with a stream copy. Audio is dropped (captions
+        are burned + shipped as an .srt; dialogue and music are mixed later).
         """
         norm_dir = tempfile.mkdtemp()
         norm_paths = []
@@ -40,7 +42,7 @@ class VideoStitcher:
                 if dur > 0:
                     cmd += ["-t", f"{dur:.3f}"]
             cmd += [
-                "-vf", self._NORM_VF,
+                "-vf", self._vf_for(ratio),
                 "-c:v", "libx264", "-crf", "20", "-an", norm,
             ]
             proc = subprocess.run(cmd, capture_output=True, text=True)
