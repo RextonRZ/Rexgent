@@ -107,6 +107,49 @@ def test_long_line_never_overlaps_the_next_line():
     assert start["reply"] == 7.2  # waits for the long line + gap, not 5.0
 
 
+def test_deferred_shot_missing_from_cut_does_not_shift_voices():
+    # storyboard had 3 shots but shot 2 was deferred (never rendered): the cut
+    # plan simply doesn't contain it, so the scene-2 line anchors to the REAL
+    # video time (5s), not the storyboard's phantom 10s
+    cut_plan = [
+        {"scene_number": 1, "shots": [{"duration": 5.0, "has_dialogue": False}]},
+        # deferred 5s shot absent
+        {"scene_number": 2, "shots": [{"duration": 5.0, "has_dialogue": True}]},
+    ]
+    rows = [{"scene_number": 2, "line_index": 0, "audio_path": "a", "duration": 2.0}]
+    segs = place_dialogue(rows, cut_plan)
+    assert segs[0]["start"] == 5.0
+
+
+def test_imported_media_pushes_dialogue_by_real_screen_time():
+    # an imported intro (no scene) plays first — the voice waits for it
+    cut_plan = [
+        {"scene_number": None, "shots": [{"duration": 3.5, "has_dialogue": False}]},
+        {"scene_number": 1, "shots": [{"duration": 5.0, "has_dialogue": True}]},
+    ]
+    rows = [{"scene_number": 1, "line_index": 0, "audio_path": "a", "duration": 2.0}]
+    assert place_dialogue(rows, cut_plan)[0]["start"] == 3.5
+
+
+def test_scene_split_across_cut_groups_merges_not_overwrites():
+    # editor re-ordered the cut so scene 1 appears twice around scene 2: its
+    # speaking shots merge into one offsets list and lines place exactly once
+    cut_plan = [
+        {"scene_number": 1, "shots": [{"duration": 5.0, "has_dialogue": True}]},
+        {"scene_number": 2, "shots": [{"duration": 5.0, "has_dialogue": False}]},
+        {"scene_number": 1, "shots": [{"duration": 5.0, "has_dialogue": True}]},
+    ]
+    rows = [
+        {"scene_number": 1, "line_index": 0, "audio_path": "l0", "duration": 2.0},
+        {"scene_number": 1, "line_index": 1, "audio_path": "l1", "duration": 2.0},
+    ]
+    segs = place_dialogue(rows, cut_plan)
+    assert len(segs) == 2  # placed once, not once per group
+    start = {p["audio_path"]: p["start"] for p in segs}
+    assert start["l0"] == 0.0
+    assert start["l1"] == 10.0  # the second scene-1 group, at its real time
+
+
 def test_fitting_shots_restores_picture_sync():
     # once the shot is fitted to 10s (audio-first), the reply lands back on its
     # own shot's start — no waiting, no overlap.

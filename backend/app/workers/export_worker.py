@@ -50,6 +50,26 @@ def build_dialogue_segments(line_rows, scene_plan):
     return place_dialogue(rows, scene_plan)
 
 
+def build_cut_plan(entries: list[dict]) -> list[dict]:
+    """Fold the ACTUAL export cut — ordered chunks with real (probed)
+    durations — into the scene_plan shape place_dialogue consumes.
+    entries: [{scene_number|None, duration, has_dialogue}] in cut order.
+    Consecutive same-scene chunks merge into one group; imported media
+    (scene_number None) rides along as silent screen time. Building the
+    timeline from the cut instead of the storyboard is what keeps voices on
+    their pictures when a shot was deferred, failed, trimmed, or footage was
+    imported."""
+    plan: list[dict] = []
+    for e in entries:
+        shot = {"duration": float(e.get("duration") or 0.0),
+                "has_dialogue": bool(e.get("has_dialogue"))}
+        if plan and plan[-1]["scene_number"] == e.get("scene_number"):
+            plan[-1]["shots"].append(shot)
+        else:
+            plan.append({"scene_number": e.get("scene_number"), "shots": [shot]})
+    return plan
+
+
 def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers,
                                    script_line_keys=None) -> set:
     """Names whose dialogue audio no longer matches casting: their lines were
@@ -173,16 +193,11 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         oss = OSSManager(get_settings())
         caption_gen = CaptionGenerator()
 
-        clips_with_dialogue = []
         duration_by_clip = {}
         for clip in clips_for_export:
             shot = db.query(Shot).filter(Shot.id == clip.shot_id).first()
-            dur = shot.estimated_duration_seconds if shot else 5
-            clips_with_dialogue.append({
-                "dialogue": shot.dialogue if shot else None,
-                "duration": dur,
-            })
-            duration_by_clip[str(clip.id)] = dur
+            duration_by_clip[str(clip.id)] = (
+                shot.estimated_duration_seconds if shot else 5)
 
         # Production report (token fields populated by Phase 5 token tracking)
         wall_minutes = (
@@ -211,17 +226,25 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         # audio is muted — the model fakes its own speech on those, which
         # would murmur under the real TTS voices; scenery shots keep their
         # ambience. Imported media is never muted.
-        speaking_shots = {
-            str(s.id) for s in
-            db.query(Shot).filter(Shot.id.in_([c.shot_id for c in clips_for_export])).all()
-            if (s.dialogue or "").strip()
-        }
+        from app.models.script import Scene
+        shot_meta: dict = {}
+        if clips_for_export:
+            for s, scene_no in (db.query(Shot, Scene.number)
+                                .join(Scene, Shot.scene_id == Scene.id)
+                                .filter(Shot.id.in_([c.shot_id for c in clips_for_export]))
+                                .all()):
+                shot_meta[str(s.id)] = {"scene": scene_no,
+                                        "dialogue": (s.dialogue or "").strip()}
         _stage(project_id, "update", f"Fetching {len(resolved)} segment(s)")
         workdir = tempfile.mkdtemp()
         stitch_inputs = []
+        # the ACTUAL cut, chunk by chunk, with REAL durations — dialogue and
+        # captions are placed on this, not on the storyboard's estimates
+        cut_entries: list = []
         for i, seg in enumerate(resolved):
             local = os.path.join(workdir, f"seg_{i:03d}.mp4")
-            mute = bool(seg["clip"] and str(seg["clip"].shot_id) in speaking_shots)
+            meta = shot_meta.get(str(seg["clip"].shot_id)) if seg["clip"] else None
+            mute = bool(meta and meta["dialogue"])
             try:
                 resp = httpx.get(seg["url"], timeout=180.0)
                 resp.raise_for_status()
@@ -229,6 +252,23 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     fh.write(resp.content)
                 stitch_inputs.append({"path": local, "in": seg["in"], "out": seg["out"],
                                       "mute": mute})
+                # what this chunk really contributes to the final timeline
+                probed = VideoStitcher._duration(local)
+                tin = float(seg["in"] or 0.0)
+                if seg["out"] is not None:
+                    eff = float(seg["out"]) - tin
+                    if probed > 0:
+                        eff = min(eff, max(0.0, probed - tin))
+                elif probed > 0:
+                    eff = max(0.0, probed - tin)
+                else:  # probe failed — fall back to the storyboard estimate
+                    eff = duration_by_clip.get(str(seg["clip"].id), 5) if seg["clip"] else 5
+                cut_entries.append({
+                    "scene_number": meta["scene"] if meta else None,
+                    "duration": eff,
+                    "has_dialogue": bool(meta and meta["dialogue"]),
+                    "text": meta["dialogue"] if meta else None,
+                })
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: could not download {seg['url']}: {e}")
 
@@ -264,34 +304,19 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 bgm_local = None
                 logger.warning(f"Export: music download failed: {e}")
 
-        # ── Dialogue placement: each line aligned to the shot that speaks it ──
+        # ── Dialogue placement: each line aligned to the shot that speaks it.
+        # The timeline comes from the ACTUAL cut (probed chunk durations, in
+        # stitch order) — never from the storyboard, which still lists shots
+        # that were deferred, failed, trimmed, or preceded by imported media. ──
         dialogue_segments: list = []
         try:
-            from app.models.script import Script, Scene
-
             # Make sure voice lines exist before we try to place them.
             tool_event(project_id, "export", "synth_voices", "started", agent="Audio Mixer")
             _ensure_voice_lines(db, project_id)
             tool_event(project_id, "export", "synth_voices", "succeeded", agent="Audio Mixer",
                        artifact="voices match casting")
 
-            script = (db.query(Script).filter(Script.project_id == uuid.UUID(project_id))
-                      .order_by(Script.created_at.desc()).first())
-            # Per-scene shot layout (duration + which shots carry dialogue) so voice
-            # lines land on the matching picture.
-            scene_plan = []
-            if script:
-                scenes = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
-                for s in scenes:
-                    sh = db.query(Shot).filter(Shot.scene_id == s.id).order_by(Shot.number).all()
-                    scene_plan.append({
-                        "scene_number": s.number,
-                        "shots": [
-                            {"duration": x.estimated_duration_seconds or 5,
-                             "has_dialogue": bool((x.dialogue or "").strip())}
-                            for x in sh
-                        ],
-                    })
+            scene_plan = build_cut_plan(cut_entries)
             line_rows = []
             for row in db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(project_id)).all():
                 if not row.audio_url:
@@ -319,8 +344,12 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         srt_url = None
         try:
             spoken = [s for s in dialogue_segments if s.get("text")]
+            # fallback captions (no voice lines) time by the CUT's real chunk
+            # durations, so they stay on-picture like the voices would
+            cut_captions = [{"dialogue": e.get("text"), "duration": e["duration"]}
+                            for e in cut_entries]
             srt = (caption_gen.generate_srt_from_segments(spoken) if spoken
-                   else caption_gen.generate_srt(clips_with_dialogue))
+                   else caption_gen.generate_srt(cut_captions))
             if srt.strip():
                 srt_path = os.path.join(workdir, "captions.srt")
                 with open(srt_path, "w", encoding="utf-8") as f:

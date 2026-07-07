@@ -19,27 +19,30 @@ def assemble_scene_segment(lines: list[dict], scene_offset: float, gap: float = 
 def scene_global_offsets(scene_plan: list[dict]) -> dict[int, float]:
     """Global start (seconds) of each scene = sum of all prior scenes' shot
     durations. This is the reliable anchor for a scene's dialogue even when no
-    individual shot is tagged as speaking."""
+    individual shot is tagged as speaking. With repeated scene groups the
+    FIRST appearance anchors the scene."""
     offs: dict[int, float] = {}
     t = 0.0
     for scene in scene_plan:
-        offs[scene["scene_number"]] = round(t, 3)
+        if scene["scene_number"] not in offs:
+            offs[scene["scene_number"]] = round(t, 3)
         t += sum(float(s.get("duration") or 0.0) for s in scene.get("shots", []))
     return offs
 
 
 def dialogue_shot_offsets(scene_plan: list[dict]) -> dict[int, list[float]]:
     """Global start (seconds) of each dialogue-bearing shot, per scene.
-    scene_plan: ordered [{scene_number, shots: [{duration, has_dialogue}]}]."""
+    scene_plan: ordered [{scene_number, shots: [{duration, has_dialogue}]}].
+    A scene may appear in several non-contiguous groups (a cut re-ordered in
+    the editor) — its starts MERGE instead of the last group winning."""
     offs: dict[int, list[float]] = {}
     t = 0.0
     for scene in scene_plan:
-        starts = []
+        starts = offs.setdefault(scene["scene_number"], [])
         for shot in scene.get("shots", []):
             if shot.get("has_dialogue"):
                 starts.append(round(t, 3))
             t += float(shot.get("duration") or 0.0)
-        offs[scene["scene_number"]] = starts
     return offs
 
 
@@ -56,8 +59,14 @@ def place_dialogue(line_rows: list[dict], scene_plan: list[dict], gap: float = 0
         by_scene.setdefault(r["scene_number"], []).append(r)
 
     out = []
+    seen: set = set()
     for scene in scene_plan:
         n = scene["scene_number"]
+        # a scene split across several cut groups is placed ONCE, on its
+        # merged offsets — not re-placed per group
+        if n in seen:
+            continue
+        seen.add(n)
         lines = by_scene.get(n, [])
         starts = offs.get(n, [])
         # never fall back to 0.0: if no shot in this scene is tagged as
