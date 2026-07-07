@@ -134,10 +134,11 @@ export function AutoRunPanel({
       </CardHeader>
       <CardContent className="px-6 space-y-5">
         <p className="text-sm text-muted-foreground">
-          The agent autonomously writes the script, judges it (and self-corrects
-          if weak), extracts characters, storyboards, and allocates the budget —
-          then hands you a plan to review. No voucher is spent until you start
-          generation on the Generate tab.
+          The agent writes the script, judges it (rewriting weak drafts),
+          extracts characters, storyboards, and allocates the budget, then
+          hands you a plan to review. Planning itself costs a few cents of AI
+          writing; your voucher only goes to plates, voices and video after
+          you choose to generate.
         </p>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -277,7 +278,7 @@ export function AutoRunPanel({
             {estScenes} scenes · ~{estShots} shots at this length.
           </p>
           <p>
-            Scripting is cheap — this drama&apos;s{" "}
+            Scripting costs cents. This drama&apos;s{" "}
             <span className="text-foreground">${cap.toFixed(0)}</span> cap limits
             how much <em>video</em> renders, not how long you write. A bigger
             story renders as more, shorter shots; the agent tiers premium
@@ -308,7 +309,7 @@ export function AutoRunPanel({
           <span className="mt-0.5 block text-[11px] text-muted-foreground">
             {fullAuto
               ? `Casts, voices, renders and exports the episode automatically under the $${cap.toFixed(0)} cap. This spends your voucher.`
-              : "Off: the agent plans everything but spends nothing until you press generate."}
+              : "Off: plan only. A few cents of AI writing; plates, voices and video wait until you choose."}
           </span>
         </button>
 
@@ -323,7 +324,7 @@ export function AutoRunPanel({
               : "Planning…"
             : fullAuto
             ? "Produce my episode (spends voucher)"
-            : "Plan my drama (no spend)"}
+            : "Plan my drama (no video spend)"}
         </Button>
 
         {trace.length > 0 && (
@@ -341,7 +342,9 @@ export function AutoRunPanel({
 
         {result && (
           <div className="border-t pt-3 text-sm space-y-2">
-            <p className="font-medium">✓ Plan ready</p>
+            <p className="font-medium">
+              {fullAuto ? "✓ Episode in production" : "✓ Plan ready"}
+            </p>
             {result.judgement && (
               <p>
                 Quality:{" "}
@@ -366,15 +369,31 @@ export function AutoRunPanel({
                 {result.budget.happyhorse_shots} HappyHorse
               </p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Nothing spent yet. Review the script, cast and storyboard — then
-              generate when you&apos;re ready.
-            </p>
+            {fullAuto ? (
+              <p className="text-xs text-muted-foreground">
+                Plates, voices and video are rendering automatically. Watch
+                progress on the Generate step.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Script, cast and storyboard are done; no need to extract
+                anything again. Two clicks remain: Generate Plates on the
+                Characters step locks each face and voice, then Start
+                generation renders the video. Those two are what spend your
+                voucher.
+              </p>
+            )}
             <Button
-              onClick={() => router.push(`/projects/${projectId}/generate`)}
+              onClick={() =>
+                router.push(
+                  `/projects/${projectId}/${fullAuto ? "generate" : "characters"}`
+                )
+              }
               className="w-full glow"
             >
-              Review &amp; generate →
+              {fullAuto
+                ? "Watch it render →"
+                : "Review cast & generate plates →"}
             </Button>
           </div>
         )}
