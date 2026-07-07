@@ -21,13 +21,12 @@ import { useLedger } from "@/hooks/useLedger";
 import { useProjectProgress } from "@/hooks/useProjectProgress";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import {
-  RAW_TO_STAGE,
   STAGE_LABELS,
   STAGE_ORDER,
   ensureLiveRun,
+  mapActiveByStage,
   useLiveRunStore,
   useRunningStages,
-  type RunningStage,
   type StageKey,
   type TrailEntry,
 } from "@/hooks/useLiveRun";
@@ -83,6 +82,120 @@ function TrailIcon({ kind }: { kind: TrailEntry["kind"] }) {
   return <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-zinc-600" />;
 }
 
+/** Compact crew view for the dock column — same store, same stages, at a
+ * glance. The full node-graph modal opens from its footer button. */
+export function CrewDockPanel({
+  projectId,
+  onOpenFull,
+}: {
+  projectId: string;
+  onOpenFull: () => void;
+}) {
+  const reduced = useReducedMotion();
+  const progress = useProjectProgress(projectId);
+  const running = useRunningStages(projectId);
+  const failed = useLiveRunStore((s) => s.failed);
+  const activeByStage = useMemo(() => mapActiveByStage(running), [running]);
+
+  const activeKeys = STAGE_ORDER.filter((k) => activeByStage[k]);
+  const doneCount = progress
+    ? STAGE_ORDER.filter((k) => progress[k]).length
+    : 0;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="relative flex h-2 w-2 shrink-0">
+          {activeKeys.length ? (
+            <>
+              <span className="absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-60 motion-safe:animate-ping" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-400" />
+            </>
+          ) : (
+            <span className="inline-flex h-2 w-2 rounded-full bg-zinc-600" />
+          )}
+        </span>
+        {activeKeys.length
+          ? `Crew working · ${activeKeys.map((k) => STAGE_LABELS[k]).join(" + ")}`
+          : `Crew idle · ${doneCount}/${STAGE_ORDER.length} done`}
+      </p>
+
+      {STAGE_ORDER.map((key) => {
+        const live = activeByStage[key];
+        const st: StageStatus = live
+          ? "active"
+          : failed[key]
+            ? "failed"
+            : progress?.[key]
+              ? "done"
+              : "pending";
+        const Icon = STAGE_ICONS[key];
+        return (
+          <div key={key} className="flex items-center gap-2.5 px-1 py-1">
+            <span
+              className={cn(
+                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
+                st === "active" &&
+                  "border-violet-400/60 bg-violet-500/15 text-violet-200",
+                st === "done" && "border-ok/40 bg-ok/10 text-ok",
+                st === "failed" &&
+                  "border-amber-400/50 bg-amber-500/10 text-amber-300",
+                st === "pending" && "border-white/10 bg-zinc-900 text-zinc-600"
+              )}
+            >
+              {st === "done" ? (
+                <Check className="size-3" />
+              ) : (
+                <Icon className="size-3" />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p
+                className={cn(
+                  "text-xs font-medium",
+                  st === "active"
+                    ? "text-violet-200"
+                    : st === "done"
+                      ? "text-zinc-300"
+                      : st === "failed"
+                        ? "text-amber-300"
+                        : "text-zinc-600"
+                )}
+              >
+                {STAGE_LABELS[key]}
+              </p>
+              {live && (
+                <p className="truncate text-[10px] text-muted-foreground">
+                  {live.agent}: {live.label}
+                  {live.index && live.total ? ` · ${live.index}/${live.total}` : ""}
+                </p>
+              )}
+              {!live && failed[key] && (
+                <p className="truncate text-[10px] text-amber-300/80">
+                  {failed[key]}
+                </p>
+              )}
+            </div>
+            {st === "active" &&
+              (reduced ? (
+                <span className="h-2 w-2 shrink-0 rounded-full bg-violet-400" />
+              ) : (
+                <Loader2 className="size-3.5 shrink-0 animate-spin text-violet-300" />
+              ))}
+          </div>
+        );
+      })}
+
+      <button
+        onClick={onOpenFull}
+        className="mt-2 w-full rounded-lg border hairline py-1.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      >
+        Open full pipeline →
+      </button>
+    </div>
+  );
+}
+
 export function CrewModal({
   projectId,
   open,
@@ -117,15 +230,7 @@ function CrewModalBody({ projectId }: { projectId: string }) {
     ensureLiveRun(projectId);
   }, [projectId]);
 
-  // one live entry per pipeline stage (relationships fold under characters)
-  const activeByStage = useMemo(() => {
-    const map: Partial<Record<StageKey, RunningStage>> = {};
-    for (const r of running) {
-      const k = RAW_TO_STAGE[r.stage];
-      if (k && !map[k]) map[k] = r;
-    }
-    return map;
-  }, [running]);
+  const activeByStage = useMemo(() => mapActiveByStage(running), [running]);
 
   const statusOf = (key: StageKey): StageStatus => {
     if (activeByStage[key]) return "active";

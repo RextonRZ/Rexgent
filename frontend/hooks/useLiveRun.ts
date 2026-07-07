@@ -370,6 +370,18 @@ export function ensureLiveRun(projectId: string) {
   });
 }
 
+/** One live entry per pipeline stage (relationships fold under Characters). */
+export function mapActiveByStage(
+  running: RunningStage[]
+): Partial<Record<StageKey, RunningStage>> {
+  const map: Partial<Record<StageKey, RunningStage>> = {};
+  for (const r of running) {
+    const k = RAW_TO_STAGE[r.stage];
+    if (k && !map[k]) map[k] = r;
+  }
+  return map;
+}
+
 /** Live "who is working right now" — the shared store behind every surface. */
 export function useRunningStages(projectId: string): RunningStage[] {
   useEffect(() => {
