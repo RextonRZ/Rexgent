@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -12,6 +12,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { cn } from "@/lib/utils";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 
 /** ── chart primitives for the usage dashboard ────────────────────────────
  * Colors are validator-checked against the card surface (#12101c):
@@ -19,10 +21,15 @@ import {
  *   dark = premium) — the routing story reads straight off the lightness;
  * - nominal magnitude bars (categories, dramas) wear one hue, slot-1 violet;
  * - marks stay thin, gaps do the separating, text wears text tokens.
+ * Tooltip chrome matches the Studio stats TIP style app-wide.
  */
 
 export const TIER_RAMP = ["#ddd6fe", "#a78bfa", "#8b5cf6", "#7c3aed", "#5b21b6"];
 export const BAR_HUE = "#8b5cf6";
+
+/** Shared dark tooltip chrome — same as Studio stats. */
+const TIP =
+  "pointer-events-none whitespace-nowrap rounded-md border border-white/10 bg-[#161122] px-2.5 py-1.5 shadow-lg";
 
 export const fmtTokens = (n: number) =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${Math.round(n / 1_000)}K` : String(n);
@@ -32,6 +39,17 @@ export const fmtUsd = (n: number) =>
 
 export const fmtPct = (p: number) => `${Math.round(p * 100)}%`;
 
+/** Once-on-mount reveal: children scale in from the left (the "filling" read). */
+function useMountReveal(reduced: boolean) {
+  const [ready, setReady] = useState(reduced);
+  useEffect(() => {
+    if (reduced) return;
+    const raf = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(raf);
+  }, [reduced]);
+  return ready;
+}
+
 export interface TierSegment {
   key: string;
   label: string;
@@ -40,8 +58,11 @@ export interface TierSegment {
   usd: number;
 }
 
-/** Horizontal 100% stacked bar: the five LLM tiers, cheap → premium. */
+/** The showpiece: a horizontal 100% stacked bar of the five LLM tiers,
+ * cheap → premium, filling left→right on mount, cross-highlighted on hover. */
 export function TierSplitBar({ segments }: { segments: TierSegment[] }) {
+  const reduced = useReducedMotion();
+  const ready = useMountReveal(reduced);
   const [hover, setHover] = useState<string | null>(null);
   const total = segments.reduce((s, x) => s + x.value, 0);
   if (!total) {
@@ -50,33 +71,49 @@ export function TierSplitBar({ segments }: { segments: TierSegment[] }) {
   const dimmed = (key: string) => hover !== null && hover !== key;
   return (
     <div>
-      <div className="flex h-9 w-full gap-[2px] overflow-hidden rounded-lg">
+      <div
+        className="flex h-10 w-full origin-left gap-[2px] overflow-visible transition-transform duration-700 ease-out motion-reduce:transition-none"
+        style={{ transform: ready ? "scaleX(1)" : "scaleX(0)" }}
+      >
         {segments.map((s, i) =>
           s.value <= 0 ? null : (
             <div
               key={s.key}
               onMouseEnter={() => setHover(s.key)}
               onMouseLeave={() => setHover(null)}
-              className="group relative flex items-center justify-center transition-opacity duration-150 motion-reduce:transition-none"
+              className={cn(
+                "group relative flex items-center justify-center rounded-[4px] transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+                !dimmed(s.key) && hover === s.key && "motion-safe:-translate-y-[1px]"
+              )}
               style={{
                 width: `${(s.value / total) * 100}%`,
                 background: TIER_RAMP[i],
-                opacity: dimmed(s.key) ? 0.3 : 1,
-                minWidth: 3,
+                opacity: dimmed(s.key) ? 0.25 : 1,
+                minWidth: 4,
+                boxShadow:
+                  hover === s.key ? `0 0 18px ${TIER_RAMP[i]}55` : undefined,
               }}
             >
               {s.value / total >= 0.12 && (
                 <span
-                  className="pointer-events-none truncate px-1 font-mono text-[10px] font-medium"
-                  style={{ color: i < 2 ? "#1c1633" : "#f4f1ff" }}
+                  className="pointer-events-none truncate px-1 font-mono text-[10px] font-medium transition-opacity delay-500 duration-300 motion-reduce:transition-none"
+                  style={{
+                    color: i < 2 ? "#1c1633" : "#f4f1ff",
+                    opacity: ready ? 1 : 0,
+                  }}
                 >
                   {fmtPct(s.value / total)}
                 </span>
               )}
-              {/* tooltip: exact value + share */}
-              <div className="pointer-events-none absolute -top-1 left-1/2 z-10 hidden -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-white/10 bg-[#181327] px-2.5 py-1.5 text-left shadow-xl group-hover:block">
+              {/* tooltip: model + role + exact tokens + share */}
+              <div
+                className={cn(
+                  TIP,
+                  "absolute -top-1.5 left-1/2 z-10 hidden -translate-x-1/2 -translate-y-full text-left group-hover:block"
+                )}
+              >
                 <p className="font-mono text-[10px] text-zinc-200">{s.label}</p>
-                <p className="text-[10px] text-zinc-400">{s.role}</p>
+                <p className="text-[10px] text-zinc-500">{s.role}</p>
                 <p className="text-[10px] tabular-nums text-zinc-300">
                   {fmtTokens(s.value)} tokens · {fmtPct(s.value / total)} · {fmtUsd(s.usd)}
                 </p>
@@ -86,14 +123,14 @@ export function TierSplitBar({ segments }: { segments: TierSegment[] }) {
         )}
       </div>
       {/* legend: identity never rides on color alone */}
-      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
         {segments.map((s, i) => (
           <button
             key={s.key}
             onMouseEnter={() => setHover(s.key)}
             onMouseLeave={() => setHover(null)}
             className="flex items-center gap-1.5 text-left transition-opacity duration-150 motion-reduce:transition-none"
-            style={{ opacity: dimmed(s.key) ? 0.4 : 1 }}
+            style={{ opacity: dimmed(s.key) ? 0.35 : 1 }}
           >
             <span
               className="h-2.5 w-2.5 shrink-0 rounded-sm"
@@ -115,44 +152,119 @@ export interface RankedRow {
   sub?: string;
 }
 
-/** Nominal magnitude rows: one series, one hue, values right-aligned. */
+/** Nominal magnitude rows: one series, one hue. Hovering a row dims the
+ * others and raises a tooltip with the exact value + share of total. */
 export function RankedBars({ rows }: { rows: RankedRow[] }) {
+  const reduced = useReducedMotion();
+  const ready = useMountReveal(reduced);
+  const [hover, setHover] = useState<string | null>(null);
   const max = Math.max(...rows.map((r) => r.value), 0);
+  const total = rows.reduce((s, r) => s + r.value, 0);
   if (!rows.length || max <= 0) {
     return <p className="text-xs text-zinc-500">Nothing in this range.</p>;
   }
   return (
-    <div className="space-y-2">
-      {rows.map((r) => (
-        <div key={r.label} className="group" title={`${r.label}: ${r.display}`}>
-          <div className="mb-1 flex items-baseline justify-between gap-3">
-            <span className="min-w-0 truncate text-xs text-zinc-300">{r.label}</span>
-            <span className="shrink-0 text-right text-xs tabular-nums text-zinc-400">
-              {r.display}
-              {r.sub && <span className="ml-2 text-zinc-600">{r.sub}</span>}
-            </span>
+    <div className="space-y-2.5">
+      {rows.map((r) => {
+        const dim = hover !== null && hover !== r.label;
+        return (
+          <div
+            key={r.label}
+            onMouseEnter={() => setHover(r.label)}
+            onMouseLeave={() => setHover(null)}
+            className="relative transition-opacity duration-150 motion-reduce:transition-none"
+            style={{ opacity: dim ? 0.4 : 1 }}
+          >
+            <div className="mb-1 flex items-baseline justify-between gap-3">
+              <span className="min-w-0 truncate text-xs text-zinc-300">{r.label}</span>
+              <span className="shrink-0 text-right text-xs tabular-nums text-zinc-400">
+                {r.display}
+                {r.sub && <span className="ml-2 text-zinc-600">{r.sub}</span>}
+              </span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-white/[0.04]">
+              <div
+                className="h-2 rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none"
+                style={{
+                  width: ready ? `${(r.value / max) * 100}%` : "0%",
+                  background: BAR_HUE,
+                  minWidth: ready ? 2 : 0,
+                  boxShadow: hover === r.label ? `0 0 14px ${BAR_HUE}55` : undefined,
+                }}
+              />
+            </div>
+            {hover === r.label && total > 0 && (
+              <div className={cn(TIP, "absolute -top-1 left-0 z-10 -translate-y-full")}>
+                <p className="text-[10px] text-zinc-200">{r.label}</p>
+                <p className="text-[10px] tabular-nums text-zinc-400">
+                  {r.display} · {fmtPct(r.value / total)} of total
+                </p>
+              </div>
+            )}
           </div>
-          <div className="h-2 w-full rounded-full bg-white/[0.04]">
-            <div
-              className="h-2 rounded-full transition-opacity duration-150 group-hover:opacity-80 motion-reduce:transition-none"
-              style={{ width: `${(r.value / max) * 100}%`, background: BAR_HUE, minWidth: 2 }}
-            />
-          </div>
-        </div>
-      ))}
+        );
+      })}
+    </div>
+  );
+}
+
+/** Premium vs economy split (the video roster) — same hover language as the
+ * routing bar, one pole per tier from the same violet ramp. */
+export function TierRatioBar({
+  a,
+  b,
+}: {
+  a: { label: string; clips: number };
+  b: { label: string; clips: number };
+}) {
+  const [hover, setHover] = useState<string | null>(null);
+  const total = Math.max(1, a.clips + b.clips);
+  const seg = (s: { label: string; clips: number }, color: string, cls: string) => (
+    <div
+      onMouseEnter={() => setHover(s.label)}
+      onMouseLeave={() => setHover(null)}
+      className={cn("group relative transition-opacity duration-150 motion-reduce:transition-none", cls)}
+      style={{
+        width: `${(s.clips / total) * 100}%`,
+        background: color,
+        opacity: hover !== null && hover !== s.label ? 0.3 : 1,
+        minWidth: s.clips > 0 ? 4 : 0,
+      }}
+    >
+      <div
+        className={cn(
+          TIP,
+          "absolute -top-1.5 left-1/2 z-10 hidden -translate-x-1/2 -translate-y-full group-hover:block"
+        )}
+      >
+        <p className="text-[10px] text-zinc-200">{s.label}</p>
+        <p className="text-[10px] tabular-nums text-zinc-400">
+          {s.clips} clip{s.clips === 1 ? "" : "s"} · {fmtPct(s.clips / total)}
+        </p>
+      </div>
+    </div>
+  );
+  return (
+    <div className="flex h-2.5 w-full gap-[2px] overflow-visible">
+      {seg(a, "#5b21b6", "rounded-l-full")}
+      {seg(b, "#a78bfa", "rounded-r-full flex-1")}
     </div>
   );
 }
 
 const tooltipStyle = {
-  background: "#181327",
+  background: "#161122",
   border: "1px solid rgba(255,255,255,0.1)",
   borderRadius: 8,
   fontSize: 11,
   color: "#d4d4d8",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
 };
 
-/** Spend + volume over time. Two panels, one x-axis notion — never dual-axis. */
+const CHART_MARGIN = { top: 4, right: 8, left: -14, bottom: 0 };
+
+/** Spend + volume over time. Two panels, one aligned x-axis, hover synced —
+ * they read as one connected story. Never dual-axis. */
 export function TrendChart({
   data,
   reduced,
@@ -163,13 +275,51 @@ export function TrendChart({
   if (data.length === 0) {
     return <p className="text-xs text-zinc-500">No activity in this range yet.</p>;
   }
-  const short = (d: string) => d.slice(5); // MM-DD
+  const short = (d: string) => d.slice(5);
   return (
     <div className="space-y-1">
-      <p className="text-[10px] text-zinc-500">Spend per day (USD)</p>
+      <p className="text-[10px] uppercase tracking-widest text-zinc-500">
+        Spend per day
+      </p>
       <ResponsiveContainer width="100%" height={160}>
-        <AreaChart data={data} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+        <AreaChart data={data} margin={CHART_MARGIN} syncId="usage-trend">
+          <defs>
+            <linearGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={BAR_HUE} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={BAR_HUE} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
           <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+          <XAxis dataKey="date" hide />
+          <YAxis
+            tick={{ fill: "#71717a", fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            width={44}
+          />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            formatter={(v) => [fmtUsd(Number(v)), "spend"]}
+            labelFormatter={(l) => String(l)}
+            cursor={{ stroke: "rgba(167,139,250,0.35)", strokeWidth: 1 }}
+          />
+          <Area
+            type="monotone"
+            dataKey="usd"
+            stroke={BAR_HUE}
+            strokeWidth={2}
+            fill="url(#spendFill)"
+            isAnimationActive={!reduced}
+            dot={false}
+            activeDot={{ r: 4, stroke: "#12101c", strokeWidth: 2 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+      <p className="pt-2 text-[10px] uppercase tracking-widest text-zinc-500">
+        Clips rendered per day
+      </p>
+      <ResponsiveContainer width="100%" height={88}>
+        <BarChart data={data} margin={CHART_MARGIN} syncId="usage-trend">
           <XAxis
             dataKey="date"
             tickFormatter={short}
@@ -181,39 +331,14 @@ export function TrendChart({
             tick={{ fill: "#71717a", fontSize: 10 }}
             axisLine={false}
             tickLine={false}
-          />
-          <Tooltip
-            contentStyle={tooltipStyle}
-            formatter={(v) => [fmtUsd(Number(v)), "spend"]}
-            labelFormatter={(l) => String(l)}
-          />
-          <Area
-            type="monotone"
-            dataKey="usd"
-            stroke={BAR_HUE}
-            strokeWidth={2}
-            fill={BAR_HUE}
-            fillOpacity={0.1}
-            isAnimationActive={!reduced}
-            dot={false}
-            activeDot={{ r: 4, stroke: "#12101c", strokeWidth: 2 }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-      <p className="pt-2 text-[10px] text-zinc-500">Clips rendered per day</p>
-      <ResponsiveContainer width="100%" height={72}>
-        <BarChart data={data} margin={{ top: 2, right: 8, left: -18, bottom: 0 }}>
-          <XAxis dataKey="date" hide />
-          <YAxis
-            tick={{ fill: "#71717a", fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
             allowDecimals={false}
+            width={44}
           />
           <Tooltip
             contentStyle={tooltipStyle}
             formatter={(v) => [String(v), "clips"]}
             labelFormatter={(l) => String(l)}
+            cursor={{ fill: "rgba(167,139,250,0.08)" }}
           />
           <Bar
             dataKey="clips"

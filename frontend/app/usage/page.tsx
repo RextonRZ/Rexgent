@@ -2,10 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  AudioWaveform,
+  CheckCircle2,
+  Film,
+  Image as ImageIcon,
+  MessageSquareText,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "@/components/auth/UserMenu";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { AmbientBackdrop } from "@/components/shared/AmbientBackdrop";
+import { GRAIN } from "@/components/landing/CtaBackdrop";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useCountUp } from "@/hooks/useCountUp";
 import {
@@ -15,6 +25,7 @@ import {
 } from "@/hooks/useUsageAnalytics";
 import {
   RankedBars,
+  TierRatioBar,
   TierSplitBar,
   TrendChart,
   fmtPct,
@@ -41,12 +52,16 @@ const ROSTER: {
   group: string;
   unit: string;
   category: string | null; // categories key for subtotal (null = llm)
+  icon: LucideIcon;
+  tint: string; // low-sat icon tint — cohesive, not colorful
   models: RosterModel[];
 }[] = [
   {
     group: "Language",
     unit: "token",
     category: null,
+    icon: MessageSquareText,
+    tint: "text-violet-300/70",
     models: [
       { name: "qwen-max", role: "Creative writing — script and shot direction" },
       { name: "qwen-plus", role: "Judgment — narrative judge, chat, relationships" },
@@ -56,18 +71,11 @@ const ROSTER: {
     ],
   },
   {
-    group: "Image",
-    unit: "image",
-    category: "image",
-    models: [
-      { name: "wan2.6-t2i", role: "Reference plates — character, location, style" },
-      { name: "qwen-image-edit-max", role: "Costume plates and frame edits" },
-    ],
-  },
-  {
     group: "Video",
     unit: "second",
     category: "video",
+    icon: Film,
+    tint: "text-fuchsia-300/60",
     models: [
       { name: "wan2.7-t2v / i2v", role: "Premium tier — the shots that matter" },
       { name: "happyhorse-1.1-t2v / i2v / r2v", role: "Economy tier — supporting shots" },
@@ -75,9 +83,22 @@ const ROSTER: {
     ],
   },
   {
+    group: "Image",
+    unit: "image",
+    category: "image",
+    icon: ImageIcon,
+    tint: "text-indigo-300/70",
+    models: [
+      { name: "wan2.6-t2i", role: "Reference plates — character, location, style" },
+      { name: "qwen-image-edit-max", role: "Costume plates and frame edits" },
+    ],
+  },
+  {
     group: "Voice",
     unit: "character",
     category: "tts",
+    icon: AudioWaveform,
+    tint: "text-sky-300/60",
     models: [
       { name: "qwen3-tts-flash", role: "Preset voices" },
       { name: "qwen3-tts-vc-realtime", role: "Cloned voices" },
@@ -86,20 +107,53 @@ const ROSTER: {
   },
 ];
 
+/** Section header with a hairline running off to the right — sections stop
+ * blurring together without shouting. */
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-      {children}
-    </h2>
+    <div className="flex items-center gap-4">
+      <h2 className="shrink-0 text-xs font-medium uppercase tracking-widest text-zinc-500">
+        {children}
+      </h2>
+      <span aria-hidden className="h-px flex-1 bg-white/[0.06]" />
+    </div>
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/** Film-frame sprockets, same language as the dashboard recap shelf. */
+function Sprockets() {
   return (
-    <div className="rounded-xl border hairline bg-card px-4 py-3">
-      <p className="text-[11px] text-zinc-500">{label}</p>
-      <p className="mt-0.5 text-lg font-semibold">{value}</p>
-      {hint && <p className="text-[10px] text-zinc-600">{hint}</p>}
+    <div
+      aria-hidden
+      className="flex w-6 shrink-0 flex-col items-center justify-center gap-4 py-3"
+    >
+      {Array.from({ length: 7 }).map((_, i) => (
+        <span key={i} className="h-[9px] w-[7px] rounded-[2px] bg-zinc-800" />
+      ))}
+    </div>
+  );
+}
+
+/** Dashboard-style stat card: hover lift + a reserved sub-label that fades in. */
+function Stat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="group rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 pb-2.5 pt-4 text-center transition-all duration-150 hover:border-white/15 motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none">
+      <p className="text-2xl font-semibold text-foreground">{value}</p>
+      <p className="mt-1 text-[10px] uppercase tracking-widest text-zinc-500">
+        {label}
+      </p>
+      {/* reserved slot — fades in on hover, never reflows */}
+      <p className="mt-0.5 h-3.5 truncate text-[10px] leading-[14px] text-zinc-600 opacity-0 transition-opacity duration-150 group-hover:opacity-100 motion-reduce:transition-none">
+        {sub ?? ""}
+      </p>
     </div>
   );
 }
@@ -112,30 +166,36 @@ function HealthCard({
   note,
 }: {
   label: string;
-  value: string;
+  value: string | null;
   health: Health | null;
   note?: string;
 }) {
   const Icon =
     health === "ok" ? CheckCircle2 : health === "warn" ? AlertTriangle : XCircle;
   return (
-    <div className="rounded-xl border hairline bg-card px-4 py-3">
-      <p className="text-[11px] text-zinc-500">{label}</p>
-      <p className="mt-0.5 flex items-center gap-2 text-lg font-semibold">
-        {value}
-        {health && (
-          <Icon
-            className={cn(
-              "size-4",
-              health === "ok" && "text-ok",
-              health === "warn" && "text-warn",
-              health === "bad" && "text-bad"
-            )}
-            aria-label={health === "ok" ? "healthy" : health === "warn" ? "watch" : "problem"}
-          />
-        )}
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 transition-all duration-150 hover:border-white/15 motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none">
+      <p className="text-[10px] uppercase tracking-widest text-zinc-500">{label}</p>
+      {value ? (
+        <p className="mt-1 flex items-center gap-2 text-xl font-semibold">
+          {value}
+          {health && (
+            <Icon
+              className={cn(
+                "size-4",
+                health === "ok" && "text-ok",
+                health === "warn" && "text-warn",
+                health === "bad" && "text-bad"
+              )}
+              aria-label={health === "ok" ? "healthy" : health === "warn" ? "watch" : "problem"}
+            />
+          )}
+        </p>
+      ) : (
+        <p className="mt-1 text-xl font-medium text-zinc-700">—</p>
+      )}
+      <p className="mt-0.5 text-[10px] text-zinc-500">
+        {value ? note : "no data in this range yet"}
       </p>
-      {note && <p className="mt-0.5 text-[10px] text-zinc-500">{note}</p>}
     </div>
   );
 }
@@ -153,6 +213,7 @@ export default function UsagePage() {
 
   return (
     <main className="min-h-screen">
+      <AmbientBackdrop />
       <header className="glass sticky top-0 z-40 border-b hairline">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
           <Link
@@ -166,12 +227,23 @@ export default function UsagePage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-5xl space-y-10 px-6 py-8">
-        <PageHeader
-          title="Usage & analytics"
-          sub="13 Qwen Cloud models, routed by task. This page proves the routing works and shows where the money goes."
-        >
-          <div className="flex rounded-lg border hairline p-0.5" role="tablist" aria-label="Time range">
+      <div className="mx-auto max-w-5xl space-y-14 px-6 pb-20 pt-10">
+        {/* masthead — quiet; the routing hero below carries the drama */}
+        <div className="card-rise flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Usage &amp; analytics
+            </h1>
+            <p className="mt-1 max-w-xl text-sm text-zinc-500">
+              13 Qwen Cloud models, routed by task. This page proves the routing
+              works and shows where the money goes.
+            </p>
+          </div>
+          <div
+            className="flex rounded-lg border hairline bg-black/20 p-0.5"
+            role="tablist"
+            aria-label="Time range"
+          >
             {RANGES.map((r) => (
               <button
                 key={r.key}
@@ -189,7 +261,7 @@ export default function UsagePage() {
               </button>
             ))}
           </div>
-        </PageHeader>
+        </div>
 
         {isLoading || !data ? (
           <p className="text-sm text-zinc-500">Reading the ledger…</p>
@@ -198,6 +270,26 @@ export default function UsagePage() {
         )}
       </div>
     </main>
+  );
+}
+
+/** Staggered section entrance, same card-rise the dashboard uses. */
+function Rise({
+  index,
+  children,
+  className,
+}: {
+  index: number;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={cn("card-rise space-y-4", className)}
+      style={{ animationDelay: `${index * 90}ms` }}
+    >
+      {children}
+    </section>
   );
 }
 
@@ -247,6 +339,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
 
   const totalUsd = Object.values(cats).reduce((s, c) => s + c.usd, 0);
   const videoShare = cats["video"] && totalUsd > 0 ? cats["video"].usd / totalUsd : 0;
+  const totalUp = useCountUp(totalUsd, reduced);
 
   const dramaRows = data.dramas.slice(0, 8).map((d) => ({
     label: d.title,
@@ -286,7 +379,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
 
   if (nothingYet) {
     return (
-      <p className="rounded-xl border hairline bg-card px-5 py-8 text-center text-sm text-zinc-500">
+      <p className="card-rise rounded-xl border hairline bg-card px-5 py-10 text-center text-sm text-zinc-500">
         No usage in this range yet. Generate a script or render a drama and the
         ledger starts filling in.
       </p>
@@ -295,59 +388,90 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
 
   return (
     <>
-      {/* ── 1 · routing efficiency ── */}
-      <section className="space-y-4">
+      {/* ── 1 · routing efficiency: the screening-room hero ── */}
+      <Rise index={0}>
         <SectionTitle>Routing efficiency</SectionTitle>
-        <div className="rounded-2xl border hairline bg-card p-6">
-          <div className="flex flex-wrap items-end gap-x-10 gap-y-3">
-            <div>
-              <p className="text-5xl font-semibold tracking-tight">
-                {Math.round(cheapPct)}%
-              </p>
-              <p className="mt-1 text-xs text-zinc-400">
-                of language work ran on cheap tiers
-              </p>
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0c0a15] shadow-[0_20px_60px_-20px_rgba(0,0,0,0.8)]">
+          {/* screening-room glow behind the numbers only */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-24 left-1/4 h-72 w-2/3 rounded-full bg-violet-600/[0.13] blur-[90px]"
+          />
+          {/* film grain over the panel */}
+          <div
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute inset-0 opacity-[0.05] mix-blend-overlay",
+              !reduced && "animate-[film-grain_0.8s_steps(1)_infinite]"
+            )}
+            style={{ backgroundImage: GRAIN }}
+          />
+          <div className="relative flex items-stretch">
+            <Sprockets />
+            <div className="min-w-0 flex-1 px-2 py-7 sm:px-4">
+              <div className="flex flex-wrap items-end gap-x-12 gap-y-4">
+                <div>
+                  <p className="text-7xl font-semibold leading-none tracking-tight sm:text-8xl">
+                    {Math.round(cheapPct)}
+                    <span className="text-4xl text-zinc-400 sm:text-5xl">%</span>
+                  </p>
+                  <p className="mt-2 text-sm text-zinc-400">
+                    of language work ran on cheap tiers
+                  </p>
+                </div>
+                <div>
+                  <p
+                    className="text-4xl font-semibold text-ok"
+                    style={{ textShadow: "0 0 28px rgba(74,222,128,0.35)" }}
+                  >
+                    {fmtUsd(saved)}
+                  </p>
+                  <p className="mt-2 text-sm text-zinc-400">
+                    saved vs running everything on qwen-max
+                  </p>
+                </div>
+                <p className="pb-1 text-xs tabular-nums text-zinc-600">
+                  {fmtTokens(data.llm.total_tokens)} tokens · actual{" "}
+                  {fmtUsd(data.llm.total_usd)} · all-premium would be{" "}
+                  {fmtUsd(data.llm.all_premium_usd)}
+                </p>
+              </div>
+              <div className="mt-8">
+                <TierSplitBar segments={segments.filter((s) => s.value > 0)} />
+              </div>
+              {cheapLeaders.length > 0 && (
+                <p className="mt-5 text-xs italic text-zinc-500">
+                  Most work runs on {cheapLeaders.join(" and ")}; qwen-max is
+                  reserved for creative writing.
+                </p>
+              )}
             </div>
-            <div>
-              <p className="text-2xl font-semibold text-ok">{fmtUsd(saved)}</p>
-              <p className="mt-1 text-xs text-zinc-400">
-                saved vs running everything on qwen-max
-              </p>
-            </div>
-            <div className="text-xs tabular-nums text-zinc-500">
-              {fmtTokens(data.llm.total_tokens)} tokens · actual{" "}
-              {fmtUsd(data.llm.total_usd)} · all-premium would be{" "}
-              {fmtUsd(data.llm.all_premium_usd)}
-            </div>
+            <Sprockets />
           </div>
-          <div className="mt-6">
-            <TierSplitBar segments={segments.filter((s) => s.value > 0)} />
-          </div>
-          {cheapLeaders.length > 0 && (
-            <p className="mt-4 text-xs text-zinc-400">
-              Most work runs on {cheapLeaders.join(" and ")}; qwen-max is
-              reserved for creative writing.
-            </p>
-          )}
         </div>
-      </section>
+      </Rise>
 
-      {/* ── 2 · the 13-model roster ── */}
-      <section className="space-y-4">
+      {/* ── 2 · the 13-model roster: the crew list ── */}
+      <Rise index={1}>
         <SectionTitle>The 13-model roster</SectionTitle>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="gap-4 lg:columns-2">
           {ROSTER.map((group) => {
             const subtotal = group.category
               ? cats[group.category]
               : { usd: data.llm.total_usd, quantity: data.llm.total_tokens };
+            const GroupIcon = group.icon;
             return (
-              <div key={group.group} className="rounded-xl border hairline bg-card">
-                <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
+              <div
+                key={group.group}
+                className="mb-4 break-inside-avoid overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]"
+              >
+                <div className="flex items-center gap-2 border-b border-white/[0.06] bg-white/[0.015] px-4 py-2.5">
+                  <GroupIcon className={cn("size-3.5", group.tint)} />
                   <span className="text-sm font-medium">{group.group}</span>
                   <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] text-zinc-500">
                     billed per {group.unit}
                   </span>
-                  <span className="ml-auto text-xs tabular-nums text-zinc-400">
+                  <span className="ml-auto text-xs font-semibold tabular-nums text-zinc-300">
                     {subtotal ? fmtUsd(subtotal.usd) : "$0"}
                   </span>
                 </div>
@@ -355,7 +479,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
                   {group.models.map((m) => {
                     const row = byModel.get(m.name);
                     return (
-                      <div key={m.name} className="flex items-baseline gap-3 py-2">
+                      <div key={m.name} className="flex items-baseline gap-3 py-2.5">
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-mono text-xs text-zinc-200">
                             {m.name}
@@ -369,7 +493,10 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
                               <span className="ml-2 text-zinc-500">{fmtUsd(row.usd)}</span>
                             </>
                           ) : group.category ? (
-                            <span className="text-zinc-600" title="The ledger bills this group as a whole">
+                            <span
+                              className="text-zinc-600"
+                              title="The ledger bills this group as a whole"
+                            >
                               in group total
                             </span>
                           ) : (
@@ -379,23 +506,17 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
                       </div>
                     );
                   })}
-                  {/* premium vs economy ratio inside video — the routing story again */}
+                  {/* premium vs economy — the routing story again */}
                   {group.group === "Video" && (wan || hh) && (
-                    <div className="py-2.5">
-                      <div className="mb-1 flex justify-between text-[10px] text-zinc-500">
-                        <span>premium {wan?.clips ?? 0} clip{(wan?.clips ?? 0) === 1 ? "" : "s"}</span>
-                        <span>economy {hh?.clips ?? 0} clip{(hh?.clips ?? 0) === 1 ? "" : "s"}</span>
+                    <div className="py-3">
+                      <div className="mb-1.5 flex justify-between text-[10px] text-zinc-500">
+                        <span>premium · {wan?.clips ?? 0} clip{(wan?.clips ?? 0) === 1 ? "" : "s"}</span>
+                        <span>economy · {hh?.clips ?? 0} clip{(hh?.clips ?? 0) === 1 ? "" : "s"}</span>
                       </div>
-                      <div className="flex h-2 w-full gap-[2px] overflow-hidden rounded-full">
-                        <div
-                          className="rounded-l-full bg-[#5b21b6]"
-                          style={{
-                            width: `${((wan?.clips ?? 0) / Math.max(1, (wan?.clips ?? 0) + (hh?.clips ?? 0))) * 100}%`,
-                            minWidth: wan?.clips ? 3 : 0,
-                          }}
-                        />
-                        <div className="flex-1 rounded-r-full bg-[#a78bfa]" />
-                      </div>
+                      <TierRatioBar
+                        a={{ label: "Wan 2.7 (premium)", clips: wan?.clips ?? 0 }}
+                        b={{ label: "HappyHorse 1.1 (economy)", clips: hh?.clips ?? 0 }}
+                      />
                     </div>
                   )}
                 </div>
@@ -403,54 +524,66 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
             );
           })}
         </div>
-      </section>
+      </Rise>
 
       {/* ── 3 · where the money goes ── */}
-      <section className="space-y-4">
+      <Rise index={2}>
         <SectionTitle>Where the money goes</SectionTitle>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Total spent" value={fmtUsd(totalUsd)} />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat
+            label="Total spent"
+            value={fmtUsd(totalUp)}
+            sub={`across ${data.dramas.length} drama${data.dramas.length === 1 ? "" : "s"}`}
+          />
           <Stat
             label="Avg per drama"
             value={data.dramas.length ? fmtUsd(totalUsd / data.dramas.length) : "—"}
-            hint={`${data.dramas.length} drama${data.dramas.length === 1 ? "" : "s"} in range`}
+            sub={data.dramas.length ? "script to final cut" : "no dramas in range"}
           />
           <Stat
-            label="Avg per minute of film"
+            label="Per minute of film"
             value={totalMinutes > 0 ? fmtUsd(totalUsd / totalMinutes) : "—"}
-            hint={totalMinutes > 0 ? `${totalMinutes.toFixed(1)} min finished` : "no finished exports yet"}
+            sub={
+              totalMinutes > 0
+                ? `${totalMinutes.toFixed(1)} min finished`
+                : "no finished exports yet"
+            }
           />
           <Stat
             label="Avg per clip"
             value={totalClips > 0 ? fmtUsd(totalUsd / totalClips) : "—"}
-            hint={totalClips > 0 ? `${totalClips} clips` : undefined}
+            sub={totalClips > 0 ? `${totalClips} clips rendered` : "no clips in range"}
           />
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border hairline bg-card p-5">
-            <p className="mb-3 text-xs text-zinc-400">Spend by category</p>
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5">
+            <p className="mb-4 text-[10px] uppercase tracking-widest text-zinc-500">
+              Spend by category
+            </p>
             <RankedBars rows={catRows} />
             {videoShare >= 0.5 && (
-              <p className="mt-3 text-[11px] text-zinc-500">
+              <p className="mt-4 text-[11px] italic text-zinc-500">
                 Video is {fmtPct(videoShare)} of all spend, which is normal:
                 rendering footage costs orders of magnitude more than tokens.
               </p>
             )}
           </div>
-          <div className="rounded-xl border hairline bg-card p-5">
-            <p className="mb-3 text-xs text-zinc-400">Spend by drama</p>
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5">
+            <p className="mb-4 text-[10px] uppercase tracking-widest text-zinc-500">
+              Spend by drama
+            </p>
             <RankedBars rows={dramaRows} />
           </div>
         </div>
-      </section>
+      </Rise>
 
       {/* ── 4 · reliability ── */}
-      <section className="space-y-4">
+      <Rise index={3}>
         <SectionTitle>Reliability</SectionTitle>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <HealthCard
-            label="Continuity pass rate"
-            value={rel.continuity_pass_rate != null ? fmtPct(rel.continuity_pass_rate) : "—"}
+            label="Continuity pass"
+            value={rel.continuity_pass_rate != null ? fmtPct(rel.continuity_pass_rate) : null}
             health={passHealth}
             note={
               rel.flagged > 0
@@ -459,33 +592,33 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
             }
           />
           <HealthCard
-            label="Wan retry rate"
-            value={wan ? fmtPct(wan.retry_rate) : "—"}
+            label="Wan retries"
+            value={wan ? fmtPct(wan.retry_rate) : null}
             health={retryHealth(wan)}
-            note={wan ? `${wan.retried} of ${wan.clips} clips retried` : "no Wan clips in range"}
+            note={wan ? `${wan.retried} of ${wan.clips} clips retried` : undefined}
           />
           <HealthCard
-            label="HappyHorse retry rate"
-            value={hh ? fmtPct(hh.retry_rate) : "—"}
+            label="HappyHorse retries"
+            value={hh ? fmtPct(hh.retry_rate) : null}
             health={retryHealth(hh)}
-            note={hh ? `${hh.retried} of ${hh.clips} clips retried` : "no HappyHorse clips in range"}
+            note={hh ? `${hh.retried} of ${hh.clips} clips retried` : undefined}
           />
           <HealthCard
-            label="Face-lock consistency"
-            value={rel.avg_face_score != null ? `${Math.round(rel.avg_face_score)}` : "—"}
+            label="Face lock"
+            value={rel.avg_face_score != null ? String(Math.round(rel.avg_face_score)) : null}
             health={faceHealth}
             note="avg face score across scored clips"
           />
         </div>
-      </section>
+      </Rise>
 
       {/* ── 5 · trend ── */}
-      <section className="space-y-4">
+      <Rise index={4}>
         <SectionTitle>Trend</SectionTitle>
-        <div className="rounded-xl border hairline bg-card p-5">
+        <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5">
           <TrendChart data={data.trend} reduced={reduced} />
         </div>
-      </section>
+      </Rise>
     </>
   );
 }
