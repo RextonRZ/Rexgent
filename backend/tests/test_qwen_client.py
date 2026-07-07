@@ -140,6 +140,29 @@ async def test_happyhorse_accepts_reference_list(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_happyhorse_v2v_sends_source_as_video_media(monkeypatch):
+    # the regen loop edits an existing clip: DashScope's video-edit model only
+    # accepts media type "video" or "reference_image" — "reference_video" 500s.
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    client = QwenClient(get_settings())
+    captured = {}
+
+    async def fake_dispatch(model, input_obj, parameters):
+        captured["model"] = model
+        captured["media"] = input_obj.get("media")
+        return "task-v2v"
+
+    monkeypatch.setattr(client, "_dispatch_video", AsyncMock(side_effect=fake_dispatch))
+    await client.generate_video_happyhorse(
+        prompt="brighten the scene", duration=5, mode="v2v",
+        source_video_url="https://oss/original.mp4",
+    )
+    assert captured["model"] == "happyhorse-1.0-video-edit"
+    assert captured["media"] == [{"type": "video", "url": "https://oss/original.mp4"}]
+
+
+@pytest.mark.asyncio
 async def test_synthesize_speech_sdk_downloads_audio(monkeypatch):
     from app.services.qwen_client import QwenClient
     from app.config import get_settings

@@ -226,7 +226,9 @@ class QwenClient:
         elif reference_image_url:
             input_obj["media"] = self._reference_media(reference_image_url)
         if source_video_url:
-            input_obj["media"] = [{"type": "reference_video", "url": source_video_url}]
+            # the video-edit model takes the source clip as type "video";
+            # "reference_image" is the only other accepted media type here.
+            input_obj["media"] = [{"type": "video", "url": source_video_url}]
         params: dict = {
             "resolution": "1080P",
             "duration": duration,
