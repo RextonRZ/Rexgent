@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import type { BudgetEstimate, Project, ProjectsOverview } from "@/lib/types";
+import type {
+  BudgetEstimate,
+  Project,
+  ProjectCreate,
+  ProjectsOverview,
+} from "@/lib/types";
 
 export function useBudgetEstimate(params: {
   episode_count: number;
@@ -136,14 +141,7 @@ export function useDeleteProject() {
 export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: {
-      title: string;
-      genre?: string;
-      premise?: string;
-      credit_budget?: number;
-      token_budget?: number;
-      video_ratio?: "9:16" | "16:9";
-    }) => {
+    mutationFn: async (params: ProjectCreate) => {
       const { data } = await api.post<Project>("/api/projects", params);
       return data;
     },

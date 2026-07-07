@@ -27,11 +27,13 @@ import {
 
 export default function ScriptPage({ params }: { params: { id: string } }) {
   const searchParams = useSearchParams();
-  // scope carried from the create modal's budget panel, so the drama that
-  // generates matches the one they budgeted for
-  const epParam = Number(searchParams.get("ep")) || undefined;
-  const lenParam = Number(searchParams.get("len")) || undefined;
   const { data: project } = useProject(params.id);
+  // scope budgeted in the create modal: URL params right after creation,
+  // the project's stored scope on any later visit
+  const epParam =
+    Number(searchParams.get("ep")) || project?.episode_count || undefined;
+  const lenParam =
+    Number(searchParams.get("len")) || project?.target_length || undefined;
   const projectPremise = project?.premise ?? "";
   const projectGenre = project?.genre ?? "";
 

@@ -23,6 +23,10 @@ class Project(Base):
     token_budget = Column(Integer, default=2_000_000)
     # delivery format chosen at creation: "9:16" (vertical, default) or "16:9"
     video_ratio = Column(String(8), default="9:16")
+    # scope chosen at creation; the Script page seeds Full Auto from these so
+    # the drama that generates matches the one that was budgeted
+    episode_count = Column(Integer, nullable=True)
+    target_length = Column(Integer, nullable=True)  # seconds per episode
     auto_approve_casting = Column(Boolean, default=False)
     auto_clarify = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -11,6 +11,8 @@ class ProjectCreate(BaseModel):
     credit_budget: Optional[float] = None
     token_budget: Optional[int] = None
     video_ratio: Optional[str] = None  # "9:16" (default) | "16:9"
+    episode_count: Optional[int] = None
+    target_length: Optional[int] = None  # seconds per episode
 
 
 class BudgetEstimateRequest(BaseModel):
@@ -47,6 +49,8 @@ class ProjectResponse(BaseModel):
     credit_budget: Optional[float] = None
     token_budget: Optional[int] = None
     video_ratio: Optional[str] = None
+    episode_count: Optional[int] = None
+    target_length: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 

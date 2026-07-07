@@ -69,6 +69,8 @@ export function NewProjectModal({
       credit_budget: budget,
       token_budget: estimate?.llm_tokens,
       video_ratio: ratio,
+      episode_count: episodes,
+      target_length: length,
     });
     // The Script page's tabs are the real build-mode choice (Full Auto is
     // preselected; Write from Scratch and Import sit right beside it).

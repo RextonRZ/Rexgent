@@ -10,6 +10,8 @@ export interface Project {
   credit_budget: number | null;
   token_budget: number | null;
   video_ratio?: VideoRatio | null;
+  episode_count?: number | null;
+  target_length?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -21,6 +23,8 @@ export interface ProjectCreate {
   credit_budget?: number;
   token_budget?: number;
   video_ratio?: VideoRatio;
+  episode_count?: number;
+  target_length?: number;
 }
 
 export interface BudgetEstimate {

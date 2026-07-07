@@ -53,6 +53,10 @@ async def create_project(
         project.token_budget = max(0, int(request.token_budget))
     if request.video_ratio in ("9:16", "16:9"):
         project.video_ratio = request.video_ratio
+    if request.episode_count is not None:
+        project.episode_count = max(1, int(request.episode_count))
+    if request.target_length is not None:
+        project.target_length = max(10, int(request.target_length))
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -406,6 +410,8 @@ async def duplicate_project(
         title=f"{source.title} (copy)",
         genre=source.genre,
         premise=source.premise,
+        episode_count=source.episode_count,
+        target_length=source.target_length,
     )
     db.add(copy)
     db.commit()

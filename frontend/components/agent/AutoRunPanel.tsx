@@ -18,7 +18,18 @@ import {
 import { useAutoRun, type AutoRunResult } from "@/hooks/useAgent";
 import { useProject } from "@/hooks/useProjects";
 import { getSocket } from "@/lib/websocket";
+import { GENRES } from "@/lib/genres";
 import { cn } from "@/lib/utils";
+
+// Preset tones: a deliberate choice, not a blank text box.
+const TONES = [
+  "dramatic",
+  "dark",
+  "tense",
+  "romantic",
+  "lighthearted",
+  "comedic",
+];
 
 const NODE_LABELS: Record<string, string> = {
   generate_script: "Writing script",
@@ -75,6 +86,14 @@ export function AutoRunPanel({
     if (initialGenre && !touched) setGenre(initialGenre);
   }, [initialGenre, touched]);
 
+  // Scope stored on the drama at creation arrives async too.
+  useEffect(() => {
+    if (initialEpisodes && !touched) setEpisodeCount(initialEpisodes);
+  }, [initialEpisodes, touched]);
+  useEffect(() => {
+    if (initialTargetLength && !touched) setTargetLength(initialTargetLength);
+  }, [initialTargetLength, touched]);
+
   useEffect(() => {
     const socket = getSocket();
     socket.connect();
@@ -121,21 +140,42 @@ export function AutoRunPanel({
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Genre</Label>
-            <Input
+            <Select
               value={genre}
-              onChange={(e) => {
-                setTouched(true);
-                setGenre(e.target.value);
+              onValueChange={(v) => {
+                if (v) {
+                  setTouched(true);
+                  setGenre(v);
+                }
               }}
-            />
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {GENRES.map((g) => (
+                  <SelectItem key={g.value} value={g.value}>
+                    <g.icon className="size-3.5 text-muted-foreground" />
+                    {g.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Tone</Label>
-            <Input
-              value={tone}
-              onChange={(e) => setTone(e.target.value)}
-              placeholder="dramatic, dark, lighthearted..."
-            />
+            <Select value={tone} onValueChange={(v) => v && setTone(v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TONES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -187,9 +227,10 @@ export function AutoRunPanel({
               min={1}
               max={20}
               value={episodeCount}
-              onChange={(e) =>
-                setEpisodeCount(Math.max(1, Number(e.target.value) || 1))
-              }
+              onChange={(e) => {
+                setTouched(true);
+                setEpisodeCount(Math.max(1, Number(e.target.value) || 1));
+              }}
             />
           </div>
           <div className="space-y-1.5">
@@ -200,9 +241,10 @@ export function AutoRunPanel({
               max={600}
               step={5}
               value={targetLength}
-              onChange={(e) =>
-                setTargetLength(Math.max(10, Number(e.target.value) || 10))
-              }
+              onChange={(e) => {
+                setTouched(true);
+                setTargetLength(Math.max(10, Number(e.target.value) || 10));
+              }}
             />
           </div>
         </div>

@@ -92,6 +92,14 @@ export function ScriptImport({ projectId, onSuccess }: ScriptImportProps) {
         </div>
       </div>
 
+      {/* imports need no extra settings: the script itself carries the story,
+          tone and length; the genre, format and spend cap picked at creation
+          still shape everything downstream */}
+      <p className="text-center text-xs text-muted-foreground">
+        No other settings needed. Your script sets the story and length; the
+        genre, format and spend cap you picked at creation still apply.
+      </p>
+
       {selectedFile && (
         <Button
           onClick={handleUpload}

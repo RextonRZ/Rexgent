@@ -98,6 +98,8 @@ def _project(owner_id, title="My Drama"):
         premise="a premise",
         status="draft",
         poster_url=None,
+        episode_count=None,
+        target_length=None,
         created_at=now,
         updated_at=now,
     )
