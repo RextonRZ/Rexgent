@@ -253,7 +253,9 @@ export function RecapShelf({
                 autoPlay
                 preload="metadata"
                 className={cn(
-                  "absolute inset-0 h-full w-full object-cover transition-opacity duration-500",
+                  // portrait clips overflow this 16:9 frame; bias the crop
+                  // upward so faces sit in view instead of being centred
+                  "absolute inset-0 h-full w-full object-cover object-[50%_30%] transition-opacity duration-500",
                   visible ? "opacity-100" : "opacity-0"
                 )}
               />
@@ -265,7 +267,9 @@ export function RecapShelf({
                 src={current.img ?? "/still12.jpg"}
                 alt=""
                 className={cn(
-                  "absolute inset-0 h-full w-full object-cover transition-opacity duration-500",
+                  // portrait clips overflow this 16:9 frame; bias the crop
+                  // upward so faces sit in view instead of being centred
+                  "absolute inset-0 h-full w-full object-cover object-[50%_30%] transition-opacity duration-500",
                   visible ? "opacity-100" : "opacity-0",
                   !reduced && !current.video &&
                     "animate-[ken-burns_8s_ease-out_forwards]"
