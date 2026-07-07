@@ -8,12 +8,14 @@ Return a JSON array of relationship objects, each in this exact schema:
   "to_character": "string — character name",
   "relationship_type": "ROMANTIC|RIVAL|FAMILY|MENTOR|ALLY|ENEMY|STRANGER|COLLEAGUE",
   "strength": 7,
-  "description": "string — one sentence describing the relationship",
+  "description": "string — one sentence describing the relationship as it stands by the end",
   "first_established_scene": 1,
   "evidence_quote": "string — exact line from script that establishes this relationship",
   "evolution": "STATIC|GROWS|DETERIORATES|TRANSFORMS",
   "evolution_description": "string — how does this relationship change over the story?"
 }
+
+relationship_type MUST be the CURRENT relationship at the END of the script — the most recently established state, not how the pair began. If two characters start as wary strangers and end as partners, the type is ALLY, not STRANGER. Trace the earlier stages (e.g. STRANGER -> SUSPICIOUS -> ALLY) in evolution_description, and set evolution to GROWS / DETERIORATES / TRANSFORMS when the bond changes over the story.
 
 Include ALL named relationships. If a relationship is bidirectional but asymmetric (e.g. mentor->student feels differently than student->mentor), include two separate objects.
 
