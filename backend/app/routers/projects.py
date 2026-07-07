@@ -292,8 +292,22 @@ async def studio_stats(
         for r in (
             db.query(AgentReport).filter(AgentReport.project_id.in_(ids)).all()
         ):
-            a = agents.setdefault(r.agent, {"runs": 0, "conf_sum": 0.0, "conf_n": 0})
+            a = agents.setdefault(
+                r.agent,
+                {
+                    "runs": 0,
+                    "conf_sum": 0.0,
+                    "conf_n": 0,
+                    "projects": set(),
+                    "last_run": None,
+                },
+            )
             a["runs"] += 1
+            a["projects"].add(r.project_id)
+            if r.created_at is not None and (
+                a["last_run"] is None or r.created_at > a["last_run"]
+            ):
+                a["last_run"] = r.created_at
             if r.confidence is not None:
                 a["conf_sum"] += float(r.confidence)
                 a["conf_n"] += 1
@@ -310,6 +324,8 @@ async def studio_stats(
                 "avg_confidence": round(a["conf_sum"] / a["conf_n"], 3)
                 if a["conf_n"]
                 else None,
+                "dramas": len(a["projects"]),
+                "last_run": a["last_run"].isoformat() if a["last_run"] else None,
             }
             for name, a in sorted(agents.items())
         ],

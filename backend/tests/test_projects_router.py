@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -286,9 +286,21 @@ def test_stats_aggregates_activity_agents_and_costs():
         ),
     ]
     reports = [
-        SimpleNamespace(agent="continuity", confidence=0.9),
-        SimpleNamespace(agent="continuity", confidence=0.7),
-        SimpleNamespace(agent="budget_allocator", confidence=None),
+        SimpleNamespace(
+            agent="continuity", confidence=0.9, project_id=project.id, created_at=now
+        ),
+        SimpleNamespace(
+            agent="continuity",
+            confidence=0.7,
+            project_id=project.id,
+            created_at=now - timedelta(hours=2),
+        ),
+        SimpleNamespace(
+            agent="budget_allocator",
+            confidence=None,
+            project_id=project.id,
+            created_at=None,
+        ),
     ]
     db = FakeDB([project], jobs=[job], clips=clips, costs=costs, reports=reports)
     _override(db)
@@ -303,7 +315,10 @@ def test_stats_aggregates_activity_agents_and_costs():
     agents = {a["agent"]: a for a in body["agents"]}
     assert agents["continuity"]["runs"] == 2
     assert agents["continuity"]["avg_confidence"] == 0.8
+    assert agents["continuity"]["dramas"] == 1
+    assert agents["continuity"]["last_run"] == now.isoformat()
     assert agents["budget_allocator"]["avg_confidence"] is None
+    assert agents["budget_allocator"]["last_run"] is None
     assert body["cost_split"]["video"] == 1.5
     assert body["cost_split"]["llm"] == 0.25
     assert body["totals"]["clips"] == 2
