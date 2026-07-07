@@ -28,7 +28,6 @@ import {
 
 export default function ScriptPage({ params }: { params: { id: string } }) {
   const searchParams = useSearchParams();
-  const mode = searchParams.get("mode"); // "auto" | "guided" | null
   // scope carried from the create modal's budget panel, so the drama that
   // generates matches the one they budgeted for
   const epParam = Number(searchParams.get("ep")) || undefined;
@@ -112,7 +111,7 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
 
       {!scriptData ? (
         <div className="max-w-4xl">
-          <Tabs defaultValue={mode === "guided" ? "generate" : "auto"}>
+          <Tabs defaultValue="auto">
             <TabsList>
               <TabsTrigger value="auto">Full Auto</TabsTrigger>
               <TabsTrigger value="generate">Write from Scratch</TabsTrigger>

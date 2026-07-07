@@ -39,7 +39,6 @@ export function NewProjectModal({
   const createProject = useCreateProject();
   const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("sci-fi");
-  const [mode, setMode] = useState<"auto" | "guided">("auto");
   const [ratio, setRatio] = useState<"9:16" | "16:9">("9:16");
   const [episodes, setEpisodes] = useState(1);
   const [length, setLength] = useState(30);
@@ -71,9 +70,9 @@ export function NewProjectModal({
       token_budget: estimate?.llm_tokens,
       video_ratio: ratio,
     });
-    router.push(
-      `/projects/${project.id}/script?mode=${mode}&ep=${episodes}&len=${length}`
-    );
+    // The Script page's tabs are the real build-mode choice (Full Auto is
+    // preselected; Write from Scratch and Import sit right beside it).
+    router.push(`/projects/${project.id}/script?ep=${episodes}&len=${length}`);
   };
 
   return (
@@ -240,24 +239,6 @@ export function NewProjectModal({
             )}
           </div>
 
-          <div>
-            <Label className="text-xs text-muted-foreground">How should we build it?</Label>
-            <div className="mt-1 grid grid-cols-2 gap-2">
-              <ModeCard
-                active={mode === "auto"}
-                onClick={() => setMode("auto")}
-                title="⚡ Full Auto"
-                desc="The agent runs every stage. You watch."
-              />
-              <ModeCard
-                active={mode === "guided"}
-                onClick={() => setMode("guided")}
-                title="Guided"
-                desc="Review and approve each stage."
-              />
-            </div>
-          </div>
-
           <Button
             onClick={handleCreate}
             disabled={pending}
@@ -310,29 +291,3 @@ function FormatCard({
   );
 }
 
-function ModeCard({
-  active,
-  onClick,
-  title,
-  desc,
-}: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  desc: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "text-left rounded-lg border p-3 transition-all",
-        active
-          ? "border-primary bg-primary/10"
-          : "border-border hover:border-primary/40"
-      )}
-    >
-      <div className="text-sm font-semibold">{title}</div>
-      <div className="text-[11px] text-muted-foreground mt-0.5">{desc}</div>
-    </button>
-  );
-}
