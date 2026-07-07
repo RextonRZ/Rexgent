@@ -18,6 +18,7 @@ from app.services.oss_manager import OSSManager
 from app.services.usage_tracker import global_usage
 from app.services.audio_timeline import place_dialogue
 from app.models.line_audio import LineAudio
+from app.websocket.tool_events import tool_event, tool_run
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -244,7 +245,9 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         stitcher = VideoStitcher()
         final_local = os.path.join(workdir, "final.mp4")
         _stage(project_id, "update", f"Stitching {len(stitch_inputs)} clip(s)")
-        stitcher.stitch(stitch_inputs, final_local, ratio=ratio)
+        with tool_run(project_id, "export", "stitch_clips", "Editor") as t:
+            stitcher.stitch(stitch_inputs, final_local, ratio=ratio)
+            t["artifact"] = f"{len(stitch_inputs)} clips"
 
         # ── User-chosen music: downloaded on its OWN so a dialogue-prep hiccup
         # can never silently drop the track the user set ──
@@ -267,7 +270,10 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             from app.models.script import Script, Scene
 
             # Make sure voice lines exist before we try to place them.
+            tool_event(project_id, "export", "synth_voices", "started", agent="Audio Mixer")
             _ensure_voice_lines(db, project_id)
+            tool_event(project_id, "export", "synth_voices", "succeeded", agent="Audio Mixer",
+                       artifact="voices match casting")
 
             script = (db.query(Script).filter(Script.project_id == uuid.UUID(project_id))
                       .order_by(Script.created_at.desc()).first())
@@ -301,7 +307,9 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                                       "text": row.text, "character_name": row.character_name})
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"Export: could not download line audio {row.audio_url}: {e}")
-            dialogue_segments = build_dialogue_segments(line_rows, scene_plan)
+            with tool_run(project_id, "export", "assemble_timeline", "Editor") as t:
+                dialogue_segments = build_dialogue_segments(line_rows, scene_plan)
+                t["artifact"] = f"{len(dialogue_segments)} lines placed"
         except Exception as e:  # noqa: BLE001
             logger.warning(f"Export: dialogue prep skipped: {e}")
 
@@ -321,7 +329,9 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 srt_url = oss.upload_file(srt_path, srt_key)
                 burned = os.path.join(workdir, "final_subbed.mp4")
                 _stage(project_id, "update", "Burning captions into the picture")
-                stitcher.burn_subtitles(final_local, srt_path, burned)
+                with tool_run(project_id, "export", "burn_captions", "Editor") as t:
+                    stitcher.burn_subtitles(final_local, srt_path, burned)
+                    t["artifact"] = "captions burned + .srt"
                 final_local = burned
         except Exception as e:  # noqa: BLE001
             logger.warning(f"Export: subtitle burn skipped: {e}")
@@ -332,31 +342,38 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             if dialogue_segments or bgm_local:
                 emit("audio.mix.started", {}, project_id)
                 mixed = os.path.join(workdir, "final_audio.mp4")
-                stitcher.mix_tracks(
-                    final_local, dialogue_segments, bgm_local, mixed,
-                    bgm_volume=float(audio.get("volume", 1.0)) if audio else 1.0,
-                    duck=bool(audio.get("duck", True)) if audio else True,
-                    bgm_fade_in=float(audio.get("fade_in", 0.0)) if audio else 0.0,
-                    bgm_fade_out=float(audio.get("fade_out", 0.0)) if audio else 0.0,
-                )
+                with tool_run(project_id, "export", "mix_audio", "Audio Mixer") as t:
+                    stitcher.mix_tracks(
+                        final_local, dialogue_segments, bgm_local, mixed,
+                        bgm_volume=float(audio.get("volume", 1.0)) if audio else 1.0,
+                        duck=bool(audio.get("duck", True)) if audio else True,
+                        bgm_fade_in=float(audio.get("fade_in", 0.0)) if audio else 0.0,
+                        bgm_fade_out=float(audio.get("fade_out", 0.0)) if audio else 0.0,
+                    )
+                    t["artifact"] = (f"{len(dialogue_segments)} voices"
+                                     + (" + music" if bgm_local else ""))
                 final_local = mixed
                 emit("audio.mix.completed", {}, project_id)
         except Exception as e:  # noqa: BLE001
             logger.warning(f"Export: audio mix skipped: {e}")
 
         _stage(project_id, "update", "Uploading the final cut")
-        final_key = oss.get_project_path(project_id, "exports", "final.mp4")
-        final_url = oss.upload_file(final_local, final_key)
+        with tool_run(project_id, "export", "render_mp4", "Editor") as t:
+            final_key = oss.get_project_path(project_id, "exports", "final.mp4")
+            final_url = oss.upload_file(final_local, final_key)
+            t["artifact"] = "1 mp4"
 
-        export = FinalExport(
-            project_id=uuid.UUID(project_id),
-            url=final_url,
-            duration_seconds=report["total_duration_seconds"],
-            caption_url=srt_url,
-            report_json=report,
-        )
-        db.add(export)
-        db.commit()
+        with tool_run(project_id, "export", "write_export_db", "Editor") as t:
+            export = FinalExport(
+                project_id=uuid.UUID(project_id),
+                url=final_url,
+                duration_seconds=report["total_duration_seconds"],
+                caption_url=srt_url,
+                report_json=report,
+            )
+            db.add(export)
+            db.commit()
+            t["artifact"] = "1 export row"
         try:
             from app.websocket.emitter import emit
             emit("export.completed", {"url": final_url,

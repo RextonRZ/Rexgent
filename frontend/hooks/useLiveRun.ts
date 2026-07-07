@@ -99,6 +99,20 @@ export interface FinishedEvent {
   failed: boolean;
 }
 
+/** One tool node inside a stage's sub-graph — driven by `tool:progress`. */
+export interface ToolState {
+  tool: string;
+  status: "run" | "done" | "fail";
+  agent?: string;
+  /** what flowed out of the tool, shown on its edge ("8 shots", "5 plates") */
+  artifact?: string;
+  error?: string;
+  index?: number;
+  total?: number;
+  since: number;
+  at: number;
+}
+
 interface LiveRunState {
   projectId: string | null;
   /** live "who is working" keyed by RAW stage (chat shows relationships separately) */
@@ -107,6 +121,10 @@ interface LiveRunState {
   trail: Record<StageKey, TrailEntry[]>;
   /** last failure label per stage — cleared when the stage starts again */
   failed: Partial<Record<StageKey, string>>;
+  /** per-stage tool nodes (the modal's level-2 graph); latest state per tool.
+   * Deliberately NOT reset on stage start: a re-run overwrites each tool as it
+   * fires again, and finished sub-paths stay reviewable. */
+  tools: Record<StageKey, Record<string, ToolState>>;
 }
 
 const emptyTrail = (): Record<StageKey, TrailEntry[]> => ({
@@ -117,11 +135,20 @@ const emptyTrail = (): Record<StageKey, TrailEntry[]> => ({
   export: [],
 });
 
+const emptyTools = (): Record<StageKey, Record<string, ToolState>> => ({
+  script: {},
+  characters: {},
+  storyboard: {},
+  generate: {},
+  export: {},
+});
+
 export const useLiveRunStore = create<LiveRunState>(() => ({
   projectId: null,
   running: {},
   trail: emptyTrail(),
   failed: {},
+  tools: emptyTools(),
 }));
 
 const TRAIL_CAP = 30;
@@ -172,6 +199,42 @@ function setFailed(stage: StageKey, label: string | null) {
   });
 }
 
+/** `tool:progress` payload from the backend (see app/websocket/tool_events.py). */
+export interface ToolProgress {
+  stage: string;
+  tool: string;
+  status: "started" | "succeeded" | "failed";
+  agent?: string;
+  artifact?: string;
+  error?: string;
+  index?: number;
+  total?: number;
+}
+
+function upsertTool(p: ToolProgress) {
+  const stage = p.stage as StageKey;
+  if (!STAGE_ORDER.includes(stage) || !p.tool) return;
+  useLiveRunStore.setState((s) => {
+    const prev = s.tools[stage][p.tool];
+    const next: ToolState = {
+      tool: p.tool,
+      status:
+        p.status === "succeeded" ? "done" : p.status === "failed" ? "fail" : "run",
+      agent: p.agent ?? prev?.agent,
+      // a succeeded event without an artifact keeps the last known one
+      artifact: p.artifact ?? prev?.artifact,
+      error: p.status === "failed" ? p.error : undefined,
+      index: p.index ?? (p.status === "started" ? prev?.index : undefined),
+      total: p.total ?? prev?.total,
+      since: p.status === "started" && prev?.status === "run" ? prev.since : Date.now(),
+      at: Date.now(),
+    };
+    return {
+      tools: { ...s.tools, [stage]: { ...s.tools[stage], [p.tool]: next } },
+    };
+  });
+}
+
 /* Completed/failed announcements → the Showrunner chat turns these into
  * bubbles. Kept as a plain pub/sub so the chat's message ids stay local. */
 type FinishedCb = (m: FinishedEvent) => void;
@@ -198,6 +261,7 @@ export function ensureLiveRun(projectId: string) {
     running: {},
     trail: emptyTrail(),
     failed: {},
+    tools: emptyTools(),
   });
 
   const socket = getSocket();
@@ -234,6 +298,13 @@ export function ensureLiveRun(projectId: string) {
       }
       finishedSubs.forEach((cb) => cb({ agent, label: p.label, failed }));
     }
+  });
+
+  // ── the per-TOOL protocol: each stage's machinery ticks individually in
+  // the crew modal's workflow graph (and anywhere else reading `tools`) ──
+  on("tool:progress", (p: ToolProgress) => {
+    if (!p?.stage || !p?.tool) return;
+    upsertTool(p);
   });
 
   // ── auto-run node hops feed the trail (chat renders its own copy of these) ──

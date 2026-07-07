@@ -18,6 +18,7 @@ from app.services.clip_store import persist_clip_url
 from app.services.frame_sampler import extract_last_frame
 from app.services.cost_ledger import record_video
 from app.websocket.emitter import emit
+from app.websocket.tool_events import tool_event, tool_run
 from app.agents.reporter import report_agent
 from app.config import get_settings
 
@@ -125,9 +126,14 @@ class GenerationRunner:
             if not self.db.query(LineAudio).filter(
                     LineAudio.project_id == job.project_id).count():
                 from app.agent.pipeline_ops import synth_dialogue_op
-                await synth_dialogue_op(self.db, str(job.project_id))
+                with tool_run(job.project_id, "generate", "synth_voices",
+                              "Audio Mixer") as t:
+                    n_lines = await synth_dialogue_op(self.db, str(job.project_id))
+                    t["artifact"] = f"{n_lines} lines"
             from app.services.shot_duration_fitter import fit_project_shot_durations
-            fitted = fit_project_shot_durations(self.db, str(job.project_id))
+            with tool_run(job.project_id, "generate", "fit_durations", "Director") as t:
+                fitted = fit_project_shot_durations(self.db, str(job.project_id))
+                t["artifact"] = f"{fitted} shots resized"
             if fitted:
                 logger.info(f"Audio-first fit: {fitted} shot duration(s) adjusted")
         except Exception as e:  # noqa: BLE001
@@ -191,11 +197,15 @@ class GenerationRunner:
         if self._cancelled:
             job.status = "BUDGET_EXHAUSTED"
             self.db.commit()
+            tool_event(pid, "generate", "dispatch_video", "failed", agent="Renderer",
+                       error="stopped at the spend cap")
             emit("job:budget_exhausted", {"job_id": str(job.id)}, pid)
             return
         job.status = "COMPLETE"
         job.completed_at = datetime.now(timezone.utc)
         self.db.commit()
+        tool_event(pid, "generate", "dispatch_video", "succeeded", agent="Renderer",
+                   artifact=f"{job.completed_shots} clips")
         emit("job:completed", {
             "job_id": str(job.id),
             "total_clips": job.completed_shots,
@@ -348,6 +358,8 @@ class GenerationRunner:
         emit("generation.shot.started", {"scene_number": scene_number,
              "shot_number": shot.number, "index": job.completed_shots + 1,
              "total": job.total_shots}, pid)
+        tool_event(pid, "generate", "dispatch_video", "started", agent="Renderer",
+                   index=job.completed_shots + 1, total=job.total_shots)
         # Legacy event kept for backward compatibility with the live-generation UI,
         # which still listens for clip:* events.
         emit("clip:started", {"shot_id": str(shot.id),
@@ -377,11 +389,15 @@ class GenerationRunner:
                 # -> OSS -> project.poster_url) so cards never ship empty.
 
                 emit("continuity.scoring.started", {"shot_id": str(shot.id)}, pid)
+                tool_event(pid, "generate", "verify_face", "started", agent="Continuity",
+                           index=job.completed_shots + 1, total=job.total_shots)
                 guard = await self.continuity.validate(
                     clip_url=clip_url, duration=shot.estimated_duration_seconds,
                     characters_in_frame=in_frame, bible=bible, scene_number=scene_number,
                     foreground_characters=foreground)
                 emit("continuity.scoring.completed", {"shot_id": str(shot.id), "scores": guard}, pid)
+                tool_event(pid, "generate", "verify_face", "succeeded", agent="Continuity",
+                           artifact=f"scored {guard['continuity_score']}%")
                 report_agent(self.db, str(job.project_id), agent="continuity", stage="generation",
                              decision={"continuity_score": guard["continuity_score"],
                                        "face": guard.get("face_score"), "outfit": guard.get("outfit_score"),
@@ -390,6 +406,7 @@ class GenerationRunner:
                              confidence=guard["continuity_score"] / 100.0)
 
                 status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
+                tool_event(pid, "generate", "write_clip_db", "started", agent="Renderer")
                 clip = GeneratedClip(
                     job_id=job.id, shot_id=shot.id,
                     model_used=shot.quality_tier or "happyhorse", prompt=prompt, url=clip_url,
@@ -401,6 +418,11 @@ class GenerationRunner:
                 self.db.add(clip)
                 job.completed_shots += 1
                 self.db.commit()
+                tool_event(pid, "generate", "write_clip_db", "succeeded", agent="Renderer",
+                           artifact=f"{job.completed_shots} clip rows")
+                if attempt > 0:
+                    tool_event(pid, "generate", "self_correct", "succeeded",
+                               agent="Renderer", artifact="recovered on retry")
                 amt = record_video(self.db, str(job.project_id), shot.estimated_duration_seconds,
                                    shot.quality_tier or "happyhorse", ref_id=str(clip.id))
                 job.actual_cost += amt
@@ -417,6 +439,13 @@ class GenerationRunner:
                 return self._store_last_frame(pid, shot, clip_url)
             except Exception as e:  # HARD failure only -> at most one retry
                 logger.error(f"Shot {shot.id} attempt {attempt} hard-failed: {e}")
+                if attempt < MAX_RETRIES:
+                    # the self-correct pass: same shot, fresh attempt
+                    tool_event(pid, "generate", "self_correct", "started", agent="Renderer",
+                               index=attempt + 1, total=MAX_RETRIES, error=str(e))
+                else:
+                    tool_event(pid, "generate", "self_correct", "failed", agent="Renderer",
+                               error=str(e))
                 if attempt >= MAX_RETRIES:
                     self.db.add(GeneratedClip(
                         job_id=job.id, shot_id=shot.id,

@@ -17,6 +17,7 @@ from app.services.guardrails import InputSanitizer
 from app.mcp_tools.token_optimizer import TokenOptimizer
 from app.graph.sync import sync_scenes, sync_characters
 from app.websocket.emitter import emit
+from app.websocket.tool_events import tool_event, tool_run
 
 
 def _progress(pid, stage: str, status: str, agent: str, label: str, **extra) -> None:
@@ -60,14 +61,20 @@ async def generate_script_op(
               "Rewriting with the judge's notes" if notes else "Writing your screenplay")
     with track_project(project_id, db):
         clean_premise = InputSanitizer().sanitize(premise, max_length=300)
-        raw_text = await ScriptGenerator().generate(
-            genre=genre, premise=clean_premise, tone=tone,
-            episode_count=episode_count, target_length=target_length, language=language,
-            notes=notes, model=model or "qwen-max",
-        )
+        with tool_run(project_id, "script", "llm_write", "Screenwriter") as t:
+            raw_text = await ScriptGenerator().generate(
+                genre=genre, premise=clean_premise, tone=tone,
+                episode_count=episode_count, target_length=target_length, language=language,
+                notes=notes, model=model or "qwen-max",
+            )
+            t["artifact"] = "1 draft"
         _progress(project_id, "script", "update", "Screenwriter", "Structuring scenes and beats")
-        structured = await ScriptStructurer().structure(raw_text, language=language)
-        script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
+        with tool_run(project_id, "script", "structure_scenes", "Screenwriter") as t:
+            structured = await ScriptStructurer().structure(raw_text, language=language)
+            t["artifact"] = f"{len(structured.get('scenes', []))} scenes"
+        with tool_run(project_id, "script", "write_script_db", "Screenwriter") as t:
+            script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
+            t["artifact"] = f"{len(scene_uuids)} rows"
         sync_scenes(project_id, structured, scene_uuids=scene_uuids)
         # Full Auto enters the premise here, not at create time — reflect it on
         # the project so the dashboard card and chat context stay truthful, and
@@ -102,7 +109,11 @@ async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = 
     _progress(script.project_id, "characters", "started", "Casting Director",
               "Reading the cast from the script")
     with track_project(script.project_id, db):
-        data = await CharacterExtractor().extract(script.structured_json)
+        with tool_run(script.project_id, "characters", "extract_cast", "Casting Director") as t:
+            data = await CharacterExtractor().extract(script.structured_json)
+            t["artifact"] = f"{len(data)} characters"
+    tool_event(script.project_id, "characters", "write_cast_db", "started",
+               agent="Casting Director")
     db.query(Character).filter(Character.project_id == script.project_id).delete()
     created = []
     for cd in data:
@@ -122,6 +133,8 @@ async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = 
     db.commit()
     for c in created:
         db.refresh(c)
+    tool_event(script.project_id, "characters", "write_cast_db", "succeeded",
+               agent="Casting Director", artifact=f"{len(created)} rows")
     sync_characters(str(script.project_id), created, script.structured_json)
     _progress(script.project_id, "characters", "completed", "Casting Director",
               f"{len(created)} character(s) cast")
@@ -145,11 +158,14 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
     from app.services.usage_tracker import track_project
     _progress(script.project_id, "storyboard", "started", "Director",
               "Breaking the script into shots")
+    dressed = 0
     with track_project(script.project_id, db):
         for scene_index, scene in enumerate(scenes, start=1):
             _progress(script.project_id, "storyboard", "update", "Director",
                       f"Scene {scene.number}: staging shots and set dressing",
                       index=scene_index, total=len(scenes))
+            tool_event(script.project_id, "storyboard", "shot_breakdown", "started",
+                       agent="Director", index=scene_index, total=len(scenes))
             scene_chars = [char_map.get(str(n).upper(), {"name": n}) for n in (scene.characters_json or [])]
             shots = await gen.generate_for_scene(
                 {"scene_number": scene.number, "heading": scene.heading,
@@ -161,12 +177,15 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # set dressing: pins props + prop state per scene (enhancement only)
             try:
                 from app.services.set_dresser import SetDresser
+                tool_event(script.project_id, "storyboard", "set_design", "started",
+                           agent="Director", index=scene_index, total=len(scenes))
                 scene.set_json = await SetDresser().dress(
                     {"scene_number": scene.number, "heading": scene.heading,
                      "location": scene.location, "description": scene.description,
                      "stage_directions": scene.stage_directions or []},
                     [{"shot_number": sd.get("shot_number"), "action": sd.get("action"),
                       "dialogue": sd.get("dialogue")} for sd in shots])
+                dressed += 1
             except Exception:  # noqa: BLE001
                 pass
             for sd in shots:
@@ -187,7 +206,13 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 )
                 db.add(shot)
                 created.append((shot, scene.number))
-    db.commit()
+    tool_event(script.project_id, "storyboard", "shot_breakdown", "succeeded",
+               agent="Director", artifact=f"{len(created)} shots")
+    tool_event(script.project_id, "storyboard", "set_design", "succeeded",
+               agent="Director", artifact=f"{dressed} scenes dressed")
+    with tool_run(script.project_id, "storyboard", "write_shots_db", "Director") as t:
+        db.commit()
+        t["artifact"] = f"{len(created)} rows"
     _progress(script.project_id, "storyboard", "completed", "Director",
               f"Storyboard ready: {len(created)} shots across {len(scenes)} scene(s)")
     # scene_number + shot_number ride along so the budget allocator can
@@ -208,13 +233,15 @@ def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_u
         from app.models.project import Project
         project = db.query(Project).filter(Project.id == uuid.UUID(str(project_id))).first()
         budget_usd = float(project.credit_budget) if project and project.credit_budget else 40.0
-    result = TokenOptimizer().allocate(shots, budget_usd)
-    tier_by_id = {s["shot_id"]: s["quality_tier"] for s in result["scored_shots"]}
-    for sid, tier in tier_by_id.items():
-        shot = db.query(Shot).filter(Shot.id == uuid.UUID(sid)).first()
-        if shot:
-            shot.quality_tier = tier
-    db.commit()
+    with tool_run(project_id, "generate", "budget_allocate", "Producer") as t:
+        result = TokenOptimizer().allocate(shots, budget_usd)
+        tier_by_id = {s["shot_id"]: s["quality_tier"] for s in result["scored_shots"]}
+        for sid, tier in tier_by_id.items():
+            shot = db.query(Shot).filter(Shot.id == uuid.UUID(sid)).first()
+            if shot:
+                shot.quality_tier = tier
+        db.commit()
+        t["artifact"] = f"{len(tier_by_id)} shots fitted"
     from app.agents.reporter import report_agent
     report_agent(db, project_id, agent="budget_allocator", stage="budget",
                  decision={"wan": result.get("wan_shots"), "happyhorse": result.get("happyhorse_shots")}

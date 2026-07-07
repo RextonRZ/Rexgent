@@ -12,6 +12,7 @@ from app.services.plate_generator import (PlateGenerator, character_plate_prompt
 from app.services.prompt_loader import load_prompt
 from app.services.guardrails import strip_character_names
 from app.websocket.emitter import emit
+from app.websocket.tool_events import tool_event, tool_run
 
 
 def _key(name: str) -> str:
@@ -130,6 +131,8 @@ class CastingDirector:
 
         idx += 1
         emit("casting.plate.started", {"kind": "style", "key": "style", "index": idx, "total": total}, pid)
+        tool_event(pid, "generate", "generate_plates", "started", agent="Casting",
+                   index=idx, total=total)
         s_url, _ = await self.plates.generate_and_store_plate(pid, "style", "style",
                                                               style.get("prompt", ""),
                                                               negative_prompt=style.get("negative_prompt"))
@@ -140,6 +143,8 @@ class CastingDirector:
         for loc in locations:
             idx += 1
             emit("casting.plate.started", {"kind": "location", "key": loc["location_key"], "index": idx, "total": total}, pid)
+            tool_event(pid, "generate", "generate_plates", "started", agent="Casting",
+                       index=idx, total=total)
             desc = strip_character_names(loc["description"], char_names) or "interior room"
             prompt = f"{desc} background plate. {', '.join(style.get('style_tags', []))}"
             url, _ = await self.plates.generate_and_store_plate(pid, "location", loc["location_key"], prompt)
@@ -148,12 +153,15 @@ class CastingDirector:
                                       scene_numbers=loc["scene_numbers"]))
             emit("casting.plate.completed", {"kind": "location", "key": loc["location_key"], "index": idx, "total": total}, pid)
 
+        faces_locked = 0
         for c in characters:
             variants = plan.get(c.name) or [{"label": "default", "outfit_description": "",
                                              "scene_numbers": []}]
             for i, v in enumerate(variants):
                 idx += 1
                 emit("casting.plate.started", {"kind": "character", "key": f"{c.name}:{v['label']}", "index": idx, "total": total}, pid)
+                tool_event(pid, "generate", "generate_plates", "started", agent="Casting",
+                           index=idx, total=total)
                 outfit = v.get("outfit_description", "")
                 # identity plate: waist-up, plain background, no style-tag scene drift
                 subject = subject_descriptor(c.gender, c.estimated_age,
@@ -163,6 +171,8 @@ class CastingDirector:
                     pid, "character", f"{c.name}_{v['label']}", prompt,
                     negative_prompt=CHAR_PLATE_NEGATIVE,
                     base_image_url=c.reference_image_url, prompt_extend=False)
+                if vector:
+                    faces_locked += 1
                 is_default = (i == 0)
                 self.db.add(CostumeVariant(character_id=c.id, label=v["label"],
                                            outfit_description=v.get("outfit_description"),
@@ -177,10 +187,19 @@ class CastingDirector:
                     c.plate_status = "ai_generated"
                 emit("casting.plate.completed", {"kind": "character", "key": f"{c.name}:{v['label']}", "index": idx, "total": total}, pid)
 
-        for idx_v, c in enumerate(characters):
-            emit("casting.voice.started", {"character": c.name}, pid)
-            assign_voice(c, idx_v)
-            emit("casting.voice.completed", {"character": c.name}, pid)
+        tool_event(pid, "generate", "generate_plates", "succeeded", agent="Casting",
+                   artifact=f"{total} plates")
+        if faces_locked:
+            tool_event(pid, "generate", "face_lock", "succeeded", agent="Casting",
+                       artifact=f"{faces_locked} identities locked")
+
+        with tool_run(pid, "generate", "voice_assign", "Casting",
+                      total=len(characters)) as t:
+            for idx_v, c in enumerate(characters):
+                emit("casting.voice.started", {"character": c.name}, pid)
+                assign_voice(c, idx_v)
+                emit("casting.voice.completed", {"character": c.name}, pid)
+            t["artifact"] = f"{len(characters)} voices"
 
         self.db.commit()
         from app.agents.reporter import report_agent

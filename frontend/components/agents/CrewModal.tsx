@@ -1,17 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
+  ChevronDown,
   Clapperboard,
   Film,
-  Link2,
   Loader2,
   PenLine,
   Scissors,
   Users,
-  Volume2,
-  Wallet,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -27,8 +25,17 @@ import {
   useLiveRunStore,
   useRunningStages,
   type StageKey,
+  type ToolState,
   type TrailEntry,
 } from "@/hooks/useLiveRun";
+import {
+  FALLBACK_TOOL_ICON,
+  STAGE_AGENT,
+  STAGE_AGENT_ICONS,
+  STAGE_TOOLS,
+  TOOL_KIND_COPY,
+  type ToolSpec,
+} from "@/lib/stageTools";
 
 const STAGE_ICONS: Record<StageKey, LucideIcon> = {
   script: PenLine,
@@ -36,21 +43,6 @@ const STAGE_ICONS: Record<StageKey, LucideIcon> = {
   storyboard: Clapperboard,
   generate: Film,
   export: Scissors,
-};
-
-/** Same crew metaphor as Studio stats — one naming scheme everywhere. */
-const AGENT_ICONS: Record<string, LucideIcon> = {
-  Screenwriter: PenLine,
-  "Casting Director": Users,
-  Casting: Users,
-  Director: Clapperboard,
-  "Story Analyst": Link2,
-  Renderer: Film,
-  Continuity: Link2,
-  Producer: Wallet,
-  "Audio Mixer": Volume2,
-  Editor: Scissors,
-  Showrunner: Clapperboard,
 };
 
 /** Ledger by_stage keys attributed to each pipeline stage (shown only if > 0). */
@@ -63,6 +55,7 @@ const STAGE_COST_KEYS: Record<StageKey, string[]> = {
 };
 
 type StageStatus = "done" | "active" | "failed" | "pending";
+type ToolNodeStatus = "idle" | "run" | "done" | "fail";
 
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -81,8 +74,227 @@ function TrailIcon({ kind }: { kind: TrailEntry["kind"] }) {
   return <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-zinc-600" />;
 }
 
-/** Compact crew view for the dock column — same store, same stages, at a
- * glance. The full node-graph modal opens from its footer button. */
+/** The stage's tool nodes in render order: the fixed topology first, then any
+ * tool the backend emitted that we didn't predeclare (never hide machinery). */
+function orderedTools(
+  stage: StageKey,
+  live: Record<string, ToolState>
+): { spec: ToolSpec; state?: ToolState }[] {
+  const fixed = STAGE_TOOLS[stage].map((spec) => ({ spec, state: live[spec.key] }));
+  const known = new Set(STAGE_TOOLS[stage].map((t) => t.key));
+  const extras = Object.values(live)
+    .filter((t) => !known.has(t.tool))
+    .sort((a, b) => a.at - b.at)
+    .map((state) => ({
+      spec: { key: state.tool, icon: FALLBACK_TOOL_ICON, kind: "service" as const },
+      state,
+    }));
+  return [...fixed, ...extras];
+}
+
+const toolStatus = (state?: ToolState): ToolNodeStatus => state?.status ?? "idle";
+
+/** One tool node card: idle faint → spinning+glow → green tick / amber retry. */
+function ToolNode({
+  spec,
+  state,
+  reduced,
+}: {
+  spec: ToolSpec;
+  state?: ToolState;
+  reduced: boolean;
+}) {
+  const st = toolStatus(state);
+  const Icon = spec.icon;
+  const retry =
+    st === "fail" && state?.index && state?.total
+      ? `retry ${state.index}/${state.total}`
+      : null;
+  return (
+    <div
+      title={`${spec.key} · ${TOOL_KIND_COPY[spec.kind]}${
+        state?.agent ? ` · ${state.agent}` : ""
+      }${state?.error ? ` · ${state.error}` : ""}`}
+      className={cn(
+        "relative flex w-full flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 transition-colors duration-150 motion-reduce:transition-none",
+        st === "idle" && "border-white/[0.06] text-zinc-600",
+        st === "run" &&
+          "border-violet-400/50 bg-violet-500/10 text-violet-200 ring-2 ring-violet-400/20",
+        st === "done" && "border-ok/30 bg-ok/[0.04] text-zinc-300",
+        st === "fail" && "border-amber-400/50 bg-amber-500/10 text-amber-300"
+      )}
+    >
+      {st === "run" ? (
+        reduced ? (
+          <span className="my-0.5 h-2.5 w-2.5 rounded-full bg-violet-400" />
+        ) : (
+          <Loader2 className="size-3.5 animate-spin" />
+        )
+      ) : (
+        <Icon className="size-3.5" />
+      )}
+      <span className="max-w-full truncate font-mono text-[9px] leading-3">
+        {spec.key}
+      </span>
+      <span className="h-3 max-w-full truncate text-[9px] leading-3 text-zinc-500">
+        {st === "run" && state?.index && state?.total
+          ? `${state.index}/${state.total}`
+          : retry ?? (st === "fail" ? "failed" : "")}
+      </span>
+      {st === "done" && (
+        <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-ok text-black">
+          <Check className="size-2" strokeWidth={3} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** The level-2 sub-graph: the stage's agent hub branching down to its tool
+ * nodes, artifact labels riding the edges. Pure SVG+CSS on a fixed topology. */
+function StageToolGraph({
+  stage,
+  live,
+  reduced,
+}: {
+  stage: StageKey;
+  live: Record<string, ToolState>;
+  reduced: boolean;
+}) {
+  const nodes = orderedTools(stage, live);
+  const n = nodes.length;
+  const AgentIcon = STAGE_AGENT_ICONS[stage];
+  const anyRun = nodes.some((t) => toolStatus(t.state) === "run");
+
+  const edgeClass = (st: ToolNodeStatus) =>
+    st === "run"
+      ? "stroke-violet-400/70"
+      : st === "done"
+        ? "stroke-ok/40"
+        : st === "fail"
+          ? "stroke-amber-400/60"
+          : "stroke-white/10";
+
+  return (
+    <>
+      {/* ── wide: hub above, tools fan out below (scrolls sideways if tight) ── */}
+      <div className="scroll-clean hidden overflow-x-auto sm:block">
+        <div style={{ minWidth: `${n * 84}px` }}>
+          <div className="relative z-10 flex justify-center">
+            <span
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px]",
+                anyRun
+                  ? "border-violet-400/50 bg-violet-500/10 text-violet-200"
+                  : "border-white/10 bg-zinc-900 text-zinc-400"
+              )}
+            >
+              <AgentIcon className="size-3" />
+              {STAGE_AGENT[stage]}
+            </span>
+          </div>
+          <svg
+            aria-hidden
+            className="block h-8 w-full"
+            viewBox="0 0 100 32"
+            preserveAspectRatio="none"
+          >
+            {nodes.map((t, i) => {
+              const st = toolStatus(t.state);
+              const x = ((i + 0.5) / n) * 100;
+              return (
+                <path
+                  key={t.spec.key}
+                  d={`M 50 0 C 50 16, ${x} 10, ${x} 32`}
+                  fill="none"
+                  vectorEffect="non-scaling-stroke"
+                  strokeWidth="1.5"
+                  strokeDasharray={st === "done" || st === "fail" ? undefined : "3 3"}
+                  className={cn(
+                    edgeClass(st),
+                    st === "run" && !reduced && "dash-flow"
+                  )}
+                />
+              );
+            })}
+          </svg>
+          {/* artifact labels sit ON the edges, right where they land */}
+          <div
+            className="grid gap-1.5"
+            style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}
+          >
+            {nodes.map((t) => (
+              <div key={t.spec.key} className="flex flex-col items-center">
+                <span
+                  className={cn(
+                    "relative z-10 -mt-3 mb-0.5 h-4 max-w-full truncate rounded bg-[#0b0912] px-1 text-[9px] leading-4",
+                    t.state?.artifact ? "text-zinc-400" : "text-transparent"
+                  )}
+                >
+                  {t.state?.artifact ?? "·"}
+                </span>
+                <ToolNode spec={t.spec} state={t.state} reduced={reduced} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── narrow: the same graph stacked vertically ── */}
+      <div className="sm:hidden">
+        <span className="flex w-fit items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1 text-[11px] text-zinc-400">
+          <AgentIcon className="size-3" />
+          {STAGE_AGENT[stage]}
+        </span>
+        <div className="ml-3 border-l border-white/10 pl-3 pt-1.5">
+          {nodes.map((t) => {
+            const st = toolStatus(t.state);
+            const Icon = t.spec.icon;
+            return (
+              <div key={t.spec.key} className="flex items-center gap-2 py-1">
+                {st === "run" ? (
+                  reduced ? (
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-violet-400" />
+                  ) : (
+                    <Loader2 className="size-3 shrink-0 animate-spin text-violet-300" />
+                  )
+                ) : st === "done" ? (
+                  <Check className="size-3 shrink-0 text-ok" />
+                ) : st === "fail" ? (
+                  <X className="size-3 shrink-0 text-amber-300" />
+                ) : (
+                  <Icon className="size-3 shrink-0 text-zinc-600" />
+                )}
+                <span
+                  className={cn(
+                    "font-mono text-[10px]",
+                    st === "run"
+                      ? "text-violet-200"
+                      : st === "done"
+                        ? "text-zinc-300"
+                        : st === "fail"
+                          ? "text-amber-300"
+                          : "text-zinc-600"
+                  )}
+                >
+                  {t.spec.key}
+                </span>
+                {t.state?.artifact && (
+                  <span className="truncate text-[9px] text-zinc-500">
+                    {t.state.artifact}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Compact crew view for the dock column — same store, same stages, same tool
+ * states at a glance. The full node-graph modal opens from its footer button. */
 export function CrewDockPanel({
   projectId,
   onOpenFull,
@@ -94,6 +306,7 @@ export function CrewDockPanel({
   const progress = useProjectProgress(projectId);
   const running = useRunningStages(projectId);
   const failed = useLiveRunStore((s) => s.failed);
+  const tools = useLiveRunStore((s) => s.tools);
   const activeByStage = useMemo(() => mapActiveByStage(running), [running]);
 
   const activeKeys = STAGE_ORDER.filter((k) => activeByStage[k]);
@@ -129,58 +342,84 @@ export function CrewDockPanel({
               ? "done"
               : "pending";
         const Icon = STAGE_ICONS[key];
+        const stageTools = tools[key];
+        const hasToolState = Object.keys(stageTools).length > 0;
         return (
-          <div key={key} className="flex items-center gap-2.5 px-1 py-1">
-            <span
-              className={cn(
-                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
-                st === "active" &&
-                  "border-violet-400/60 bg-violet-500/15 text-violet-200",
-                st === "done" && "border-ok/40 bg-ok/10 text-ok",
-                st === "failed" &&
-                  "border-amber-400/50 bg-amber-500/10 text-amber-300",
-                st === "pending" && "border-white/10 bg-zinc-900 text-zinc-600"
-              )}
-            >
-              {st === "done" ? (
-                <Check className="size-3" />
-              ) : (
-                <Icon className="size-3" />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p
+          <div key={key} className="px-1 py-1">
+            <div className="flex items-center gap-2.5">
+              <span
                 className={cn(
-                  "text-xs font-medium",
-                  st === "active"
-                    ? "text-violet-200"
-                    : st === "done"
-                      ? "text-zinc-300"
-                      : st === "failed"
-                        ? "text-amber-300"
-                        : "text-zinc-600"
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
+                  st === "active" &&
+                    "border-violet-400/60 bg-violet-500/15 text-violet-200",
+                  st === "done" && "border-ok/40 bg-ok/10 text-ok",
+                  st === "failed" &&
+                    "border-amber-400/50 bg-amber-500/10 text-amber-300",
+                  st === "pending" && "border-white/10 bg-zinc-900 text-zinc-600"
                 )}
               >
-                {STAGE_LABELS[key]}
-              </p>
-              {live && (
-                <p className="truncate text-[10px] text-muted-foreground">
-                  {live.agent}: {live.label}
-                  {live.index && live.total ? ` · ${live.index}/${live.total}` : ""}
+                {st === "done" ? (
+                  <Check className="size-3" />
+                ) : (
+                  <Icon className="size-3" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p
+                  className={cn(
+                    "text-xs font-medium",
+                    st === "active"
+                      ? "text-violet-200"
+                      : st === "done"
+                        ? "text-zinc-300"
+                        : st === "failed"
+                          ? "text-amber-300"
+                          : "text-zinc-600"
+                  )}
+                >
+                  {STAGE_LABELS[key]}
                 </p>
-              )}
-              {!live && failed[key] && (
-                <p className="truncate text-[10px] text-amber-300/80">
-                  {failed[key]}
-                </p>
-              )}
+                {live && (
+                  <p className="truncate text-[10px] text-muted-foreground">
+                    {live.agent}: {live.label}
+                    {live.index && live.total ? ` · ${live.index}/${live.total}` : ""}
+                  </p>
+                )}
+                {!live && failed[key] && (
+                  <p className="truncate text-[10px] text-amber-300/80">
+                    {failed[key]}
+                  </p>
+                )}
+              </div>
+              {st === "active" &&
+                (reduced ? (
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-violet-400" />
+                ) : (
+                  <Loader2 className="size-3.5 shrink-0 animate-spin text-violet-300" />
+                ))}
             </div>
-            {st === "active" &&
-              (reduced ? (
-                <span className="h-2 w-2 shrink-0 rounded-full bg-violet-400" />
-              ) : (
-                <Loader2 className="size-3.5 shrink-0 animate-spin text-violet-300" />
-              ))}
+            {/* per-tool ticks — identical data to the modal's sub-graph */}
+            {hasToolState && (
+              <div className="ml-[34px] mt-1 flex flex-wrap gap-1">
+                {orderedTools(key, stageTools).map((t) => {
+                  const ts = toolStatus(t.state);
+                  if (ts === "idle") return null;
+                  return (
+                    <span
+                      key={t.spec.key}
+                      title={`${t.spec.key}${t.state?.artifact ? ` · ${t.state.artifact}` : ""}`}
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        ts === "run" &&
+                          "bg-violet-400 motion-safe:animate-pulse",
+                        ts === "done" && "bg-ok/70",
+                        ts === "fail" && "bg-amber-400"
+                      )}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}
@@ -195,10 +434,10 @@ export function CrewDockPanel({
   );
 }
 
-/** Deliberately NON-modal: the overlay stops at `insetRight`, so the dock's
- * Showrunner chat and Live cost stay visible and clickable beside the full
- * pipeline — three synchronized views of the same run. ESC or the dimmed
- * backdrop closes it. */
+/** Deliberately NON-modal in layout: the overlay stops at `insetRight`, so the
+ * dock's Showrunner chat and Live cost stay visible beside the full pipeline —
+ * three synchronized views of the same run. Keyboard focus IS trapped inside
+ * (and restored on close); ESC or the dimmed backdrop closes it. */
 export function CrewModal({
   projectId,
   open,
@@ -211,13 +450,40 @@ export function CrewModal({
   /** px kept clear on the right so the dock stays usable */
   insetRight?: number;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) return;
+    const restoreTo = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onOpenChange(false);
+      if (e.key === "Escape") {
+        onOpenChange(false);
+        return;
+      }
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const focusables = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute("disabled"));
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const current = document.activeElement;
+      if (e.shiftKey && (current === first || current === panelRef.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && current === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      restoreTo?.focus?.();
+    };
   }, [open, onOpenChange]);
 
   if (!open) return null;
@@ -232,9 +498,12 @@ export function CrewModal({
         onClick={() => onOpenChange(false)}
       />
       <div
+        ref={panelRef}
         role="dialog"
+        aria-modal="true"
         aria-label="Your crew"
-        className="absolute left-1/2 top-1/2 flex max-h-[85vh] w-[min(92%,880px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b0912] shadow-2xl duration-200 animate-in fade-in-0 zoom-in-95"
+        tabIndex={-1}
+        className="absolute left-1/2 top-1/2 flex max-h-[85vh] w-[min(92%,880px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b0912] shadow-2xl outline-none duration-200 animate-in fade-in-0 zoom-in-95"
       >
         <CrewModalBody
           projectId={projectId}
@@ -258,6 +527,7 @@ function CrewModalBody({
   const running = useRunningStages(projectId);
   const trail = useLiveRunStore((s) => s.trail);
   const failed = useLiveRunStore((s) => s.failed);
+  const tools = useLiveRunStore((s) => s.tools);
   const [openPanels, setOpenPanels] = useState<StageKey[]>([]);
 
   useEffect(() => {
@@ -273,12 +543,12 @@ function CrewModalBody({
     return "pending";
   };
 
-  // a stage error auto-surfaces its detail panel
+  // the ACTIVE stage auto-expands its sub-graph; failures auto-surface too
   useEffect(() => {
-    const bad = STAGE_ORDER.filter((k) => failed[k]);
-    if (!bad.length) return;
-    setOpenPanels((cur) => [...cur, ...bad.filter((k) => !cur.includes(k))]);
-  }, [failed]);
+    const want = STAGE_ORDER.filter((k) => failed[k] || activeByStage[k]);
+    if (!want.length) return;
+    setOpenPanels((cur) => [...cur, ...want.filter((k) => !cur.includes(k))]);
+  }, [failed, activeByStage]);
 
   const togglePanel = (key: StageKey) =>
     setOpenPanels((cur) =>
@@ -293,42 +563,59 @@ function CrewModalBody({
   const tokens = ledger?.llm?.total_tokens ?? 0;
 
   const statusLine = activeKeys.length
-    ? `Working on ${activeKeys.map((k) => STAGE_LABELS[k]).join(" + ")} · $${grand.toFixed(2)} spent`
+    ? `Working on ${activeKeys.map((k) => STAGE_LABELS[k]).join(" + ")}`
     : doneCount === STAGE_ORDER.length
-      ? `All caught up · $${grand.toFixed(2)} spent`
-      : `Crew idle · ${doneCount}/${STAGE_ORDER.length} stages done · $${grand.toFixed(2)} spent`;
+      ? "All caught up"
+      : `Crew idle · ${doneCount}/${STAGE_ORDER.length} stages done`;
 
-  // tool nodes branch under the FIRST active stage: latest entry per agent
-  const activeKey = activeKeys[0];
-  const tools = useMemo(() => {
-    if (!activeKey) return [];
-    const latest = new Map<string, TrailEntry>();
-    for (const e of trail[activeKey]) latest.set(e.agent, e);
-    return Array.from(latest.values()).slice(-5);
-  }, [trail, activeKey]);
-  const runningAgent = activeKey ? activeByStage[activeKey]?.agent : undefined;
-  const activeIdx = activeKey ? STAGE_ORDER.indexOf(activeKey) : -1;
-  // node centers sit at 10%, 30%, 50%, 70%, 90% of the rail
-  const centerPct = activeIdx >= 0 ? activeIdx * 20 + 10 : 0;
+  // screen-reader narration of tool transitions ("dispatch_video complete,
+  // verify_face running") — announced only when a status actually changes
+  const [announcement, setAnnouncement] = useState("");
+  const lastStatuses = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    const parts: string[] = [];
+    for (const stage of STAGE_ORDER) {
+      for (const t of Object.values(tools[stage])) {
+        const id = `${stage}:${t.tool}`;
+        const prev = lastStatuses.current.get(id);
+        if (prev === t.status) continue;
+        lastStatuses.current.set(id, t.status);
+        if (t.status === "done") parts.push(`${t.tool} complete`);
+        else if (t.status === "fail") parts.push(`${t.tool} failed`);
+        else if (t.status === "run" && prev === undefined)
+          parts.push(`${t.tool} running`);
+      }
+    }
+    if (parts.length) setAnnouncement(parts.slice(-2).join(", "));
+  }, [tools]);
+
+  const stageCost = (key: StageKey) =>
+    STAGE_COST_KEYS[key].reduce((sum, k) => sum + (ledger?.by_stage?.[k] ?? 0), 0);
 
   const sessionQuiet =
     activeKeys.length === 0 &&
-    STAGE_ORDER.every((k) => trail[k].length === 0);
+    STAGE_ORDER.every(
+      (k) => trail[k].length === 0 && Object.keys(tools[k]).length === 0
+    );
 
   return (
     <>
-      {/* header — cost and tokens reuse the same query the dock reads */}
+      {/* header — live cost + token ticker reuse the same query the dock reads */}
       <div className="flex items-start justify-between gap-4 border-b border-white/[0.08] px-6 py-4">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Your crew</h2>
           <p className="mt-0.5 text-xs text-zinc-500">{statusLine}</p>
         </div>
         <div className="flex items-center gap-3">
-          {tokens > 0 && (
-            <span className="hidden text-[11px] tabular-nums text-zinc-500 sm:block">
-              {fmtTokens(tokens)} tokens
-            </span>
-          )}
+          <span className="text-[11px] tabular-nums text-zinc-400">
+            ${grand.toFixed(2)}
+            {tokens > 0 && (
+              <span className="hidden text-zinc-600 sm:inline">
+                {" "}
+                · {fmtTokens(tokens)} tok
+              </span>
+            )}
+          </span>
           <button
             onClick={onClose}
             aria-label="Close crew view"
@@ -339,14 +626,15 @@ function CrewModalBody({
         </div>
       </div>
 
-      {/* stage changes are announced for screen readers */}
+      {/* stage + tool transitions are announced for screen readers */}
       <p aria-live="polite" role="status" className="sr-only">
-        {activeKeys.length
-          ? `Crew working on ${activeKeys.map((k) => STAGE_LABELS[k]).join(" and ")}`
-          : "Crew idle"}
+        {announcement ||
+          (activeKeys.length
+            ? `Crew working on ${activeKeys.map((k) => STAGE_LABELS[k]).join(" and ")}`
+            : "Crew idle")}
       </p>
 
-      <div className="scroll-clean min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
+      <div className="scroll-clean min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
         {/* ── the pipeline rail ── */}
         <div className="relative">
           {/* connectors behind the nodes: solid when crossed, dashed ahead */}
@@ -382,7 +670,7 @@ function CrewModalBody({
                   <button
                     onClick={() => togglePanel(key)}
                     aria-expanded={isOpen}
-                    aria-label={`${STAGE_LABELS[key]} details`}
+                    aria-label={`${STAGE_LABELS[key]} workflow`}
                     className={cn(
                       "relative flex h-11 w-11 items-center justify-center rounded-full border transition-colors duration-150 motion-reduce:transition-none",
                       st === "active" &&
@@ -435,90 +723,63 @@ function CrewModalBody({
               );
             })}
           </div>
-
-          {/* ── tool branch under the active stage ── */}
-          {activeKey && tools.length > 0 && (
-            <div className="relative mt-1 h-[74px]">
-              <svg
-                aria-hidden
-                className="absolute top-0 h-4 w-px overflow-visible"
-                style={{ left: `${centerPct}%` }}
-              >
-                <line
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="16"
-                  stroke="rgb(167 139 250 / 0.5)"
-                  strokeWidth="2"
-                  strokeDasharray="3 3"
-                  className={reduced ? undefined : "dash-flow"}
-                />
-              </svg>
-              <div
-                className="absolute top-4 flex max-w-full -translate-x-1/2 flex-wrap justify-center gap-1.5"
-                style={{
-                  left: `clamp(120px, ${centerPct}%, calc(100% - 120px))`,
-                }}
-              >
-                {tools.map((t) => {
-                  const ToolIcon = AGENT_ICONS[t.agent] ?? Clapperboard;
-                  const isRunning = t.agent === runningAgent;
-                  return (
-                    <span
-                      key={t.agent}
-                      title={t.label}
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-full border px-2 py-1 font-mono text-[10px] transition-colors duration-150 motion-reduce:transition-none",
-                        isRunning
-                          ? "border-violet-400/50 bg-violet-500/10 text-violet-200"
-                          : t.kind === "fail"
-                            ? "border-bad/30 text-bad"
-                            : t.kind === "warn"
-                              ? "border-amber-400/30 text-amber-300"
-                              : t.kind === "done"
-                                ? "border-white/10 text-zinc-300"
-                                : "border-white/[0.06] text-zinc-600"
-                      )}
-                    >
-                      {isRunning ? (
-                        reduced ? (
-                          <span className="h-2 w-2 rounded-full bg-violet-400" />
-                        ) : (
-                          <Loader2 className="size-3 animate-spin" />
-                        )
-                      ) : (
-                        <ToolIcon className="size-3" />
-                      )}
-                      {t.agent}
-                      {!isRunning && t.kind === "done" && (
-                        <Check className="size-2.5 text-ok" />
-                      )}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
         {sessionQuiet && (
           <p className="text-center text-xs text-zinc-500">
             {doneCount > 0
-              ? "Nothing running right now. Click a stage to review what exists."
+              ? "Nothing running right now. Click a stage to see how it works."
               : "Your crew reports for duty when you start a stage."}
           </p>
         )}
 
-        {/* ── expanded process panels: open several, close them one by one ── */}
-        {openPanels.map((key) => {
-          const Icon = STAGE_ICONS[key];
+        {/* ── per-stage workflow panels: expanded sub-graph OR summary chip.
+         * Finished paths stay fully rendered when expanded — collapse only
+         * folds them to a compact summary that re-expands on click. ── */}
+        {STAGE_ORDER.map((key) => {
           const st = statusOf(key);
-          const entries = trail[key];
-          const cost = STAGE_COST_KEYS[key].reduce(
-            (sum, k) => sum + (ledger?.by_stage?.[k] ?? 0),
-            0
-          );
+          const stageTools = tools[key];
+          const toolCount = Object.values(stageTools).filter(
+            (t) => t.status !== "run"
+          ).length;
+          const anyData =
+            Object.keys(stageTools).length > 0 || trail[key].length > 0;
+          const isOpen = openPanels.includes(key);
+          const cost = stageCost(key);
+          const Icon = STAGE_ICONS[key];
+
+          // nothing to say about untouched pending stages
+          if (!isOpen && !anyData && st === "pending") return null;
+
+          if (!isOpen) {
+            // compact summary chip — "Storyboard ✓ · 4 tools · $0.38"
+            return (
+              <button
+                key={key}
+                onClick={() => togglePanel(key)}
+                aria-expanded={false}
+                className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-left transition-colors duration-150 hover:border-white/20 motion-reduce:transition-none"
+              >
+                <Icon className="size-4 text-zinc-400" />
+                <span className="text-sm font-medium">{STAGE_LABELS[key]}</span>
+                {st === "done" && <Check className="size-3.5 text-ok" />}
+                {st === "failed" && <X className="size-3.5 text-amber-300" />}
+                {st === "active" &&
+                  (reduced ? (
+                    <span className="h-2 w-2 rounded-full bg-violet-400" />
+                  ) : (
+                    <Loader2 className="size-3.5 animate-spin text-violet-300" />
+                  ))}
+                <span className="text-[11px] text-zinc-500">
+                  {toolCount > 0 &&
+                    `· ${toolCount} tool${toolCount === 1 ? "" : "s"} `}
+                  {cost > 0 && `· $${cost.toFixed(2)}`}
+                </span>
+                <ChevronDown className="ml-auto size-3.5 text-zinc-500" />
+              </button>
+            );
+          }
+
           return (
             <div
               key={key}
@@ -551,21 +812,30 @@ function CrewModalBody({
                 )}
                 <button
                   onClick={() => togglePanel(key)}
-                  aria-label={`Close ${STAGE_LABELS[key]} details`}
+                  aria-expanded
+                  aria-label={`Collapse ${STAGE_LABELS[key]} workflow`}
                   className="ml-auto rounded-md p-1 text-zinc-500 transition-colors duration-150 hover:bg-white/10 hover:text-white motion-reduce:transition-none"
                 >
-                  <X className="size-3.5" />
+                  <ChevronDown className="size-3.5 rotate-180" />
                 </button>
               </div>
-              <div className="scroll-clean max-h-44 overflow-y-auto px-3 py-2">
-                {entries.length === 0 ? (
-                  <p className="py-1 text-xs text-zinc-500">
+
+              {/* the workflow sub-graph */}
+              <div className="px-3 pb-2 pt-3">
+                <StageToolGraph stage={key} live={stageTools} reduced={reduced} />
+                {Object.keys(stageTools).length === 0 && (
+                  <p className="mt-2 text-center text-[10px] text-zinc-600">
                     {progress?.[key]
-                      ? "Finished before this session — open the page to see its artifacts."
-                      : "No activity yet this session."}
+                      ? "Finished before this session — this is the machinery it ran."
+                      : "These tools light up as the stage runs."}
                   </p>
-                ) : (
-                  entries.map((e, i) => (
+                )}
+              </div>
+
+              {/* the event log under the graph — the full story, kept visible */}
+              {trail[key].length > 0 && (
+                <div className="scroll-clean max-h-36 overflow-y-auto border-t border-white/[0.06] px-3 py-2">
+                  {trail[key].map((e, i) => (
                     <div
                       key={`${e.at}-${i}`}
                       className="flex items-start gap-2 py-0.5 text-xs"
@@ -581,9 +851,9 @@ function CrewModalBody({
                         {e.label}
                       </span>
                     </div>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
