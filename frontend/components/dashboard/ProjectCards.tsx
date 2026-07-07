@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { BTN_PRIMARY } from "@/components/ui/cta";
 import { FIELD } from "@/components/auth/AuthShell";
+import { GRAIN } from "@/components/landing/CtaBackdrop";
 import { cn } from "@/lib/utils";
 import { relTime } from "@/components/dashboard/format";
 import { useSuggestTitle, useUpdateProject } from "@/hooks/useProjects";
@@ -125,33 +126,76 @@ function KebabMenu({
 export function PosterImage({
   project,
   className,
+  detailed = false,
 }: {
   project: ProjectOverviewItem;
   className?: string;
+  /** full teaser treatment (ghost title, grain, sprockets, shimmer) — for
+   * card-sized posters only; tiny thumbnails stay clean */
+  detailed?: boolean;
 }) {
+  // a generating drama's poster carries a light sweep — work in progress
+  const shimmer = detailed && statusOf(project) === "generating" && (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/[0.09] to-transparent motion-safe:animate-[poster-shimmer_2.4s_ease-in-out_infinite]"
+    />
+  );
+
   if (project.poster_url) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={project.poster_url}
-        alt=""
-        loading="lazy"
-        className={cn("h-full w-full object-cover", className)}
-      />
+      <div className={cn("relative h-full w-full overflow-hidden", className)}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={project.poster_url}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+        />
+        {shimmer}
+      </div>
     );
   }
-  // genre-tinted duotone placeholder — barely-there color, large cropped icon
+
+  // Teaser one-sheet, not a broken image: genre duotone, ghosted title
+  // typography clipped by the edges, film grain, a whisper of sprockets.
   const def = genreDef(project.genre);
   return (
     <div
       className={cn("relative h-full w-full overflow-hidden", className)}
       style={{ background: posterGradient(project.genre) }}
     >
+      {detailed && (
+        <span
+          aria-hidden
+          className="absolute -left-1 top-1.5 select-none break-words pr-8 text-[1.9rem] font-bold uppercase leading-[0.95] tracking-tight text-white/[0.09] line-clamp-3"
+        >
+          {project.title}
+        </span>
+      )}
       <def.icon
         aria-hidden
         className="absolute -bottom-3 -right-3 size-16 rotate-[-8deg] text-white opacity-20"
         strokeWidth={1.25}
       />
+      {detailed && (
+        <>
+          <span
+            aria-hidden
+            className="absolute inset-0 opacity-[0.06] mix-blend-overlay"
+            style={{ backgroundImage: GRAIN }}
+          />
+          <span
+            aria-hidden
+            className="absolute inset-x-0 bottom-1 flex justify-center gap-2 opacity-20"
+          >
+            {Array.from({ length: 12 }).map((_, i) => (
+              <span key={i} className="h-[4px] w-[5px] rounded-[1px] bg-white" />
+            ))}
+          </span>
+        </>
+      )}
+      {shimmer}
     </div>
   );
 }
@@ -175,6 +219,7 @@ export function ProjectCard({
   onAction,
   className,
   style,
+  hero = false,
 }: {
   project: ProjectOverviewItem;
   previewing: boolean;
@@ -182,6 +227,8 @@ export function ProjectCard({
   onAction: (action: ProjectAction, project: ProjectOverviewItem) => void;
   className?: string;
   style?: React.CSSProperties;
+  /** the featured 2x2 card: bigger poster, premise line, hover quick actions */
+  hero?: boolean;
 }) {
   // Prompt-like titles get a sparkle: one click asks the LLM for a clean
   // title, offered inline with Accept / Keep. Never renames on its own.
@@ -198,21 +245,23 @@ export function ProjectCard({
       onKeyDown={(e) => e.key === "Enter" && onAction("open", project)}
       style={style}
       className={cn(
-        "group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-zinc-900/60 outline-none transition-all duration-300 hover:-translate-y-1 hover:border-violet-500/30 hover:shadow-[0_12px_40px_-12px_rgba(139,92,246,0.4)] focus-visible:ring-2 focus-visible:ring-violet-400/60",
+        "group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-zinc-900/60 outline-none transition-all duration-300 hover:-translate-y-0.5 hover:border-violet-500/30 hover:shadow-[0_10px_36px_-12px_rgba(139,92,246,0.4)] focus-visible:ring-2 focus-visible:ring-violet-400/60",
         className
       )}
     >
       <div
-        className="relative aspect-video overflow-hidden bg-zinc-950"
+        className={cn(
+          "relative min-h-0 overflow-hidden bg-zinc-950",
+          // the poster is the star: taller than 16:9 on standard cards, and
+          // the hero card lets it flex-fill the doubled cell
+          hero ? "flex-1" : "aspect-[16/10]"
+        )}
         onMouseEnter={() =>
           project.preview_clip_url && onPreview(project.id)
         }
         onMouseLeave={() => onPreview(null)}
       >
-        <PosterImage
-          project={project}
-          className="transition-transform duration-500 group-hover:scale-105"
-        />
+        <PosterImage project={project} detailed className={hero ? "absolute inset-0" : undefined} />
         {/* poster gradient scrim so the title area reads on busy stills */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         {previewing && project.preview_clip_url && (
@@ -226,13 +275,40 @@ export function ProjectCard({
             className="absolute inset-0 h-full w-full object-cover"
           />
         )}
+        {hero && (
+          <div className="absolute bottom-3 right-3 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAction("open", project);
+              }}
+              className="rounded-lg bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm transition-colors hover:bg-violet-600/80"
+            >
+              Open
+            </button>
+            {project.clip_count > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAction("poster", project);
+                }}
+                className="rounded-lg bg-black/60 px-3 py-1.5 text-xs text-zinc-200 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white"
+              >
+                Change poster
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-4">
+      <div className={cn("flex flex-col", hero ? "gap-1.5 p-4" : "gap-1.5 p-3.5")}>
         <div className="flex items-center gap-1.5">
           <p
             title={project.title}
-            className="min-w-0 flex-1 truncate text-sm font-medium"
+            className={cn(
+              "min-w-0 flex-1 truncate font-medium",
+              hero ? "text-lg font-semibold" : "text-[15px]"
+            )}
           >
             {project.title}
           </p>
@@ -286,6 +362,11 @@ export function ProjectCard({
               Keep
             </button>
           </div>
+        )}
+        {hero && project.premise && (
+          <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+            {project.premise}
+          </p>
         )}
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
           {project.genre && <GenreTag genre={project.genre} />}

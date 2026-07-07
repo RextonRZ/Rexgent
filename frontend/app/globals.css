@@ -284,3 +284,10 @@
 @media (prefers-reduced-motion: reduce) {
   .card-rise { opacity: 1; animation: none; }
 }
+
+/* Teaser-poster shimmer — a light sweep across a generating drama's poster. */
+@keyframes poster-shimmer {
+  0%   { transform: translateX(-120%) skewX(-12deg); }
+  60%  { transform: translateX(220%) skewX(-12deg); }
+  100% { transform: translateX(220%) skewX(-12deg); }
+}

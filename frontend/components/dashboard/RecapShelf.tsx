@@ -263,7 +263,36 @@ export function RecapShelf({
       ref={rootRef}
       className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0a0812] px-6 py-7 lg:px-10"
     >
-      <div className="grid items-center gap-8 lg:grid-cols-[1fr_1fr]">
+      {/* screening-room atmosphere: projector beam from above, live grain,
+          corner vignette — the landing CTA's layers at whisper opacity */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div
+          className={cn(
+            "absolute inset-0",
+            !reduced && "animate-[projector-flutter_7s_linear_infinite]"
+          )}
+          style={{
+            background:
+              "radial-gradient(110% 80% at 50% -20%, rgba(167,139,250,0.09), transparent 55%)",
+          }}
+        />
+        <div
+          className={cn(
+            "absolute inset-0 opacity-[0.04] mix-blend-overlay",
+            !reduced && "animate-[film-grain_0.8s_steps(1)_infinite]"
+          )}
+          style={{ backgroundImage: GRAIN }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(130% 120% at 50% 40%, transparent 60%, rgba(0,0,0,0.35) 100%)",
+          }}
+        />
+      </div>
+
+      <div className="relative grid items-center gap-8 lg:grid-cols-[1fr_1fr]">
         {/* greeting + stats + CTA */}
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -355,7 +384,9 @@ export function RecapShelf({
               aria-label={`Open ${current?.project_title}`}
               className={cn(
                 screenChrome,
-                "outline-none transition-colors hover:border-zinc-700 focus-visible:ring-2 focus-visible:ring-violet-400/60"
+                "outline-none transition-all duration-500 hover:border-zinc-700 focus-visible:ring-2 focus-visible:ring-violet-400/60",
+                // the screen glows while footage is actually rolling
+                running && "border-violet-500/20 shadow-[0_0_60px_-12px_rgba(139,92,246,0.45)]"
               )}
             >
               {screenInner}
@@ -363,10 +394,13 @@ export function RecapShelf({
           ) : (
             <div className={screenChrome}>{screenInner}</div>
           )}
-          {/* floor reflection */}
+          {/* floor reflection, brighter while the screen is lit */}
           <div
             aria-hidden
-            className="mx-auto -mt-2 h-10 w-4/5 rounded-[100%] bg-violet-500/10 blur-2xl"
+            className={cn(
+              "mx-auto -mt-2 h-10 w-4/5 rounded-[100%] blur-2xl transition-colors duration-500",
+              hasClips && running ? "bg-violet-500/20" : "bg-violet-500/10"
+            )}
           />
         </div>
       </div>

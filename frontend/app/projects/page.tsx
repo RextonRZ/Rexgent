@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronDown,
-  Clapperboard,
   LayoutGrid,
   List,
   Search,
@@ -47,6 +46,7 @@ import {
 import { PosterPicker } from "@/components/dashboard/PosterPicker";
 import { Skeleton } from "@/components/shared/Skeleton";
 import { AmbientBackdrop } from "@/components/shared/AmbientBackdrop";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { SiteFooter } from "@/components/shared/SiteFooter";
 import { cn } from "@/lib/utils";
 import {
@@ -225,12 +225,29 @@ function Dashboard() {
         </div>
       </header>
 
+      {/* depth: slightly lighter up top where the shelf sits, darkening down */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[55vh] bg-gradient-to-b from-white/[0.02] to-transparent"
+      />
+
       <div className="mx-auto max-w-7xl space-y-10 px-6 py-8">
-        <RecapShelf
-          overview={data}
-          userName={firstName}
-          onNewDrama={() => setNewOpen(true)}
-        />
+        <div className="relative">
+          {/* barely-there violet halo behind the shelf only */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -inset-x-16 -inset-y-10 -z-10"
+            style={{
+              background:
+                "radial-gradient(55% 75% at 50% 35%, rgba(139,92,246,0.08), transparent 70%)",
+            }}
+          />
+          <RecapShelf
+            overview={data}
+            userName={firstName}
+            onNewDrama={() => setNewOpen(true)}
+          />
+        </div>
 
         <section>
           {/* toolbar */}
@@ -353,27 +370,39 @@ function Dashboard() {
                 ))}
               </div>
             ) : projects.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-20 text-center">
-                <Clapperboard className="size-8 text-zinc-600" />
-                <p className="font-medium">No dramas yet</p>
-                <p className="text-sm text-muted-foreground">
-                  Type one premise and watch a studio go to work.
-                </p>
+              <EmptyState
+                title="No dramas yet"
+                line="Type one premise and watch a studio go to work."
+              >
                 <Button
                   onClick={() => setNewOpen(true)}
-                  className={cn("mt-2 h-10", BTN_PRIMARY)}
+                  className={cn("h-10", BTN_PRIMARY)}
                 >
                   Start your first drama
                   <CtaArrow />
                 </Button>
-              </div>
+              </EmptyState>
             ) : view === "grid" ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-flow-dense grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {/* the freshest drama leads as a 2x2 hero — the grid gets a
+                    focal point instead of a uniform wall */}
+                {filtered.length > 0 && (
+                  <ProjectCard
+                    key={filtered[0].id}
+                    hero
+                    project={filtered[0]}
+                    previewing={previewId === filtered[0].id}
+                    onPreview={setPreviewId}
+                    onAction={handleAction}
+                    className="card-rise sm:col-span-2 sm:row-span-2"
+                  />
+                )}
                 <NewProjectTile
                   className="card-rise"
+                  style={{ animationDelay: "40ms" }}
                   onClick={() => setNewOpen(true)}
                 />
-                {filtered.map((p, i) => (
+                {filtered.slice(1).map((p, i) => (
                   <ProjectCard
                     key={p.id}
                     project={p}
@@ -381,7 +410,7 @@ function Dashboard() {
                     onPreview={setPreviewId}
                     onAction={handleAction}
                     className="card-rise"
-                    style={{ animationDelay: `${Math.min(i + 1, 10) * 45}ms` }}
+                    style={{ animationDelay: `${Math.min(i + 2, 12) * 40}ms` }}
                   />
                 ))}
               </div>
