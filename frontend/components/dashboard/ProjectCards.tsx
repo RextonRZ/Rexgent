@@ -150,7 +150,9 @@ export function PosterImage({
           src={project.poster_url}
           alt=""
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          // vertical dramas crop into this landscape card; bias the crop up so
+          // faces stay in frame instead of centring on torsos
+          className="h-full w-full object-cover object-[50%_25%] transition-transform duration-500 group-hover:scale-[1.03]"
         />
         {shimmer}
       </div>
@@ -272,7 +274,7 @@ export function ProjectCard({
             playsInline
             autoPlay
             preload="metadata"
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover object-[50%_25%]"
           />
         )}
         {hero && (

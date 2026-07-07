@@ -255,7 +255,7 @@ export function RecapShelf({
                 className={cn(
                   // portrait clips overflow this 16:9 frame; bias the crop
                   // upward so faces sit in view instead of being centred
-                  "absolute inset-0 h-full w-full object-cover object-[50%_30%] transition-[opacity,object-position] duration-500 group-hover:object-[50%_18%]",
+                  "absolute inset-0 h-full w-full object-cover object-[50%_30%] transition-opacity duration-500",
                   visible ? "opacity-100" : "opacity-0"
                 )}
               />
@@ -269,7 +269,7 @@ export function RecapShelf({
                 className={cn(
                   // portrait clips overflow this 16:9 frame; bias the crop
                   // upward so faces sit in view instead of being centred
-                  "absolute inset-0 h-full w-full object-cover object-[50%_30%] transition-[opacity,object-position] duration-500 group-hover:object-[50%_18%]",
+                  "absolute inset-0 h-full w-full object-cover object-[50%_30%] transition-opacity duration-500",
                   visible ? "opacity-100" : "opacity-0",
                   !reduced && !current.video &&
                     "animate-[ken-burns_8s_ease-out_forwards]"
