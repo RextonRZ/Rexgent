@@ -186,9 +186,23 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         _stage(project_id, "update", f"Stitching {len(stitch_inputs)} clip(s)")
         stitcher.stitch(stitch_inputs, final_local, ratio=ratio)
 
+        # ── User-chosen music: downloaded on its OWN so a dialogue-prep hiccup
+        # can never silently drop the track the user set ──
+        bgm_local = None
+        if audio and audio.get("url"):
+            try:
+                ext = audio["url"].rsplit(".", 1)[-1].split("?")[0].lower() or "mp3"
+                bgm_local = os.path.join(workdir, f"music.{ext}")
+                a = httpx.get(audio["url"], timeout=120.0)
+                a.raise_for_status()
+                with open(bgm_local, "wb") as fh:
+                    fh.write(a.content)
+            except Exception as e:  # noqa: BLE001
+                bgm_local = None
+                logger.warning(f"Export: music download failed: {e}")
+
         # ── Dialogue placement: each line aligned to the shot that speaks it ──
         dialogue_segments: list = []
-        bgm_local = None
         try:
             from app.models.script import Script, Scene
 
@@ -228,16 +242,8 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"Export: could not download line audio {row.audio_url}: {e}")
             dialogue_segments = build_dialogue_segments(line_rows, scene_plan)
-
-            if audio and audio.get("url"):
-                ext = audio["url"].rsplit(".", 1)[-1].split("?")[0].lower() or "mp3"
-                bgm_local = os.path.join(workdir, f"music.{ext}")
-                a = httpx.get(audio["url"], timeout=120.0)
-                a.raise_for_status()
-                with open(bgm_local, "wb") as fh:
-                    fh.write(a.content)
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"Export: audio prep skipped: {e}")
+            logger.warning(f"Export: dialogue prep skipped: {e}")
 
         # ── Captions: timed to the placed voice lines when they exist, else to
         # shot durations. Burned into the picture (short dramas are watched
@@ -268,8 +274,10 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 mixed = os.path.join(workdir, "final_audio.mp4")
                 stitcher.mix_tracks(
                     final_local, dialogue_segments, bgm_local, mixed,
-                    bgm_volume=float(audio.get("volume", 0.3)) if audio else 0.3,
+                    bgm_volume=float(audio.get("volume", 1.0)) if audio else 1.0,
                     duck=bool(audio.get("duck", True)) if audio else True,
+                    bgm_fade_in=float(audio.get("fade_in", 0.0)) if audio else 0.0,
+                    bgm_fade_out=float(audio.get("fade_out", 0.0)) if audio else 0.0,
                 )
                 final_local = mixed
                 emit("audio.mix.completed", {}, project_id)

@@ -110,10 +110,10 @@ class VideoStitcher:
         return output_path
 
     def mix_tracks(self, video_path, dialogue_segments, bgm_path, output_path,
-                   bgm_volume=0.3, duck=True):
+                   bgm_volume=0.3, duck=True, bgm_fade_in=0.0, bgm_fade_out=0.0):
         """Build one dialogue track (each segment delayed to its start, then amix),
-        optionally duck a BGM bed beneath it (sidechaincompress), and mux onto the
-        silent video. Returns output_path."""
+        optionally duck a BGM bed beneath it (sidechaincompress) with the user's
+        volume + fades applied, and mux onto the silent video. Returns output_path."""
         inputs = ["-i", video_path]
         filters, dlg_labels = [], []
         for i, seg in enumerate(dialogue_segments):
@@ -129,7 +129,16 @@ class VideoStitcher:
         if bgm_path:
             bgm_idx = n + 1
             inputs += ["-i", bgm_path]
-            filters.append(f"[{bgm_idx}:a]volume={bgm_volume}[bgm]")
+            # volume + the user's fades, in order, on the music bed
+            bgm_chain = [f"volume={bgm_volume}"]
+            if bgm_fade_in and bgm_fade_in > 0:
+                bgm_chain.append(f"afade=t=in:st=0:d={bgm_fade_in}")
+            if bgm_fade_out and bgm_fade_out > 0:
+                vdur = self._duration(video_path)
+                if vdur > 0:
+                    start = max(0.0, vdur - bgm_fade_out)
+                    bgm_chain.append(f"afade=t=out:st={start:.2f}:d={bgm_fade_out}")
+            filters.append(f"[{bgm_idx}:a]{','.join(bgm_chain)}[bgm]")
             if duck and final_audio:
                 # duplicate the dialogue: one copy keys the compressor, one goes to the final mix
                 filters.append("[dlg]asplit=2[dlgkey][dlgmix]")

@@ -46,3 +46,28 @@ def test_mix_tracks_constant_low_when_duck_false():
         joined = " ".join(run.call_args[0][0])
     assert "sidechaincompress" not in joined
     assert "amix" in joined
+
+
+def test_mix_tracks_applies_user_volume_and_fade():
+    st = VideoStitcher()
+    with patch("subprocess.run") as run, patch.object(VideoStitcher, "_duration", return_value=30.0):
+        run.return_value.returncode = 0
+        st.mix_tracks(
+            "v.mp4", [], "bgm.mp3", "out.mp4",
+            bgm_volume=0.6, duck=True, bgm_fade_in=2.0, bgm_fade_out=3.0)
+        joined = " ".join(run.call_args[0][0])
+    assert "volume=0.6" in joined         # the volume the user set
+    assert "afade=t=in:st=0:d=2.0" in joined
+    assert "afade=t=out" in joined        # fade-out anchored near the end
+
+
+def test_mix_tracks_music_only_needs_no_dialogue():
+    # music with no dialogue must still reach the output (BGM-only export)
+    st = VideoStitcher()
+    with patch("subprocess.run") as run:
+        run.return_value.returncode = 0
+        st.mix_tracks("v.mp4", [], "bgm.mp3", "out.mp4", bgm_volume=1.0, duck=True)
+        args = run.call_args[0][0]
+    joined = " ".join(args)
+    assert "[bgm]" in joined
+    assert args[-1] == "out.mp4"
