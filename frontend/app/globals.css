@@ -301,3 +301,12 @@
   from { width: 0%; }
   to   { width: 100%; }
 }
+
+/* Crew modal: marching dashes on the branch line into the running tool. */
+@keyframes dash-flow {
+  to { stroke-dashoffset: -12; }
+}
+.dash-flow { animation: dash-flow 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .dash-flow { animation: none; }
+}

@@ -3,8 +3,15 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useLedger } from "@/hooks/useLedger";
+import { useProjectProgress } from "@/hooks/useProjectProgress";
+import {
+  RAW_TO_STAGE,
+  STAGE_LABELS,
+  useRunningStages,
+} from "@/hooks/useLiveRun";
 import { CostPanelContent } from "@/components/budget/CostPanelContent";
 import { AgentChat } from "@/components/agents/AgentChat";
+import { CrewModal } from "@/components/agents/CrewModal";
 
 type PanelKey = "agent" | "cost";
 type OpenState = Record<PanelKey, boolean>;
@@ -61,8 +68,20 @@ function PanelSection({
  *  never overlap the main content, and both can be open at once. */
 export function DockRail({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState<OpenState>({ agent: false, cost: false });
+  const [crewOpen, setCrewOpen] = useState(false);
   const ledger = useLedger(projectId);
   const grand = ledger?.grand_total ?? 0;
+  // same live-run store the chat + crew modal read — one source, no drift
+  const running = useRunningStages(projectId);
+  const progress = useProjectProgress(projectId);
+  const doneCount = progress
+    ? Object.values(progress).filter(Boolean).length
+    : 0;
+  const crewStatus = running.length
+    ? running.length > 1
+      ? `${running.length} stages`
+      : STAGE_LABELS[RAW_TO_STAGE[running[0].stage] ?? "script"]
+    : null;
 
   useEffect(() => {
     try {
@@ -111,6 +130,31 @@ export function DockRail({ projectId }: { projectId: string }) {
               <CostPanelContent projectId={projectId} />
             </PanelSection>
           )}
+
+          {/* the crew runs across ALL five steps — this opens the global view */}
+          <button
+            onClick={() => setCrewOpen(true)}
+            className="flex shrink-0 items-center gap-2 px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <span className="relative flex h-2 w-2 shrink-0">
+              {crewStatus ? (
+                <>
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-60 motion-safe:animate-ping" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-400" />
+                </>
+              ) : (
+                <span className="inline-flex h-2 w-2 rounded-full bg-zinc-600" />
+              )}
+            </span>
+            <span className="truncate">
+              {crewStatus
+                ? `Crew working · ${crewStatus}`
+                : `Crew idle · ${doneCount}/5 done`}
+            </span>
+            <span className="ml-auto shrink-0 text-muted-foreground/70">
+              View crew
+            </span>
+          </button>
         </div>
       )}
 
@@ -142,7 +186,23 @@ export function DockRail({ projectId }: { projectId: string }) {
             {grand.toFixed(grand >= 10 ? 0 : 1)}
           </span>
         </button>
+        <button
+          onClick={() => setCrewOpen(true)}
+          title="Your crew"
+          className="relative h-9 w-9 rounded-lg flex items-center justify-center text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary"
+        >
+          🎬
+          {running.length > 0 && (
+            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-violet-400 motion-safe:animate-pulse" />
+          )}
+        </button>
       </div>
+
+      <CrewModal
+        projectId={projectId}
+        open={crewOpen}
+        onOpenChange={setCrewOpen}
+      />
     </aside>
   );
 }

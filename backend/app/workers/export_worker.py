@@ -23,6 +23,17 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
+def _stage(project_id: str, status: str, label: str) -> None:
+    """Export progress on the shared stage:progress channel — the same pipe the
+    agent chat, crew modal and pipeline nav already listen to. Never fatal."""
+    try:
+        from app.websocket.emitter import emit
+        emit("stage:progress", {"stage": "export", "status": status,
+             "agent": "Editor", "label": label}, project_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def build_dialogue_segments(line_rows, scene_plan):
     """Place per-line dialogue audio on the global timeline, aligning each line to
     the shot that speaks it. line_rows: dicts with scene_number, line_index,
@@ -62,6 +73,8 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         if not job:
             return
 
+        _stage(project_id, "started", "Assembling the final cut")
+
         by_id = {
             str(c.id): c
             for c in db.query(GeneratedClip)
@@ -100,6 +113,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 resolved.append({"url": c.url, "in": None, "out": None, "clip": c})
 
         if not resolved:
+            _stage(project_id, "failed", "Nothing to export yet")
             return
 
         # Generated-clip subset drives captions + the production report.
@@ -143,6 +157,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
 
         # Download every segment and concatenate into one MP4 with FFmpeg,
         # applying each segment's trim (in/out).
+        _stage(project_id, "update", f"Fetching {len(resolved)} segment(s)")
         workdir = tempfile.mkdtemp()
         stitch_inputs = []
         for i, seg in enumerate(resolved):
@@ -158,6 +173,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
 
         if not stitch_inputs:
             logger.error("Export: no segments could be downloaded; aborting")
+            _stage(project_id, "failed", "Could not download any footage")
             return
 
         # The drama's delivery format (chosen at creation) sets the canvas.
@@ -167,6 +183,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
 
         stitcher = VideoStitcher()
         final_local = os.path.join(workdir, "final.mp4")
+        _stage(project_id, "update", f"Stitching {len(stitch_inputs)} clip(s)")
         stitcher.stitch(stitch_inputs, final_local, ratio=ratio)
 
         # ── Dialogue placement: each line aligned to the shot that speaks it ──
@@ -237,6 +254,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 srt_key = oss.get_project_path(project_id, "exports", "captions.srt")
                 srt_url = oss.upload_file(srt_path, srt_key)
                 burned = os.path.join(workdir, "final_subbed.mp4")
+                _stage(project_id, "update", "Burning captions into the picture")
                 stitcher.burn_subtitles(final_local, srt_path, burned)
                 final_local = burned
         except Exception as e:  # noqa: BLE001
@@ -258,6 +276,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         except Exception as e:  # noqa: BLE001
             logger.warning(f"Export: audio mix skipped: {e}")
 
+        _stage(project_id, "update", "Uploading the final cut")
         final_key = oss.get_project_path(project_id, "exports", "final.mp4")
         final_url = oss.upload_file(final_local, final_key)
 
@@ -276,7 +295,9 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                  "duration": report["total_duration_seconds"]}, project_id)
         except Exception:  # noqa: BLE001
             pass
+        _stage(project_id, "completed", "Final cut ready")
     except Exception as e:  # noqa: BLE001
         logger.error(f"Export failed: {e}")
+        _stage(project_id, "failed", "Export failed")
     finally:
         db.close()

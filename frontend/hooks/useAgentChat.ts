@@ -2,16 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getSocket } from "@/lib/websocket";
 import { useAgentReports } from "./useAgents";
 import { useActivityFeed, type FeedItem } from "./useActivityFeed";
+import {
+  ensureLiveRun,
+  subscribeFinished,
+  useRunningStages,
+  NODE_LABELS,
+} from "./useLiveRun";
 
-/** One stage:progress event from the backend. */
-export interface StageProgress {
-  stage: string;
-  status: "started" | "update" | "completed" | "failed";
-  agent?: string;
-  label: string;
-  index?: number;
-  total?: number;
-}
+// Live run state lives in ONE shared store (useLiveRun) so the chat, the
+// dock's crew status and the crew modal can never disagree.
+export type { StageProgress, RunningStage } from "./useLiveRun";
 
 export interface ChatMessage {
   id: string;
@@ -23,15 +23,6 @@ export interface ChatMessage {
   pct?: number;
   /** how many identical lines collapsed into this one (>=2 shows a badge) */
   _count?: number;
-}
-
-export interface RunningStage {
-  stage: string;
-  agent: string;
-  label: string;
-  since: number;
-  index?: number;
-  total?: number;
 }
 
 let _mid = 0;
@@ -47,59 +38,29 @@ function parseServerTime(s?: string): number {
   return Number.isNaN(t) ? Date.now() : t;
 }
 
-/** Live "who is working right now" from stage:progress events. Started/update
- * upsert the running entry (keeping the original start time); completed and
- * failed clear it and hand a message to the caller. */
+/** Live "who is working right now", read from the shared live-run store.
+ * Completed/failed stages hand a message to the caller (chat bubbles). */
 export function useStageProgress(
   projectId: string,
   onFinished?: (msg: ChatMessage) => void
 ) {
-  const [running, setRunning] = useState<Record<string, RunningStage>>({});
   const cb = useRef(onFinished);
   cb.current = onFinished;
 
   useEffect(() => {
-    const socket = getSocket();
-    socket.connect();
-    socket.emit("join_project", { project_id: projectId });
-
-    const handler = (p: StageProgress) => {
-      if (!p?.stage) return;
-      if (p.status === "started" || p.status === "update") {
-        setRunning((cur) => ({
-          ...cur,
-          [p.stage]: {
-            stage: p.stage,
-            agent: p.agent ?? "Agent",
-            label: p.label,
-            since: cur[p.stage]?.since ?? Date.now(),
-            index: p.index,
-            total: p.total,
-          },
-        }));
-      } else {
-        setRunning((cur) => {
-          const next = { ...cur };
-          delete next[p.stage];
-          return next;
-        });
-        cb.current?.({
-          id: nextId(),
-          at: Date.now(),
-          agent: p.agent ?? "Agent",
-          kind: p.status === "failed" ? "fail" : "done",
-          text: p.label,
-        });
-      }
-    };
-    socket.on("stage:progress", handler);
-    return () => {
-      socket.off("stage:progress", handler);
-      // no socket.disconnect() — the socket is shared app-wide
-    };
+    ensureLiveRun(projectId);
+    return subscribeFinished((m) =>
+      cb.current?.({
+        id: nextId(),
+        at: Date.now(),
+        agent: m.agent,
+        kind: m.failed ? "fail" : "done",
+        text: m.label,
+      })
+    );
   }, [projectId]);
 
-  return Object.values(running);
+  return useRunningStages(projectId);
 }
 
 /** Friendly copy for raw activity events; null = not worth a chat line. */
@@ -129,20 +90,6 @@ function feedToMessage(item: FeedItem): ChatMessage | null {
       return null;
   }
 }
-
-const NODE_LABELS: Record<string, string> = {
-  generate_script: "Writing script",
-  judge: "Judging quality",
-  revise: "Revising with the judge's notes",
-  extract_characters: "Extracting characters",
-  clarify: "Checking for ambiguity",
-  storyboard: "Storyboarding",
-  casting: "Casting",
-  audio: "Voicing dialogue",
-  budget: "Fitting the budget",
-  generate_video: "Dispatching video",
-  finalize: "Finalizing the plan",
-};
 
 /** The showrunner conversation: persistent agent reports + live activity +
  * stage progress merged into one chronological feed, plus who's typing. */
