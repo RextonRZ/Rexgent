@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Check,
@@ -222,6 +222,9 @@ const DAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
 /** GitHub-style activity grid: 26 weeks of daily generation. */
 function Heatmap({ days }: { days: DayStat[] }) {
   const reduced = useReducedMotion();
+  // the tooltip is absolute inside this wrapper — fixed positioning breaks
+  // here because the card-rise ancestor keeps a transform (forwards fill)
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{
     wi: number;
     di: number;
@@ -258,7 +261,7 @@ function Heatmap({ days }: { days: DayStat[] }) {
   const activeDays = days.filter((d) => d.clips > 0).length;
 
   return (
-    <div>
+    <div ref={wrapRef} className="relative">
       <div className="mb-1 flex gap-[3px] pl-[30px]">
         {monthLabels.map((label, i) => (
           <span
@@ -304,12 +307,19 @@ function Heatmap({ days }: { days: DayStat[] }) {
                       future
                         ? undefined
                         : (e) => {
+                            const wrap = wrapRef.current;
+                            if (!wrap) return;
                             const r = e.currentTarget.getBoundingClientRect();
+                            const w = wrap.getBoundingClientRect();
                             setHover({
                               wi,
                               di,
-                              x: r.left + r.width / 2,
-                              y: r.top,
+                              // clamp so the centered tooltip stays inside the drawer
+                              x: Math.min(
+                                w.width - 64,
+                                Math.max(64, r.left - w.left + r.width / 2)
+                              ),
+                              y: r.top - w.top,
                               label: `${stat?.clips ?? 0} clips · $${(
                                 stat?.spent ?? 0
                               ).toFixed(2)} · ${day.toLocaleDateString("en", {
@@ -335,7 +345,7 @@ function Heatmap({ days }: { days: DayStat[] }) {
       </div>
       {hover && (
         <div
-          className={cn(TIP, "fixed z-[60] -translate-x-1/2 -translate-y-full")}
+          className={cn(TIP, "absolute z-20 -translate-x-1/2 -translate-y-full")}
           style={{ left: hover.x, top: hover.y - 6 }}
         >
           {hover.label}
@@ -601,7 +611,89 @@ export function StudioStatsDrawer({
           </p>
         </section>,
 
-        /* 3 — your crew */
+        /* 3 — where budget went */
+        <section key="budget" className="space-y-3">
+          <SectionTitle>Where budget went</SectionTitle>
+          {splitTotal <= 0 ? (
+            <p className="text-xs text-zinc-500">Nothing spent yet.</p>
+          ) : (
+            <>
+              <div className="relative">
+                <div className="flex h-2.5 gap-px overflow-hidden rounded-full bg-white/5">
+                  {segments.map((s) => (
+                    <div
+                      key={s.key}
+                      onMouseEnter={() => setBarHover(s.key)}
+                      onMouseLeave={() => setBarHover(null)}
+                      className={cn(
+                        s.color,
+                        "transition-opacity duration-150 motion-reduce:transition-none",
+                        splitHover && splitHover !== s.key && "opacity-40"
+                      )}
+                      style={{ width: `${s.width}%` }}
+                    />
+                  ))}
+                </div>
+                {barSeg && (
+                  <div
+                    className={cn(
+                      TIP,
+                      "absolute bottom-full z-10 mb-1.5 -translate-x-1/2"
+                    )}
+                    style={{
+                      left: `${Math.min(85, Math.max(15, barSeg.mid))}%`,
+                    }}
+                  >
+                    {barSeg.label} · ${barSeg.value.toFixed(2)} ·{" "}
+                    {pctLabel(barSeg.value)} of spend
+                  </div>
+                )}
+              </div>
+              <div className="space-y-0.5">
+                {segments.map((s) => (
+                  <div
+                    key={s.key}
+                    onMouseEnter={() => setLegendHover(s.key)}
+                    onMouseLeave={() => setLegendHover(null)}
+                    className={cn(
+                      "-mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-1 text-xs transition-all duration-150 motion-reduce:transition-none",
+                      splitHover === s.key
+                        ? "bg-white/[0.04] font-medium text-zinc-200"
+                        : "text-zinc-400",
+                      splitHover && splitHover !== s.key && "opacity-40"
+                    )}
+                  >
+                    <span className={cn("h-2 w-2 rounded-[2px]", s.color)} />
+                    {s.label}
+                    <span className="ml-auto w-16 text-right tabular-nums text-zinc-300">
+                      $<CountNum value={s.value} format={(x) => x.toFixed(2)} />
+                    </span>
+                    <span className="w-10 text-right tabular-nums text-zinc-600">
+                      {pctLabel(s.value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-zinc-500">
+                {hoveredSplit
+                  ? `${hoveredSplit.noun} is ${pctLabel(
+                      data.cost_split[hoveredSplit.key] ?? 0
+                    )} of your spend.`
+                  : biggest
+                    ? `Most of your budget goes to ${biggest.phrase}.`
+                    : ""}
+              </p>
+            </>
+          )}
+        </section>,
+
+        /* 4 — activity heatmap */
+        <section key="activity" className="space-y-3 opacity-90">
+          <SectionTitle>Generation activity · 26 weeks</SectionTitle>
+          <Heatmap days={data.days} />
+        </section>,
+
+        /* 5 — your crew */
         <section key="crew" className="space-y-3">
           <SectionTitle>Your crew</SectionTitle>
           {crew.length === 0 ? (
@@ -704,88 +796,6 @@ export function StudioStatsDrawer({
               </div>
             </>
           )}
-        </section>,
-
-        /* 4 — where budget went */
-        <section key="budget" className="space-y-3">
-          <SectionTitle>Where budget went</SectionTitle>
-          {splitTotal <= 0 ? (
-            <p className="text-xs text-zinc-500">Nothing spent yet.</p>
-          ) : (
-            <>
-              <div className="relative">
-                <div className="flex h-2.5 gap-px overflow-hidden rounded-full bg-white/5">
-                  {segments.map((s) => (
-                    <div
-                      key={s.key}
-                      onMouseEnter={() => setBarHover(s.key)}
-                      onMouseLeave={() => setBarHover(null)}
-                      className={cn(
-                        s.color,
-                        "transition-opacity duration-150 motion-reduce:transition-none",
-                        splitHover && splitHover !== s.key && "opacity-40"
-                      )}
-                      style={{ width: `${s.width}%` }}
-                    />
-                  ))}
-                </div>
-                {barSeg && (
-                  <div
-                    className={cn(
-                      TIP,
-                      "absolute bottom-full z-10 mb-1.5 -translate-x-1/2"
-                    )}
-                    style={{
-                      left: `${Math.min(85, Math.max(15, barSeg.mid))}%`,
-                    }}
-                  >
-                    {barSeg.label} · ${barSeg.value.toFixed(2)} ·{" "}
-                    {pctLabel(barSeg.value)} of spend
-                  </div>
-                )}
-              </div>
-              <div className="space-y-0.5">
-                {segments.map((s) => (
-                  <div
-                    key={s.key}
-                    onMouseEnter={() => setLegendHover(s.key)}
-                    onMouseLeave={() => setLegendHover(null)}
-                    className={cn(
-                      "-mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-1 text-xs transition-all duration-150 motion-reduce:transition-none",
-                      splitHover === s.key
-                        ? "bg-white/[0.04] font-medium text-zinc-200"
-                        : "text-zinc-400",
-                      splitHover && splitHover !== s.key && "opacity-40"
-                    )}
-                  >
-                    <span className={cn("h-2 w-2 rounded-[2px]", s.color)} />
-                    {s.label}
-                    <span className="ml-auto w-16 text-right tabular-nums text-zinc-300">
-                      $<CountNum value={s.value} format={(x) => x.toFixed(2)} />
-                    </span>
-                    <span className="w-10 text-right tabular-nums text-zinc-600">
-                      {pctLabel(s.value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[11px] text-zinc-500">
-                {hoveredSplit
-                  ? `${hoveredSplit.noun} is ${pctLabel(
-                      data.cost_split[hoveredSplit.key] ?? 0
-                    )} of your spend.`
-                  : biggest
-                    ? `Most of your budget goes to ${biggest.phrase}.`
-                    : ""}
-              </p>
-            </>
-          )}
-        </section>,
-
-        /* 5 — activity heatmap, de-emphasized at the bottom */
-        <section key="activity" className="space-y-3 opacity-90">
-          <SectionTitle>Generation activity · 26 weeks</SectionTitle>
-          <Heatmap days={data.days} />
         </section>,
       ]
     : [];
