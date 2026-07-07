@@ -77,16 +77,6 @@ function Settings() {
           </dl>
         </section>
 
-        {/* Budget / voucher (read-only info) */}
-        <section className="rounded-xl border hairline bg-card p-6">
-          <h2 className="text-sm font-medium mb-2">Generation budget</h2>
-          <p className="text-sm text-muted-foreground">
-            Each project draws from your Qwen Cloud voucher. The live meter in
-            every project shows LLM + video spend against the limit, and premium
-            generation is reserved for the shots that matter.
-          </p>
-        </section>
-
         {/* Danger / session */}
         <section className="rounded-xl border hairline bg-card p-6 flex items-center justify-between">
           <div>
