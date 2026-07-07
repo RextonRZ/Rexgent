@@ -11,11 +11,50 @@ from app.graph.sync import sync_relationships
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
 
+def _levenshtein(a: str, b: str) -> int:
+    """Edit distance between two strings (small pure-Python impl, no dep)."""
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _fuzzy_match(char_map: dict, key: str) -> object | None:
+    """Last-resort match for a near-miss name. LLMs mis-transcribe uncommon
+    characters — e.g. 秦唳行 (rare 唳) comes back as 秦斩行 — and an exact lookup
+    then drops the whole relationship. Accept the closest cast name only when
+    it is both clearly similar and unambiguously the best (so a genuine
+    non-cast name like 敌国细作 still resolves to nothing)."""
+    scored = sorted(
+        ((1 - _levenshtein(full, key) / max(len(full), len(key)), c)
+         for full, c in char_map.items() if full),
+        key=lambda t: t[0], reverse=True,
+    )
+    if not scored:
+        return None
+    best_ratio, best_c = scored[0]
+    if best_ratio < 0.6:                              # too different — don't guess
+        return None
+    if len(scored) > 1 and scored[1][0] >= best_ratio - 0.15:  # tie — ambiguous
+        return None
+    return best_c
+
+
 def _resolve_character(char_map: dict, name) -> object | None:
     """Match an LLM-returned name to a cast member, tolerating cue names.
     Screenplays cue dialogue with short names (REN) while the cast stores
     full names (Ren Ishida) — an exact-only lookup silently drops the edge.
-    Tries exact, then first-name/cue-prefix matching (unambiguous only)."""
+    Tries exact, then first-name/cue-prefix matching (unambiguous only), then
+    a conservative fuzzy fallback for mis-transcribed names."""
     key = str(name or "").strip().upper()
     if not key:
         return None
@@ -28,7 +67,9 @@ def _resolve_character(char_map: dict, name) -> object | None:
         or full.split()[0] == key              # first name match
         or key.split()[0] == full              # full given, cast stores cue
     ]
-    return candidates[0] if len(candidates) == 1 else None
+    if candidates:
+        return candidates[0] if len(candidates) == 1 else None
+    return _fuzzy_match(char_map, key)
 
 
 def _canonical_names(char_map: dict, names) -> list[str]:
