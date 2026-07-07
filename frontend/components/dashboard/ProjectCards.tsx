@@ -487,7 +487,7 @@ export function RenameDialog({
 
   return (
     <Dialog open={Boolean(project)} onOpenChange={onOpenChange}>
-      <DialogContent className="glass sm:max-w-sm">
+      <DialogContent className="glass sm:max-w-sm" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Rename drama</DialogTitle>
         </DialogHeader>

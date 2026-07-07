@@ -480,7 +480,7 @@ function DeleteProjectModal({
 }) {
   return (
     <Dialog open={Boolean(project)} onOpenChange={onOpenChange}>
-      <DialogContent className="glass sm:max-w-md">
+      <DialogContent className="glass sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className="text-xl">Delete this drama?</DialogTitle>
         </DialogHeader>

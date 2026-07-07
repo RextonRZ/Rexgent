@@ -93,7 +93,7 @@ export function NewProjectModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass sm:max-w-lg">
+      <DialogContent className="glass sm:max-w-lg" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className="text-xl">New drama</DialogTitle>
         </DialogHeader>

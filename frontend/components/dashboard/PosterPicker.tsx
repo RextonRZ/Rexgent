@@ -89,7 +89,7 @@ export function PosterPicker({
 
   return (
     <Dialog open={Boolean(project)} onOpenChange={onOpenChange}>
-      <DialogContent className="glass sm:max-w-3xl">
+      <DialogContent className="glass sm:max-w-3xl" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Change poster — {project?.title}</DialogTitle>
         </DialogHeader>

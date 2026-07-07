@@ -291,3 +291,13 @@
   60%  { transform: translateX(220%) skewX(-12deg); }
   100% { transform: translateX(220%) skewX(-12deg); }
 }
+
+/* Screening-room screen: Ken Burns drift for poster stills + now-playing bar. */
+@keyframes ken-burns {
+  from { transform: scale(1) translate(0, 0); }
+  to   { transform: scale(1.08) translate(-1.5%, 1%); }
+}
+@keyframes screen-progress {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
