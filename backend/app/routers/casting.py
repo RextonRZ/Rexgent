@@ -192,13 +192,21 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
 
 @router.post("/character/{character_id}/voice/design")
 def set_voice(character_id: str, voice: str = "Cherry", db: Session = Depends(get_db)):
-    """Pick a preset TTS voice (qwen3-tts-flash timbre) for the character."""
+    """Pick a preset TTS voice (qwen3-tts-flash timbre) for the character.
+    Clears any existing voice lines so the next export will re-synthesize
+    with the newly chosen voice (not the old one from generation)."""
     from app.services.voice_catalog import ALL_IDS
+    from app.models.line_audio import LineAudio
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c:
         raise HTTPException(status_code=404, detail="Character not found")
     c.voice_id = voice if voice in ALL_IDS else "Cherry"
     c.voice_model, c.voice_source = get_settings().qwen_tts_designed_model, "preset"
+    # clear this character's voice lines so export re-synthesizes with the new voice
+    db.query(LineAudio).filter(
+        LineAudio.project_id == c.project_id,
+        LineAudio.character_name == c.name
+    ).delete(synchronize_session=False)
     db.commit()
     return {"voice_id": c.voice_id}
 
@@ -206,7 +214,10 @@ def set_voice(character_id: str, voice: str = "Cherry", db: Session = Depends(ge
 @router.post("/character/{character_id}/voice/clone")
 async def clone_voice(character_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Clone a custom voice from an uploaded sample (5-20s). Enrols it via
-    qwen-voice-enrollment; the character then speaks with the realtime vc model."""
+    qwen-voice-enrollment; the character then speaks with the realtime vc model.
+    Clears existing voice lines so the next export will re-synthesize with the
+    cloned voice (not the old preset voice)."""
+    from app.models.line_audio import LineAudio
     settings = get_settings()
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c:
@@ -229,6 +240,11 @@ async def clone_voice(character_id: str, file: UploadFile = File(...), db: Sessi
         raise HTTPException(status_code=502, detail=f"Voice enrollment failed: {e}")
     c.voice_id, c.voice_model, c.voice_source = voice, settings.qwen_tts_cloned_model, "cloned"
     c.voice_sample_url = sample_url
+    # clear this character's voice lines so export re-synthesizes with the cloned voice
+    db.query(LineAudio).filter(
+        LineAudio.project_id == c.project_id,
+        LineAudio.character_name == c.name
+    ).delete(synchronize_session=False)
     db.commit()
     return {"voice_id": voice, "voice_source": "cloned"}
 
