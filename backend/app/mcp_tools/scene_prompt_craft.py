@@ -1,7 +1,7 @@
 import json
 from app.services.qwen_client import QwenClient
 from app.services.prompt_loader import load_prompt
-from app.services.guardrails import PromptSanitizer
+from app.services.guardrails import PromptSanitizer, strip_character_names
 from app.config import get_settings
 
 
@@ -38,10 +38,25 @@ class ScenePromptCraft:
         next_action: str | None = None,
         foreground_characters: list | None = None,
     ) -> dict:
+        # A location named after a character ("Bear's apartment") must not smuggle
+        # the character-noun into the background — strip names from the setting text
+        # before it reaches the model, or it renders the animal, not the room.
+        names = list(character_visuals.keys())
+        if scene_setting:
+            clean_setting = dict(scene_setting)
+            if clean_setting.get("location"):
+                clean_setting["location"] = strip_character_names(
+                    clean_setting["location"], names) or "interior room"
+            if clean_setting.get("set_items"):
+                clean_setting["set_items"] = [
+                    strip_character_names(str(it), names) for it in clean_setting["set_items"]
+                ]
+        else:
+            clean_setting = None
         setting_block = (
             f"Scene setting (rule 13 — render this SAME room and these SAME props):\n"
-            f"{json.dumps(scene_setting, ensure_ascii=False)}\n\n"
-            if scene_setting else ""
+            f"{json.dumps(clean_setting, ensure_ascii=False)}\n\n"
+            if clean_setting else ""
         )
         # Adjacent-shot context (rule 14) so the prompt shows only THIS shot's
         # incremental motion instead of replaying the previous shot's action.

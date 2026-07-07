@@ -4,7 +4,34 @@ from app.services.guardrails import (
     CostCircuitBreaker,
     InputSanitizer,
     PreGenerationValidator,
+    strip_character_names,
 )
+
+
+class TestStripCharacterNames:
+    def test_possessive_location_loses_the_name_not_just_the_word(self):
+        # the Bear bug: "Bear's apartment" must become "apartment", never
+        # "'s apartment" (which still reads as a broken possessive)
+        assert strip_character_names("Bear's apartment", ["Bear"]) == "apartment"
+
+    def test_standalone_name_removed(self):
+        assert strip_character_names("Rose enters the room", ["Rose"]) == "enters the room"
+
+    def test_curly_apostrophe_possessive(self):
+        assert strip_character_names("Bear’s den, dim light", ["Bear"]) == "den, dim light"
+
+    def test_substring_is_never_touched(self):
+        # "Bear" must not gut "Beard" or "bearing"
+        assert strip_character_names("a man with a thick beard", ["Bear"]) == "a man with a thick beard"
+
+    def test_longest_name_first(self):
+        out = strip_character_names("Bear Junior's toy", ["Bear", "Bear Junior"])
+        assert "Bear" not in out and out == "toy"
+
+    def test_empty_inputs_are_safe(self):
+        assert strip_character_names("", ["Bear"]) == ""
+        assert strip_character_names("a room", []) == "a room"
+        assert strip_character_names("a room", [None, ""]) == "a room"
 
 
 class TestPromptSanitizer:
@@ -40,6 +67,14 @@ class TestPromptSanitizer:
         result = self.sanitizer.sanitize(prompt, character_names=["YUKI", "ARIA"])
         assert "YUKI" not in result
         assert "ARIA" not in result
+
+    def test_strips_possessive_character_names(self):
+        # the noun-name collision inside a full prompt: no dangling "'s"
+        prompt = "wide shot of Bear's apartment, warm practical lighting"
+        result = self.sanitizer.sanitize(prompt, character_names=["Bear"])
+        assert "Bear" not in result
+        assert "'s" not in result
+        assert "apartment" in result and "practical lighting" in result
 
     def test_preserves_clean_prompt(self):
         prompt = "Close-up, static camera, young woman with sharp cheekbones, tense expression, dramatic side lighting"

@@ -6,6 +6,28 @@ from collections import Counter
 logger = logging.getLogger(__name__)
 
 
+def strip_character_names(text: str, names) -> str:
+    """Remove character names — and their possessives — from free text, so a
+    character whose name is also a common noun ("Bear", "Rose", "Hunter") is
+    never rendered as the literal object. "Bear's apartment" -> "apartment",
+    not "'s apartment"; "Rose enters" -> "enters". Whole-word, case-insensitive.
+
+    Used anywhere a name can bleed into an image/video prompt: the location
+    plate prompt, the scene setting, and the final shot prompt."""
+    if not text or not names:
+        return text
+    result = text
+    # longest name first so "Bear Junior" is consumed before "Bear"
+    for name in sorted((n for n in names if n and str(n).strip()), key=len, reverse=True):
+        # eat an optional trailing possessive ('s / ’s) with the name
+        result = re.sub(r"\b" + re.escape(str(name)) + r"(?:['’]s)?\b",
+                        "", result, flags=re.IGNORECASE)
+    result = re.sub(r"['’]s\b", "", result)        # any orphaned possessive
+    result = re.sub(r"\s+([,.;])", r"\1", result)  # space before punctuation
+    result = re.sub(r"\s{2,}", " ", result)
+    return result.strip(" ,")
+
+
 class PromptSanitizer:
     """Prevents text/number hallucination in generated video.
 
@@ -57,8 +79,8 @@ class PromptSanitizer:
         result = self.STANDALONE_NUMBER_PATTERN.sub("", result)
 
         if character_names:
-            for name in character_names:
-                result = re.sub(r"\b" + re.escape(name) + r"\b", "", result, flags=re.IGNORECASE)
+            # strip names AND their possessives ("Bear's" -> "", not "'s")
+            result = strip_character_names(result, character_names)
 
         result = re.sub(r"\s{2,}", " ", result).strip()
         result = re.sub(r",\s*,", ",", result)

@@ -10,6 +10,7 @@ from app.services.wardrobe_planner import WardrobePlanner
 from app.services.plate_generator import (PlateGenerator, character_plate_prompt,
                                           subject_descriptor, CHAR_PLATE_NEGATIVE)
 from app.services.prompt_loader import load_prompt
+from app.services.guardrails import strip_character_names
 from app.websocket.emitter import emit
 
 
@@ -64,11 +65,16 @@ async def ensure_location_plates(db: Session, project_id) -> int:
     plates = PlateGenerator(db)
     style = db.query(StylePreset).filter(StylePreset.project_id == project_id).first()
     tags = list(style.style_tags or []) if style else []
+    # a location like "Bear's apartment" must not paint the animal Bear —
+    # neutralize character names in the plate prompt (label stays raw in the DB)
+    char_names = [c.name for c in
+                  db.query(Character).filter(Character.project_id == project_id).all()]
 
     for idx, loc in enumerate(missing, start=1):
         emit("casting.plate.started",
              {"kind": "location", "key": loc["location_key"], "index": idx, "total": len(missing)}, pid)
-        prompt = f"{loc['description']} background plate"
+        desc = strip_character_names(loc["description"], char_names) or "interior room"
+        prompt = f"{desc} background plate"
         if tags:
             prompt += f". {', '.join(tags)}"
         url, _ = await plates.generate_and_store_plate(pid, "location", loc["location_key"], prompt)
@@ -130,10 +136,12 @@ class CastingDirector:
         self._upsert_style(project_id, style, s_url)
         emit("casting.plate.completed", {"kind": "style", "key": "style", "index": idx, "total": total}, pid)
 
+        char_names = [c.name for c in characters]
         for loc in locations:
             idx += 1
             emit("casting.plate.started", {"kind": "location", "key": loc["location_key"], "index": idx, "total": total}, pid)
-            prompt = f"{loc['description']} background plate. {', '.join(style.get('style_tags', []))}"
+            desc = strip_character_names(loc["description"], char_names) or "interior room"
+            prompt = f"{desc} background plate. {', '.join(style.get('style_tags', []))}"
             url, _ = await self.plates.generate_and_store_plate(pid, "location", loc["location_key"], prompt)
             self.db.add(LocationPlate(project_id=project_id, location_key=loc["location_key"],
                                       description=loc["description"], plate_image_url=url,

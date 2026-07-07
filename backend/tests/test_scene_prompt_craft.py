@@ -55,6 +55,29 @@ async def test_craft_injects_scene_setting_into_llm_input():
 
 
 @pytest.mark.asyncio
+async def test_craft_neutralizes_character_named_location():
+    # "Bear's apartment" where Bear is a person must reach the model as a plain
+    # room, or the video renders the animal Bear inside the apartment
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "wide shot, apartment", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(
+        shot={"shot_type": "LS"},
+        character_visuals={"Bear": {"video_prompt_fragment": "burly bearded man"}},
+        target_model="wan",
+        scene_setting={"location": "Bear's apartment", "set_items": ["Bear's armchair"]})
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    setting_line = [l for l in user_msg.splitlines() if "Scene setting" in l or "location" in l]
+    joined = "\n".join(setting_line)
+    assert "Bear's" not in joined       # possessive gone
+    assert "apartment" in user_msg      # the room survives
+    assert "armchair" in user_msg       # the prop survives, minus the name
+
+
+@pytest.mark.asyncio
 async def test_craft_without_setting_has_no_setting_block():
     crafter = ScenePromptCraft.__new__(ScenePromptCraft)
     crafter.qwen = MagicMock()
