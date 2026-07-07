@@ -151,6 +151,17 @@ async def generate_script(
 
     project.genre = request.genre
     project.premise = request.premise
+    # The create modal only asks for a name now — an unnamed drama takes its
+    # title from the premise once a real script exists.
+    if (project.title or "").strip().lower() in ("", "untitled drama"):
+        try:
+            from app.routers.projects import _clean_title, _llm_title
+            with track_project(str(request.project_id), db):
+                suggested = _clean_title(await _llm_title(request.premise))
+            if suggested:
+                project.title = suggested
+        except Exception:  # noqa: BLE001
+            pass
     db.commit()
     db.refresh(script)
 

@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -21,11 +20,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { GENRES } from "@/lib/genres";
-import {
-  useBudgetEstimate,
-  useCreateProject,
-  useSuggestTitle,
-} from "@/hooks/useProjects";
+import { useBudgetEstimate, useCreateProject } from "@/hooks/useProjects";
 
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -42,8 +37,7 @@ export function NewProjectModal({
 }) {
   const router = useRouter();
   const createProject = useCreateProject();
-  const suggestTitle = useSuggestTitle();
-  const [premise, setPremise] = useState("");
+  const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("sci-fi");
   const [mode, setMode] = useState<"auto" | "guided">("auto");
   const [ratio, setRatio] = useState<"9:16" | "16:9">("9:16");
@@ -64,24 +58,15 @@ export function NewProjectModal({
   const budget = budgetOverride ?? suggestedBudget;
   const overBudget = Boolean(estimate && estimate.credit_usd > budget);
 
-  const pending = createProject.isPending || suggestTitle.isPending;
+  const pending = createProject.isPending;
 
   const handleCreate = async () => {
-    // The card never wears the raw prompt: derive a short evocative title,
-    // keep the premise stored separately on the project.
-    const p = premise.trim();
-    let title = "Untitled Drama";
-    if (p) {
-      try {
-        title = await suggestTitle.mutateAsync(p);
-      } catch {
-        title = p.slice(0, 60);
-      }
-    }
+    // The premise is entered ONCE, on the Script page where generation starts.
+    // A blank name is fine: the studio titles the drama from the premise as
+    // soon as a script exists.
     const project = await createProject.mutateAsync({
-      title,
+      title: title.trim() || "Untitled Drama",
       genre,
-      premise,
       credit_budget: budget,
       token_budget: estimate?.llm_tokens,
       video_ratio: ratio,
@@ -99,17 +84,17 @@ export function NewProjectModal({
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <div>
-            <Label className="text-xs text-muted-foreground">Premise</Label>
-            <Textarea
-              value={premise}
-              onChange={(e) => setPremise(e.target.value.slice(0, 300))}
-              placeholder="A detective in 2047 Tokyo discovers her partner is an AI."
-              rows={3}
+            <Label className="text-xs text-muted-foreground">Drama title</Label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value.slice(0, 80))}
+              placeholder="Untitled Drama"
               className="mt-1 bg-background/50"
               autoFocus
             />
             <p className="text-[11px] text-muted-foreground mt-1">
-              {premise.length}/300
+              Optional. You will write the premise next, on the Script page. Left
+              blank, the studio names it from your premise.
             </p>
           </div>
 

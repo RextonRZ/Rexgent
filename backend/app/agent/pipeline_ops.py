@@ -69,6 +69,26 @@ async def generate_script_op(
         structured = await ScriptStructurer().structure(raw_text, language=language)
         script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
         sync_scenes(project_id, structured, scene_uuids=scene_uuids)
+        # Full Auto enters the premise here, not at create time — reflect it on
+        # the project so the dashboard card and chat context stay truthful, and
+        # name an untitled drama from it.
+        try:
+            from app.models.project import Project
+            project = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+            if project is not None and clean_premise:
+                project.premise = clean_premise
+                project.genre = genre or project.genre
+                if (project.title or "").strip().lower() in ("", "untitled drama"):
+                    try:
+                        from app.routers.projects import _clean_title, _llm_title
+                        suggested = _clean_title(await _llm_title(clean_premise))
+                        if suggested:
+                            project.title = suggested
+                    except Exception:  # noqa: BLE001
+                        pass
+                db.commit()
+        except Exception:  # noqa: BLE001
+            pass
         _progress(project_id, "script", "completed", "Screenwriter",
                   f"Script ready: {len(structured.get('scenes', []))} scene(s)")
         return {"script_id": str(script.id), "structured": structured}
