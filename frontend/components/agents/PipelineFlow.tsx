@@ -1,40 +1,54 @@
 "use client";
 
+import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { useProjectProgress } from "@/hooks/useProjectProgress";
+import {
+  STAGE_ORDER,
+  mapActiveByStage,
+  useRunningStages,
+  type StageKey,
+} from "@/hooks/useLiveRun";
 
-const STAGES = [
-  { key: "script", label: "Script" },
-  { key: "judge", label: "Judge" },
-  { key: "characters", label: "Cast" },
-  { key: "storyboard", label: "Board" },
-  { key: "casting", label: "Plates" },
-  { key: "generation", label: "Gen" },
-  { key: "export", label: "Export" },
-];
+/** Short chip labels for the chat header (the five canonical stages —
+ * Judge/Plates live inside the crew graph as tools, not fake stages). */
+const CHIP_LABELS: Record<StageKey, string> = {
+  script: "Script",
+  characters: "Cast",
+  storyboard: "Board",
+  generate: "Gen",
+  export: "Export",
+};
 
-/** Horizontal pipeline; the current stage is highlighted + pulsing ("live direction"). */
-export function PipelineFlow({ current }: { current: string | null }) {
-  const idx = STAGES.findIndex((s) => s.key === current);
+/** Horizontal pipeline strip in the Showrunner chat header. Reads the SAME
+ * run-state store + progress query as the dock and the crew modal, so it can
+ * never disagree with them: done stages stay green across refreshes and dock
+ * close/reopen, every live stage pulses (not just an arbitrary first one). */
+export function PipelineFlow({ projectId }: { projectId: string }) {
+  const progress = useProjectProgress(projectId);
+  const running = useRunningStages(projectId);
+  const activeByStage = useMemo(() => mapActiveByStage(running), [running]);
+
   return (
-    <div className="flex items-center gap-1 gap-y-1.5 flex-wrap">
-      {STAGES.map((s, i) => {
-        const active = i === idx;
-        const done = idx > -1 && i < idx;
+    <div className="flex flex-wrap items-center gap-1 gap-y-1.5">
+      {STAGE_ORDER.map((key, i) => {
+        const active = Boolean(activeByStage[key]);
+        const done = !active && Boolean(progress?.[key]);
         return (
-          <div key={s.key} className="flex items-center gap-1">
+          <div key={key} className="flex items-center gap-1">
             <span
               className={cn(
                 "rounded px-1.5 py-0.5 text-[9px] font-medium transition-colors",
                 active
-                  ? "bg-primary text-primary-foreground animate-pulse"
+                  ? "bg-primary text-primary-foreground motion-safe:animate-pulse"
                   : done
-                  ? "bg-ok/20 text-ok"
-                  : "bg-secondary text-muted-foreground"
+                    ? "bg-ok/20 text-ok"
+                    : "bg-secondary text-muted-foreground"
               )}
             >
-              {s.label}
+              {CHIP_LABELS[key]}
             </span>
-            {i < STAGES.length - 1 && (
+            {i < STAGE_ORDER.length - 1 && (
               <span className={cn("h-px w-1.5", done ? "bg-ok/40" : "bg-border")} />
             )}
           </div>

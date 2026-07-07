@@ -260,8 +260,6 @@ export function AgentChat({ projectId }: { projectId: string }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, running.length, awaitingCasting, budgetFit, exportUrl]);
 
-  const stage = running[0]?.stage ?? null;
-
   const ask = async () => {
     const q = question.trim();
     if (!q || thinking) return;
@@ -295,7 +293,7 @@ export function AgentChat({ projectId }: { projectId: string }) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="shrink-0">
-        <PipelineFlow current={stage} />
+        <PipelineFlow projectId={projectId} />
       </div>
 
       <div
