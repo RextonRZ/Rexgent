@@ -50,6 +50,22 @@ export function RelationshipGraph({
   onSelectEdge,
 }: RelationshipGraphProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+
+  const zoomBy = (k: number) => {
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current)
+      .transition()
+      .duration(200)
+      .call(zoomRef.current.scaleBy, k);
+  };
+  const resetZoom = () => {
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current)
+      .transition()
+      .duration(250)
+      .call(zoomRef.current.transform, d3.zoomIdentity);
+  };
 
   useEffect(() => {
     if (!svgRef.current || characters.length === 0) return;
@@ -71,7 +87,19 @@ export function RelationshipGraph({
     svg.selectAll("*").remove();
     svg.attr("viewBox", `0 0 ${width} ${height}`);
 
-    const tooltip = svg.append("g").style("pointer-events", "none");
+    // everything zoomable/pannable lives in this container group
+    const container = svg.append("g");
+
+    // scroll to zoom, drag background to pan; node drag still wins on nodes
+    // because d3.drag stops event propagation before zoom sees it
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.4, 4])
+      .on("zoom", (event) => container.attr("transform", event.transform));
+    svg.call(zoom).on("dblclick.zoom", null);
+    zoomRef.current = zoom;
+
+    const tooltip = container.append("g").style("pointer-events", "none");
 
     const simulation = d3
       .forceSimulation<GraphNode>(nodes)
@@ -86,7 +114,7 @@ export function RelationshipGraph({
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide(34));
 
-    const link = svg
+    const link = container
       .append("g")
       .selectAll("line")
       .data(links)
@@ -109,7 +137,7 @@ export function RelationshipGraph({
         tooltip.raise();
         if (d.rel.evidence_quote) {
           tooltip.selectAll("*").remove();
-          const [mx, my] = d3.pointer(event, svgRef.current);
+          const [mx, my] = d3.pointer(event, container.node());
           const text = `"${d.rel.evidence_quote}"`;
           const t = tooltip
             .append("text")
@@ -140,7 +168,7 @@ export function RelationshipGraph({
         if (onSelectEdge) onSelectEdge(d.rel);
       });
 
-    const node = svg
+    const node = container
       .append("g")
       .selectAll<SVGGElement, GraphNode>("g")
       .data(nodes)
@@ -228,7 +256,37 @@ export function RelationshipGraph({
 
   return (
     <div className="w-full">
-      <svg ref={svgRef} className="w-full h-[460px]" />
+      <div className="relative">
+        <svg
+          ref={svgRef}
+          className="w-full h-[460px] cursor-grab active:cursor-grabbing"
+        />
+        {/* zoom controls — scroll to zoom, drag to pan, or use these */}
+        <div className="absolute right-2 top-2 flex flex-col overflow-hidden rounded-lg border border-white/10 bg-black/40 backdrop-blur-sm">
+          <button
+            onClick={() => zoomBy(1.3)}
+            aria-label="Zoom in"
+            className="flex h-8 w-8 items-center justify-center text-lg text-zinc-300 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            +
+          </button>
+          <button
+            onClick={() => zoomBy(1 / 1.3)}
+            aria-label="Zoom out"
+            className="flex h-8 w-8 items-center justify-center border-t border-white/10 text-lg text-zinc-300 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            −
+          </button>
+          <button
+            onClick={resetZoom}
+            aria-label="Reset zoom"
+            title="Reset"
+            className="flex h-8 w-8 items-center justify-center border-t border-white/10 text-xs text-zinc-300 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            ⤢
+          </button>
+        </div>
+      </div>
       <div className="flex flex-wrap gap-3 text-xs mt-2">
         {Object.entries(REL_COLORS).map(([type, color]) => (
           <span key={type} className="flex items-center gap-1">

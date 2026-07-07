@@ -8,6 +8,7 @@ import { FaceUpload } from "./FaceUpload";
 import { AppearanceGenerator } from "./AppearanceGenerator";
 import { PlateCard } from "@/components/casting/PlateCard";
 import { VoiceRow } from "@/components/casting/VoiceRow";
+import { ZoomableImage } from "@/components/shared/Lightbox";
 import {
   useRegenerateVariant,
   useOverrideVariant,
@@ -108,8 +109,7 @@ export function CharacterCard({
         {/* compact header: avatar + name + role */}
         <div className="flex items-center gap-4">
           {hasFace ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <ZoomableImage
               src={character.reference_image_url!}
               alt={character.name}
               className="h-16 w-16 rounded-full object-cover border border-border shrink-0"

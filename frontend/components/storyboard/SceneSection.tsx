@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ShotCard } from "./ShotCard";
+import { ZoomableImage } from "@/components/shared/Lightbox";
 import type { SceneShots } from "@/hooks/useStoryboard";
 
 export interface SceneLocation {
@@ -58,8 +59,7 @@ export function SceneSection({
               <div className="md:w-44 shrink-0">
                 <div className="rounded-lg overflow-hidden border hairline bg-background/40">
                   {location.url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <ZoomableImage
                       src={location.url}
                       alt={location.label}
                       className="aspect-square w-full object-cover"

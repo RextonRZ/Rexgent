@@ -1,6 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { ZoomIn } from "lucide-react";
+import { Lightbox } from "@/components/shared/Lightbox";
 
 const STATUS_LABEL: Record<string, string> = {
   ai_generated: "AI generated",
@@ -32,6 +34,7 @@ export function PlateCard({
   onUpload,
 }: PlateCardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [zoom, setZoom] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -47,11 +50,26 @@ export function PlateCard({
       <div className="relative aspect-square w-full bg-background/40">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt={label} className="h-full w-full object-contain" />
+          <img
+            src={imageUrl}
+            alt={label}
+            onClick={() => setZoom(true)}
+            className="h-full w-full cursor-zoom-in object-contain"
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">
             no plate yet
           </div>
+        )}
+        {/* view-larger affordance, top-left so it clears the status badge */}
+        {imageUrl && (
+          <button
+            onClick={() => setZoom(true)}
+            title="View larger"
+            className="absolute top-1.5 left-1.5 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white/80 opacity-0 transition-opacity hover:bg-black/70 hover:text-white group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            <ZoomIn className="size-3.5" />
+          </button>
         )}
         {status && (
           <span
@@ -102,6 +120,13 @@ export function PlateCard({
         accept="image/*"
         className="hidden"
         onChange={handleFileChange}
+      />
+
+      <Lightbox
+        src={imageUrl}
+        alt={label}
+        open={zoom}
+        onClose={() => setZoom(false)}
       />
     </div>
   );
