@@ -65,3 +65,37 @@ async def test_craft_without_setting_has_no_setting_block():
     await crafter.craft(shot={}, character_visuals={}, target_model="wan")
     user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "Scene setting" not in user_msg
+
+
+@pytest.mark.asyncio
+async def test_craft_injects_adjacent_shot_actions():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "man stands alone breathing hard", "negative_prompt": "",
+        "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(
+        shot={"shot_type": "MS", "action": "the man catches his breath"},
+        character_visuals={}, target_model="happyhorse",
+        prev_action="woman runs into the alley, man chases her",
+        next_action="the man turns and walks toward a door")
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Previous shot" in user_msg
+    assert "do NOT replay" in user_msg
+    assert "woman runs into the alley" in user_msg
+    assert "Next shot" in user_msg
+
+
+@pytest.mark.asyncio
+async def test_craft_without_adjacent_shots_has_no_continuity_block():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(shot={}, character_visuals={}, target_model="wan")
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Continuity with adjacent shots" not in user_msg

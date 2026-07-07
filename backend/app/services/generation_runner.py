@@ -240,17 +240,24 @@ class GenerationRunner:
 
             scene_anchor = None
             set_json = getattr(scene, "set_json", None)
-            for shot in shots:
+            # Continuity de-dup runs over the shots that actually render (the
+            # allocator may have cut some), so each prompt sees the real
+            # previous/next picture — never a deferred shot. Prev/next stay
+            # within the scene: a scene change is a clean cut, so the first
+            # shot has no "previous" to continue from.
+            active = [s for s in shots if (s.quality_tier or "") != "deferred"]
+            for i, shot in enumerate(active):
                 if self._cancelled:
                     break
-                if (shot.quality_tier or "") == "deferred":
-                    continue  # the allocator cut this shot to fit the spend cap
+                prev_action = active[i - 1].action if i > 0 else None
+                next_action = active[i + 1].action if i < len(active) - 1 else None
                 scene_setting, state_changed = setting_for_shot(
                     set_json, scene.location, shot.number)
                 prev_last_frame = await r2._process_shot(
                     job2, shot, char_by_name, bible, scene.number, prev_last_frame,
                     scene_anchor_url=scene_anchor, scene_setting=scene_setting,
-                    suppress_location=state_changed)
+                    suppress_location=state_changed,
+                    prev_action=prev_action, next_action=next_action)
                 # the first wide shot's closing frame anchors the room for the
                 # rest of the scene — a run of close-ups can't erase the set
                 if (scene_anchor is None and prev_last_frame
@@ -269,7 +276,8 @@ class GenerationRunner:
             db2.close()
         return prev_last_frame
 
-    async def _craft_prompt(self, shot, char_by_name, scene_setting=None) -> str:
+    async def _craft_prompt(self, shot, char_by_name, scene_setting=None,
+                            prev_action=None, next_action=None) -> str:
         in_frame = shot.characters_in_frame or []
         shot_chars = [char_by_name[n] for n in in_frame if n in char_by_name]
         character_visuals = {
@@ -285,6 +293,8 @@ class GenerationRunner:
             character_visuals=character_visuals,
             target_model=shot.quality_tier or "happyhorse",
             scene_setting=scene_setting,
+            prev_action=prev_action,
+            next_action=next_action,
         )
         return result.get("prompt", "")
 
@@ -301,7 +311,8 @@ class GenerationRunner:
 
     async def _process_shot(self, job, shot, char_by_name, bible, scene_number,
                             prev_last_frame_url, scene_anchor_url=None,
-                            scene_setting=None, suppress_location=False):
+                            scene_setting=None, suppress_location=False,
+                            prev_action=None, next_action=None):
         pid = str(job.project_id)
         in_frame = shot.characters_in_frame or []
         is_wan = shot.quality_tier == "wan"
@@ -324,7 +335,8 @@ class GenerationRunner:
         for attempt in range(MAX_RETRIES + 1):
             try:
                 ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
-                prompt = await self._craft_prompt(shot, char_by_name, scene_setting)
+                prompt = await self._craft_prompt(
+                    shot, char_by_name, scene_setting, prev_action, next_action)
                 if is_wan:
                     task_id = await self.qwen.generate_video_wan(
                         prompt=prompt, duration=shot.estimated_duration_seconds,

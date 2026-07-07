@@ -14,8 +14,13 @@ Rules you ALWAYS follow:
 11. BACKGROUND DEPTH FOLLOWS THE FRAMING. For close framings (ECU, CU, MCU, OTS, POV), render a shallow depth of field: the subject sharp and dominant, the surroundings softly blurred bokeh — only a suggestion of the room, NEVER the whole room in sharp focus. For wide framings (MS, FS, LS, EWS), show the full environment in focus as an establishing view. A close-up must never look like a person pasted in front of a flat, fully-detailed backdrop.
 12. If `notes` describes blocking (who stands where, foreground/background, left/right), honour it exactly and keep those positions — it is how consecutive shots stay in the same physical space. Frame the characters' real spatial relationship (over-the-shoulder, two-shot) instead of isolating each on an identical background.
 13. If a `Scene setting` is given, it is the SAME physical room across every shot of the scene: weave its `set_items` (visible ones for this framing) into the prompt with identical wording so props and furniture stay in the same positions. If `current_state` is present, the set has CHANGED — render the changed state exactly (a shattered vase stays shattered) and NEVER show the original intact prop again.
+14. CONTINUITY WITH ADJACENT SHOTS. You may be given `Previous shot` (what the camera JUST showed) and `Next shot` (what comes immediately after) — both from the same continuous scene. When they are present:
+    - Do NOT re-stage or replay action the previous shot already showed. Begin THIS shot from where the previous one ended and depict ONLY the new, incremental motion. Example: if the previous shot already showed a woman running into an alley while a man chases her, this shot does not repeat the run — the chase has ALREADY happened; continue from that moment (e.g. the man now stands alone, breathing hard).
+    - A character who has already entered the frame in the previous shot is ALREADY present here — never show them enter, arrive, or run in again.
+    - Respect the temporal boundary: describe where this clip STARTS and where it ENDS, and end it at the point the next shot picks up, so the model does not loop the whole action.
+    - Translate any abstract or emotional beat into concrete, visible motion a camera can literally capture (a slight smile, a lowered sword, a softening gaze), not narrative or intent.
 
-You will be given shot data (including `shot_type` and any `notes` blocking), character visual descriptions (use these, NOT names), the target model, and duration.
+You will be given shot data (including `shot_type` and any `notes` blocking), character visual descriptions (use these, NOT names), optionally the `Previous shot`/`Next shot` actions, the target model, and duration.
 
 Return JSON only, in this exact schema:
 {

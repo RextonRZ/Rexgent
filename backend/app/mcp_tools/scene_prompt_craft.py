@@ -34,15 +34,32 @@ class ScenePromptCraft:
         target_model: str = "wan",
         style_bible: dict | None = None,
         scene_setting: dict | None = None,
+        prev_action: str | None = None,
+        next_action: str | None = None,
     ) -> dict:
         setting_block = (
             f"Scene setting (rule 13 — render this SAME room and these SAME props):\n"
             f"{json.dumps(scene_setting, ensure_ascii=False)}\n\n"
             if scene_setting else ""
         )
+        # Adjacent-shot context (rule 14) so the prompt shows only THIS shot's
+        # incremental motion instead of replaying the previous shot's action.
+        continuity_parts = []
+        if prev_action:
+            continuity_parts.append(
+                f"Previous shot (already shown — do NOT replay this): {prev_action}")
+        if next_action:
+            continuity_parts.append(
+                f"Next shot (end this shot where that begins): {next_action}")
+        continuity_block = (
+            "Continuity with adjacent shots (rule 14):\n"
+            + "\n".join(continuity_parts) + "\n\n"
+            if continuity_parts else ""
+        )
         user_content = (
             f"Shot data:\n{json.dumps(shot)}\n\n"
             f"{setting_block}"
+            f"{continuity_block}"
             f"Character visual descriptions (use these, NOT names):\n{json.dumps(character_visuals)}\n\n"
             f"Target model: {target_model}\n"
             f"Duration: {shot.get('estimated_duration_seconds', 5)}s\n"
