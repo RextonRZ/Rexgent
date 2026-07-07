@@ -113,6 +113,11 @@ class GenerationRunner:
 
         job.status = "RUNNING"
         self.db.commit()
+        # picked up: keep the pipeline lit through the pre-render phases
+        # (voice synth, duration fit, preflight) before the first shot event
+        emit("stage:progress", {"stage": "generate", "status": "update",
+             "agent": "Renderer", "label": "Preparing the studio"},
+             str(job.project_id))
 
         # Spend ceiling comes from THIS drama's budget, not a global default.
         from app.models.project import Project
@@ -224,6 +229,8 @@ class GenerationRunner:
                 from app.workers.export_worker import run_export
                 run_export.delay(pid, str(job.id))
                 emit("export.autostarted", {"job_id": str(job.id)}, pid)
+                emit("stage:progress", {"stage": "export", "status": "started",
+                     "agent": "Editor", "label": "Queueing the final cut"}, pid)
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"auto-export dispatch failed: {e}")
 

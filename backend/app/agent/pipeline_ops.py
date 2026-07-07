@@ -347,6 +347,9 @@ def dispatch_generation_op(db: Session, project_id: str, auto_export: bool = Fal
     db.add(job)
     db.commit()
     db.refresh(job)
+    # instant feedback: the worker's own first event can be seconds away
+    _progress(project_id, "generate", "started", "Showrunner",
+              "Dispatching the render crew")
     from app.workers.generation_worker import run_generation_job
     run_generation_job.delay(str(job.id))
     return str(job.id)

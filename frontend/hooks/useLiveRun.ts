@@ -84,6 +84,10 @@ export interface RunningStage {
   since: number;
   index?: number;
   total?: number;
+  /** true when only tool:progress events created this entry — such entries
+   * self-clear when their last tool finishes (a standalone budget fit must
+   * not spin forever); stage-level events own their clearing. */
+  fromTool?: boolean;
 }
 
 export interface TrailEntry {
@@ -164,21 +168,36 @@ function pushTrail(stage: StageKey, entry: TrailEntry) {
 
 function upsertRunning(
   rawStage: string,
-  patch: { agent?: string; label: string; index?: number; total?: number }
+  patch: {
+    agent?: string;
+    label: string;
+    index?: number;
+    total?: number;
+    fromTool?: boolean;
+  }
 ) {
-  useLiveRunStore.setState((s) => ({
-    running: {
-      ...s.running,
-      [rawStage]: {
-        stage: rawStage,
-        agent: patch.agent ?? "Agent",
-        label: patch.label,
-        since: s.running[rawStage]?.since ?? Date.now(),
-        index: patch.index,
-        total: patch.total,
+  useLiveRunStore.setState((s) => {
+    const existing = s.running[rawStage];
+    return {
+      running: {
+        ...s.running,
+        [rawStage]: {
+          stage: rawStage,
+          agent: patch.agent ?? "Agent",
+          label: patch.label,
+          since: existing?.since ?? Date.now(),
+          index: patch.index,
+          total: patch.total,
+          // a stage-level event (fromTool undefined) claims ownership; a
+          // tool event never overrides that claim
+          fromTool:
+            patch.fromTool === undefined
+              ? false
+              : (existing?.fromTool ?? patch.fromTool),
+        },
       },
-    },
-  }));
+    };
+  });
 }
 
 function clearRunning(rawStage: string) {
@@ -301,10 +320,31 @@ export function ensureLiveRun(projectId: string) {
   });
 
   // ── the per-TOOL protocol: each stage's machinery ticks individually in
-  // the crew modal's workflow graph (and anywhere else reading `tools`) ──
+  // the crew modal's workflow graph — AND keeps the stage lit in real time.
+  // Generate spends whole minutes in synth/fit/preflight before its first
+  // shot event; without this the dock sat on "Crew idle" the entire time. ──
   on("tool:progress", (p: ToolProgress) => {
     if (!p?.stage || !p?.tool) return;
     upsertTool(p);
+    const verb =
+      p.status === "succeeded" ? " done" : p.status === "failed" ? " failed" : "";
+    upsertRunning(p.stage, {
+      agent: p.agent ?? "Crew",
+      label: `${p.tool.replace(/_/g, " ")}${verb}`,
+      index: p.index,
+      total: p.total,
+      fromTool: true,
+    });
+    // tool-only entries self-clear once their stage has no tool running —
+    // a standalone budget fit must not leave the stage spinning forever
+    if (p.status !== "started") {
+      const s = useLiveRunStore.getState();
+      const entry = s.running[p.stage];
+      const anyToolRunning = Object.values(
+        s.tools[p.stage as StageKey] ?? {}
+      ).some((t) => t.status === "run");
+      if (entry?.fromTool && !anyToolRunning) clearRunning(p.stage);
+    }
   });
 
   // ── auto-run node hops feed the trail (chat renders its own copy of these) ──

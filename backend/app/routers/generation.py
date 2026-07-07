@@ -24,6 +24,12 @@ async def start_generation(request: GenerationStartRequest, db: Session = Depend
     db.add(job)
     db.commit()
     db.refresh(job)
+    # light the pipeline the instant the user clicks — the celery worker may
+    # take seconds to pick the job up, and its own first event even longer
+    from app.websocket.emitter import emit
+    emit("stage:progress", {"stage": "generate", "status": "started",
+         "agent": "Showrunner", "label": "Dispatching the render crew"},
+         str(request.project_id))
     run_generation_job.delay(str(job.id))
     return job
 

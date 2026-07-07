@@ -68,6 +68,12 @@ async def render_export(request: ExportRequest, db: Session = Depends(get_db)):
             "fade_out": request.audio_fade_out,
             "duck": request.audio_duck,
         }
+    # light the pipeline the instant the user clicks — the worker's own
+    # "started" event only fires once celery picks the job up
+    from app.websocket.emitter import emit
+    emit("stage:progress", {"stage": "export", "status": "started",
+         "agent": "Editor", "label": "Queueing the final cut"},
+         str(request.project_id))
     run_export.delay(str(request.project_id), str(request.job_id), clips, audio)
     return {"status": "rendering", "message": "Export job started"}
 
