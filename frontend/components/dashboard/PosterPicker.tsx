@@ -42,6 +42,9 @@ export function PosterPicker({
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
   const [time, setTime] = useState(0);
+  // the picker frames the preview in the clip's OWN shape (vertical dramas are
+  // 9:16) so you see the exact poster you're choosing, not a letterboxed 16:9
+  const [portrait, setPortrait] = useState(false);
 
   const { data } = useQuery({
     queryKey: ["poster-clips", project?.id],
@@ -133,21 +136,31 @@ export function PosterPicker({
 
             {/* preview + scrubber */}
             <div className="min-w-0 flex-1 space-y-3">
-              <video
-                ref={videoRef}
-                key={url ?? "none"}
-                src={url ?? undefined}
-                muted
-                playsInline
-                preload="metadata"
-                onLoadedMetadata={(e) => {
-                  setDuration(e.currentTarget.duration || 0);
-                  setTime(e.currentTarget.currentTime || 0);
-                }}
-                className="aspect-video w-full rounded-lg border border-zinc-800 bg-black object-contain"
-              />
+              <div className="flex justify-center">
+                <video
+                  ref={videoRef}
+                  key={url ?? "none"}
+                  src={url ?? undefined}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  onLoadedMetadata={(e) => {
+                    setDuration(e.currentTarget.duration || 0);
+                    setTime(e.currentTarget.currentTime || 0);
+                    setPortrait(
+                      e.currentTarget.videoHeight > e.currentTarget.videoWidth
+                    );
+                  }}
+                  className={cn(
+                    "rounded-lg border border-zinc-800 bg-black object-contain",
+                    portrait
+                      ? "aspect-[9/16] h-[52vh] max-h-[460px] w-auto"
+                      : "aspect-video w-full"
+                  )}
+                />
+              </div>
 
-              {/* auto-suggested frames */}
+              {/* auto-suggested frames — same shape as the delivery format */}
               {suggested.length > 0 && (
                 <div className="grid grid-cols-6 gap-1.5">
                   {suggested.map((ts) => (
@@ -162,7 +175,10 @@ export function PosterPicker({
                         muted
                         playsInline
                         preload="metadata"
-                        className="aspect-video w-full object-cover"
+                        className={cn(
+                          "w-full object-cover",
+                          portrait ? "aspect-[9/16]" : "aspect-video"
+                        )}
                       />
                     </button>
                   ))}
