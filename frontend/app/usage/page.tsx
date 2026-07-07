@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   AudioWaveform,
   CheckCircle2,
+  Clapperboard,
   Film,
   Image as ImageIcon,
   MessageSquareText,
@@ -16,10 +17,12 @@ import { cn } from "@/lib/utils";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { AmbientBackdrop } from "@/components/shared/AmbientBackdrop";
 import { GRAIN } from "@/components/landing/CtaBackdrop";
+import { GENRES } from "@/lib/genres";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useCountUp } from "@/hooks/useCountUp";
 import {
   useUsageAnalytics,
+  type ClipSample,
   type UsageAnalytics,
   type UsageRange,
 } from "@/hooks/useUsageAnalytics";
@@ -134,6 +137,59 @@ function Sprockets() {
   );
 }
 
+/** Drama poster thumb — the same art the dashboard cards lead with; a
+ * genre-tinted placeholder when no poster was extracted yet. */
+function PosterThumb({
+  poster,
+  genre,
+}: {
+  poster: string | null;
+  genre: string | null;
+}) {
+  if (poster) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={poster}
+        alt=""
+        loading="lazy"
+        className="h-9 w-7 shrink-0 rounded-[4px] object-cover object-[50%_25%] ring-1 ring-white/10"
+      />
+    );
+  }
+  const g = GENRES.find((x) => x.value === (genre || "").toLowerCase());
+  const Icon = g?.icon ?? Clapperboard;
+  return (
+    <span
+      className="flex h-9 w-7 shrink-0 items-center justify-center rounded-[4px] ring-1 ring-white/10"
+      style={{ background: g?.tint ?? "hsl(250 12% 13%)" }}
+    >
+      <Icon className="size-3 text-zinc-500" />
+    </span>
+  );
+}
+
+/** The clips BEHIND a reliability number — visible proof, sized as evidence,
+ * never a gallery. Hover names the drama and shot. */
+function EvidenceStrip({ samples }: { samples?: ClipSample[] }) {
+  if (!samples?.length) return null;
+  return (
+    <div className="mt-2.5 flex gap-1.5">
+      {samples.map((s, i) => (
+        <video
+          key={`${s.url}-${i}`}
+          src={s.url}
+          muted
+          playsInline
+          preload="metadata"
+          title={`${s.title}${s.shot_number != null ? ` · shot ${s.shot_number}` : ""}`}
+          className="h-8 w-12 shrink-0 rounded-[3px] object-cover ring-1 ring-white/10"
+        />
+      ))}
+    </div>
+  );
+}
+
 /** Dashboard-style stat card: hover lift + a reserved sub-label that fades in. */
 function Stat({
   label,
@@ -164,11 +220,14 @@ function HealthCard({
   value,
   health,
   note,
+  evidence,
 }: {
   label: string;
   value: string | null;
   health: Health | null;
   note?: string;
+  /** the actual clips behind the number — rendered only when there is data */
+  evidence?: React.ReactNode;
 }) {
   const Icon =
     health === "ok" ? CheckCircle2 : health === "warn" ? AlertTriangle : XCircle;
@@ -196,6 +255,7 @@ function HealthCard({
       <p className="mt-0.5 text-[10px] text-zinc-500">
         {value ? note : "no data in this range yet"}
       </p>
+      {value ? evidence : null}
     </div>
   );
 }
@@ -346,6 +406,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
     value: d.usd,
     display: fmtUsd(d.usd),
     sub: d.usd_per_min != null ? `${fmtUsd(d.usd_per_min)}/min of film` : undefined,
+    thumb: <PosterThumb poster={d.poster_url} genre={d.genre} />,
   }));
 
   const finished = data.dramas.filter((d) => d.runtime_seconds);
@@ -392,6 +453,34 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
       <Rise index={0}>
         <SectionTitle>Routing efficiency</SectionTitle>
         <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0c0a15] shadow-[0_20px_60px_-20px_rgba(0,0,0,0.8)]">
+          {/* faint montage of the user's own productions — atmosphere, not
+           * content: heavily darkened, masked away before the numbers */}
+          {(data.hero_stills?.length ?? 0) > 0 && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 flex"
+              style={{
+                WebkitMaskImage:
+                  "linear-gradient(to bottom, rgba(0,0,0,0.8), transparent 80%)",
+                maskImage:
+                  "linear-gradient(to bottom, rgba(0,0,0,0.8), transparent 80%)",
+              }}
+            >
+              {data.hero_stills!.map((u, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={`${u}-${i}`}
+                  src={u}
+                  alt=""
+                  loading="lazy"
+                  className={cn(
+                    "h-full w-full min-w-0 flex-1 object-cover object-[50%_25%] opacity-30 brightness-[0.25]",
+                    !reduced && "animate-[ken-burns_16s_ease-out_forwards]"
+                  )}
+                />
+              ))}
+            </div>
+          )}
           {/* screening-room glow behind the numbers only */}
           <div
             aria-hidden
@@ -590,6 +679,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
                 ? `${rel.flagged} clip${rel.flagged === 1 ? "" : "s"} flagged for review`
                 : "scored by qwen3-vl-plus"
             }
+            evidence={<EvidenceStrip samples={rel.flagged_samples} />}
           />
           <HealthCard
             label="Wan retries"
@@ -602,6 +692,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
             value={hh ? fmtPct(hh.retry_rate) : null}
             health={retryHealth(hh)}
             note={hh ? `${hh.retried} of ${hh.clips} clips retried` : undefined}
+            evidence={<EvidenceStrip samples={rel.retried_samples} />}
           />
           <HealthCard
             label="Face lock"

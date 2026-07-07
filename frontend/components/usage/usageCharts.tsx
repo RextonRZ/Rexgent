@@ -150,6 +150,9 @@ export interface RankedRow {
   value: number;
   display: string;
   sub?: string;
+  /** optional leading media (a drama's poster thumb) — the row becomes a
+   * recognizable production, not just text */
+  thumb?: React.ReactNode;
 }
 
 /** Nominal magnitude rows: one series, one hue. Hovering a row dims the
@@ -172,26 +175,29 @@ export function RankedBars({ rows }: { rows: RankedRow[] }) {
             key={r.label}
             onMouseEnter={() => setHover(r.label)}
             onMouseLeave={() => setHover(null)}
-            className="relative transition-opacity duration-150 motion-reduce:transition-none"
+            className="relative flex items-center gap-2.5 transition-opacity duration-150 motion-reduce:transition-none"
             style={{ opacity: dim ? 0.4 : 1 }}
           >
-            <div className="mb-1 flex items-baseline justify-between gap-3">
-              <span className="min-w-0 truncate text-xs text-zinc-300">{r.label}</span>
-              <span className="shrink-0 text-right text-xs tabular-nums text-zinc-400">
-                {r.display}
-                {r.sub && <span className="ml-2 text-zinc-600">{r.sub}</span>}
-              </span>
-            </div>
-            <div className="h-2 w-full rounded-full bg-white/[0.04]">
-              <div
-                className="h-2 rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none"
-                style={{
-                  width: ready ? `${(r.value / max) * 100}%` : "0%",
-                  background: BAR_HUE,
-                  minWidth: ready ? 2 : 0,
-                  boxShadow: hover === r.label ? `0 0 14px ${BAR_HUE}55` : undefined,
-                }}
-              />
+            {r.thumb}
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-baseline justify-between gap-3">
+                <span className="min-w-0 truncate text-xs text-zinc-300">{r.label}</span>
+                <span className="shrink-0 text-right text-xs tabular-nums text-zinc-400">
+                  {r.display}
+                  {r.sub && <span className="ml-2 text-zinc-600">{r.sub}</span>}
+                </span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-white/[0.04]">
+                <div
+                  className="h-2 rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none"
+                  style={{
+                    width: ready ? `${(r.value / max) * 100}%` : "0%",
+                    background: BAR_HUE,
+                    minWidth: ready ? 2 : 0,
+                    boxShadow: hover === r.label ? `0 0 14px ${BAR_HUE}55` : undefined,
+                  }}
+                />
+              </div>
             </div>
             {hover === r.label && total > 0 && (
               <div className={cn(TIP, "absolute -top-1 left-0 z-10 -translate-y-full")}>

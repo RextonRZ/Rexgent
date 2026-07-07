@@ -18,6 +18,7 @@ from app.models.cost_event import CostEvent
 from app.models.generation_job import GenerationJob
 from app.models.generated_clip import GeneratedClip
 from app.models.final_export import FinalExport
+from app.models.shot import Shot
 from app.services.model_router import llm_cost_for
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -104,11 +105,15 @@ def usage(
                 .filter(Project.user_id == str(current_user.id)).all())
     ids = [p.id for p in projects]
     title_by_id = {p.id: (p.title or "Untitled drama") for p in projects}
+    project_by_id = {p.id: p for p in projects}
     cutoff = _cutoff(range)
     if not ids:
+        empty_rel = summarize_clips([])
+        empty_rel["flagged_samples"] = []
+        empty_rel["retried_samples"] = []
         return {"range": range, "llm": summarize_events([])["llm"],
-                "categories": {}, "dramas": [], "reliability": summarize_clips([]),
-                "trend": []}
+                "categories": {}, "dramas": [], "reliability": empty_rel,
+                "hero_stills": [], "trend": []}
 
     q = db.query(CostEvent).filter(CostEvent.project_id.in_(ids))
     if cutoff:
@@ -143,14 +148,38 @@ def usage(
     dramas = []
     for pid, usd in sorted(usd_by_project.items(), key=lambda kv: kv[1], reverse=True):
         runtime = runtime_by_project.get(pid)
+        project = project_by_id.get(pid)
         dramas.append({
             "id": str(pid),
             "title": title_by_id.get(pid, "Untitled drama"),
+            "poster_url": getattr(project, "poster_url", None),
+            "genre": getattr(project, "genre", None),
             "usd": usd,
             "runtime_seconds": runtime,
             "clips": clips_by_project.get(pid, 0),
             "usd_per_min": round(usd / (runtime / 60), 2) if runtime else None,
         })
+
+    # ── evidence footage: the clips BEHIND the reliability numbers ──
+    def _samples(rows, limit):
+        rows = sorted((c for c in rows if c.url),
+                      key=lambda c: c.created_at or datetime.min, reverse=True)[:limit]
+        shot_no = {s.id: s.number for s in
+                   db.query(Shot).filter(Shot.id.in_([c.shot_id for c in rows])).all()} \
+            if rows else {}
+        return [{
+            "url": c.url,
+            "title": title_by_id.get(job_project.get(c.job_id), "Untitled drama"),
+            "shot_number": shot_no.get(c.shot_id),
+        } for c in rows]
+
+    flagged_samples = _samples([c for c in clips if c.status == "NEEDS_REVIEW"], 4)
+    retried_samples = _samples([c for c in clips if (c.retries or 0) > 0], 3)
+
+    # a handful of recent posters for the routing hero's faint backdrop
+    hero_stills = [p.poster_url for p in
+                   sorted(projects, key=lambda p: p.created_at or datetime.min,
+                          reverse=True) if p.poster_url][:6]
 
     # ── daily trend: spend + clip volume ──
     daily: dict = {}
@@ -165,11 +194,16 @@ def usage(
         if day:
             daily.setdefault(day, {"date": day, "usd": 0.0, "clips": 0})["clips"] += 1
 
+    reliability = summarize_clips(clips)
+    reliability["flagged_samples"] = flagged_samples
+    reliability["retried_samples"] = retried_samples
+
     return {
         "range": range,
         "llm": summary["llm"],
         "categories": summary["categories"],
         "dramas": dramas,
-        "reliability": summarize_clips(clips),
+        "reliability": reliability,
+        "hero_stills": hero_stills,
         "trend": sorted(daily.values(), key=lambda r: r["date"]),
     }

@@ -9,6 +9,13 @@ export interface LlmModelRow {
   usd: number;
 }
 
+/** A real clip behind a reliability number — evidence, not decoration. */
+export interface ClipSample {
+  url: string;
+  title: string;
+  shot_number: number | null;
+}
+
 export interface UsageAnalytics {
   range: UsageRange;
   llm: {
@@ -23,6 +30,8 @@ export interface UsageAnalytics {
   dramas: {
     id: string;
     title: string;
+    poster_url: string | null;
+    genre: string | null;
     usd: number;
     runtime_seconds: number | null;
     clips: number;
@@ -34,7 +43,11 @@ export interface UsageAnalytics {
     flagged: number;
     avg_face_score: number | null;
     by_tier: Record<string, { clips: number; retried: number; retry_rate: number }>;
+    flagged_samples?: ClipSample[];
+    retried_samples?: ClipSample[];
   };
+  /** recent drama posters for the routing hero's faint backdrop */
+  hero_stills?: string[];
   trend: { date: string; usd: number; clips: number }[];
 }
 
