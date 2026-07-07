@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { ShotCard } from "./ShotCard";
 import { ZoomableImage } from "@/components/shared/Lightbox";
+import { SettingChip } from "@/components/script/BeatSheet";
+import { parseSceneHeading } from "@/lib/sceneHeading";
 import type { SceneShots } from "@/hooks/useStoryboard";
 
 export interface SceneLocation {
@@ -25,13 +27,15 @@ export function SceneSection({
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-5 py-3.5 text-left"
       >
-        <span className="text-sm font-semibold">
-          Scene {scene.scene_number}
+        <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+          <span className="shrink-0">Scene {scene.scene_number}</span>
           {scene.heading && (
-            <span className="font-normal text-muted-foreground">
-              {" "}
-              — {scene.heading}
-            </span>
+            <>
+              <SettingChip heading={scene.heading} />
+              <span className="truncate font-normal text-muted-foreground">
+                {parseSceneHeading(scene.heading).text}
+              </span>
+            </>
           )}
         </span>
         <span className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">

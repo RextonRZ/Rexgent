@@ -1,8 +1,35 @@
 "use client";
 
 import { useState } from "react";
+import { Home, Trees } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { parseSceneHeading } from "@/lib/sceneHeading";
 import type { StructuredScript } from "@/lib/types";
+
+/** "Indoor"/"Outdoor" in plain words — INT./EXT. is screenwriter jargon. */
+export function SettingChip({
+  heading,
+  location,
+}: {
+  heading?: string | null;
+  location?: string | null;
+}) {
+  const { setting } = parseSceneHeading(heading, location);
+  if (!setting) return null;
+  const outdoor = setting === "Outdoor";
+  const Icon = outdoor ? Trees : Home;
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+        outdoor ? "bg-ok/10 text-ok" : "bg-sky-500/10 text-sky-300"
+      )}
+    >
+      <Icon className="size-2.5" />
+      {setting}
+    </span>
+  );
+}
 
 /** The narrative ladder, visible: logline → beats per scene, with the two
  * micro drama landmarks called out (the 3 second hook, the cliffhanger). */
@@ -41,8 +68,10 @@ export function BeatSheet({ structured }: { structured: StructuredScript }) {
                   <span className="w-5 shrink-0 text-right font-mono text-muted-foreground">
                     {sc.scene_number}
                   </span>
+                  <SettingChip heading={sc.heading} location={sc.location} />
                   <span className="truncate text-muted-foreground">
-                    {sc.heading || sc.location}
+                    {parseSceneHeading(sc.heading, sc.location).text ||
+                      sc.location}
                   </span>
                   {sc.emotional_beat && (
                     <span className="shrink-0 rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-foreground/80">

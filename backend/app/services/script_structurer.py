@@ -15,4 +15,10 @@ class ScriptStructurer:
             {"role": "system", "content": system},
             {"role": "user", "content": raw_text},
         ]
-        return await self.qwen.chat_json(messages=messages, temperature=0.2, task="structure")
+        result = await self.qwen.chat_json(messages=messages, temperature=0.2, task="structure")
+        if isinstance(result, dict):
+            # the LLM mislabels INT/EXT (streets tagged INT., same location
+            # flipping between scenes) — corrected deterministically
+            from app.services.scene_heading import normalize_scene_headings
+            result = normalize_scene_headings(result)
+        return result

@@ -35,6 +35,10 @@ Parse the following screenplay into this exact JSON schema:
   "characters_mentioned": ["string"]
 }
 
+Heading rules:
+- "INT." is ONLY for enclosed indoor spaces (rooms, huts, offices, vehicles). Streets, alleys, rooftops, courtyards, squares and any open air space are "EXT.".
+- The SAME location must keep the SAME INT./EXT. prefix in every scene it appears.
+
 Return ONLY the JSON. No explanation, no markdown fences.
 
 SCREENPLAY TEXT:
