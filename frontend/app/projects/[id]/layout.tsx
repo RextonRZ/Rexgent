@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { PipelineNav } from "@/components/shared/PipelineNav";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { UserMenu } from "@/components/auth/UserMenu";
@@ -22,26 +21,20 @@ export default function ProjectLayout({
         <AmbientBackdrop />
         <header className="sticky top-0 z-40 glass border-b hairline">
           <div className="mx-auto max-w-7xl px-4 h-14 flex items-center justify-between gap-3">
-            {/* left: back action · divider · wordmark */}
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <Link
-                href="/projects"
-                title="Back to dashboard"
-                className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground sm:px-2.5"
-              >
-                <ArrowLeft className="size-4 shrink-0" />
-                <span className="hidden sm:inline">Dashboard</span>
-              </Link>
-              <span className="h-5 w-px bg-white/10" aria-hidden />
-              <Link href="/projects" aria-label="Rexgent home" className="shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/rexgent_wordmark.png"
-                  alt="Rexgent"
-                  className="h-4 w-auto"
-                />
-              </Link>
-            </div>
+            {/* left: wordmark — click returns to the dashboard */}
+            <Link
+              href="/projects"
+              aria-label="Back to dashboard"
+              title="Back to dashboard"
+              className="shrink-0 rounded transition-opacity hover:opacity-80"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/rexgent_wordmark.png"
+                alt="Rexgent"
+                className="h-4 w-auto"
+              />
+            </Link>
 
             {/* center: pipeline stepper (full on lg+, compact below) */}
             <PipelineNav projectId={params.id} />
