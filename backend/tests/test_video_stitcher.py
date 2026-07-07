@@ -38,6 +38,23 @@ def test_mix_tracks_builds_duck_filter():
     assert "amix" in joined
 
 
+def test_mix_never_lets_amix_shrink_the_voices():
+    # amix's default normalization scales each input by 1/n — with 20 dialogue
+    # lines every voice played at 1/20th volume (sounded like NO audio).
+    # normalize=0 on every amix keeps voices at full level.
+    st = VideoStitcher()
+    with patch("subprocess.run") as run, \
+         patch.object(VideoStitcher, "_has_audio", return_value=True):
+        run.return_value.returncode = 0
+        st.mix_tracks("v.mp4",
+                      [{"audio_path": f"l{i}.wav", "start": float(i * 3)} for i in range(20)],
+                      "bgm.mp3", "out.mp4", bgm_volume=0.3, duck=True)
+        joined = " ".join(run.call_args[0][0])
+    for part in joined.split(";"):
+        if "amix" in part:
+            assert "normalize=0" in part, f"amix without normalize=0: {part}"
+
+
 def test_mix_tracks_constant_low_when_duck_false():
     st = VideoStitcher()
     with patch("subprocess.run") as run:

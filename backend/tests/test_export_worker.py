@@ -41,6 +41,25 @@ def test_unknown_speaker_rows_never_trigger_resynthesis():
     assert characters_needing_resynthesis(rows, current, {"Rex"}) == set()
 
 
+def test_rows_without_recorded_voice_count_as_stale():
+    # lines synthesized before voice tracking have voice_id=None — once the
+    # character has a chosen voice, those must re-synthesize
+    rows = [_row("Mei", None), _row("Rex", "Eric")]
+    current = {"Mei": "cloned-voice-xyz", "Rex": "Eric"}
+    assert characters_needing_resynthesis(rows, current, {"Mei", "Rex"}) == {"Mei"}
+
+
+def test_partially_missing_lines_detected_per_slot():
+    # Mei HAS one line, but her scene-2 line failed to synthesize (flaky clone
+    # websocket) — slot-level detection must still flag her
+    r1 = SimpleNamespace(character_name="Mei", voice_id="v1", scene_number=1, line_index=0)
+    r2 = SimpleNamespace(character_name="Rex", voice_id="Eric", scene_number=1, line_index=1)
+    current = {"Mei": "v1", "Rex": "Eric"}
+    line_keys = {(1, 0, "Mei"), (1, 1, "Rex"), (2, 0, "Mei")}
+    redo = characters_needing_resynthesis([r1, r2], current, {"Mei", "Rex"}, line_keys)
+    assert redo == {"Mei"}
+
+
 def test_lines_land_on_their_dialogue_shots():
     # scene 1: shot0 silent (5s), shot1 speaks (5s) -> line starts at 5.0
     line_rows = [{"scene_number": 1, "line_index": 0, "audio_local": "a", "duration_seconds": 2.0}]

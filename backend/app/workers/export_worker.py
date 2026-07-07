@@ -49,20 +49,27 @@ def build_dialogue_segments(line_rows, scene_plan):
     return place_dialogue(rows, scene_plan)
 
 
-def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers) -> set:
+def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers,
+                                   script_line_keys=None) -> set:
     """Names whose dialogue audio no longer matches casting: their lines were
     synthesized with a different voice_id than the character's CURRENT one
-    (recast after generation), or they speak in the script but have no lines
-    at all. Pure function so the recast rules are testable."""
+    (recast after generation; rows with NO recorded voice count too), or they
+    speak in the script but audio is missing — either no lines at all, or
+    individual line slots that a flaky TTS call skipped (script_line_keys:
+    {(scene_number, line_index, character)}). Pure function so the recast
+    rules are testable."""
     stale = {
         r.character_name for r in rows
         if r.character_name in current_voice_by_name
-        and r.voice_id
         and current_voice_by_name[r.character_name]
         and r.voice_id != current_voice_by_name[r.character_name]
     }
     have = {r.character_name for r in rows}
     missing = {s for s in script_speakers if s not in have}
+    if script_line_keys:
+        have_slots = {(r.scene_number, r.line_index) for r in rows}
+        missing |= {ch for (sc, li, ch) in script_line_keys
+                    if ch in script_speakers and (sc, li) not in have_slots}
     return stale | missing
 
 
@@ -88,15 +95,17 @@ def _ensure_voice_lines(db, project_id: str) -> None:
         chars = db.query(Character).filter(Character.project_id == pid).all()
         current = {c.name: c.voice_id for c in chars if c.voice_id}
         speakers: set = set()
+        line_keys: set = set()
         script = (db.query(Script).filter(Script.project_id == pid)
                   .order_by(Script.created_at.desc()).first())
         if script:
             for s in db.query(Scene).filter(Scene.script_id == script.id).all():
-                for line in (s.dialogue_json or []):
+                for li, line in enumerate(s.dialogue_json or []):
                     if line.get("character"):
                         speakers.add(line["character"])
+                        line_keys.add((s.number, li, line["character"]))
 
-        redo = characters_needing_resynthesis(rows, current, speakers)
+        redo = characters_needing_resynthesis(rows, current, speakers, line_keys)
         if redo:
             logger.info(f"Export: re-synthesizing recast voices for {sorted(redo)}")
             asyncio.run(synth_dialogue_op(db, project_id, only_characters=redo))

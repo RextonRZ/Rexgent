@@ -1,7 +1,10 @@
+import logging
 from app.services.qwen_client import QwenClient
 from app.services.oss_manager import OSSManager
 from app.config import get_settings
 from app.websocket.emitter import emit
+
+logger = logging.getLogger(__name__)
 
 
 def probe_duration(audio_bytes: bytes) -> float:
@@ -52,7 +55,19 @@ class DialogueSynthesizer:
                 vid = voice.get("voice_id") or "Cherry"  # preset fallback for unknown speakers
                 emit("audio.tts.started", {"scene_number": scene["number"], "line_index": li,
                                            "index": idx, "total": total}, pid)
-                audio = await self.qwen.synthesize_speech(line.get("line", ""), vid, voice.get("voice_model"))
+                # One flaky line (the cloned-voice websocket especially) must
+                # not sink the whole batch: keep every line that succeeded,
+                # skip the failure, and let the next export's missing-line
+                # detection retry it.
+                try:
+                    audio = await self.qwen.synthesize_speech(
+                        line.get("line", ""), vid, voice.get("voice_model"))
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        f"TTS failed for {name} (voice {vid}) s{scene['number']}l{li}: {e}")
+                    emit("audio.tts.failed", {"scene_number": scene["number"], "line_index": li,
+                                              "character": name, "error": str(e)[:200]}, pid)
+                    continue
                 key = self.oss.get_project_path(pid, "audio", f"s{scene['number']}_l{li}.wav")
                 url = self.oss.upload_bytes(audio, key, content_type="audio/wav")
                 rows.append({"project_id": project_id, "scene_number": scene["number"], "line_index": li,

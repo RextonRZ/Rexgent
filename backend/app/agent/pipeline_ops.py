@@ -268,10 +268,15 @@ async def synth_dialogue_op(db: Session, project_id: str,
     scene_dicts = [{"number": s.number, "dialogue_json": s.dialogue_json} for s in scenes]
     rows = await DialogueSynthesizer(db).synthesize_lines(
         project_id, scene_dicts, voice_by_name, only_characters=only_characters)
-    stale = db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(str(project_id)))
-    if only_characters is not None:
-        stale = stale.filter(LineAudio.character_name.in_(list(only_characters)))
-    stale.delete(synchronize_session=False)
+    # Exact replace: drop ONLY the (scene, line) slots we actually re-synthesized.
+    # A line whose TTS failed keeps its previous audio instead of going silent,
+    # and the next export's missing/stale detection retries it.
+    new_keys = {(r["scene_number"], r["line_index"]) for r in rows}
+    if new_keys:
+        for old in db.query(LineAudio).filter(
+                LineAudio.project_id == uuid.UUID(str(project_id))).all():
+            if (old.scene_number, old.line_index) in new_keys:
+                db.delete(old)
     for r in rows:
         db.add(LineAudio(**r))
     db.commit()

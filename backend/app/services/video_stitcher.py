@@ -164,7 +164,12 @@ class VideoStitcher:
         n = len(dialogue_segments)
         dlg = None
         if dlg_labels:
-            filters.append(f"{''.join(dlg_labels)}amix=inputs={n}:dropout_transition=0[dlg]")
+            # normalize=0 is LOAD-BEARING: amix's default scales every input by
+            # 1/n, so 20 dialogue lines each played at 1/20th volume — inaudible.
+            # Lines never overlap (placement guarantees it), so plain summing
+            # cannot clip.
+            filters.append(f"{''.join(dlg_labels)}amix=inputs={n}"
+                           f":dropout_transition=0:normalize=0[dlg]")
             dlg = "[dlg]"
         # ── bed: the stitched video's own ambient track + optional BGM ──
         bed_labels = []
@@ -187,19 +192,21 @@ class VideoStitcher:
             bed_labels.append("[bgm]")
         bed = None
         if len(bed_labels) == 2:
-            filters.append(f"{''.join(bed_labels)}amix=inputs=2:dropout_transition=0[bed]")
+            filters.append(f"{''.join(bed_labels)}amix=inputs=2"
+                           f":dropout_transition=0:normalize=0[bed]")
             bed = "[bed]"
         elif bed_labels:
             bed = bed_labels[0]
-        # ── combine ──
+        # ── combine (normalize=0 everywhere: never let amix shrink the voices) ──
         if bed and dlg:
             if duck:
                 # duplicate the dialogue: one copy keys the compressor, one goes to the final mix
                 filters.append("[dlg]asplit=2[dlgkey][dlgmix]")
                 filters.append(f"{bed}[dlgkey]sidechaincompress=threshold=0.03:ratio=8[bedduck]")
-                filters.append("[bedduck][dlgmix]amix=inputs=2:dropout_transition=0[aout]")
+                filters.append("[bedduck][dlgmix]amix=inputs=2"
+                               ":dropout_transition=0:normalize=0[aout]")
             else:
-                filters.append(f"{bed}{dlg}amix=inputs=2:dropout_transition=0[aout]")
+                filters.append(f"{bed}{dlg}amix=inputs=2:dropout_transition=0:normalize=0[aout]")
             final_audio = "[aout]"
         else:
             final_audio = bed or dlg
