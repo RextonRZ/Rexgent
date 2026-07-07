@@ -1,6 +1,7 @@
 
 import {
   Clapperboard,
+  
   CloudRain,
   Coffee,
   Eye,
@@ -38,7 +39,7 @@ export const GENRES: GenreDef[] = [
   { value: "fantasy", label: "Fantasy", icon: Wand2, tint: "hsl(280 20% 12%)", dot: "hsl(280 45% 64%)" },
   { value: "action", label: "Action", icon: Swords, tint: "hsl(12 32% 12%)", dot: "hsl(14 65% 56%)" },
   { value: "slice of life", label: "Slice of Life", icon: Coffee, tint: "hsl(150 18% 11%)", dot: "hsl(150 40% 56%)" },
-  { value: "historical", label: "Historical", icon: Landmark, tint: "hsl(45 18% 12%)", dot: "hsl(45 40% 58%)" },
+  { value: "historical", label: "Historical", icon: Landmark, tint: "hsl(35 22% 12%)", dot: "hsl(35 45% 58%)" },
   { value: "melodrama", label: "Melodrama", icon: CloudRain, tint: "hsl(220 18% 12%)", dot: "hsl(220 40% 64%)" },
 ];
 
