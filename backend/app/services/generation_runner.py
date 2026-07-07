@@ -60,7 +60,13 @@ class GenerationRunner:
         for c in characters:
             chars[c.name] = {"variants": [
                 {"plate_image_url": v.plate_image_url, "scene_numbers": v.scene_numbers or [],
-                 "is_default": v.is_default} for v in getattr(c, "costume_variants", [])]}
+                 "is_default": v.is_default,
+                 # the continuity agent's face-lock check reads THIS — without
+                 # it every clip scores face=None and the check is dead.
+                 # list() so a pgvector numpy array survives `if not ref`.
+                 "face_vector": (list(v.face_vector)
+                                 if v.face_vector is not None else None)}
+                for v in getattr(c, "costume_variants", [])]}
         loc_by_scene = {}
         for l in locations:
             for n in (l.scene_numbers or []):

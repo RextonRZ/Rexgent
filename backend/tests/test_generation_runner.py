@@ -192,6 +192,8 @@ def test_load_bible_shapes_characters_and_locations():
 
     class V: pass
     v = V(); v.plate_image_url = "u"; v.scene_numbers = [1]; v.is_default = True
+    import numpy as np
+    v.face_vector = np.array([0.1, 0.2])  # pgvector returns numpy arrays
 
     class C: pass
     c = C(); c.name = "Mia"; c.costume_variants = [v]
@@ -201,5 +203,8 @@ def test_load_bible_shapes_characters_and_locations():
 
     bible = runner._shape_bible(characters=[c], locations=[l], style_url="style")
     assert bible["characters"]["Mia"]["variants"][0]["plate_image_url"] == "u"
+    # the continuity face-lock reads this — it must ride along as a PLAIN LIST
+    # (a numpy array would crash the agent's `if not ref` truthiness check)
+    assert bible["characters"]["Mia"]["variants"][0]["face_vector"] == [0.1, 0.2]
     assert bible["location_by_scene"][1] == "loc"
     assert bible["style_plate"] == "style"
