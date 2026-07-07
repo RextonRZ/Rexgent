@@ -180,12 +180,8 @@ function EvidenceStrip({ samples }: { samples?: ClipSample[] }) {
   const [failed, setFailed] = useState<Set<string>>(new Set());
   if (!samples?.length) return null;
   const ok = samples.filter((s) => !failed.has(s.url));
-  const gone = samples.length - ok.length;
-  if (ok.length === 0) {
-    return (
-      <p className="mt-2 text-[10px] text-zinc-600">evidence footage expired</p>
-    );
-  }
+  // unavailable footage simply doesn't render — the stat stands on its own
+  if (ok.length === 0) return null;
   return (
     <div className="mt-2.5 flex items-center gap-1.5">
       {ok.map((s, i) => (
@@ -202,11 +198,6 @@ function EvidenceStrip({ samples }: { samples?: ClipSample[] }) {
           className="h-8 w-12 shrink-0 rounded-[3px] bg-zinc-900 object-cover ring-1 ring-white/10"
         />
       ))}
-      {gone > 0 && (
-        <span className="flex h-8 items-center rounded-[3px] bg-zinc-900 px-2 text-[10px] text-zinc-600 ring-1 ring-white/[0.06]">
-          +{gone} expired
-        </span>
-      )}
     </div>
   );
 }
