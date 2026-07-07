@@ -118,6 +118,21 @@ def test_mix_uses_video_ambient_as_bed_and_ducks_it():
     assert "[bed][dlgkey]sidechaincompress" in joined  # bed ducks under speech
 
 
+def test_stitch_mutes_dialogue_shot_audio():
+    # a dialogue shot's model audio fakes its own speech — it must be silenced
+    # so only the real TTS voices speak; the stream stays for the concat
+    st = VideoStitcher()
+    with patch("subprocess.run") as run, \
+         patch.object(VideoStitcher, "_has_audio", return_value=True), \
+         patch.object(VideoStitcher, "_duration", return_value=5.0):
+        run.return_value.returncode = 0
+        st.stitch([{"path": "/tmp/a.mp4", "in": None, "out": None, "mute": True}],
+                  "/tmp/out.mp4")
+        normalise = " ".join(run.call_args_list[0][0][0])
+    assert "volume=0" in normalise
+    assert "afade" not in normalise  # nothing to fade — it's silent
+
+
 def test_mix_ambient_only_still_produces_audio():
     # no dialogue, no BGM — the ambient bed alone must reach the output
     st = VideoStitcher()

@@ -29,23 +29,27 @@ class VideoStitcher:
         """Concatenate clips into one MP4.
 
         `clips` is a list of paths (str) or dicts
-        {"path": str, "in": float|None, "out": float|None} for per-clip trim.
-        Each clip is first normalised to the drama's delivery canvas
-        (vertical 1080x1920 by default) at 24fps (and trimmed), so
-        mixed-resolution / imported media join cleanly; the normalised parts
-        are then concatenated with a stream copy.
+        {"path": str, "in": float|None, "out": float|None, "mute": bool} for
+        per-clip trim / audio policy. Each clip is first normalised to the
+        drama's delivery canvas (vertical 1080x1920 by default) at 24fps (and
+        trimmed), so mixed-resolution / imported media join cleanly; the
+        normalised parts are then concatenated with a stream copy.
 
         The model's ORIGINAL audio is kept as the ambient bed, with a short
         fade in/out on every chunk so transitions don't cut audibly. Clips
         with no audio stream get silence so the concat's streams stay uniform.
+        mute=True silences a chunk's source audio entirely — used for dialogue
+        shots, whose model-generated fake speech would otherwise murmur under
+        the real TTS voices.
         """
         norm_dir = tempfile.mkdtemp()
         norm_paths = []
         for i, clip in enumerate(clips):
             if isinstance(clip, str):
-                path, tin, tout = clip, None, None
+                path, tin, tout, mute = clip, None, None, False
             else:
                 path, tin, tout = clip.get("path"), clip.get("in"), clip.get("out")
+                mute = bool(clip.get("mute"))
             norm = os.path.join(norm_dir, f"n{i:03d}.mp4")
             # effective chunk length places the fade-out; fall back to probe
             if tout is not None:
@@ -65,8 +69,13 @@ class VideoStitcher:
                         "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
             if tout is not None and eff > 0:
                 cmd += ["-t", f"{eff:.3f}"]
-            afade = (f"afade=t=in:st=0:d={f},afade=t=out:st={max(0.0, eff - f):.3f}:d={f}"
-                     if eff > 2 * f else "anull")
+            if mute:
+                # dialogue shot: kill the model's fake speech; TTS carries the voice
+                afade = "volume=0"
+            elif eff > 2 * f:
+                afade = f"afade=t=in:st=0:d={f},afade=t=out:st={max(0.0, eff - f):.3f}:d={f}"
+            else:
+                afade = "anull"
             cmd += ["-vf", self._vf_for(ratio), "-af", afade]
             if not has_audio:
                 cmd += ["-map", "0:v", "-map", "1:a", "-shortest"]

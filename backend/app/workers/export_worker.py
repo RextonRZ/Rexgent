@@ -197,18 +197,28 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         oss.upload_file(report_path, report_key)
 
         # Download every segment and concatenate into one MP4 with FFmpeg,
-        # applying each segment's trim (in/out).
+        # applying each segment's trim (in/out). A dialogue shot's ORIGINAL
+        # audio is muted — the model fakes its own speech on those, which
+        # would murmur under the real TTS voices; scenery shots keep their
+        # ambience. Imported media is never muted.
+        speaking_shots = {
+            str(s.id) for s in
+            db.query(Shot).filter(Shot.id.in_([c.shot_id for c in clips_for_export])).all()
+            if (s.dialogue or "").strip()
+        }
         _stage(project_id, "update", f"Fetching {len(resolved)} segment(s)")
         workdir = tempfile.mkdtemp()
         stitch_inputs = []
         for i, seg in enumerate(resolved):
             local = os.path.join(workdir, f"seg_{i:03d}.mp4")
+            mute = bool(seg["clip"] and str(seg["clip"].shot_id) in speaking_shots)
             try:
                 resp = httpx.get(seg["url"], timeout=180.0)
                 resp.raise_for_status()
                 with open(local, "wb") as fh:
                     fh.write(resp.content)
-                stitch_inputs.append({"path": local, "in": seg["in"], "out": seg["out"]})
+                stitch_inputs.append({"path": local, "in": seg["in"], "out": seg["out"],
+                                      "mute": mute})
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: could not download {seg['url']}: {e}")
 
