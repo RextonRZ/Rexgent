@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Text, Integer, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -19,6 +19,9 @@ class CharacterRelationship(Base):
     evidence_quote = Column(Text, nullable=True)
     evolution = Column(String(50), nullable=True)
     evolution_description = Column(Text, nullable=True)
+    # ordered arc of the relationship as it changes: [{scene, type, label}, ...]
+    # the last stage's type is the current rel_type shown on the graph
+    stages = Column(JSONB, nullable=True)
 
     from_character = relationship("Character", foreign_keys=[from_char_id], back_populates="relationships_from")
     to_character = relationship("Character", foreign_keys=[to_char_id], back_populates="relationships_to")

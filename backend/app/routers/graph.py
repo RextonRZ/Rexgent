@@ -83,6 +83,37 @@ def _canonical_names(char_map: dict, names) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+REL_TYPES = {"ROMANTIC", "RIVAL", "FAMILY", "MENTOR", "ALLY", "ENEMY",
+             "STRANGER", "COLLEAGUE"}
+
+
+def _clean_stages(raw, rel_type: str) -> list[dict] | None:
+    """Normalise the LLM's stage arc: keep scene-ordered {scene, type, label}
+    entries, cap at 5, and force the final stage's type to match the current
+    rel_type so the timeline always ends on the state shown by the graph."""
+    if not isinstance(raw, list):
+        return None
+    out = []
+    for s in raw:
+        if not isinstance(s, dict):
+            continue
+        label = str(s.get("label") or "").strip()
+        stype = str(s.get("type") or "").strip().upper()
+        if stype not in REL_TYPES:
+            stype = rel_type
+        scene = s.get("scene")
+        out.append({
+            "scene": scene if isinstance(scene, int) else None,
+            "type": stype,
+            "label": label,
+        })
+    if not out:
+        return None
+    out = out[:5]
+    out[-1]["type"] = rel_type  # the arc must end on the current state
+    return out
+
+
 def _serialize_rel(r: CharacterRelationship) -> dict:
     return {
         "id": str(r.id),
@@ -95,6 +126,7 @@ def _serialize_rel(r: CharacterRelationship) -> dict:
         "evidence_quote": r.evidence_quote,
         "evolution": r.evolution,
         "evolution_description": r.evolution_description,
+        "stages": r.stages,
     }
 
 
@@ -150,17 +182,19 @@ async def build_relationship_graph(request: dict, db: Session = Depends(get_db))
         if not from_char or not to_char or from_char is to_char:
             continue
 
+        rel_type = rel.get("relationship_type", "COLLEAGUE")
         db_rel = CharacterRelationship(
             project_id=script.project_id,
             from_char_id=from_char.id,
             to_char_id=to_char.id,
-            rel_type=rel.get("relationship_type", "COLLEAGUE"),
+            rel_type=rel_type,
             strength=rel.get("strength", 5),
             description=rel.get("description"),
             first_established_scene=rel.get("first_established_scene"),
             evidence_quote=rel.get("evidence_quote"),
             evolution=rel.get("evolution", "STATIC"),
             evolution_description=rel.get("evolution_description"),
+            stages=_clean_stages(rel.get("stages"), rel_type),
         )
         db.add(db_rel)
         created.append(db_rel)

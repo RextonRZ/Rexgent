@@ -12,6 +12,13 @@ export interface CharacterRelationship {
   evidence_quote: string | null;
   evolution: "STATIC" | "GROWS" | "DETERIORATES" | "TRANSFORMS";
   evolution_description: string | null;
+  stages: RelationshipStage[] | null;
+}
+
+export interface RelationshipStage {
+  scene: number | null;
+  type: RelationshipType;
+  label: string;
 }
 
 export type RelationshipType =
