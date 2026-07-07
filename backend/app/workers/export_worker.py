@@ -49,16 +49,57 @@ def build_dialogue_segments(line_rows, scene_plan):
     return place_dialogue(rows, scene_plan)
 
 
+def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers) -> set:
+    """Names whose dialogue audio no longer matches casting: their lines were
+    synthesized with a different voice_id than the character's CURRENT one
+    (recast after generation), or they speak in the script but have no lines
+    at all. Pure function so the recast rules are testable."""
+    stale = {
+        r.character_name for r in rows
+        if r.character_name in current_voice_by_name
+        and r.voice_id
+        and current_voice_by_name[r.character_name]
+        and r.voice_id != current_voice_by_name[r.character_name]
+    }
+    have = {r.character_name for r in rows}
+    missing = {s for s in script_speakers if s not in have}
+    return stale | missing
+
+
 def _ensure_voice_lines(db, project_id: str) -> None:
-    """The manual Generate flow never synthesizes dialogue, so a first export
-    would be silent. If no voice lines exist yet, synthesize them now (assigning
-    preset voices to any character that skipped casting)."""
-    if db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(project_id)).count():
-        return
+    """Make the dialogue audio match casting before the mix.
+    - No lines at all (manual Generate never synthesizes) -> synthesize everything.
+    - A character was recast (voice_id on their lines != their current voice,
+      e.g. switched preset or enrolled a clone) -> re-synthesize ONLY their lines.
+    Other characters' audio is reused, so a recast costs TTS for one character,
+    not the whole script."""
     try:
         import asyncio
+        from app.models.character import Character
+        from app.models.script import Script, Scene
         from app.agent.pipeline_ops import synth_dialogue_op
-        asyncio.run(synth_dialogue_op(db, project_id))
+
+        pid = uuid.UUID(project_id)
+        rows = db.query(LineAudio).filter(LineAudio.project_id == pid).all()
+        if not rows:
+            asyncio.run(synth_dialogue_op(db, project_id))
+            return
+
+        chars = db.query(Character).filter(Character.project_id == pid).all()
+        current = {c.name: c.voice_id for c in chars if c.voice_id}
+        speakers: set = set()
+        script = (db.query(Script).filter(Script.project_id == pid)
+                  .order_by(Script.created_at.desc()).first())
+        if script:
+            for s in db.query(Scene).filter(Scene.script_id == script.id).all():
+                for line in (s.dialogue_json or []):
+                    if line.get("character"):
+                        speakers.add(line["character"])
+
+        redo = characters_needing_resynthesis(rows, current, speakers)
+        if redo:
+            logger.info(f"Export: re-synthesizing recast voices for {sorted(redo)}")
+            asyncio.run(synth_dialogue_op(db, project_id, only_characters=redo))
     except Exception as e:  # noqa: BLE001
         logger.warning(f"Export: dialogue synth skipped: {e}")
 

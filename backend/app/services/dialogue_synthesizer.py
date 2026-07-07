@@ -29,12 +29,23 @@ class DialogueSynthesizer:
         self.oss = OSSManager(s)
         self.db = db
 
-    async def synthesize_lines(self, project_id, scenes, voice_by_name) -> list[dict]:
+    async def synthesize_lines(self, project_id, scenes, voice_by_name,
+                               only_characters=None) -> list[dict]:
+        """Synthesize dialogue lines. only_characters (a set of names) restricts
+        synthesis to those speakers — used when a voice was recast after the
+        first synthesis. line_index always comes from the FULL dialogue list so
+        timeline placement stays stable across partial re-runs."""
         pid = str(project_id)
-        total = sum(len(s.get("dialogue_json") or []) for s in scenes)
+
+        def _want(line) -> bool:
+            return only_characters is None or line.get("character") in only_characters
+
+        total = sum(1 for s in scenes for line in (s.get("dialogue_json") or []) if _want(line))
         idx, rows = 0, []
         for scene in scenes:
             for li, line in enumerate(scene.get("dialogue_json") or []):
+                if not _want(line):
+                    continue
                 idx += 1
                 name = line.get("character")
                 voice = voice_by_name.get(name) or {}

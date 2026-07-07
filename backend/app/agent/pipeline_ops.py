@@ -239,7 +239,11 @@ async def cast_bible_op(db: Session, project_id: str) -> dict:
     return await CastingDirector(db).cast_bible(project_id)
 
 
-async def synth_dialogue_op(db: Session, project_id: str) -> int:
+async def synth_dialogue_op(db: Session, project_id: str,
+                            only_characters: set | None = None) -> int:
+    """Synthesize dialogue audio. only_characters restricts the run to those
+    speakers' lines (recast after first synthesis) — other characters' existing
+    audio is left untouched."""
     from app.services.dialogue_synthesizer import DialogueSynthesizer
     from app.models.script import Script, Scene
     from app.models.character import Character
@@ -262,8 +266,12 @@ async def synth_dialogue_op(db: Session, project_id: str) -> int:
         db.commit()
     voice_by_name = {c.name: {"voice_id": c.voice_id, "voice_model": c.voice_model} for c in chars}
     scene_dicts = [{"number": s.number, "dialogue_json": s.dialogue_json} for s in scenes]
-    rows = await DialogueSynthesizer(db).synthesize_lines(project_id, scene_dicts, voice_by_name)
-    db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(str(project_id))).delete()
+    rows = await DialogueSynthesizer(db).synthesize_lines(
+        project_id, scene_dicts, voice_by_name, only_characters=only_characters)
+    stale = db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(str(project_id)))
+    if only_characters is not None:
+        stale = stale.filter(LineAudio.character_name.in_(list(only_characters)))
+    stale.delete(synchronize_session=False)
     for r in rows:
         db.add(LineAudio(**r))
     db.commit()
