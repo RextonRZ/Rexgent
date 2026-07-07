@@ -60,6 +60,8 @@ export function AutoRunPanel({
   const [premise, setPremise] = useState(initialPremise);
   const [genre, setGenre] = useState(initialGenre || "sci-fi");
   const [tone, setTone] = useState("dramatic");
+  // tone reaches the LLM as free prompt text — presets guide, custom frees
+  const [customTone, setCustomTone] = useState(false);
   const [model, setModel] = useState("qwen-max");
   const [language, setLanguage] = useState("en");
   const [targetLength, setTargetLength] = useState(initialTargetLength || 30); // seconds
@@ -113,7 +115,7 @@ export function AutoRunPanel({
       project_id: projectId,
       premise,
       genre,
-      tone,
+      tone: tone.trim() || "dramatic",
       model,
       language,
       target_length: targetLength,
@@ -164,7 +166,18 @@ export function AutoRunPanel({
           </div>
           <div className="space-y-1.5">
             <Label>Tone</Label>
-            <Select value={tone} onValueChange={(v) => v && setTone(v)}>
+            <Select
+              value={customTone ? "custom" : tone}
+              onValueChange={(v) => {
+                if (!v) return;
+                if (v === "custom") {
+                  setCustomTone(true);
+                } else {
+                  setCustomTone(false);
+                  setTone(v);
+                }
+              }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -174,8 +187,17 @@ export function AutoRunPanel({
                     {t.charAt(0).toUpperCase() + t.slice(1)}
                   </SelectItem>
                 ))}
+                <SelectItem value="custom">Custom…</SelectItem>
               </SelectContent>
             </Select>
+            {customTone && (
+              <Input
+                value={tone}
+                onChange={(e) => setTone(e.target.value)}
+                placeholder="bittersweet neo noir, slow burn, wuxia..."
+                autoFocus
+              />
+            )}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
