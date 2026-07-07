@@ -11,6 +11,7 @@ from app.routers.generation import router as generation_router
 from app.routers.edit import router as edit_router
 from app.routers.export import router as export_router
 from app.routers.agent import router as agent_router
+from app.routers.analytics import router as analytics_router
 from app.routers.auth import router as auth_router
 from app.routers.casting import router as casting_router
 
@@ -41,6 +42,7 @@ app.include_router(generation_router)
 app.include_router(edit_router)
 app.include_router(export_router)
 app.include_router(agent_router)
+app.include_router(analytics_router)
 app.include_router(casting_router)
 
 

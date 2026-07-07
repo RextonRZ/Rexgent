@@ -47,6 +47,12 @@ export function UserMenu() {
           Your dramas
         </DropdownMenuItem>
         <DropdownMenuItem
+          onClick={() => router.push("/usage")}
+          className="cursor-pointer"
+        >
+          Usage &amp; analytics
+        </DropdownMenuItem>
+        <DropdownMenuItem
           onClick={() => router.push("/settings")}
           className="cursor-pointer"
         >
