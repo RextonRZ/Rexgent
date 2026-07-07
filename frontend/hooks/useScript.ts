@@ -29,30 +29,6 @@ export function useLatestScript(projectId: string) {
   });
 }
 
-export function useGenerateScript() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (params: {
-      project_id: string;
-      genre: string;
-      premise: string;
-      tone?: string;
-      episode_count?: number;
-      target_length?: number;
-      notes?: string;
-      language?: string;
-      model?: string;
-    }) => {
-      const { data } = await api.post("/api/script/generate", params);
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["script"] });
-    },
-  });
-}
-
 export function useUpdateScript() {
   const queryClient = useQueryClient();
 

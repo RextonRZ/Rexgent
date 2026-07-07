@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import { useProject } from "@/hooks/useProjects";
 import { useLatestScript } from "@/hooks/useScript";
 import { ScriptImport } from "@/components/script/ScriptImport";
-import { ScriptGenerate } from "@/components/script/ScriptGenerate";
 import { ScriptEditor } from "@/components/script/ScriptEditor";
 import { BeatSheet } from "@/components/script/BeatSheet";
 import { PlotGapPanel } from "@/components/script/PlotGapPanel";
@@ -114,7 +113,6 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
           <Tabs defaultValue="auto">
             <TabsList>
               <TabsTrigger value="auto">Full Auto</TabsTrigger>
-              <TabsTrigger value="generate">Write from Scratch</TabsTrigger>
               <TabsTrigger value="import">Import Script</TabsTrigger>
             </TabsList>
             <TabsContent value="auto">
@@ -124,21 +122,6 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
                 initialGenre={projectGenre}
                 initialEpisodes={epParam}
                 initialTargetLength={lenParam}
-              />
-            </TabsContent>
-            <TabsContent value="generate">
-              <ScriptGenerate
-                projectId={params.id}
-                initialPremise={projectPremise}
-                initialGenre={projectGenre}
-                initialEpisodes={epParam}
-                initialTargetLength={lenParam}
-                onSuccess={(data) =>
-                  setScriptData({
-                    script_id: data.script_id,
-                    raw_text: data.raw_text,
-                  })
-                }
               />
             </TabsContent>
             <TabsContent value="import">

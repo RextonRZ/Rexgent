@@ -23,6 +23,7 @@ async def run_auto(request: dict, db: Session = Depends(get_db)):
     premise = request.get("premise", "")
     genre = request.get("genre", "drama")
     tone = request.get("tone", "dramatic")
+    model = request.get("model", "")
     language = request.get("language", "en")
     target_length = int(request.get("target_length", 30))  # seconds
     episode_count = int(request.get("episode_count", 1))
@@ -40,7 +41,8 @@ async def run_auto(request: dict, db: Session = Depends(get_db)):
     try:
         final_state = await graph.ainvoke({
             "project_id": project_id, "premise": premise, "genre": genre,
-            "tone": tone, "language": language, "auto": True, "revise_count": 0,
+            "tone": tone, "model": model, "language": language,
+            "auto": True, "revise_count": 0,
             "target_length": target_length, "episode_count": episode_count,
             "dispatch_video": dispatch_video,
         })

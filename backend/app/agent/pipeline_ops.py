@@ -53,7 +53,7 @@ def _persist_script(db: Session, project_id: str, raw_text: str, structured: dic
 async def generate_script_op(
     db: Session, project_id: str, premise: str, genre: str,
     tone: str = "dramatic", episode_count: int = 1, target_length: int = 30,
-    language: str = "en", notes: str = "",
+    language: str = "en", notes: str = "", model: str | None = None,
 ) -> dict:
     from app.services.usage_tracker import track_project
     _progress(project_id, "script", "started", "Screenwriter",
@@ -63,7 +63,7 @@ async def generate_script_op(
         raw_text = await ScriptGenerator().generate(
             genre=genre, premise=clean_premise, tone=tone,
             episode_count=episode_count, target_length=target_length, language=language,
-            notes=notes,
+            notes=notes, model=model or "qwen-max",
         )
         _progress(project_id, "script", "update", "Screenwriter", "Structuring scenes and beats")
         structured = await ScriptStructurer().structure(raw_text, language=language)

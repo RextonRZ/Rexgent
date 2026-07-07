@@ -6,6 +6,7 @@ class PipelineState(TypedDict, total=False):
     premise: str
     genre: str
     tone: str
+    model: str               # explicit writing-model override ("" = default)
     language: str            # "en" | "zh"
     target_length: int       # minutes per episode
     episode_count: int

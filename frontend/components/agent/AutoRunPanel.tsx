@@ -48,6 +48,8 @@ export function AutoRunPanel({
   const { data: project } = useProject(projectId);
   const [premise, setPremise] = useState(initialPremise);
   const [genre, setGenre] = useState(initialGenre || "sci-fi");
+  const [tone, setTone] = useState("dramatic");
+  const [model, setModel] = useState("qwen-max");
   const [language, setLanguage] = useState("en");
   const [targetLength, setTargetLength] = useState(initialTargetLength || 30); // seconds
   const [episodeCount, setEpisodeCount] = useState(initialEpisodes || 1);
@@ -92,6 +94,8 @@ export function AutoRunPanel({
       project_id: projectId,
       premise,
       genre,
+      tone,
+      model,
       language,
       target_length: targetLength,
       episode_count: episodeCount,
@@ -126,6 +130,16 @@ export function AutoRunPanel({
             />
           </div>
           <div className="space-y-1.5">
+            <Label>Tone</Label>
+            <Input
+              value={tone}
+              onChange={(e) => setTone(e.target.value)}
+              placeholder="dramatic, dark, lighthearted..."
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
             <Label>Language</Label>
             <Select value={language} onValueChange={(v) => v && setLanguage(v)}>
               <SelectTrigger className="w-full">
@@ -134,6 +148,20 @@ export function AutoRunPanel({
               <SelectContent>
                 <SelectItem value="en">English</SelectItem>
                 <SelectItem value="zh">中文</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Writing model</Label>
+            <Select value={model} onValueChange={(v) => v && setModel(v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="qwen-max">Qwen-Max (best)</SelectItem>
+                <SelectItem value="qwen-plus">Qwen-Plus (balanced)</SelectItem>
+                <SelectItem value="qwen-flash">Qwen-Flash (fast/cheap)</SelectItem>
+                <SelectItem value="qwen3-max">Qwen3-Max (newest)</SelectItem>
               </SelectContent>
             </Select>
           </div>

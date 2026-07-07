@@ -27,6 +27,8 @@ export function useAutoRun() {
       project_id: string;
       premise: string;
       genre: string;
+      tone?: string;
+      model?: string;
       language: string;
       target_length?: number;
       episode_count?: number;

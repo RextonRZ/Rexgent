@@ -50,6 +50,7 @@ def build_pipeline_graph(db=None):
             target_length=state.get("target_length", 30),
             language=state.get("language", "en"),
             notes=notes,
+            model=state.get("model") or None,
         )
         state["script_id"] = out["script_id"]
         state["structured"] = out["structured"]
