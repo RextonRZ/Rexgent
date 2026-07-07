@@ -19,4 +19,11 @@ Include ALL named relationships. If a relationship is bidirectional but asymmetr
 
 Use from_character/to_character names EXACTLY as they appear in the provided CHARACTERS list (full names, not the screenplay's short dialogue cues).
 
+Examples of what counts as a relationship:
+- Characters who appear together in scenes
+- Characters who pursue, chase, or oppose each other
+- Characters who speak to or about each other
+- Characters who form alliances or conflicts
+- Characters who meet for the first time and establish dynamic
+
 Return ONLY the JSON array.

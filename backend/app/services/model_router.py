@@ -27,12 +27,12 @@ TASK_MODELS: dict[str, str] = {
     "prompt_craft": ANALYSIS,
     "regen_rewrite": ANALYSIS,
     "appearance": ANALYSIS,
+    "relationships": ANALYSIS,  # relationship extraction reads narrative dynamics, not just structure
     # deterministic structuring / extraction / formatting — cheap tier
     "structure": STRUCTURED,
     "characters": STRUCTURED,
     "wardrobe": STRUCTURED,
     "set_dress": STRUCTURED,
-    "relationships": STRUCTURED,
     "mbti": STRUCTURED,
     "clarify": STRUCTURED,
     "style": STRUCTURED,
