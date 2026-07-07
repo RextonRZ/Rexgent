@@ -21,6 +21,10 @@ class Shot(Base):
     estimated_duration_seconds = Column(Integer, default=5)
     quality_tier = Column(String(20), nullable=True)
     characters_in_frame = Column(JSONB, nullable=True)
+    # subset of characters_in_frame that are only a back/shoulder to camera
+    # (face unseen). They anchor outfit, not identity, and the shot is really
+    # ABOUT the other character(s).
+    foreground_characters = Column(JSONB, nullable=True)
     notes = Column(Text, nullable=True)
     director_note = Column(Text, nullable=True)
 

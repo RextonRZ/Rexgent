@@ -35,11 +35,17 @@ class ContinuityAgent:
     def _sample(self, clip_url, duration):
         return sample_frames(clip_url, duration, count=3)
 
-    async def validate(self, clip_url, duration, characters_in_frame, bible, scene_number) -> dict:
+    async def validate(self, clip_url, duration, characters_in_frame, bible, scene_number,
+                       foreground_characters=None) -> dict:
         frames = self._sample(clip_url, duration)
+        fg = set(foreground_characters or [])
+        # Only score faces we expect to SEE: a foreground occluder (back/shoulder
+        # to camera) has no face in frame, so matching it would spuriously tank
+        # the score on every reveal / over-the-shoulder shot.
+        face_names = [n for n in characters_in_frame if n not in fg]
         # face
         face_scores = []
-        for name in characters_in_frame:
+        for name in face_names:
             ch = bible["characters"].get(name)
             if not ch:
                 continue
@@ -57,8 +63,10 @@ class ContinuityAgent:
         if frames:
             mid = frames[len(frames) // 2]
             b64 = base64.b64encode(mid).decode()
+            # prefer a face-visible subject's plate for the outfit check
+            outfit_names = face_names or characters_in_frame
             char_plate = next((map_variant_for_scene(bible["characters"][n].get("variants", []), scene_number)
-                               for n in characters_in_frame if n in bible["characters"]), None)
+                               for n in outfit_names if n in bible["characters"]), None)
             loc_plate = (bible.get("location_by_scene") or {}).get(scene_number)
             content = [{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                        {"type": "text", "text": self.vl_prompt}]

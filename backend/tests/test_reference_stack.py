@@ -133,3 +133,47 @@ def test_state_change_suppresses_location_plate():
         prev_last_frame_url="prev", model_cap=9, shot_type="LS",
         suppress_location=True)
     assert "loc1" not in [m["url"] for m in media]
+
+
+# two characters: Rex (subject) and Mia (foreground shoulder in a reveal)
+TWO = {
+    "Rex": {"variants": [{"plate_image_url": "rex_face", "scene_numbers": [1], "is_default": True}]},
+    "Mia": {"variants": [{"plate_image_url": "mia_face", "scene_numbers": [1], "is_default": True}]},
+}
+
+
+def _two_bible():
+    return {"characters": TWO, "style_plate": "style", "location_by_scene": {1: "loc1"}}
+
+
+def test_foreground_character_drops_face_lock():
+    # Mia is only a foreground shoulder: her face plate must NOT be injected,
+    # so the model does not render her front-and-centre in Rex's reveal.
+    _, prov = build_reference_stack_labeled(
+        characters_in_frame=["Rex", "Mia"], scene_number=1, bible=_two_bible(),
+        prev_last_frame_url=None, model_cap=9, shot_type="OTS",
+        foreground_characters=["Mia"])
+    roles = {(p["url"], p["role"]) for p in prov}
+    assert ("rex_face", "identity") in roles      # subject keeps the face lock
+    assert ("mia_face", "identity") not in roles  # foreground loses it
+    # Mia's plate can still appear as a costume reference, never as identity
+    mia_roles = {p["role"] for p in prov if p["url"] == "mia_face"}
+    assert "identity" not in mia_roles
+
+
+def test_subject_ordered_before_foreground_under_tight_cap():
+    # a tight cap must keep the subject's face, not the foreground occluder's plate
+    media, _ = build_reference_stack_labeled(
+        characters_in_frame=["Mia", "Rex"], scene_number=1, bible=_two_bible(),
+        prev_last_frame_url=None, model_cap=1, shot_type="OTS",
+        foreground_characters=["Mia"])
+    assert [m["url"] for m in media] == ["rex_face"]
+
+
+def test_no_foreground_keeps_both_faces():
+    # a genuine two-shot: both faces are referenced as before
+    _, prov = build_reference_stack_labeled(
+        characters_in_frame=["Rex", "Mia"], scene_number=1, bible=_two_bible(),
+        prev_last_frame_url=None, model_cap=9)
+    ident = {p["url"] for p in prov if p["role"] == "identity"}
+    assert ident == {"rex_face", "mia_face"}

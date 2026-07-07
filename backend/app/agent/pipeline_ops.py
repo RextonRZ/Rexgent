@@ -170,6 +170,10 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             except Exception:  # noqa: BLE001
                 pass
             for sd in shots:
+                in_frame = sd.get("characters_in_frame", []) or []
+                # foreground names must be a subset of who is actually in frame
+                foreground = [n for n in (sd.get("foreground_characters") or [])
+                              if n in in_frame]
                 shot = Shot(
                     scene_id=scene.id, number=sd.get("shot_number", 1),
                     shot_type=sd.get("shot_type"), camera_movement=sd.get("camera_movement"),
@@ -177,7 +181,8 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     action=sd.get("action"), dialogue=sd.get("dialogue"),
                     emotional_beat=sd.get("emotional_beat"),
                     estimated_duration_seconds=sd.get("estimated_duration_seconds", 5),
-                    characters_in_frame=sd.get("characters_in_frame", []),
+                    characters_in_frame=in_frame,
+                    foreground_characters=foreground,
                     notes=sd.get("notes"),
                 )
                 db.add(shot)

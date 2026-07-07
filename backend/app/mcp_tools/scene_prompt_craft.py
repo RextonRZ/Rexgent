@@ -36,6 +36,7 @@ class ScenePromptCraft:
         scene_setting: dict | None = None,
         prev_action: str | None = None,
         next_action: str | None = None,
+        foreground_characters: list | None = None,
     ) -> dict:
         setting_block = (
             f"Scene setting (rule 13 — render this SAME room and these SAME props):\n"
@@ -56,10 +57,20 @@ class ScenePromptCraft:
             + "\n".join(continuity_parts) + "\n\n"
             if continuity_parts else ""
         )
+        # Foreground occluders (rule 15): named characters who are only a
+        # back/shoulder to camera. Staged as soft-focus foreground, face unseen,
+        # so the subject stays the focus.
+        foreground_block = (
+            f"Foreground occlusion (rule 15 — show ONLY as a soft-focus back or "
+            f"shoulder in the near foreground, face turned away and not visible; "
+            f"do NOT make them a co-subject): {json.dumps(list(foreground_characters), ensure_ascii=False)}\n\n"
+            if foreground_characters else ""
+        )
         user_content = (
             f"Shot data:\n{json.dumps(shot)}\n\n"
             f"{setting_block}"
             f"{continuity_block}"
+            f"{foreground_block}"
             f"Character visual descriptions (use these, NOT names):\n{json.dumps(character_visuals)}\n\n"
             f"Target model: {target_model}\n"
             f"Duration: {shot.get('estimated_duration_seconds', 5)}s\n"

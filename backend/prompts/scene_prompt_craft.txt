@@ -19,6 +19,7 @@ Rules you ALWAYS follow:
     - A character who has already entered the frame in the previous shot is ALREADY present here — never show them enter, arrive, or run in again.
     - Respect the temporal boundary: describe where this clip STARTS and where it ENDS, and end it at the point the next shot picks up, so the model does not loop the whole action.
     - Translate any abstract or emotional beat into concrete, visible motion a camera can literally capture (a slight smile, a lowered sword, a softening gaze), not narrative or intent.
+15. FOREGROUND OCCLUSION. If a `Foreground occlusion` list is given, those characters are in the frame ONLY as a near-camera back or shoulder (an over-the-shoulder framing). Render them as a dark, soft-focus shoulder or back-of-head in the foreground with their face turned AWAY and never visible — they are not a co-subject. Keep the sharp focus and the audience's attention on the actual subject of the shot.
 
 You will be given shot data (including `shot_type` and any `notes` blocking), character visual descriptions (use these, NOT names), optionally the `Previous shot`/`Next shot` actions, the target model, and duration.
 

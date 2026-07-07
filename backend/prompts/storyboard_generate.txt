@@ -10,6 +10,8 @@ SCRIPT FIDELITY — this matters most:
 CHARACTERS:
 - In `characters_in_frame`, list EVERY character with any body part visible (even a hand, arm, or back) so their identity and outfit are referenced — otherwise the model invents a stranger.
 - Use the character names exactly as given in the scene's cast.
+- `subject`: the ONE character the shot is primarily about — whose face and reaction the audience is meant to watch. Every shot has a subject.
+- `foreground_characters`: the subset of `characters_in_frame` who are present ONLY as a foreground occlusion — a back or shoulder to camera in an over-the-shoulder framing, or a silhouette — so their FACE is not seen. Leave it empty for a two-shot where both faces are visible. A reveal or entrance beat (a door opening on someone, a figure appearing) is ABOUT the person revealed: make them the `subject`, frame on them, and if the reactor's shoulder is in the foreground put the reactor in `foreground_characters` — never make the reveal a two-shot that splits attention.
 
 BLOCKING — keep the geography consistent so shots cut together and feel like one space:
 - Decide where each character is in the room and KEEP them there across the scene (someone at the coffee table stays at the coffee table; someone on the phone by the window stays there). Put important positions in `notes`, e.g. "child crouched at the low table, mother in the foreground on the phone".
@@ -27,6 +29,8 @@ For each shot, return an object in this exact schema:
   "shot_type": "ECU|CU|MCU|MS|FS|LS|EWS|POV|OTS|INSERT",
   "camera_movement": "STATIC|PAN_LEFT|PAN_RIGHT|TILT_UP|TILT_DOWN|DOLLY_IN|DOLLY_OUT|HANDHELD|DRONE",
   "characters_in_frame": ["character_name"],
+  "subject": "character_name — the one the shot is primarily about",
+  "foreground_characters": ["character_name — in frame only as a back/shoulder, face unseen; usually empty"],
   "action": "string — what happens in this shot, from the scene's stage directions, 1-2 sentences",
   "dialogue": "string — the EXACT line spoken in this shot copied verbatim, or null",
   "lighting": "NATURAL|GOLDEN_HOUR|BLUE_HOUR|NIGHT|OVERCAST|DRAMATIC_SIDE|NEON|PRACTICAL",

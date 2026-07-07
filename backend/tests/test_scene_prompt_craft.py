@@ -99,3 +99,34 @@ async def test_craft_without_adjacent_shots_has_no_continuity_block():
     await crafter.craft(shot={}, character_visuals={}, target_model="wan")
     user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "Continuity with adjacent shots" not in user_msg
+
+
+@pytest.mark.asyncio
+async def test_craft_stages_foreground_character_as_occlusion():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "man in doorway", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(
+        shot={"shot_type": "OTS", "action": "the door opens on a man with a sword"},
+        character_visuals={}, target_model="happyhorse",
+        foreground_characters=["Woman Xin"])
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Foreground occlusion" in user_msg
+    assert "Woman Xin" in user_msg
+    assert "face turned away" in user_msg
+
+
+@pytest.mark.asyncio
+async def test_craft_without_foreground_has_no_occlusion_block():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(shot={}, character_visuals={}, target_model="wan")
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Foreground occlusion" not in user_msg

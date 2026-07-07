@@ -277,8 +277,9 @@ class GenerationRunner:
         return prev_last_frame
 
     async def _craft_prompt(self, shot, char_by_name, scene_setting=None,
-                            prev_action=None, next_action=None) -> str:
+                            prev_action=None, next_action=None, foreground=None) -> str:
         in_frame = shot.characters_in_frame or []
+        fg = set(foreground or [])
         shot_chars = [char_by_name[n] for n in in_frame if n in char_by_name]
         character_visuals = {
             c.name: {"video_prompt_fragment": c.video_prompt_fragment or c.visual_description or ""}
@@ -295,6 +296,7 @@ class GenerationRunner:
             scene_setting=scene_setting,
             prev_action=prev_action,
             next_action=next_action,
+            foreground_characters=[n for n in in_frame if n in fg],
         )
         return result.get("prompt", "")
 
@@ -315,13 +317,15 @@ class GenerationRunner:
                             prev_action=None, next_action=None):
         pid = str(job.project_id)
         in_frame = shot.characters_in_frame or []
+        foreground = [n for n in (getattr(shot, "foreground_characters", None) or [])
+                      if n in in_frame]
         is_wan = shot.quality_tier == "wan"
         model_cap = 5 if is_wan else 9
         ref_stack, ref_provenance = build_reference_stack_labeled(
             characters_in_frame=in_frame, scene_number=scene_number, bible=bible,
             prev_last_frame_url=prev_last_frame_url, model_cap=model_cap,
             shot_type=shot.shot_type, scene_anchor_url=scene_anchor_url,
-            suppress_location=suppress_location)
+            suppress_location=suppress_location, foreground_characters=foreground)
         seed = stable_seed(pid, shot.id)
 
         emit("generation.shot.started", {"scene_number": scene_number,
@@ -336,7 +340,8 @@ class GenerationRunner:
             try:
                 ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
                 prompt = await self._craft_prompt(
-                    shot, char_by_name, scene_setting, prev_action, next_action)
+                    shot, char_by_name, scene_setting, prev_action, next_action,
+                    foreground=foreground)
                 if is_wan:
                     task_id = await self.qwen.generate_video_wan(
                         prompt=prompt, duration=shot.estimated_duration_seconds,
@@ -357,7 +362,8 @@ class GenerationRunner:
                 emit("continuity.scoring.started", {"shot_id": str(shot.id)}, pid)
                 guard = await self.continuity.validate(
                     clip_url=clip_url, duration=shot.estimated_duration_seconds,
-                    characters_in_frame=in_frame, bible=bible, scene_number=scene_number)
+                    characters_in_frame=in_frame, bible=bible, scene_number=scene_number,
+                    foreground_characters=foreground)
                 emit("continuity.scoring.completed", {"shot_id": str(shot.id), "scores": guard}, pid)
                 report_agent(self.db, str(job.project_id), agent="continuity", stage="generation",
                              decision={"continuity_score": guard["continuity_score"],

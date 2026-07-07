@@ -33,3 +33,38 @@ async def test_validate_never_recommends_retry():
     assert "retry_instruction" not in out
     assert out["overall_pass"] is False
     assert 0 <= out["continuity_score"] <= 100
+
+
+@pytest.mark.asyncio
+async def test_validate_excludes_foreground_from_face_scoring():
+    # Rex faces camera (0.9); Mia is a foreground shoulder, face unseen. Scoring
+    # Mia's face would tank the shot, so she must be skipped for face matching.
+    agent = ContinuityAgent.__new__(ContinuityAgent)
+    agent.embedder = MagicMock()
+    agent.embedder.model = MagicMock()
+    agent.embedder.model.embed = MagicMock(return_value=[0.5] * 512)
+    compared = []
+
+    def compare(ref, _fv):
+        compared.append(ref)
+        return 0.9 if ref == "rex_vec" else 0.1
+
+    agent.embedder.compare_vectors = compare
+    agent._sample = MagicMock(return_value=[b"f"])
+    agent.qwen = MagicMock()
+    agent.qwen.chat_vision_json = AsyncMock(return_value={})
+    agent.vl_prompt = "compare"
+    agent.vl_model = "qwen3-vl-plus"
+    bible = {"characters": {
+        "Rex": {"variants": [{"plate_image_url": "rex", "scene_numbers": [1],
+                              "is_default": True, "face_vector": "rex_vec"}]},
+        "Mia": {"variants": [{"plate_image_url": "mia", "scene_numbers": [1],
+                              "is_default": True, "face_vector": "mia_vec"}]},
+    }, "location_by_scene": {}}
+
+    out = await agent.validate(
+        clip_url="c", duration=5, characters_in_frame=["Rex", "Mia"],
+        bible=bible, scene_number=1, foreground_characters=["Mia"])
+    # only Rex's vector was compared; Mia's unseen face never dragged the score
+    assert compared == ["rex_vec"]
+    assert out["face_score"] == pytest.approx(0.9)

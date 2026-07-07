@@ -10,7 +10,8 @@ WIDE_FRAMINGS = {"MS", "FS", "LS", "EWS", "WS"}
 
 def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
                                   prev_last_frame_url, model_cap, shot_type=None,
-                                  scene_anchor_url=None, suppress_location=False):
+                                  scene_anchor_url=None, suppress_location=False,
+                                  foreground_characters=None):
     """Same stack as build_reference_stack, but each reference keeps its role
     (identity | costume | prev_frame | scene_anchor | location | style) and,
     where relevant, the character it belongs to. The provenance list is
@@ -24,15 +25,23 @@ def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
 
     Returns (media, provenance): media is the API payload, provenance the
     matching [{"url", "role", "character"?}] records in the same order."""
+    fg = set(foreground_characters or [])
     entries: list[tuple[str, str, str | None]] = []
-    for name in characters_in_frame:
+    # Subjects (face-visible) first so a tight model_cap never trims their face
+    # lock in favour of a foreground occluder. A foreground character keeps only
+    # their costume plate (outfit continuity for the back/shoulder) — NOT the
+    # identity plate, whose face lock would drag them front-and-centre in a shot
+    # that is really about someone else.
+    ordered = ([n for n in characters_in_frame if n not in fg]
+               + [n for n in characters_in_frame if n in fg])
+    for name in ordered:
         ch = bible["characters"].get(name)
         if not ch:
             continue
         variants = ch.get("variants", [])
         identity = next((v.get("plate_image_url") for v in variants
                          if v.get("is_default") and v.get("plate_image_url")), None)
-        if identity:
+        if identity and name not in fg:
             entries.append((identity, "identity", name))
         scene_variant = map_variant_for_scene(variants, scene_number)
         if scene_variant and scene_variant.get("plate_image_url"):
@@ -64,7 +73,8 @@ def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
 
 
 def build_reference_stack(characters_in_frame, scene_number, bible,
-                          prev_last_frame_url, model_cap, shot_type=None):
+                          prev_last_frame_url, model_cap, shot_type=None,
+                          foreground_characters=None):
     """Per character: identity (default) face plate FIRST to lock the face, then the
     scene's costume plate for the outfit. Then last-frame chain (continuity) ->
     location (wide shots only) -> style. Dedupe and trim to model_cap.
@@ -75,5 +85,6 @@ def build_reference_stack(characters_in_frame, scene_number, bible,
     Returns a list of {"type": "reference_image", "url": ...} dicts."""
     media, _ = build_reference_stack_labeled(
         characters_in_frame, scene_number, bible,
-        prev_last_frame_url, model_cap, shot_type)
+        prev_last_frame_url, model_cap, shot_type,
+        foreground_characters=foreground_characters)
     return media
