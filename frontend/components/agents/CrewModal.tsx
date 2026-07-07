@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import {
   Check,
   Clapperboard,
@@ -196,28 +195,63 @@ export function CrewDockPanel({
   );
 }
 
+/** Deliberately NON-modal: the overlay stops at `insetRight`, so the dock's
+ * Showrunner chat and Live cost stay visible and clickable beside the full
+ * pipeline — three synchronized views of the same run. ESC or the dimmed
+ * backdrop closes it. */
 export function CrewModal({
   projectId,
   open,
   onOpenChange,
+  insetRight = 0,
 }: {
   projectId: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  /** px kept clear on the right so the dock stays usable */
+  insetRight?: number;
 }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onOpenChange(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onOpenChange]);
+
+  if (!open) return null;
+
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
-        <DialogPrimitive.Popup className="fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[min(94vw,880px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b0912] shadow-2xl outline-none duration-150 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
-          <CrewModalBody projectId={projectId} />
-        </DialogPrimitive.Popup>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+    <div
+      className="fixed inset-y-0 left-0 z-40"
+      style={{ right: insetRight }}
+    >
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm duration-200 animate-in fade-in-0"
+        onClick={() => onOpenChange(false)}
+      />
+      <div
+        role="dialog"
+        aria-label="Your crew"
+        className="absolute left-1/2 top-1/2 flex max-h-[85vh] w-[min(92%,880px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b0912] shadow-2xl duration-200 animate-in fade-in-0 zoom-in-95"
+      >
+        <CrewModalBody
+          projectId={projectId}
+          onClose={() => onOpenChange(false)}
+        />
+      </div>
+    </div>
   );
 }
 
-function CrewModalBody({ projectId }: { projectId: string }) {
+function CrewModalBody({
+  projectId,
+  onClose,
+}: {
+  projectId: string;
+  onClose: () => void;
+}) {
   const reduced = useReducedMotion();
   const progress = useProjectProgress(projectId);
   const ledger = useLedger(projectId);
@@ -286,9 +320,7 @@ function CrewModalBody({ projectId }: { projectId: string }) {
       {/* header — cost and tokens reuse the same query the dock reads */}
       <div className="flex items-start justify-between gap-4 border-b border-white/[0.08] px-6 py-4">
         <div>
-          <DialogPrimitive.Title className="text-lg font-semibold tracking-tight">
-            Your crew
-          </DialogPrimitive.Title>
+          <h2 className="text-lg font-semibold tracking-tight">Your crew</h2>
           <p className="mt-0.5 text-xs text-zinc-500">{statusLine}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -297,12 +329,13 @@ function CrewModalBody({ projectId }: { projectId: string }) {
               {fmtTokens(tokens)} tokens
             </span>
           )}
-          <DialogPrimitive.Close
+          <button
+            onClick={onClose}
             aria-label="Close crew view"
             className="rounded-md p-1 text-zinc-400 transition-all duration-150 hover:bg-white/10 hover:text-white motion-safe:hover:rotate-90 motion-reduce:transition-none"
           >
             <X className="size-5" />
-          </DialogPrimitive.Close>
+          </button>
         </div>
       </div>
 

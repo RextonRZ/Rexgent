@@ -198,6 +198,8 @@ export function DockRail({ projectId }: { projectId: string }) {
         projectId={projectId}
         open={crewOpen}
         onOpenChange={setCrewOpen}
+        // keep the dock clear: rail (48px) + panel column (320px) when open
+        insetRight={anyOpen ? 368 : 48}
       />
     </aside>
   );
