@@ -53,18 +53,25 @@ function useMountReveal(reduced: boolean) {
 export interface TierSegment {
   key: string;
   label: string;
+  /** short in-bar name ("flash", "vl-plus") */
+  short: string;
   role: string;
   value: number;
   usd: number;
+  color: string;
+  /** in-segment label ink, picked per fill luminance */
+  ink: string;
 }
 
-/** The showpiece: a horizontal 100% stacked bar of the five LLM tiers,
- * cheap → premium, filling left→right on mount, cross-highlighted on hover. */
+/** The showpiece: a horizontal 100% stacked bar of the LLM tiers, cheap →
+ * premium (plus a gray "other" tail), pill ends, inline "flash 20%" labels,
+ * filling left→right on mount, cross-highlighted on hover. */
 export function TierSplitBar({ segments }: { segments: TierSegment[] }) {
   const reduced = useReducedMotion();
   const ready = useMountReveal(reduced);
   const [hover, setHover] = useState<string | null>(null);
-  const total = segments.reduce((s, x) => s + x.value, 0);
+  const visible = segments.filter((s) => s.value > 0);
+  const total = visible.reduce((s, x) => s + x.value, 0);
   if (!total) {
     return <p className="text-xs text-zinc-500">No language model usage in this range.</p>;
   }
@@ -72,37 +79,36 @@ export function TierSplitBar({ segments }: { segments: TierSegment[] }) {
   return (
     <div>
       <div
-        className="flex h-10 w-full origin-left gap-[2px] overflow-visible transition-transform duration-700 ease-out motion-reduce:transition-none"
+        className="flex h-[34px] w-full origin-left gap-[3px] overflow-visible transition-transform duration-700 ease-out motion-reduce:transition-none"
         style={{ transform: ready ? "scaleX(1)" : "scaleX(0)" }}
       >
-        {segments.map((s, i) =>
-          s.value <= 0 ? null : (
+        {visible.map((s, i) => {
+          const share = s.value / total;
+          return (
             <div
               key={s.key}
               onMouseEnter={() => setHover(s.key)}
               onMouseLeave={() => setHover(null)}
               className={cn(
-                "group relative flex items-center justify-center rounded-[4px] transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+                "group relative flex items-center justify-center rounded-[5px] transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+                i === 0 && "rounded-l-[17px]",
+                i === visible.length - 1 && "rounded-r-[17px]",
                 !dimmed(s.key) && hover === s.key && "motion-safe:-translate-y-[1px]"
               )}
               style={{
-                width: `${(s.value / total) * 100}%`,
-                background: TIER_RAMP[i],
+                width: `${share * 100}%`,
+                background: s.color,
                 opacity: dimmed(s.key) ? 0.25 : 1,
-                minWidth: 4,
-                boxShadow:
-                  hover === s.key ? `0 0 18px ${TIER_RAMP[i]}55` : undefined,
+                minWidth: 5,
+                boxShadow: hover === s.key ? `0 0 18px ${s.color}55` : undefined,
               }}
             >
-              {s.value / total >= 0.12 && (
+              {share >= 0.1 && (
                 <span
-                  className="pointer-events-none truncate px-1 font-mono text-[10px] font-medium transition-opacity delay-500 duration-300 motion-reduce:transition-none"
-                  style={{
-                    color: i < 2 ? "#1c1633" : "#f4f1ff",
-                    opacity: ready ? 1 : 0,
-                  }}
+                  className="pointer-events-none truncate px-1.5 font-mono text-[10px] font-medium transition-opacity delay-500 duration-300 motion-reduce:transition-none"
+                  style={{ color: s.ink, opacity: ready ? 1 : 0 }}
                 >
-                  {fmtPct(s.value / total)}
+                  {s.short} {fmtPct(share)}
                 </span>
               )}
               {/* tooltip: model + role + exact tokens + share */}
@@ -115,16 +121,16 @@ export function TierSplitBar({ segments }: { segments: TierSegment[] }) {
                 <p className="font-mono text-[10px] text-zinc-200">{s.label}</p>
                 <p className="text-[10px] text-zinc-500">{s.role}</p>
                 <p className="text-[10px] tabular-nums text-zinc-300">
-                  {fmtTokens(s.value)} tokens · {fmtPct(s.value / total)} · {fmtUsd(s.usd)}
+                  {fmtTokens(s.value)} tokens · {fmtPct(share)} · {fmtUsd(s.usd)}
                 </p>
               </div>
             </div>
-          )
-        )}
+          );
+        })}
       </div>
-      {/* legend: identity never rides on color alone */}
+      {/* legend: every segment named, identity never rides on color alone */}
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-        {segments.map((s, i) => (
+        {visible.map((s) => (
           <button
             key={s.key}
             onMouseEnter={() => setHover(s.key)}
@@ -134,7 +140,7 @@ export function TierSplitBar({ segments }: { segments: TierSegment[] }) {
           >
             <span
               className="h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ background: TIER_RAMP[i] }}
+              style={{ background: s.color }}
             />
             <span className="font-mono text-[10px] text-zinc-300">{s.label}</span>
             <span className="text-[10px] text-zinc-500">{s.role}</span>

@@ -38,13 +38,13 @@ import {
 } from "@/components/usage/usageCharts";
 
 /** Tier order is the story: cheap on the left, premium on the right, so the
- * light mass of the ramp IS the routing win. */
-const TIER_ORDER = [
-  { key: "qwen-flash", label: "qwen-flash", role: "cheap structured work" },
-  { key: "qwen-plus", label: "qwen-plus", role: "judgment + chat" },
-  { key: "qwen3-vl-plus", label: "qwen3-vl-plus", role: "continuity vision" },
-  { key: "qwen-max", label: "qwen-max", role: "creative writing" },
-  { key: "qwen-vl-max", label: "qwen-vl-max", role: "reference analysis" },
+ * light mass of the violet ramp IS the routing win. Ink per fill luminance. */
+const TIER_META = [
+  { key: "qwen-flash", short: "flash", role: "cheap structured work", color: "#ddd6fe", ink: "#1c1633" },
+  { key: "qwen-plus", short: "plus", role: "judgment + chat", color: "#a78bfa", ink: "#1c1633" },
+  { key: "qwen3-vl-plus", short: "vl-plus", role: "continuity vision", color: "#8b5cf6", ink: "#f4f1ff" },
+  { key: "qwen-max", short: "max", role: "creative writing", color: "#7c3aed", ink: "#f4f1ff" },
+  { key: "qwen-vl-max", short: "vl-max", role: "reference analysis", color: "#5b21b6", ink: "#f4f1ff" },
 ];
 
 interface RosterModel {
@@ -170,22 +170,43 @@ function PosterThumb({
 }
 
 /** The clips BEHIND a reliability number — visible proof, sized as evidence,
- * never a gallery. Hover names the drama and shot. */
+ * never a gallery. Hover names the drama and shot. Expired footage never
+ * renders as a black void: failed tiles drop out and a "+N expired" chip
+ * counts them instead.
+ * TODO(data): clips expire on OSS, so historical evidence breaks — persist a
+ * small extracted poster JPG per clip at generation time and reference that
+ * here instead of the live clip URL. */
 function EvidenceStrip({ samples }: { samples?: ClipSample[] }) {
+  const [failed, setFailed] = useState<Set<string>>(new Set());
   if (!samples?.length) return null;
+  const ok = samples.filter((s) => !failed.has(s.url));
+  const gone = samples.length - ok.length;
+  if (ok.length === 0) {
+    return (
+      <p className="mt-2 text-[10px] text-zinc-600">evidence footage expired</p>
+    );
+  }
   return (
-    <div className="mt-2.5 flex gap-1.5">
-      {samples.map((s, i) => (
+    <div className="mt-2.5 flex items-center gap-1.5">
+      {ok.map((s, i) => (
         <video
           key={`${s.url}-${i}`}
           src={s.url}
           muted
           playsInline
           preload="metadata"
+          onError={() =>
+            setFailed((prev) => new Set(prev).add(s.url))
+          }
           title={`${s.title}${s.shot_number != null ? ` · shot ${s.shot_number}` : ""}`}
-          className="h-8 w-12 shrink-0 rounded-[3px] object-cover ring-1 ring-white/10"
+          className="h-8 w-12 shrink-0 rounded-[3px] bg-zinc-900 object-cover ring-1 ring-white/10"
         />
       ))}
+      {gone > 0 && (
+        <span className="flex h-8 items-center rounded-[3px] bg-zinc-900 px-2 text-[10px] text-zinc-600 ring-1 ring-white/[0.06]">
+          +{gone} expired
+        </span>
+      )}
     </div>
   );
 }
@@ -355,29 +376,35 @@ function Rise({
 
 function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }) {
   const byModel = new Map(data.llm.by_model.map((r) => [r.model, r]));
-  const segments: TierSegment[] = TIER_ORDER.map((t) => ({
+  const segments: TierSegment[] = TIER_META.map((t) => ({
     key: t.key,
-    label: t.label,
+    label: t.key,
+    short: t.short,
     role: t.role,
+    color: t.color,
+    ink: t.ink,
     value: byModel.get(t.key)?.tokens ?? 0,
     usd: byModel.get(t.key)?.usd ?? 0,
   }));
-  // models the router doesn't know still count as premium-side "other"
-  const known = new Set(TIER_ORDER.map((t) => t.key));
-  for (const r of data.llm.by_model) {
-    if (!known.has(r.model)) {
-      segments.push({ key: r.model, label: r.model, role: "other", value: r.tokens, usd: r.usd });
-    }
+  // fold anything the router doesn't know into ONE labeled gray tail, so the
+  // bar always sums to 100% with every segment named in the legend
+  const known = new Set(TIER_META.map((t) => t.key));
+  const extras = data.llm.by_model.filter((r) => !known.has(r.model));
+  if (extras.length) {
+    segments.push({
+      key: "other",
+      label: "other",
+      short: "other",
+      role: extras.map((r) => r.model).join(", "),
+      color: "#52525b",
+      ink: "#e4e4e7",
+      value: extras.reduce((s, r) => s + r.tokens, 0),
+      usd: extras.reduce((s, r) => s + r.usd, 0),
+    });
   }
 
   const cheapPct = useCountUp(Math.round(data.llm.cheap_share * 100), reduced);
   const saved = useCountUp(data.llm.saved_usd, reduced);
-
-  const cheapLeaders = segments
-    .filter((s) => !["qwen-max", "qwen-vl-max"].includes(s.key) && s.value > 0)
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 2)
-    .map((s) => s.label);
 
   const cats = data.categories;
   const catRows = (
@@ -474,7 +501,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
                   alt=""
                   loading="lazy"
                   className={cn(
-                    "h-full w-full min-w-0 flex-1 object-cover object-[50%_25%] opacity-30 brightness-[0.25]",
+                    "h-full w-full min-w-0 flex-1 object-cover object-[50%_25%] opacity-25 brightness-[0.12]",
                     !reduced && "animate-[ken-burns_16s_ease-out_forwards]"
                   )}
                 />
@@ -498,42 +525,31 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
           <div className="relative flex items-stretch">
             <Sprockets />
             <div className="min-w-0 flex-1 px-2 py-7 sm:px-4">
-              <div className="flex flex-wrap items-end gap-x-12 gap-y-4">
-                <div>
-                  <p className="text-7xl font-semibold leading-none tracking-tight sm:text-8xl">
-                    {Math.round(cheapPct)}
-                    <span className="text-4xl text-zinc-400 sm:text-5xl">%</span>
-                  </p>
-                  <p className="mt-2 text-sm text-zinc-400">
-                    of language work ran on cheap tiers
-                  </p>
-                </div>
-                <div>
-                  <p
-                    className="text-4xl font-semibold text-ok"
-                    style={{ textShadow: "0 0 28px rgba(74,222,128,0.35)" }}
+              {/* one baseline: the number and its context read as a unit */}
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <p className="text-[52px] font-medium leading-none tracking-tight">
+                  {Math.round(cheapPct)}
+                  <span className="text-[26px] text-zinc-400">%</span>
+                </p>
+                <p className="text-sm text-zinc-400">
+                  of language work on cheap tiers ·{" "}
+                  <span
+                    className="font-medium text-ok"
+                    style={{ textShadow: "0 0 20px rgba(74,222,128,0.3)" }}
                   >
-                    {fmtUsd(saved)}
-                  </p>
-                  <p className="mt-2 text-sm text-zinc-400">
-                    saved vs running everything on qwen-max
-                  </p>
-                </div>
-                <p className="pb-1 text-xs tabular-nums text-zinc-600">
-                  {fmtTokens(data.llm.total_tokens)} tokens · actual{" "}
-                  {fmtUsd(data.llm.total_usd)} · all-premium would be{" "}
-                  {fmtUsd(data.llm.all_premium_usd)}
+                    {fmtUsd(saved)} saved
+                  </span>
                 </p>
               </div>
-              <div className="mt-8">
-                <TierSplitBar segments={segments.filter((s) => s.value > 0)} />
+              <div className="mt-4">
+                <TierSplitBar segments={segments} />
               </div>
-              {cheapLeaders.length > 0 && (
-                <p className="mt-5 text-xs italic text-zinc-500">
-                  Most work runs on {cheapLeaders.join(" and ")}; qwen-max is
-                  reserved for creative writing.
-                </p>
-              )}
+              {/* the receipt, small */}
+              <p className="mt-3 text-[10px] tabular-nums text-zinc-600">
+                {fmtTokens(data.llm.total_tokens)} tokens · actual{" "}
+                {fmtUsd(data.llm.total_usd)} · all-premium would be{" "}
+                {fmtUsd(data.llm.all_premium_usd)}
+              </p>
             </div>
             <Sprockets />
           </div>
