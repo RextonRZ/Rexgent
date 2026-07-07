@@ -2,7 +2,19 @@
 
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import {
+  Check,
+  Clapperboard,
+  Link2,
+  MessageSquare,
+  PenLine,
+  Scissors,
+  Users,
+  Volume2,
+  Wallet,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { Skeleton } from "@/components/shared/Skeleton";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
@@ -28,28 +40,83 @@ interface StudioStatsData {
   };
 }
 
-const AGENT_LABELS: Record<string, string> = {
-  continuity: "Continuity",
-  budget_allocator: "Budget Allocator",
-  audio_continuity: "Audio Continuity",
-  style_casting: "Style / Casting",
-  narrative_judge: "Narrative Judge",
-  clarification: "Clarification",
+/* ── your crew: reframe raw agent telemetry as who did what ─────────── */
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+const CREW: Record<
+  string,
+  { icon: LucideIcon; role: string; did: (n: number) => string }
+> = {
+  narrative_judge: {
+    icon: Scissors,
+    role: "Editor / Judge",
+    did: (n) => `Reviewed ${plural(n, "draft")} before any spend`,
+  },
+  script_reviser: {
+    icon: PenLine,
+    role: "Reviser",
+    did: (n) => `Rewrote ${plural(n, "draft")} with the judge's notes`,
+  },
+  clarification: {
+    icon: MessageSquare,
+    role: "Script Doctor",
+    did: (n) => `Checked ${plural(n, "script")} for ambiguity`,
+  },
+  style_casting: {
+    icon: Users,
+    role: "Casting",
+    did: (n) => `Locked faces, outfits and voices in ${plural(n, "run")}`,
+  },
+  continuity: {
+    icon: Link2,
+    role: "Continuity",
+    did: (n) => `Checked ${plural(n, "shot")} for face and scene drift`,
+  },
+  budget_allocator: {
+    icon: Wallet,
+    role: "Producer",
+    did: (n) => `Fitted the spend plan ${n} time${n === 1 ? "" : "s"}`,
+  },
+  audio_continuity: {
+    icon: Volume2,
+    role: "Audio",
+    did: (n) => `Voiced dialogue in ${plural(n, "run")}`,
+  },
+  Showrunner: {
+    icon: Clapperboard,
+    role: "Showrunner",
+    did: (n) => `Answered ${plural(n, "question")} about your dramas`,
+  },
 };
 
-const SPLIT_ORDER: { key: string; label: string; color: string }[] = [
-  { key: "video", label: "Video", color: "bg-violet-500" },
-  { key: "image", label: "Image", color: "bg-pink-400" },
-  { key: "llm", label: "LLM", color: "bg-blue-400" },
-  { key: "tts", label: "TTS", color: "bg-zinc-500" },
-];
-
-function confTone(c: number | null): string {
-  if (c === null) return "text-muted-foreground";
-  if (c >= 0.9) return "text-zinc-200";
-  if (c >= 0.7) return "text-amber-400";
-  return "text-red-400";
+function crewOf(agent: string) {
+  return (
+    CREW[agent] ?? {
+      icon: Clapperboard,
+      role: agent.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      did: (n: number) => plural(n, "report"),
+    }
+  );
 }
+
+/** Health of a crew member, in words first, numbers second. */
+function health(conf: number | null) {
+  if (conf === null) return null;
+  const pct = Math.round(Math.min(Math.max(conf, 0), 1) * 100);
+  if (pct >= 90) return { pct, word: "Reliable", dot: "bg-emerald-400", text: "text-emerald-400/90" };
+  if (pct >= 70) return { pct, word: "Good", dot: "bg-amber-400", text: "text-amber-400/90" };
+  return { pct, word: "Needs attention", dot: "bg-red-400", text: "text-red-400/90" };
+}
+
+/* ── where budget went: one cohesive cool ramp, no alarm colors ──────── */
+
+const SPLIT_ORDER: { key: string; label: string; color: string; phrase: string }[] = [
+  { key: "video", label: "Video", color: "bg-violet-500", phrase: "video generation" },
+  { key: "image", label: "Image", color: "bg-violet-300", phrase: "bible plates and posters" },
+  { key: "llm", label: "LLM", color: "bg-blue-400", phrase: "writing and analysis" },
+  { key: "tts", label: "Voice", color: "bg-zinc-500", phrase: "voice synthesis" },
+];
 
 function cellTone(clips: number): string {
   if (clips <= 0) return "bg-white/5";
@@ -60,7 +127,7 @@ function cellTone(clips: number): string {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+    <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
       {children}
     </h3>
   );
@@ -106,6 +173,8 @@ function Heatmap({ days }: { days: DayStat[] }) {
       ? week[0].toLocaleString("en", { month: "short" })
       : null;
   });
+
+  const activeDays = days.filter((d) => d.clips > 0).length;
 
   return (
     <div>
@@ -167,13 +236,31 @@ function Heatmap({ days }: { days: DayStat[] }) {
         )}
         More
       </div>
-      {days.length === 0 && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          No generation activity yet. Your first render lights this up.
+      {activeDays < 10 && (
+        <p className="mt-2 text-xs text-zinc-500">
+          Your activity grid fills in as you generate more.
         </p>
       )}
     </div>
   );
+}
+
+/** Sum clips/spend over the [from, to) day window (offsets back from today). */
+function windowSum(days: DayStat[], fromDaysAgo: number, toDaysAgo: number) {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  let clips = 0;
+  let spent = 0;
+  for (const d of days) {
+    const age = Math.floor(
+      (now.getTime() - new Date(d.date + "T00:00:00").getTime()) / 86400000
+    );
+    if (age >= toDaysAgo && age < fromDaysAgo) {
+      clips += d.clips;
+      spent += d.spent;
+    }
+  }
+  return { clips, spent };
 }
 
 export function StudioStatsDrawer({
@@ -207,6 +294,227 @@ export function StudioStatsDrawer({
     (sum, s) => sum + (data?.cost_split[s.key] ?? 0),
     0
   );
+  const biggest =
+    splitTotal > 0
+      ? SPLIT_ORDER.reduce((best, s) =>
+          (data?.cost_split[s.key] ?? 0) > (data?.cost_split[best.key] ?? 0)
+            ? s
+            : best
+        )
+      : null;
+
+  // this week vs last week, from the daily series
+  const thisWeek = data ? windowSum(data.days, 7, 0) : { clips: 0, spent: 0 };
+  const lastWeek = data ? windowSum(data.days, 14, 7) : { clips: 0, spent: 0 };
+  const clipDelta = thisWeek.clips - lastWeek.clips;
+  const perClipSecs =
+    data && data.totals.clips > 0
+      ? data.totals.film_seconds / data.totals.clips
+      : 5;
+
+  const crew = data
+    ? [...data.agents].sort((a, b) => b.runs - a.runs)
+    : [];
+
+  const sections: React.ReactNode[] = data
+    ? [
+        /* 1 — headline totals */
+        <section key="totals">
+          <div className="grid grid-cols-4 gap-2">
+            {(
+              [
+                ["Dramas", <CountNum key="d" value={data.totals.dramas} />],
+                ["Clips", <CountNum key="c" value={data.totals.clips} />],
+                [
+                  "Runtime",
+                  <CountNum
+                    key="r"
+                    value={data.totals.film_seconds}
+                    format={fmtFilm}
+                  />,
+                ],
+                [
+                  "Spent",
+                  <CountNum
+                    key="s"
+                    value={data.totals.spent_usd}
+                    format={(v) => `$${v.toFixed(2)}`}
+                  />,
+                ],
+              ] as const
+            ).map(([label, node]) => (
+              <div
+                key={label}
+                className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-2 py-4 text-center"
+              >
+                <p className="text-xl font-semibold tabular-nums text-foreground">
+                  {node}
+                </p>
+                <p className="mt-1 text-[10px] uppercase tracking-widest text-zinc-500">
+                  {label}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>,
+
+        /* 2 — this week, with change vs last week */
+        <section key="week" className="space-y-3">
+          <SectionTitle>This week</SectionTitle>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-400">
+            <span>
+              <span className="font-medium tabular-nums text-zinc-200">
+                {thisWeek.clips}
+              </span>{" "}
+              clips
+            </span>
+            <span className="text-zinc-700">·</span>
+            <span>
+              <span className="font-medium tabular-nums text-zinc-200">
+                {fmtFilm(thisWeek.clips * perClipSecs)}
+              </span>{" "}
+              generated
+            </span>
+            <span className="text-zinc-700">·</span>
+            <span>
+              <span className="font-medium tabular-nums text-zinc-200">
+                ${thisWeek.spent.toFixed(2)}
+              </span>{" "}
+              spent
+            </span>
+            {(thisWeek.clips > 0 || lastWeek.clips > 0) && clipDelta !== 0 && (
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-medium tabular-nums",
+                  clipDelta > 0
+                    ? "bg-emerald-500/10 text-emerald-400"
+                    : "bg-red-500/10 text-red-400"
+                )}
+              >
+                {clipDelta > 0 ? "▲" : "▼"} {Math.abs(clipDelta)} vs last week
+              </span>
+            )}
+          </p>
+        </section>,
+
+        /* 3 — your crew */
+        <section key="crew" className="space-y-3">
+          <SectionTitle>Your crew</SectionTitle>
+          {crew.length === 0 ? (
+            <p className="text-xs text-zinc-500">
+              Your crew reports for duty once a drama runs the pipeline.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {crew.map((a) => {
+                const member = crewOf(a.agent);
+                const h = health(a.avg_confidence);
+                const Icon = member.icon;
+                return (
+                  <div key={a.agent} className="space-y-1.5">
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03]">
+                        <Icon className="size-4 text-zinc-400" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-zinc-200">
+                          {member.role}
+                        </p>
+                        <p className="truncate text-xs text-zinc-500">
+                          {member.did(a.runs)}
+                        </p>
+                      </div>
+                      {h && (
+                        <div className="shrink-0 text-right">
+                          <p className="flex items-center justify-end gap-1.5">
+                            <span className={cn("h-1.5 w-1.5 rounded-full", h.dot)} />
+                            <span className={cn("text-[10px] font-medium", h.text)}>
+                              {h.word}
+                            </span>
+                          </p>
+                          {h.pct >= 100 ? (
+                            <Check className="ml-auto mt-0.5 size-3 text-zinc-600" />
+                          ) : (
+                            <p className="mt-0.5 text-[10px] tabular-nums text-zinc-600">
+                              {h.pct}%
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {/* secondary: a whisper of a confidence track */}
+                    <div className="ml-11 h-1 overflow-hidden rounded-full bg-white/[0.04]">
+                      <div
+                        className="h-full rounded-full bg-violet-500/40 transition-all duration-700"
+                        style={{
+                          width: `${((a.avg_confidence ?? 0) * 100).toFixed(0)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>,
+
+        /* 4 — where budget went */
+        <section key="budget" className="space-y-3">
+          <SectionTitle>Where budget went</SectionTitle>
+          {splitTotal <= 0 ? (
+            <p className="text-xs text-zinc-500">Nothing spent yet.</p>
+          ) : (
+            <>
+              <div className="flex h-2.5 gap-px overflow-hidden rounded-full bg-white/5">
+                {SPLIT_ORDER.map((s) => {
+                  const v = data.cost_split[s.key] ?? 0;
+                  if (v <= 0) return null;
+                  return (
+                    <div
+                      key={s.key}
+                      className={s.color}
+                      style={{ width: `${(v / splitTotal) * 100}%` }}
+                    />
+                  );
+                })}
+              </div>
+              <div className="space-y-1.5">
+                {SPLIT_ORDER.map((s) => {
+                  const v = data.cost_split[s.key] ?? 0;
+                  if (v <= 0) return null;
+                  return (
+                    <div
+                      key={s.key}
+                      className="flex items-center gap-2 text-xs text-zinc-400"
+                    >
+                      <span className={cn("h-2 w-2 rounded-[2px]", s.color)} />
+                      {s.label}
+                      <span className="ml-auto tabular-nums text-zinc-300">
+                        $<CountNum value={v} format={(x) => x.toFixed(2)} />
+                      </span>
+                      <span className="w-10 text-right tabular-nums text-zinc-600">
+                        {Math.round((v / splitTotal) * 100)}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {biggest && (
+                <p className="text-xs text-zinc-500">
+                  Most of your budget goes to {biggest.phrase}.
+                </p>
+              )}
+            </>
+          )}
+        </section>,
+
+        /* 5 — activity heatmap, de-emphasized at the bottom */
+        <section key="activity" className="space-y-3 opacity-90">
+          <SectionTitle>Generation activity · 26 weeks</SectionTitle>
+          <Heatmap days={data.days} />
+        </section>,
+      ]
+    : [];
 
   return (
     <div className="fixed inset-0 z-50">
@@ -217,7 +525,7 @@ export function StudioStatsDrawer({
       <aside
         role="dialog"
         aria-label="Studio stats"
-        className="absolute right-0 top-0 h-full w-[480px] max-w-full space-y-8 overflow-y-auto border-l border-white/10 bg-[#0b0912] p-6 shadow-2xl duration-300 animate-in slide-in-from-right"
+        className="absolute right-0 top-0 h-full w-[480px] max-w-full space-y-9 overflow-y-auto border-l border-white/10 bg-[#0b0912] p-6 shadow-2xl duration-300 animate-in slide-in-from-right scroll-clean"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold tracking-tight">Studio stats</h2>
@@ -237,138 +545,15 @@ export function StudioStatsDrawer({
             ))}
           </div>
         ) : (
-          <>
-            {/* activity heatmap */}
-            <section className="space-y-3">
-              <SectionTitle>Generation activity · 26 weeks</SectionTitle>
-              <Heatmap days={data.days} />
-            </section>
-
-            {/* agent breakdown */}
-            <section className="space-y-3">
-              <SectionTitle>Agents</SectionTitle>
-              {data.agents.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Agent reports appear once a drama runs the pipeline.
-                </p>
-              ) : (
-                <div className="space-y-2.5">
-                  {data.agents.map((a) => (
-                    <div key={a.agent} className="flex items-center gap-3">
-                      <span className="w-32 shrink-0 truncate text-sm text-zinc-300">
-                        {AGENT_LABELS[a.agent] ?? a.agent}
-                      </span>
-                      <span className="w-14 shrink-0 text-right font-mono text-[11px] text-muted-foreground">
-                        <CountNum value={a.runs} /> runs
-                      </span>
-                      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/5">
-                        <div
-                          className="h-full rounded-full bg-violet-500/70 transition-all duration-700"
-                          style={{
-                            width: `${((a.avg_confidence ?? 0) * 100).toFixed(0)}%`,
-                          }}
-                        />
-                      </div>
-                      <span
-                        className={cn(
-                          "w-10 shrink-0 text-right font-mono text-[11px] tabular-nums",
-                          confTone(a.avg_confidence)
-                        )}
-                      >
-                        {a.avg_confidence !== null
-                          ? `${Math.round(a.avg_confidence * 100)}%`
-                          : "–"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* cost split */}
-            <section className="space-y-3">
-              <SectionTitle>Cost split</SectionTitle>
-              {splitTotal <= 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Nothing spent yet.
-                </p>
-              ) : (
-                <>
-                  <div className="flex h-2.5 gap-px overflow-hidden rounded-full bg-white/5">
-                    {SPLIT_ORDER.map((s) => {
-                      const v = data.cost_split[s.key] ?? 0;
-                      if (v <= 0) return null;
-                      return (
-                        <div
-                          key={s.key}
-                          className={s.color}
-                          style={{ width: `${(v / splitTotal) * 100}%` }}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                    {SPLIT_ORDER.map((s) => {
-                      const v = data.cost_split[s.key] ?? 0;
-                      return (
-                        <span
-                          key={s.key}
-                          className="flex items-center gap-1.5 text-[11px] text-zinc-400"
-                        >
-                          <span
-                            className={cn("h-2 w-2 rounded-[2px]", s.color)}
-                          />
-                          {s.label}
-                          <span className="font-mono text-muted-foreground">
-                            $<CountNum value={v} format={(x) => x.toFixed(2)} />
-                          </span>
-                        </span>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </section>
-
-            {/* totals */}
-            <section className="space-y-3">
-              <SectionTitle>Totals</SectionTitle>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                {(
-                  [
-                    ["Dramas", <CountNum key="d" value={data.totals.dramas} />],
-                    ["Clips", <CountNum key="c" value={data.totals.clips} />],
-                    [
-                      "Runtime",
-                      <CountNum
-                        key="r"
-                        value={data.totals.film_seconds}
-                        format={fmtFilm}
-                      />,
-                    ],
-                    [
-                      "Spent",
-                      <CountNum
-                        key="s"
-                        value={data.totals.spent_usd}
-                        format={(v) => `$${v.toFixed(2)}`}
-                      />,
-                    ],
-                  ] as const
-                ).map(([label, node]) => (
-                  <div
-                    key={label}
-                    className="rounded-lg border border-white/[0.08] bg-white/[0.02] py-3"
-                  >
-                    <p className="font-mono text-sm text-foreground">{node}</p>
-                    <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                      {label}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </>
+          sections.map((s, i) => (
+            <div
+              key={i}
+              className="card-rise"
+              style={{ animationDelay: `${i * 70}ms` }}
+            >
+              {s}
+            </div>
+          ))
         )}
       </aside>
     </div>
