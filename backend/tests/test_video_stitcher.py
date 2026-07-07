@@ -71,3 +71,60 @@ def test_mix_tracks_music_only_needs_no_dialogue():
     joined = " ".join(args)
     assert "[bgm]" in joined
     assert args[-1] == "out.mp4"
+
+
+def test_stitch_keeps_original_audio_with_chunk_fades():
+    # the model's own audio rides along as the ambient bed, faded at both ends
+    # of every chunk so clip-to-clip cuts don't click
+    st = VideoStitcher()
+    with patch("subprocess.run") as run, \
+         patch.object(VideoStitcher, "_has_audio", return_value=True), \
+         patch.object(VideoStitcher, "_duration", return_value=5.0):
+        run.return_value.returncode = 0
+        st.stitch(["/tmp/a.mp4"], "/tmp/out.mp4")
+        normalise = " ".join(run.call_args_list[0][0][0])
+    assert "afade=t=in:st=0:d=0.25" in normalise
+    assert "afade=t=out:st=4.750:d=0.25" in normalise
+    assert "-an" not in normalise.split()   # audio no longer dropped
+    assert "aac" in normalise
+
+
+def test_stitch_fills_silence_when_clip_has_no_audio():
+    # a silent clip still gets a uniform aac stream so the concat holds
+    st = VideoStitcher()
+    with patch("subprocess.run") as run, \
+         patch.object(VideoStitcher, "_has_audio", return_value=False), \
+         patch.object(VideoStitcher, "_duration", return_value=5.0):
+        run.return_value.returncode = 0
+        st.stitch(["/tmp/a.mp4"], "/tmp/out.mp4")
+        normalise = " ".join(run.call_args_list[0][0][0])
+    assert "anullsrc" in normalise
+    assert "-shortest" in normalise
+
+
+def test_mix_uses_video_ambient_as_bed_and_ducks_it():
+    # the stitched video's own audio joins the bed with BGM; the whole bed
+    # ducks under dialogue so voices stay clear
+    st = VideoStitcher()
+    with patch("subprocess.run") as run, \
+         patch.object(VideoStitcher, "_has_audio", return_value=True):
+        run.return_value.returncode = 0
+        st.mix_tracks("v.mp4", [{"audio_path": "a.wav", "start": 0.0}],
+                      "bgm.mp3", "out.mp4", bgm_volume=0.3, duck=True,
+                      ambient_volume=0.7)
+        joined = " ".join(run.call_args[0][0])
+    assert "[0:a]volume=0.7[amb]" in joined            # ambient bed present
+    assert "[amb][bgm]amix" in joined                  # bed = ambient + music
+    assert "[bed][dlgkey]sidechaincompress" in joined  # bed ducks under speech
+
+
+def test_mix_ambient_only_still_produces_audio():
+    # no dialogue, no BGM — the ambient bed alone must reach the output
+    st = VideoStitcher()
+    with patch("subprocess.run") as run, \
+         patch.object(VideoStitcher, "_has_audio", return_value=True):
+        run.return_value.returncode = 0
+        st.mix_tracks("v.mp4", [], None, "out.mp4")
+        args = run.call_args[0][0]
+    assert "[amb]" in " ".join(args)
+    assert args[args.index("-map") + 1] == "0:v"

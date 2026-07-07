@@ -7,12 +7,23 @@ class VideoStitcher:
     # Canvas per delivery format; clips of any source resolution letterbox
     # onto it instead of breaking the concat.
     _CANVAS = {"9:16": (1080, 1920), "16:9": (1920, 1080)}
+    # per-chunk audio fade so clip-to-clip cuts don't click/jar
+    _AUDIO_FADE = 0.25
 
     @classmethod
     def _vf_for(cls, ratio: str) -> str:
         w, h = cls._CANVAS.get(ratio, cls._CANVAS["9:16"])
         return (f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
                 f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,fps=24,format=yuv420p")
+
+    @staticmethod
+    def _has_audio(path: str) -> bool:
+        proc = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "a",
+             "-show_entries", "stream=codec_type", "-of", "csv=p=0", path],
+            capture_output=True, text=True,
+        )
+        return "audio" in (proc.stdout or "")
 
     def stitch(self, clips: list, output_path: str, ratio: str = "9:16") -> str:
         """Concatenate clips into one MP4.
@@ -22,8 +33,11 @@ class VideoStitcher:
         Each clip is first normalised to the drama's delivery canvas
         (vertical 1080x1920 by default) at 24fps (and trimmed), so
         mixed-resolution / imported media join cleanly; the normalised parts
-        are then concatenated with a stream copy. Audio is dropped (captions
-        are burned + shipped as an .srt; dialogue and music are mixed later).
+        are then concatenated with a stream copy.
+
+        The model's ORIGINAL audio is kept as the ambient bed, with a short
+        fade in/out on every chunk so transitions don't cut audibly. Clips
+        with no audio stream get silence so the concat's streams stay uniform.
         """
         norm_dir = tempfile.mkdtemp()
         norm_paths = []
@@ -33,17 +47,32 @@ class VideoStitcher:
             else:
                 path, tin, tout = clip.get("path"), clip.get("in"), clip.get("out")
             norm = os.path.join(norm_dir, f"n{i:03d}.mp4")
+            # effective chunk length places the fade-out; fall back to probe
+            if tout is not None:
+                eff = float(tout) - float(tin or 0.0)
+            else:
+                eff = max(0.0, self._duration(path) - float(tin or 0.0))
+            f = self._AUDIO_FADE
+            has_audio = self._has_audio(path)
             cmd = ["ffmpeg", "-y"]
             if tin:
                 cmd += ["-ss", f"{float(tin):.3f}"]
             cmd += ["-i", path]
-            if tout is not None:
-                dur = float(tout) - float(tin or 0.0)
-                if dur > 0:
-                    cmd += ["-t", f"{dur:.3f}"]
+            if not has_audio:
+                # silent source: manufacture a silence track so every chunk has
+                # a uniform aac stream for the copy-concat
+                cmd += ["-f", "lavfi",
+                        "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
+            if tout is not None and eff > 0:
+                cmd += ["-t", f"{eff:.3f}"]
+            afade = (f"afade=t=in:st=0:d={f},afade=t=out:st={max(0.0, eff - f):.3f}:d={f}"
+                     if eff > 2 * f else "anull")
+            cmd += ["-vf", self._vf_for(ratio), "-af", afade]
+            if not has_audio:
+                cmd += ["-map", "0:v", "-map", "1:a", "-shortest"]
             cmd += [
-                "-vf", self._vf_for(ratio),
-                "-c:v", "libx264", "-crf", "20", "-an", norm,
+                "-c:v", "libx264", "-crf", "20",
+                "-c:a", "aac", "-ar", "48000", "-ac", "2", norm,
             ]
             proc = subprocess.run(cmd, capture_output=True, text=True)
             if proc.returncode != 0:
@@ -110,10 +139,12 @@ class VideoStitcher:
         return output_path
 
     def mix_tracks(self, video_path, dialogue_segments, bgm_path, output_path,
-                   bgm_volume=0.3, duck=True, bgm_fade_in=0.0, bgm_fade_out=0.0):
-        """Build one dialogue track (each segment delayed to its start, then amix),
-        optionally duck a BGM bed beneath it (sidechaincompress) with the user's
-        volume + fades applied, and mux onto the silent video. Returns output_path."""
+                   bgm_volume=0.3, duck=True, bgm_fade_in=0.0, bgm_fade_out=0.0,
+                   ambient_volume=0.7):
+        """Final mix: TTS dialogue on top of a BED made of the video's own
+        (model-generated) ambient audio + the user's BGM. Each dialogue segment
+        is delayed to its timeline start; the whole bed ducks under speech
+        (sidechaincompress) so voices stay intelligible. Returns output_path."""
         inputs = ["-i", video_path]
         filters, dlg_labels = [], []
         for i, seg in enumerate(dialogue_segments):
@@ -122,14 +153,19 @@ class VideoStitcher:
             filters.append(f"[{i+1}:a]adelay={delay_ms}|{delay_ms}[d{i}]")
             dlg_labels.append(f"[d{i}]")
         n = len(dialogue_segments)
-        final_audio = None
+        dlg = None
         if dlg_labels:
             filters.append(f"{''.join(dlg_labels)}amix=inputs={n}:dropout_transition=0[dlg]")
-            final_audio = "[dlg]"
+            dlg = "[dlg]"
+        # ── bed: the stitched video's own ambient track + optional BGM ──
+        bed_labels = []
+        if self._has_audio(video_path):
+            filters.append(f"[0:a]volume={ambient_volume}[amb]")
+            bed_labels.append("[amb]")
         if bgm_path:
             bgm_idx = n + 1
             inputs += ["-i", bgm_path]
-            # volume + the user's fades, in order, on the music bed
+            # volume + the user's fades, in order, on the music
             bgm_chain = [f"volume={bgm_volume}"]
             if bgm_fade_in and bgm_fade_in > 0:
                 bgm_chain.append(f"afade=t=in:st=0:d={bgm_fade_in}")
@@ -139,17 +175,30 @@ class VideoStitcher:
                     start = max(0.0, vdur - bgm_fade_out)
                     bgm_chain.append(f"afade=t=out:st={start:.2f}:d={bgm_fade_out}")
             filters.append(f"[{bgm_idx}:a]{','.join(bgm_chain)}[bgm]")
-            if duck and final_audio:
+            bed_labels.append("[bgm]")
+        bed = None
+        if len(bed_labels) == 2:
+            filters.append(f"{''.join(bed_labels)}amix=inputs=2:dropout_transition=0[bed]")
+            bed = "[bed]"
+        elif bed_labels:
+            bed = bed_labels[0]
+        # ── combine ──
+        if bed and dlg:
+            if duck:
                 # duplicate the dialogue: one copy keys the compressor, one goes to the final mix
                 filters.append("[dlg]asplit=2[dlgkey][dlgmix]")
-                filters.append("[bgm][dlgkey]sidechaincompress=threshold=0.03:ratio=8[bgmduck]")
-                filters.append("[bgmduck][dlgmix]amix=inputs=2:dropout_transition=0[aout]")
-                final_audio = "[aout]"
-            elif final_audio:
-                filters.append("[bgm][dlg]amix=inputs=2:dropout_transition=0[aout]")
-                final_audio = "[aout]"
+                filters.append(f"{bed}[dlgkey]sidechaincompress=threshold=0.03:ratio=8[bedduck]")
+                filters.append("[bedduck][dlgmix]amix=inputs=2:dropout_transition=0[aout]")
             else:
-                final_audio = "[bgm]"
+                filters.append(f"{bed}{dlg}amix=inputs=2:dropout_transition=0[aout]")
+            final_audio = "[aout]"
+        else:
+            final_audio = bed or dlg
+        if final_audio is None:
+            # nothing to mix — hand back the video untouched
+            import shutil
+            shutil.copyfile(video_path, output_path)
+            return output_path
         cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", ";".join(filters),
                "-map", "0:v", "-map", final_audio, "-c:v", "copy", "-c:a", "aac",
                "-shortest", "-movflags", "+faststart", output_path]

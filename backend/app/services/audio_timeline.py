@@ -72,6 +72,11 @@ def place_dialogue(line_rows: list[dict], scene_plan: list[dict], gap: float = 0
                 start = prev_end
             else:
                 start = starts[0] if starts else scene_start
+            # never overlap the previous line: when a line's audio outruns its
+            # shot (a two-person exchange in short shots), the next line waits
+            # for it to finish instead of talking over it.
+            if prev_end is not None and start < prev_end:
+                start = prev_end
             seg = {"audio_path": ln["audio_path"], "start": round(start, 3),
                    "duration": round(float(ln.get("duration") or 0.0), 3)}
             # text/character ride along so burned captions share the exact

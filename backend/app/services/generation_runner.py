@@ -116,6 +116,23 @@ class GenerationRunner:
         # Delivery format the user picked at creation (vertical by default).
         self._video_ratio = (getattr(project, "video_ratio", None) or VIDEO_RATIO)
 
+        # ── Audio-first: synthesize the dialogue BEFORE rendering and fit each
+        # speaking shot's duration to its real line audio, so a two-person
+        # exchange gets pictures long enough to hold both voices. The lines are
+        # reused at export (not paid for twice). Never fatal to the render.
+        try:
+            from app.models.line_audio import LineAudio
+            if not self.db.query(LineAudio).filter(
+                    LineAudio.project_id == job.project_id).count():
+                from app.agent.pipeline_ops import synth_dialogue_op
+                await synth_dialogue_op(self.db, str(job.project_id))
+            from app.services.shot_duration_fitter import fit_project_shot_durations
+            fitted = fit_project_shot_durations(self.db, str(job.project_id))
+            if fitted:
+                logger.info(f"Audio-first fit: {fitted} shot duration(s) adjusted")
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Audio-first duration fit skipped: {e}")
+
         shots = self._ordered_shots(job.project_id)
         characters = self.db.query(Character).filter(Character.project_id == job.project_id).all()
         char_by_name = {c.name: c for c in characters}

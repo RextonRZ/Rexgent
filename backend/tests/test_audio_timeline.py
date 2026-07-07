@@ -89,3 +89,35 @@ def test_untagged_shots_dont_collapse_dialogue_to_zero():
     assert start["s3l0"] == 20.0         # scene 3 at its offset, not 0
     # the three scenes' opening lines never share a start (no pile-up)
     assert len({start["s1l0"], start["s2l0"], start["s3l0"]}) == 3
+
+
+def test_long_line_never_overlaps_the_next_line():
+    # the two-person conversation bug: line 0 runs 7s but its shot is only 5s,
+    # so line 1 (pinned to the next shot's start at 5s) used to talk over it.
+    plan = [{"scene_number": 1, "shots": [
+        {"duration": 5.0, "has_dialogue": True},
+        {"duration": 5.0, "has_dialogue": True},
+    ]}]
+    rows = [
+        {"scene_number": 1, "line_index": 0, "audio_path": "long", "duration": 7.0},
+        {"scene_number": 1, "line_index": 1, "audio_path": "reply", "duration": 2.0},
+    ]
+    start = {p["audio_path"]: p["start"] for p in place_dialogue(rows, plan, gap=0.2)}
+    assert start["long"] == 0.0
+    assert start["reply"] == 7.2  # waits for the long line + gap, not 5.0
+
+
+def test_fitting_shots_restores_picture_sync():
+    # once the shot is fitted to 10s (audio-first), the reply lands back on its
+    # own shot's start — no waiting, no overlap.
+    plan = [{"scene_number": 1, "shots": [
+        {"duration": 10.0, "has_dialogue": True},
+        {"duration": 5.0, "has_dialogue": True},
+    ]}]
+    rows = [
+        {"scene_number": 1, "line_index": 0, "audio_path": "long", "duration": 7.0},
+        {"scene_number": 1, "line_index": 1, "audio_path": "reply", "duration": 2.0},
+    ]
+    start = {p["audio_path"]: p["start"] for p in place_dialogue(rows, plan, gap=0.2)}
+    assert start["long"] == 0.0
+    assert start["reply"] == 10.0  # exactly its own shot
