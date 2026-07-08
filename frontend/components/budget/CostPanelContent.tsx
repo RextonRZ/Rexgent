@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { useLedger } from "@/hooks/useLedger";
 import { useActivityFeed } from "@/hooks/useActivityFeed";
 import { cn } from "@/lib/utils";
@@ -75,6 +77,7 @@ export function CostPanelContent({ projectId }: { projectId: string }) {
   }
 
   const byCat = ledger?.by_category ?? {};
+  const [openCats, setOpenCats] = useState<Set<string>>(new Set());
   const byStage = ledger?.by_stage ?? {};
   const grand = ledger?.grand_total ?? 0;
   const budget = ledger?.budget ?? 40;
@@ -127,22 +130,54 @@ export function CostPanelContent({ projectId }: { projectId: string }) {
         {CATEGORIES.map((c) => {
           const amt = byCat[c.key] ?? 0;
           const models = ledger?.media_models?.[c.key];
+          const hasDetail = !!models && Object.keys(models).length > 0;
+          const isOpen = openCats.has(c.key);
+          const row = (
+            <>
+              <span className="flex w-14 items-center gap-0.5 text-muted-foreground">
+                {hasDetail && (
+                  <ChevronRight
+                    className={cn(
+                      "size-3 shrink-0 transition-transform duration-150",
+                      isOpen && "rotate-90"
+                    )}
+                  />
+                )}
+                <span className={hasDetail ? "" : "pl-3.5"}>{c.label}</span>
+              </span>
+              <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${Math.min((amt / maxCat) * 100, 100)}%` }}
+                />
+              </div>
+              <span className="w-12 text-right tabular-nums">${amt.toFixed(2)}</span>
+            </>
+          );
           return (
             <div key={c.key}>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="w-12 text-muted-foreground">{c.label}</span>
-                <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${Math.min((amt / maxCat) * 100, 100)}%` }}
-                  />
-                </div>
-                <span className="w-12 text-right tabular-nums">${amt.toFixed(2)}</span>
-              </div>
-              {/* every media model tracked: name · native qty · dollars */}
-              {models && Object.keys(models).length > 0 && (
-                <div className="ml-14 mt-0.5 space-y-0.5">
-                  {Object.entries(models)
+              {hasDetail ? (
+                <button
+                  onClick={() =>
+                    setOpenCats((cur) => {
+                      const next = new Set(cur);
+                      if (next.has(c.key)) next.delete(c.key);
+                      else next.add(c.key);
+                      return next;
+                    })
+                  }
+                  aria-expanded={isOpen}
+                  className="flex w-full items-center gap-2 rounded text-left text-xs hover:bg-white/[0.03]"
+                >
+                  {row}
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 text-xs">{row}</div>
+              )}
+              {/* per-model detail, folded away until asked for */}
+              {hasDetail && isOpen && (
+                <div className="ml-[62px] mt-1 space-y-0.5 border-l hairline pl-2">
+                  {Object.entries(models!)
                     .sort((a, b) => b[1].usd - a[1].usd)
                     .map(([model, v]) => (
                       <div

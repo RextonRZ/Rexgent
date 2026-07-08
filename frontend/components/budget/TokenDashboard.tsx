@@ -111,31 +111,42 @@ export function TokenDashboard({ projectId }: { projectId: string }) {
         </p>
       )}
 
-      {/* the media models this drama has actually consumed, in native units */}
+      {/* media models, in native units — same aligned row idiom as the
+          stage bars below, one kind-tinted dot per group */}
       {ledger?.media_models && Object.keys(ledger.media_models).length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t hairline pt-3">
-          {(["video", "image", "tts"] as const).flatMap((cat) =>
-            Object.entries(ledger.media_models?.[cat] ?? {})
-              .sort((a, b) => b[1].usd - a[1].usd)
-              .map(([model, v]) => (
-                <span
-                  key={`${cat}-${model}`}
-                  className="inline-flex items-baseline gap-1.5 text-[11px]"
-                >
-                  <span className="font-mono text-muted-foreground">{model}</span>
-                  <span className="tabular-nums text-foreground/80">
-                    {cat === "video"
-                      ? `${Math.round(v.qty)}s`
-                      : cat === "image"
-                        ? `${Math.round(v.qty)} img`
-                        : `${fmtTokens(v.qty)} ch`}
-                  </span>
-                  <span className="tabular-nums text-muted-foreground">
-                    ${v.usd.toFixed(2)}
-                  </span>
-                </span>
-              ))
-          )}
+        <div className="mt-4 border-t hairline pt-3">
+          <p className="mb-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+            Media models
+          </p>
+          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+            {(
+              [
+                ["video", "bg-violet-400", (q: number) => `${Math.round(q)}s`],
+                ["image", "bg-indigo-300", (q: number) => `${Math.round(q)} img`],
+                ["tts", "bg-sky-300", (q: number) => `${fmtTokens(q)} ch`],
+              ] as const
+            ).flatMap(([cat, dot, fmt]) =>
+              Object.entries(ledger.media_models?.[cat] ?? {})
+                .sort((a, b) => b[1].usd - a[1].usd)
+                .map(([model, v]) => (
+                  <div
+                    key={`${cat}-${model}`}
+                    className="flex items-baseline gap-2 text-xs"
+                  >
+                    <span className={cn("h-1.5 w-1.5 shrink-0 self-center rounded-full", dot)} />
+                    <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
+                      {model}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-foreground/80">
+                      {fmt(v.qty)}
+                    </span>
+                    <span className="w-12 shrink-0 text-right tabular-nums text-muted-foreground">
+                      ${v.usd.toFixed(2)}
+                    </span>
+                  </div>
+                ))
+            )}
+          </div>
         </div>
       )}
 

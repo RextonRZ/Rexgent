@@ -10,7 +10,6 @@ import {
   Film,
   Image as ImageIcon,
   MessageSquareText,
-  TrendingUp,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -140,10 +139,10 @@ function fmtMediaQty(q: number, unit: string): string {
   return String(Math.round(q));
 }
 
-/** Predictive analytics derived ONLY from this range's real data: linear
- * pace over the daily trend, average episode cost split by category. Fills
- * the roster's fourth slot with something that answers "what will the next
- * one cost me?". */
+/** Predictive analytics, honestly labelled: an ordinary least-squares
+ * linear fit over this range's daily spend, extrapolated 7 days (clamped at
+ * zero) — a statistical trend line, deliberately NOT an ML model. Episode
+ * cost is the plain average over dramas that actually rendered clips. */
 function ForecastCard({ data }: { data: UsageAnalytics }) {
   const totalUsd = Object.values(data.categories).reduce((s, c) => s + c.usd, 0);
   const produced = data.dramas.filter((d) => d.clips > 0);
@@ -172,7 +171,6 @@ function ForecastCard({ data }: { data: UsageAnalytics }) {
     }
   }
 
-  // sparkline geometry: history solid, projection dashed
   const proj = fit
     ? Array.from({ length: 7 }, (_, j) =>
         Math.max(0, fit!.intercept + fit!.slope * (pts.length + j))
@@ -181,77 +179,103 @@ function ForecastCard({ data }: { data: UsageAnalytics }) {
   const all = [...pts, ...proj];
   const maxY = Math.max(...all, 0.01);
   const W = 100;
-  const H = 30;
+  const H = 34;
   const xOf = (i: number) => (i / Math.max(1, all.length - 1)) * W;
   const yOf = (v: number) => H - 3 - (v / maxY) * (H - 8);
   const path = (arr: number[], offset: number) =>
-    arr.map((v, i) => `${i === 0 ? "M" : "L"} ${xOf(offset + i).toFixed(1)} ${yOf(v).toFixed(1)}`).join(" ");
+    arr
+      .map(
+        (v, i) =>
+          `${i === 0 ? "M" : "L"} ${xOf(offset + i).toFixed(1)} ${yOf(v).toFixed(1)}`
+      )
+      .join(" ");
+
+  const stat = (label: string, value: string, explain: string) => (
+    <div
+      title={explain}
+      className="cursor-help rounded-lg border border-white/[0.06] bg-white/[0.015] px-4 py-3 transition-colors hover:border-white/15"
+    >
+      <p className="text-[11px] text-zinc-500">{label}</p>
+      <p className="mt-0.5 text-xl font-semibold tabular-nums">{value}</p>
+    </div>
+  );
 
   return (
-    <div className="mb-4 break-inside-avoid overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]">
-      <div className="flex items-center gap-2 border-b border-white/[0.06] bg-white/[0.015] px-4 py-2.5">
-        <TrendingUp className="size-3.5 text-violet-300/70" />
-        <span className="text-sm font-medium">Forecast</span>
-        <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] text-zinc-500">
-          projected from this range
-        </span>
-      </div>
-      <div className="space-y-3 px-4 py-3">
-        {perDrama > 0 ? (
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs text-zinc-400">Next episode, at your average</span>
-            <span className="text-sm font-semibold tabular-nums">
-              ≈ {fmtUsd(perDrama)}
-            </span>
-          </div>
-        ) : null}
-        {perDrama > 0 && videoShare > 0 && (
-          <p className="text-[10px] text-zinc-600">
-            {fmtPct(videoShare)} of that is footage — the tier split is where
-            the budget is won.
-          </p>
-        )}
-        {projected7 != null && (
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs text-zinc-400">Next 7 days at current pace</span>
-            <span className="text-sm font-semibold tabular-nums">
-              ≈ {fmtUsd(projected7)}
-            </span>
-          </div>
-        )}
-        {perDrama > 0 && (
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs text-zinc-400">Episodes per $10 of voucher</span>
-            <span className="text-sm font-semibold tabular-nums">
-              ≈ {(10 / perDrama).toFixed(1)}
-            </span>
-          </div>
-        )}
-        {pts.length >= 3 ? (
-          <div>
-            <p className="mb-1 text-[10px] uppercase tracking-widest text-zinc-600">
-              Daily spend · dashed = projection
-            </p>
-            <svg viewBox={`0 0 ${W} ${H}`} className="h-14 w-full" preserveAspectRatio="none" aria-hidden>
-              <path d={path(pts, 0)} fill="none" stroke="#8b5cf6" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-              {proj.length > 0 && (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className="grid gap-3 sm:grid-cols-1">
+          {perDrama > 0 &&
+            stat(
+              "Next episode, at your average",
+              `≈ ${fmtUsd(perDrama)}`,
+              `Plain average over the ${produced.length} drama(s) that rendered clips in this range. ${fmtPct(videoShare)} of spend is footage.`
+            )}
+          {projected7 != null &&
+            stat(
+              "Next 7 days at current pace",
+              `≈ ${fmtUsd(projected7)}`,
+              "Least-squares linear fit over this range's daily spend, extended 7 days and clamped at zero. A trend line, not an ML model."
+            )}
+          {perDrama > 0 &&
+            stat(
+              "Episodes per $10 of voucher",
+              `≈ ${(10 / perDrama).toFixed(1)}`,
+              "Ten dollars divided by your average episode cost."
+            )}
+        </div>
+        <div className="flex min-w-0 flex-col justify-end">
+          {pts.length >= 3 ? (
+            <>
+              <p className="mb-1 text-[10px] uppercase tracking-widest text-zinc-600">
+                Daily spend · dashed = 7-day projection
+              </p>
+              <svg
+                viewBox={`0 0 ${W} ${H}`}
+                className="h-28 w-full"
+                preserveAspectRatio="none"
+              >
+                <title>
+                  Solid: real daily spend. Dashed: least-squares projection for
+                  the next 7 days.
+                </title>
                 <path
-                  d={`M ${xOf(pts.length - 1).toFixed(1)} ${yOf(pts[pts.length - 1]).toFixed(1)} ` + path(proj, pts.length).slice(1)}
+                  d={path(pts, 0)}
                   fill="none"
-                  stroke="#a78bfa"
+                  stroke="#8b5cf6"
                   strokeWidth="1.5"
-                  strokeDasharray="3 3"
                   vectorEffect="non-scaling-stroke"
                 />
-              )}
-              <circle cx={xOf(pts.length - 1)} cy={yOf(pts[pts.length - 1])} r="1.8" fill="#c4b5fd" />
-            </svg>
-          </div>
-        ) : (
-          <p className="text-[10px] text-zinc-600">
-            Not enough history in this range for a pace projection yet.
+                {proj.length > 0 && (
+                  <path
+                    d={
+                      `M ${xOf(pts.length - 1).toFixed(1)} ${yOf(pts[pts.length - 1]).toFixed(1)} ` +
+                      path(proj, pts.length).slice(1)
+                    }
+                    fill="none"
+                    stroke="#a78bfa"
+                    strokeWidth="1.5"
+                    strokeDasharray="3 3"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                <circle
+                  cx={xOf(pts.length - 1)}
+                  cy={yOf(pts[pts.length - 1])}
+                  r="1.8"
+                  fill="#c4b5fd"
+                />
+              </svg>
+            </>
+          ) : (
+            <p className="text-xs text-zinc-600">
+              Not enough history in this range for a pace projection yet.
+            </p>
+          )}
+          <p className="mt-2 text-[10px] italic text-zinc-600">
+            Method: ordinary least-squares over daily spend — a statistical
+            trend, not a learned model. Hover any figure for its formula.
           </p>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -788,7 +812,6 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
               </div>
             );
           })}
-          <ForecastCard data={data} />
         </div>
       </Rise>
 
@@ -886,6 +909,12 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5">
           <TrendChart data={data.trend} reduced={reduced} />
         </div>
+      </Rise>
+
+      {/* ── 6 · forecast ── */}
+      <Rise index={5}>
+        <SectionTitle>Forecast</SectionTitle>
+        <ForecastCard data={data} />
       </Rise>
     </>
   );
