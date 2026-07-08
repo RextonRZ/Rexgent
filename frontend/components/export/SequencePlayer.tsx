@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { LoadingVideo } from "@/components/shared/LoadingVideo";
 
 export interface TimelineItem {
   clipId: string; // generated clip id, or a synthetic id for imported media
@@ -103,16 +104,18 @@ export function SequencePlayer({
     <div className="space-y-2">
       {/* the episode plays the way it ships */}
       <div className={frameClass}>
-        <video
+        <LoadingVideo
+          key={current.url}
           ref={ref}
-          className="h-full w-full object-contain"
+          fit="contain"
+          className="h-full w-full"
           onEnded={handleEnded}
           onTimeUpdate={handleTimeUpdate}
           onClick={togglePlay}
           playsInline
         >
           <source src={current.url} type="video/mp4" />
-        </video>
+        </LoadingVideo>
 
         {!playing && (
           <button

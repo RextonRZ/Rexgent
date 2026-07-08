@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { LoadingVideo } from "@/components/shared/LoadingVideo";
 
 export interface MediaAsset {
   id: string;
@@ -89,7 +90,7 @@ export function MediaBin({
               className="rounded-lg border hairline bg-background/40 overflow-hidden cursor-grab active:cursor-grabbing"
             >
               {asset.type === "video" ? (
-                <video
+                <LoadingVideo
                   src={`${asset.url}#t=0.1`}
                   muted
                   loop
@@ -97,7 +98,7 @@ export function MediaBin({
                   preload="metadata"
                   onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
                   onMouseLeave={(e) => e.currentTarget.pause()}
-                  className="aspect-video w-full object-cover bg-black pointer-events-none"
+                  className="aspect-video w-full bg-black pointer-events-none"
                 />
               ) : (
                 <div className="aspect-video w-full bg-hh/20 flex items-center justify-center text-2xl">

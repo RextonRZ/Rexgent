@@ -1,8 +1,8 @@
 # Rexgent
 
-> Give me a story idea. I'll hand you back a finished vertical episode.
+> Give me a story idea. I'll hand you back a finished episode — vertical or widescreen.
 
-Rexgent is an **autonomous AI showrunner** built on **Qwen Cloud**. Type a one-line premise and an agent runs the whole production: script, self-critique and revision, casting, storyboarding, budget allocation, video generation, dialogue, and a final 9:16 episode with burned-in subtitles — while a live dashboard shows every token and cent it spends.
+Rexgent is an **autonomous AI showrunner** built on **Qwen Cloud**. Type a one-line premise and an agent runs the whole production: script, self-critique and revision, casting, storyboarding, budget allocation, video generation, dialogue, and a final episode — 9:16 portrait or 16:9 widescreen — with burned-in subtitles — while a live dashboard shows every token and cent it spends.
 
 **Built for:** [Global AI Hackathon Series with Qwen Cloud](https://qwencloud-hackathon.devpost.com/) — Track 2: AI Showrunner
 
@@ -10,16 +10,17 @@ Rexgent is an **autonomous AI showrunner** built on **Qwen Cloud**. Type a one-l
 
 ## What a run looks like
 
-1. Create a drama: premise + genre + format (9:16 vertical) + a **spend cap** — a live panel projects the tokens and dollars this drama will cost before anything runs
+1. Create a drama: premise + genre + format (9:16 vertical or 16:9 widescreen) + a **spend cap** — a live panel projects the tokens and dollars this drama will cost before anything runs
 2. Flip **Full Auto** and watch the agent: write → judge (8 axes incl. hook strength) → revise with the judge's own critique → extract characters → storyboard
 3. The **beat sheet** shows the ladder: logline → scene beats, with the 3-second hook and the cliffhanger tagged
 4. Casting builds the **production bible**: identity plates, per-outfit costume plates, location plates, one style plate, a voice per character
 5. The **set dresser** pins each scene's props — and tracks state ("from shot 3: the vase lies shattered")
 6. Budget allocation **fits the plan to the cap**: hook shots protected on Wan 2.7, supporting shots downgraded to HappyHorse, the least important deferred — all visible
 7. Generation runs live: every clip shows its **reference provenance** (the exact plates that conditioned it) and a continuity score from real ArcFace embeddings
-8. The **token dashboard** shows the engineering: most tokens ran on qwen-flash, Qwen-Max only wrote
-9. Export renders itself: dialogue placed on the exact shots that speak it, BGM ducking under speech, captions burned in, vertical 1080×1920
+8. The **crew workflow graph** shows the machinery live: every stage expands into its real tools — model calls, DB writes, validators — ticking one by one, with artifact labels ("8 shots", "5 plates") on the edges
+9. Export renders itself: dialogue placed on the exact shots that speak it, BGM ducking under speech, captions burned in, native 1080×1920 or 1920×1080 per the chosen format
 10. One premise in → one watchable episode out, with a production report proving it stayed under budget
+11. **Usage & Analytics** proves the routing thesis across every drama: share of language work on cheap tiers, dollars saved vs all-premium, per-model usage down to seconds/images/characters, continuity + retry reliability
 
 ---
 
@@ -41,7 +42,7 @@ flowchart LR
     CAST --> AUD[dialogue TTS]
     AUD --> B[budget: fit plan<br/>to spend cap]
     B --> V[generate video<br/>per-shot references]
-    V --> E[auto export:<br/>9:16 + subtitles]
+    V --> E[auto export:<br/>chosen format + subtitles]
     E --> DONE((episode))
 ```
 
@@ -133,7 +134,7 @@ flowchart TB
 | Script + storyboard writing | Qwen-Max | The only creative-writing tier |
 | Judging, plot gaps, endings, prompt craft | Qwen-Plus | Analysis at a third of the cost |
 | Structuring, extraction, wardrobe, set dressing, titles | Qwen-Flash | Deterministic JSON work, ~15x cheaper output |
-| Hero + hook shots | Wan 2.7 (t2v/i2v) | Premium 1080P, native 9:16, seeded |
+| Hero + hook shots | Wan 2.7 (t2v/i2v) | Premium 1080P, native 9:16/16:9, seeded |
 | Supporting shots | HappyHorse 1.1 (t2v/i2v/r2v) | Reference-to-video with up to 9 reference images |
 | Clip surgery (regen loop) | HappyHorse 1.0 video-edit | Video-to-video fixes from user flags |
 | Bible plates | wan2.6-t2i + qwen-image-edit-max | Costume plates edited FROM the face so identity carries |
@@ -308,8 +309,8 @@ Rexgent/
 │   │   ├── workers/            # Celery: generation, casting, export
 │   │   └── websocket/          # Socket.IO events (Redis emitter)
 │   ├── prompts/                # 17 prompt templates
-│   ├── migrations/             # Alembic (13 revisions)
-│   └── tests/                  # 311 unit tests
+│   ├── migrations/             # Alembic (19 revisions)
+│   └── tests/                  # 385 unit tests
 ├── frontend/                   # Next.js 14 + TypeScript + Tailwind
 │   └── app/projects/[id]/      # Script → Characters → Storyboard → Generate → Export
 ├── docker-compose.yml          # api + worker + frontend + postgres + redis + neo4j
@@ -333,6 +334,8 @@ Rexgent/
 
 - **Self-correcting agent** — the judge's critique feeds the rewrite; weak hooks and flat endings never reach generation
 - **Budget fitting, not budget reporting** — hook protection, tier downgrades, deferrals; the plan always fits the user's cap
+- **Audio-first cutting** — dialogue is synthesized and measured BEFORE video renders, shots are sized to their real lines, and voices land on the exact cut (probed durations, never estimates)
+- **Glass-box orchestration** — a live two-level crew graph (stages → tools) driven by per-tool events, tear-out dock panels, and a Usage & Analytics page with per-model receipts
 - **Provable consistency** — a production bible conditions every clip, and each clip shows the exact references it used
 - **A finished product** — one premise becomes a watchable 9:16 episode with placed dialogue, ducked music, and burned-in subtitles
 - **The engineering is on screen** — live token dashboard, agent activity feed, story map, beat sheet, per-clip provenance

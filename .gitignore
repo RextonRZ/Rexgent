@@ -44,3 +44,11 @@ htmlcov/
 SUBMISSION.md
 docs/
 .superpowers/
+
+# internal planning docs — local only, not for the public repo
+01_PRODUCT_SPEC.md
+02_ARCHITECTURE.md
+03_DEVELOPMENT_PLAN.md
+05_QWEN_PROMPTS.md
+06_MCP_TOOLS.md
+08_NARRATIVE_MEMORY_GRAPH.md

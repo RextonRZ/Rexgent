@@ -19,6 +19,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Slider } from "@/components/ui/slider";
 import type { TimelineItem } from "./SequencePlayer";
 import { ASSET_MIME, type MediaAsset } from "./MediaBin";
+import { LoadingVideo } from "@/components/shared/LoadingVideo";
 
 export const PX_PER_SEC = 80; // default timeline scale
 const ZOOM_MIN = 24;
@@ -61,13 +62,13 @@ function Filmstrip({ item, width }: { item: TimelineItem; width: number }) {
       {Array.from({ length: count }, (_, i) => {
         const t = item.trimStart + (span * (i + 0.5)) / count;
         return (
-          <video
+          <LoadingVideo
             key={i}
             src={`${item.url}#t=${t.toFixed(2)}`}
             muted
             playsInline
             preload="metadata"
-            className="h-full flex-1 min-w-0 object-cover border-r border-black/30 last:border-r-0"
+            className="h-full flex-1 min-w-0 border-r border-black/30 last:border-r-0"
           />
         );
       })}

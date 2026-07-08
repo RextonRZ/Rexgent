@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { FlagPanel } from "@/components/edit/FlagPanel";
 import type { GeneratedClip } from "@/lib/types";
+import { LoadingVideo } from "@/components/shared/LoadingVideo";
 
 /** A pop-up that shows a take larger with the AI-edit (flag & regenerate) panel. */
 export function ClipEditModal({
@@ -49,13 +50,14 @@ export function ClipEditModal({
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <video
+          <LoadingVideo
             src={clip.url ?? undefined}
             controls
             autoPlay
             loop
             playsInline
-            className="w-full rounded-lg bg-black aspect-video object-contain"
+            fit="contain"
+            className="w-full rounded-lg bg-black aspect-video"
           />
           <FlagPanel
             clipId={clip.id}

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { SceneShots } from "@/hooks/useStoryboard";
 import type { GeneratedClip } from "@/lib/types";
 import { ClipBadge } from "@/components/budget/ClipBadge";
+import { LoadingVideo } from "@/components/shared/LoadingVideo";
 
 function TakeTile({
   clip,
@@ -31,7 +32,7 @@ function TakeTile({
         onClick={onSelect}
         title="Click to select, then the pen to AI-edit"
       >
-        <video
+        <LoadingVideo
           src={`${clip.url}#t=0.1`}
           muted
           loop
@@ -39,7 +40,7 @@ function TakeTile({
           preload="metadata"
           onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
           onMouseLeave={(e) => e.currentTarget.pause()}
-          className="aspect-video w-full rounded-md object-cover border hairline bg-black"
+          className="aspect-video w-full rounded-md border hairline bg-black"
         />
         <span className="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white/90">
           {label}
