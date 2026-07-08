@@ -35,9 +35,26 @@ def test_categories_accumulate_usd_and_native_units():
         _ev("image", 0.05, 1), _ev("tts", 0.02, 800),
     ]
     cats = summarize_events(events)["categories"]
-    assert cats["video"] == {"usd": 2.25, "quantity": 15.0}
+    assert cats["video"]["usd"] == 2.25 and cats["video"]["quantity"] == 15.0
     assert cats["image"]["quantity"] == 1.0
     assert cats["tts"]["quantity"] == 800.0
+
+
+def test_media_categories_break_down_by_model():
+    events = [
+        _ev("video", 0.75, 5, model="wan2.7"),
+        _ev("video", 1.08, 10, model="happyhorse-1.1"),
+        _ev("video", 0.54, 5),  # old row, no model recorded
+        _ev("image", 0.05, 1, model="wan2.6-t2i"),
+        _ev("tts", 0.02, 800, model="qwen3-tts-flash"),
+    ]
+    cats = summarize_events(events)["categories"]
+    vm = cats["video"]["by_model"]
+    assert vm["wan2.7"] == {"usd": 0.75, "quantity": 5.0}
+    assert vm["happyhorse-1.1"]["quantity"] == 10.0
+    assert vm["untracked"]["usd"] == 0.54  # never fabricated onto a model
+    assert cats["image"]["by_model"]["wan2.6-t2i"]["quantity"] == 1.0
+    assert cats["tts"]["by_model"]["qwen3-tts-flash"]["quantity"] == 800.0
 
 
 def _clip(status="APPROVED", model="wan", retries=0, face=90.0):

@@ -68,17 +68,24 @@ def aggregate(db, project_id, budget=None) -> dict:
                     "tokens_by_stage": llm_tokens_by_stage}}
 
 
-def record_video(db, project_id, seconds, model, ref_id=None):
+# tier keys -> the ledger's readable model names (usage analytics groups on these)
+VIDEO_MODEL_NAMES = {"wan": "wan2.7", "happyhorse": "happyhorse-1.1"}
+
+
+def record_video(db, project_id, seconds, model, ref_id=None, model_name=None):
     return record(db, project_id, "video", "generation", "second", seconds,
-                  video_cost(seconds, model), ref_id)
+                  video_cost(seconds, model), ref_id,
+                  model=model_name or VIDEO_MODEL_NAMES.get(model, model))
 
 
-def record_image(db, project_id, n=1, stage="casting"):
-    return record(db, project_id, "image", stage, "image", n, image_cost(n))
+def record_image(db, project_id, n=1, stage="casting", model=None):
+    return record(db, project_id, "image", stage, "image", n, image_cost(n),
+                  model=model)
 
 
-def record_tts(db, project_id, chars):
-    return record(db, project_id, "tts", "audio", "char", chars, tts_cost(chars))
+def record_tts(db, project_id, chars, model=None):
+    return record(db, project_id, "tts", "audio", "char", chars, tts_cost(chars),
+                  model=model)
 
 
 def record_llm(db, project_id, in_tokens, out_tokens, stage="script", model=None):

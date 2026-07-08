@@ -75,7 +75,10 @@ class DialogueSynthesizer:
                              "audio_url": url, "duration_seconds": probe_duration(audio)})
                 if getattr(self, "db", None) is not None:
                     from app.services.cost_ledger import record_tts
-                    record_tts(self.db, project_id, len(line.get("line", "")))
+                    vm = (voice.get("voice_model") or "").lower()
+                    record_tts(self.db, project_id, len(line.get("line", "")),
+                               model=("qwen3-tts-vc-realtime" if "realtime" in vm
+                                      else "qwen3-tts-flash"))
                 emit("audio.tts.completed", {"scene_number": scene["number"], "line_index": li,
                                              "index": idx, "total": total}, pid)
         return rows

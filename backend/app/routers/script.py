@@ -247,7 +247,7 @@ async def analyze_script(script_id: str, db: Session = Depends(get_db)):
         with tool_run(script.project_id, "script", "plot_gap_check", "Story Analyst") as tb:
             gaps = await get_tool("plot_gap_detector")({"script": script.structured_json})
             tb["artifact"] = f"{len(gaps.get('flags', []))} flags"
-        with tool_run(script.project_id, "script", "ending_lab", "Story Analyst") as tb:
+        with tool_run(script.project_id, "script", "ending_engine", "Story Analyst") as tb:
             ending = await get_tool("ending_engine")({"script": script.structured_json})
             tb["artifact"] = f"{len((ending or {}).get('variants', []) or (ending or {}).get('options', []) or [])} endings" if isinstance(ending, dict) else None
 

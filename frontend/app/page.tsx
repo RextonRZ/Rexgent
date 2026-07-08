@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { GoLink } from "@/components/shared/NavProgress";
 import { Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BTN_PRIMARY, BTN_SECONDARY, CtaArrow } from "@/components/ui/cta";
@@ -38,12 +39,12 @@ export default function LandingPage() {
           />
           <nav className="flex items-center gap-6">
             {isAuthenticated ? (
-              <Link href="/projects">
+              <GoLink href="/projects">
                 <Button className={`h-10 ${BTN_PRIMARY}`}>
                   Your dramas
                   <CtaArrow />
                 </Button>
-              </Link>
+              </GoLink>
             ) : (
               <>
                 <Link
@@ -52,11 +53,11 @@ export default function LandingPage() {
                 >
                   Sign in
                 </Link>
-                <Link href="/signup">
+                <GoLink href="/signup">
                   <Button className={`h-10 ${BTN_PRIMARY}`}>
                     Get started
                   </Button>
-                </Link>
+                </GoLink>
               </>
             )}
           </nav>

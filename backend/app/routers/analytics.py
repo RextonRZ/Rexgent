@@ -39,10 +39,17 @@ def summarize_events(events: list) -> dict:
     llm_usd = premium_usd = 0.0
     llm_tokens = cheap_tokens = 0
     for e in events:
-        cat = categories.setdefault(e.category, {"usd": 0.0, "quantity": 0.0})
+        cat = categories.setdefault(
+            e.category, {"usd": 0.0, "quantity": 0.0, "by_model": {}})
         cat["usd"] = round(cat["usd"] + (e.amount_usd or 0.0), 4)
         cat["quantity"] = round(cat["quantity"] + (e.quantity or 0.0), 2)
         if e.category != "llm":
+            # media events tag their model too (older rows predate the tagging
+            # and fold into "untracked" — never fabricated onto a model)
+            m = e.model or "untracked"
+            row = cat["by_model"].setdefault(m, {"usd": 0.0, "quantity": 0.0})
+            row["usd"] = round(row["usd"] + (e.amount_usd or 0.0), 4)
+            row["quantity"] = round(row["quantity"] + (e.quantity or 0.0), 2)
             continue
         ti, to = int(e.input_tokens or 0), int(e.output_tokens or 0)
         tokens = int(e.quantity or 0) or (ti + to)

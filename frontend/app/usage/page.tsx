@@ -50,6 +50,8 @@ const TIER_META = [
 interface RosterModel {
   name: string;
   role: string;
+  /** ledger model keys whose usage sums onto this row */
+  match?: string[];
 }
 const ROSTER: {
   group: string;
@@ -80,9 +82,9 @@ const ROSTER: {
     icon: Film,
     tint: "text-fuchsia-300/60",
     models: [
-      { name: "wan2.7-t2v / i2v", role: "Premium tier — the shots that matter" },
-      { name: "happyhorse-1.1-t2v / i2v / r2v", role: "Economy tier — supporting shots" },
-      { name: "happyhorse-1.0-video-edit", role: "Fix a take — the regen loop" },
+      { name: "wan2.7-t2v / i2v", role: "Premium tier — the shots that matter", match: ["wan2.7"] },
+      { name: "happyhorse-1.1-t2v / i2v / r2v", role: "Economy tier — supporting shots", match: ["happyhorse-1.1"] },
+      { name: "happyhorse-1.0-video-edit", role: "Fix a take — the regen loop", match: ["happyhorse-1.0-video-edit"] },
     ],
   },
   {
@@ -92,8 +94,8 @@ const ROSTER: {
     icon: ImageIcon,
     tint: "text-indigo-300/70",
     models: [
-      { name: "wan2.6-t2i", role: "Reference plates — character, location, style" },
-      { name: "qwen-image-edit-max", role: "Costume plates and frame edits" },
+      { name: "wan2.6-t2i", role: "Reference plates — character, location, style", match: ["wan2.6-t2i"] },
+      { name: "qwen-image-edit-max", role: "Costume plates and frame edits", match: ["qwen-image-edit-max"] },
     ],
   },
   {
@@ -103,8 +105,8 @@ const ROSTER: {
     icon: AudioWaveform,
     tint: "text-sky-300/60",
     models: [
-      { name: "qwen3-tts-flash", role: "Preset voices" },
-      { name: "qwen3-tts-vc-realtime", role: "Cloned voices" },
+      { name: "qwen3-tts-flash", role: "Preset voices", match: ["qwen3-tts-flash"] },
+      { name: "qwen3-tts-vc-realtime", role: "Cloned voices", match: ["qwen3-tts-vc-realtime"] },
       { name: "qwen-voice-enrollment", role: "Clone enrollment" },
     ],
   },
@@ -112,6 +114,31 @@ const ROSTER: {
 
 /** Section header with a hairline running off to the right — sections stop
  * blurring together without shouting. */
+/** Sum a roster row's ledger models; null when nothing recorded for it. */
+function mediaUsage(
+  byModel: Record<string, { usd: number; quantity: number }> | undefined,
+  match?: string[]
+): { usd: number; quantity: number } | null {
+  if (!byModel || !match?.length) return null;
+  let usd = 0;
+  let quantity = 0;
+  for (const key of match) {
+    const row = byModel[key];
+    if (row) {
+      usd += row.usd;
+      quantity += row.quantity;
+    }
+  }
+  return usd > 0 || quantity > 0 ? { usd, quantity } : null;
+}
+
+function fmtMediaQty(q: number, unit: string): string {
+  if (unit === "second") return `${Math.round(q)}s`;
+  if (unit === "image") return `${Math.round(q)} img`;
+  if (unit === "character") return `${fmtTokens(q)} chars`;
+  return String(Math.round(q));
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-4">
@@ -589,6 +616,10 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
                 <div className="divide-y divide-white/[0.04] px-4">
                   {group.models.map((m) => {
                     const row = byModel.get(m.name);
+                    const media = mediaUsage(
+                      group.category ? cats[group.category]?.by_model : undefined,
+                      m.match
+                    );
                     return (
                       <div key={m.name} className="flex items-baseline gap-3 py-2.5">
                         <div className="min-w-0 flex-1">
@@ -603,12 +634,17 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
                               {fmtTokens(row.tokens)} tok
                               <span className="ml-2 text-zinc-500">{fmtUsd(row.usd)}</span>
                             </>
+                          ) : media ? (
+                            <>
+                              {fmtMediaQty(media.quantity, group.unit)}
+                              <span className="ml-2 text-zinc-500">{fmtUsd(media.usd)}</span>
+                            </>
                           ) : group.category ? (
                             <span
                               className="text-zinc-600"
-                              title="The ledger bills this group as a whole"
+                              title="No usage recorded for this model in the selected range"
                             >
-                              in group total
+                              unused
                             </span>
                           ) : (
                             <span className="text-zinc-600">unused</span>

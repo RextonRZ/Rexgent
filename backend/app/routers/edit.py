@@ -113,6 +113,12 @@ async def regen_clip(request: RegenRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_clip)
     if job:
+        # the fix-a-take render costs real money — it lands on the ledger too
+        from app.services.cost_ledger import record_video
+        record_video(db, str(job.project_id), duration, "happyhorse",
+                     ref_id=str(new_clip.id),
+                     model_name="happyhorse-1.0-video-edit")
+    if job:
         tool_event(str(job.project_id), "generate", "fix_take", "succeeded",
                    agent="Editor", artifact="take re-rendered")
 

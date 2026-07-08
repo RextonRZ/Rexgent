@@ -28,7 +28,15 @@ export interface UsageAnalytics {
     cheap_share: number;
     by_model: LlmModelRow[];
   };
-  categories: Record<string, { usd: number; quantity: number }>;
+  categories: Record<
+    string,
+    {
+      usd: number;
+      quantity: number;
+      /** media events tag their model; pre-tagging rows fold into "untracked" */
+      by_model?: Record<string, { usd: number; quantity: number }>;
+    }
+  >;
   dramas: {
     id: string;
     title: string;

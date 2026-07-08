@@ -471,8 +471,8 @@ export function AgentChat({ projectId }: { projectId: string }) {
         <Input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask the showrunner about this drama…"
-          className="h-8 bg-background/50 text-[11px]"
+          placeholder="Ask about this drama…"
+          className="h-8 bg-background/50 text-[11px] placeholder:text-[11px]"
         />
         <Button
           type="submit"

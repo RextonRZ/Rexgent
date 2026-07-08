@@ -64,7 +64,7 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
     { key: "llm_write", icon: Sparkles, kind: "llm" },
     { key: "narrative_judge", icon: Scale, kind: "validator" },
     { key: "plot_gap_check", icon: Search, kind: "validator" },
-    { key: "ending_lab", icon: GitBranch, kind: "llm" },
+    { key: "ending_engine", icon: GitBranch, kind: "llm" },
     { key: "structure_scenes", icon: ListTree, kind: "llm" },
     { key: "write_script_db", icon: Database, kind: "db" },
   ],
