@@ -8,7 +8,11 @@ from app.agents.registry import AGENTS
 from app.models.agent_report import AgentReport
 from app.models.character import Character
 
-router = APIRouter(prefix="/api/agent", tags=["agent"])
+from app.deps import get_current_user
+
+router = APIRouter(prefix="/api/agent", tags=["agent"],
+                   # every pipeline endpoint requires a signed-in user
+                   dependencies=[Depends(get_current_user)])
 
 
 @router.post("/auto")

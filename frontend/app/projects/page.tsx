@@ -56,6 +56,7 @@ import {
 } from "@/hooks/useProjects";
 import { useAuth } from "@/hooks/useAuth";
 import type { ProjectOverviewItem } from "@/lib/types";
+import { errText } from "@/lib/errText";
 
 const VIEW_KEY = "rx.dashboard.view";
 
@@ -456,7 +457,7 @@ function Dashboard() {
         pending={deleteProject.isPending}
         error={
           deleteProject.isError
-            ? (deleteProject.error as Error).message
+            ? errText(deleteProject.error)
             : null
         }
         onOpenChange={(v) => !v && setDeleteTarget(null)}

@@ -8,6 +8,7 @@ import {
   useVoices,
   previewVoice,
 } from "@/hooks/useCasting";
+import { errText } from "@/lib/errText";
 
 /** A short neutral passage to read for a clean voice sample. */
 const CLONE_PASSAGE =
@@ -208,7 +209,7 @@ export function VoiceRow({
             <p className="text-[10px] text-ok">✓ Cloned voice active.</p>
           )}
           {cloneVoice.isError && (
-            <p className="text-[10px] text-bad">{(cloneVoice.error as Error).message}</p>
+            <p className="text-[10px] text-bad">{errText(cloneVoice.error)}</p>
           )}
         </div>
       )}

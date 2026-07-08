@@ -169,6 +169,8 @@ def usage(
             if rows else {}
         return [{
             "url": c.url,
+            # persisted still survives the clip URL's expiry — preferred
+            "poster": getattr(c, "poster_url", None),
             "title": title_by_id.get(job_project.get(c.job_id), "Untitled drama"),
             "shot_number": shot_no.get(c.shot_id),
         } for c in rows]

@@ -22,6 +22,7 @@ import {
   useUploadMedia,
 } from "@/hooks/useExport";
 import type { GeneratedClip } from "@/lib/types";
+import { errText } from "@/lib/errText";
 
 /** All playable takes per shot, best first (APPROVED, then highest score). */
 function buildClipsByShot(clips: GeneratedClip[]): Record<string, GeneratedClip[]> {
@@ -244,9 +245,12 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     ]);
   };
 
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+
   const handleExport = async () => {
     if (!jobId || timeline.length === 0) return;
     setRendering(true);
+    setExportNotice(null);
     try {
       await render.mutateAsync({
         projectId,
@@ -261,11 +265,24 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         audioFadeIn: audio.fadeIn,
         audioDuck: audio.duck,
       });
+      let landed = false;
       for (let i = 0; i < 60; i++) {
         await new Promise((r) => setTimeout(r, 3000));
         const res = await download.refetch();
-        if (res.data?.download_url || res.data?.url) break;
+        if (res.data?.download_url || res.data?.url) {
+          landed = true;
+          break;
+        }
       }
+      if (!landed) {
+        // 3 minutes without a file — the worker may still be rendering a long
+        // episode; say so instead of silently resetting the button
+        setExportNotice(
+          "Still rendering — long episodes can take a few more minutes. Leave this page open; the download appears here when the cut lands."
+        );
+      }
+    } catch (err) {
+      setExportNotice(errText(err, "The render failed to start. Try again."));
     } finally {
       setRendering(false);
     }
@@ -366,6 +383,12 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         </div>
       </div>
 
+      {exportNotice && (
+        <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          {exportNotice}
+        </p>
+      )}
+
       {result?.report_json ? (
         <div className="rounded-xl border hairline bg-card p-4 text-sm">
           <div className="flex items-center justify-between mb-2">
@@ -385,14 +408,14 @@ export function ExportEditor({ projectId }: { projectId: string }) {
               label="Duration"
               value={`${result.report_json.total_duration_seconds ?? "—"}s`}
             />
-            <Stat label="Clips" value={String(result.report_json.total_clips)} />
+            <Stat label="Clips" value={String(result.report_json.total_clips ?? 0)} />
             <Stat
               label="Video cost"
-              value={`$${result.report_json.video_cost_usd?.toFixed(2)}`}
+              value={`$${(result.report_json.video_cost_usd ?? 0).toFixed(2)}`}
             />
             <Stat
               label="Grand total"
-              value={`$${result.report_json.grand_total_cost?.toFixed(2)} / $${result.report_json.budget_usd}`}
+              value={`$${(result.report_json.grand_total_cost ?? 0).toFixed(2)} / $${result.report_json.budget_usd ?? "—"}`}
             />
           </div>
         </div>

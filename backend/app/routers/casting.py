@@ -14,7 +14,11 @@ from app.services.face_embedder import FaceEmbedder
 from app.services.qwen_client import QwenClient
 from app.config import get_settings
 
-router = APIRouter(prefix="/api/casting", tags=["casting"])
+from app.deps import get_current_user
+
+router = APIRouter(prefix="/api/casting", tags=["casting"],
+                   # every pipeline endpoint requires a signed-in user
+                   dependencies=[Depends(get_current_user)])
 
 
 def _to_wav(data: bytes) -> bytes:

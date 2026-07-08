@@ -15,7 +15,11 @@ from app.services.usage_tracker import track_project
 from app.graph.sync import sync_characters
 from app.websocket.emitter import emit
 
-router = APIRouter(prefix="/api/characters", tags=["characters"])
+from app.deps import get_current_user
+
+router = APIRouter(prefix="/api/characters", tags=["characters"],
+                   # every pipeline endpoint requires a signed-in user
+                   dependencies=[Depends(get_current_user)])
 
 
 @router.post("/extract")

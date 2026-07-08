@@ -12,7 +12,11 @@ from app.services.storyboard_generator import StoryboardGenerator, plan_shot_bud
 from app.services.usage_tracker import track_project
 from app.websocket.emitter import emit
 
-router = APIRouter(prefix="/api/storyboard", tags=["storyboard"])
+from app.deps import get_current_user
+
+router = APIRouter(prefix="/api/storyboard", tags=["storyboard"],
+                   # every pipeline endpoint requires a signed-in user
+                   dependencies=[Depends(get_current_user)])
 
 
 def persist_scenes(db: Session, script: Script, structured: dict) -> dict:

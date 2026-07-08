@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useUploadFace } from "@/hooks/useFaceEmbed";
+import { errText } from "@/lib/errText";
 
 interface FaceUploadProps {
   characterId: string;
@@ -58,7 +59,7 @@ export function FaceUpload({ characterId, hasReference }: FaceUploadProps) {
       )}
       {uploadFace.isError && (
         <p className="text-destructive mt-1">
-          {(uploadFace.error as Error).message}
+          {errText(uploadFace.error)}
         </p>
       )}
     </div>

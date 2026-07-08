@@ -17,6 +17,7 @@ def build_report(
     llm_output_tokens: int = 0,
     llm_cost_usd: float = 0.0,
     budget: float = 40.0,
+    other_costs_usd: float = 0.0,  # images + TTS, straight from the ledger
 ) -> dict:
     wan_clips = [c for c in clips if c.model_used == "wan"]
     hh_clips = [c for c in clips if c.model_used != "wan"]
@@ -27,7 +28,7 @@ def build_report(
     video_cost_usd = round(
         sum(video_cost(duration_by_clip.get(str(c.id), 0), c.model_used) for c in clips), 2
     )
-    grand_total = video_cost_usd + llm_cost_usd
+    grand_total = video_cost_usd + llm_cost_usd + other_costs_usd
 
     # Continuity scores are 0-100 (see ContinuityAgent.PASS_THRESHOLD).
     from app.mcp_tools.continuity_agent import PASS_THRESHOLD
@@ -45,6 +46,7 @@ def build_report(
         "happyhorse_clips": len(hh_clips),
         "happyhorse_seconds": hh_seconds,
         "llm_cost_usd": round(llm_cost_usd, 4),
+        "other_costs_usd": round(other_costs_usd, 4),
         "video_cost_usd": video_cost_usd,
         "grand_total_cost": round(grand_total, 2),
         "budget_usd": budget,

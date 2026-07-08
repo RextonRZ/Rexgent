@@ -184,20 +184,35 @@ function EvidenceStrip({ samples }: { samples?: ClipSample[] }) {
   if (ok.length === 0) return null;
   return (
     <div className="mt-2.5 flex items-center gap-1.5">
-      {ok.map((s, i) => (
-        <video
-          key={`${s.url}-${i}`}
-          src={s.url}
-          muted
-          playsInline
-          preload="metadata"
-          onError={() =>
-            setFailed((prev) => new Set(prev).add(s.url))
-          }
-          title={`${s.title}${s.shot_number != null ? ` · shot ${s.shot_number}` : ""}`}
-          className="h-8 w-12 shrink-0 rounded-[3px] bg-zinc-900 object-cover ring-1 ring-white/10"
-        />
-      ))}
+      {ok.map((s, i) => {
+        const tip = `${s.title}${s.shot_number != null ? ` · shot ${s.shot_number}` : ""}`;
+        const cls =
+          "h-8 w-12 shrink-0 rounded-[3px] bg-zinc-900 object-cover ring-1 ring-white/10";
+        // the persisted still outlives the clip URL — use it when we have it
+        return s.poster ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={`${s.url}-${i}`}
+            src={s.poster}
+            alt=""
+            loading="lazy"
+            onError={() => setFailed((prev) => new Set(prev).add(s.url))}
+            title={tip}
+            className={cls}
+          />
+        ) : (
+          <video
+            key={`${s.url}-${i}`}
+            src={s.url}
+            muted
+            playsInline
+            preload="metadata"
+            onError={() => setFailed((prev) => new Set(prev).add(s.url))}
+            title={tip}
+            className={cls}
+          />
+        );
+      })}
     </div>
   );
 }

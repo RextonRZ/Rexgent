@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { GENRES } from "@/lib/genres";
+import { errText } from "@/lib/errText";
 import { useBudgetEstimate, useCreateProject } from "@/hooks/useProjects";
 
 function fmtTokens(n: number): string {
@@ -58,23 +59,29 @@ export function NewProjectModal({
   const overBudget = Boolean(estimate && estimate.credit_usd > budget);
 
   const pending = createProject.isPending;
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const handleCreate = async () => {
     // The premise is entered ONCE, on the Script page where generation starts.
     // A blank name is fine: the studio titles the drama from the premise as
     // soon as a script exists.
-    const project = await createProject.mutateAsync({
-      title: title.trim() || "Untitled Drama",
-      genre,
-      credit_budget: budget,
-      token_budget: estimate?.llm_tokens,
-      video_ratio: ratio,
-      episode_count: episodes,
-      target_length: length,
-    });
-    // The Script page's tabs are the real build-mode choice (Full Auto is
-    // preselected; Write from Scratch and Import sit right beside it).
-    router.push(`/projects/${project.id}/script?ep=${episodes}&len=${length}`);
+    setCreateError(null);
+    try {
+      const project = await createProject.mutateAsync({
+        title: title.trim() || "Untitled Drama",
+        genre,
+        credit_budget: budget,
+        token_budget: estimate?.llm_tokens,
+        video_ratio: ratio,
+        episode_count: episodes,
+        target_length: length,
+      });
+      // The Script page's tabs are the real build-mode choice (Full Auto is
+      // preselected; Write from Scratch and Import sit right beside it).
+      router.push(`/projects/${project.id}/script?ep=${episodes}&len=${length}`);
+    } catch (err) {
+      setCreateError(errText(err, "Could not create the drama. Try again."));
+    }
   };
 
   return (
@@ -241,6 +248,11 @@ export function NewProjectModal({
             )}
           </div>
 
+          {createError && (
+            <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+              {createError}
+            </p>
+          )}
           <Button
             onClick={handleCreate}
             disabled={pending}

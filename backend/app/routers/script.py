@@ -22,7 +22,11 @@ from app.graph.sync import sync_scenes
 from app.mcp_tools.registry import get_tool
 from app.websocket.emitter import emit
 
-router = APIRouter(prefix="/api/script", tags=["script"])
+from app.deps import get_current_user
+
+router = APIRouter(prefix="/api/script", tags=["script"],
+                   # every pipeline endpoint requires a signed-in user
+                   dependencies=[Depends(get_current_user)])
 
 
 @router.post("/parse", response_model=ScriptParseResponse)

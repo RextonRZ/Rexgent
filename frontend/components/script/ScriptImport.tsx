@@ -5,6 +5,7 @@ import { useDropzone } from "react-dropzone";
 import { UploadCloud, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useParseScript } from "@/hooks/useScript";
+import { errText } from "@/lib/errText";
 
 interface ScriptImportProps {
   projectId: string;
@@ -111,7 +112,7 @@ export function ScriptImport({ projectId, onSuccess }: ScriptImportProps) {
       )}
       {parseScript.isError && (
         <p className="text-sm text-bad">
-          Error: {(parseScript.error as Error).message}
+          Error: {errText(parseScript.error)}
         </p>
       )}
     </div>

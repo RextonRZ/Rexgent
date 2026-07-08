@@ -12,6 +12,8 @@ export interface LlmModelRow {
 /** A real clip behind a reliability number — evidence, not decoration. */
 export interface ClipSample {
   url: string;
+  /** persisted still — survives clip URL expiry; preferred over the video */
+  poster?: string | null;
   title: string;
   shot_number: number | null;
 }

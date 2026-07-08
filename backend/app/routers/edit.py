@@ -12,7 +12,11 @@ from app.services.clip_store import persist_clip_url
 from app.services.qwen_client import QwenClient
 from app.config import get_settings
 
-router = APIRouter(prefix="/api/edit", tags=["edit"])
+from app.deps import get_current_user
+
+router = APIRouter(prefix="/api/edit", tags=["edit"],
+                   # every pipeline endpoint requires a signed-in user
+                   dependencies=[Depends(get_current_user)])
 
 
 @router.post("/trim")
@@ -20,7 +24,11 @@ async def trim_clip(request: TrimRequest, db: Session = Depends(get_db)):
     clip = db.query(GeneratedClip).filter(GeneratedClip.id == request.clip_id).first()
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
-    # Trim points are recorded; FFmpeg trim happens at final render (File 17).
+    # Persisted on the clip so ANY later export honors the trim (the FFmpeg
+    # cut itself happens at final render).
+    clip.trim_start = request.start_seconds
+    clip.trim_end = request.end_seconds
+    db.commit()
     return {
         "clip_id": str(clip.id),
         "start": request.start_seconds,
@@ -73,10 +81,16 @@ async def regen_clip(request: RegenRequest, db: Session = Depends(get_db)):
         )
     revised_prompt = rewrite.get("revised_prompt", clip.prompt)
 
+    # the re-render must be as long as the ORIGINAL shot — a hardcoded 5s
+    # regen of a 10s dialogue shot would be too short to hold its line
+    from app.models.shot import Shot
+    shot = db.query(Shot).filter(Shot.id == clip.shot_id).first()
+    duration = (shot.estimated_duration_seconds if shot else None) or 5
+
     qwen = QwenClient(get_settings())
     task_id = await qwen.generate_video_happyhorse(
         prompt=revised_prompt,
-        duration=5,
+        duration=duration,
         mode="v2v" if clip.url else "t2v",
         source_video_url=clip.url,
         edit_instruction=flag.description,

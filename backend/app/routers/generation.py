@@ -12,7 +12,11 @@ from app.schemas.generation import GenerationStartRequest, GenerationJobStatus, 
 from app.services.cost_rates import video_cost
 from app.workers.generation_worker import run_generation_job
 
-router = APIRouter(prefix="/api/generate", tags=["generation"])
+from app.deps import get_current_user
+
+router = APIRouter(prefix="/api/generate", tags=["generation"],
+                   # every pipeline endpoint requires a signed-in user
+                   dependencies=[Depends(get_current_user)])
 
 
 @router.post("/start", response_model=GenerationJobStatus)

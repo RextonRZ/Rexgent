@@ -8,7 +8,11 @@ from app.services.oss_manager import OSSManager
 from app.config import get_settings
 from app.workers.export_worker import run_export
 
-router = APIRouter(prefix="/api/export", tags=["export"])
+from app.deps import get_current_user
+
+router = APIRouter(prefix="/api/export", tags=["export"],
+                   # every pipeline endpoint requires a signed-in user
+                   dependencies=[Depends(get_current_user)])
 
 
 @router.post("/{project_id}/audio")

@@ -25,6 +25,13 @@ class GeneratedClip(Base):
     seed = Column(Integer, nullable=True)
     status = Column(String(20), default="PENDING")
     retries = Column(Integer, default=0)
+    # editor trim points — honored by EVERY later export, not just the one
+    # where the user set them
+    trim_start = Column(Float, nullable=True)
+    trim_end = Column(Float, nullable=True)
+    # small extracted still: outlives the clip URL's expiry (dashboards,
+    # analytics evidence)
+    poster_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("GenerationJob", back_populates="clips")

@@ -8,7 +8,11 @@ from app.models.relationship import CharacterRelationship
 from app.services.relationship_builder import RelationshipBuilder
 from app.graph.sync import sync_relationships
 
-router = APIRouter(prefix="/api/graph", tags=["graph"])
+from app.deps import get_current_user
+
+router = APIRouter(prefix="/api/graph", tags=["graph"],
+                   # every pipeline endpoint requires a signed-in user
+                   dependencies=[Depends(get_current_user)])
 
 
 def _levenshtein(a: str, b: str) -> int:

@@ -19,6 +19,7 @@ import { useAutoRun, type AutoRunResult } from "@/hooks/useAgent";
 import { useProject } from "@/hooks/useProjects";
 import { getSocket } from "@/lib/websocket";
 import { GENRES } from "@/lib/genres";
+import { errText } from "@/lib/errText";
 import { cn } from "@/lib/utils";
 
 // Preset tones: a deliberate choice, not a blank text box.
@@ -108,23 +109,32 @@ export function AutoRunPanel({
     };
   }, [projectId]);
 
+  const [runError, setRunError] = useState<string | null>(null);
+
   const handleRun = async () => {
     setTrace([]);
     setResult(null);
-    const res = await autoRun.mutateAsync({
-      project_id: projectId,
-      premise,
-      genre,
-      tone: tone.trim() || "dramatic",
-      model,
-      language,
-      target_length: targetLength,
-      episode_count: episodeCount,
-      // Full Auto renders + exports the finished episode under the spend cap;
-      // otherwise plan only — the user spends on the Generate tab.
-      dispatch_video: fullAuto,
-    });
-    setResult(res);
+    setRunError(null);
+    try {
+      const res = await autoRun.mutateAsync({
+        project_id: projectId,
+        premise,
+        genre,
+        tone: tone.trim() || "dramatic",
+        model,
+        language,
+        target_length: targetLength,
+        episode_count: episodeCount,
+        // Full Auto renders + exports the finished episode under the spend cap;
+        // otherwise plan only — the user spends on the Generate tab.
+        dispatch_video: fullAuto,
+      });
+      setResult(res);
+    } catch (err) {
+      // long runs can outlive the HTTP timeout while STILL progressing
+      // server-side — keep the trace visible and say so, never go mute
+      setRunError(errText(err));
+    }
   };
 
   return (
@@ -326,6 +336,14 @@ export function AutoRunPanel({
             ? "Produce my episode (spends voucher)"
             : "Plan my drama (no video spend)"}
         </Button>
+
+        {runError && (
+          <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            {runError}
+            {trace.length > 0 &&
+              " The agent trace below shows how far the run got."}
+          </p>
+        )}
 
         {trace.length > 0 && (
           <div className="space-y-1">

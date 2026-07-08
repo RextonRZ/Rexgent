@@ -8,7 +8,11 @@ from app.mcp_tools.token_optimizer import TokenOptimizer
 from app.services.usage_tracker import global_usage
 from app.services.cost_ledger import aggregate
 
-router = APIRouter(prefix="/api/budget", tags=["budget"])
+from app.deps import get_current_user
+
+router = APIRouter(prefix="/api/budget", tags=["budget"],
+                   # every pipeline endpoint requires a signed-in user
+                   dependencies=[Depends(get_current_user)])
 
 
 @router.post("/calculate")

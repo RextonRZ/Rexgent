@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { useStartGeneration } from "@/hooks/useGeneration";
 import { useGenerationStore } from "@/stores/generationStore";
+import { errText } from "@/lib/errText";
 
 export function GenerationLauncher({ projectId }: { projectId: string }) {
   const startGeneration = useStartGeneration();
@@ -29,7 +30,7 @@ export function GenerationLauncher({ projectId }: { projectId: string }) {
         )}
         {startGeneration.isError && (
           <p className="text-sm text-bad">
-            {(startGeneration.error as Error).message}
+            {errText(startGeneration.error)}
           </p>
         )}
       </div>

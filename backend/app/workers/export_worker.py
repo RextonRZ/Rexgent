@@ -15,7 +15,6 @@ from app.models.final_export import FinalExport
 from app.services.caption_generator import CaptionGenerator
 from app.services.production_report import build_report
 from app.services.oss_manager import OSSManager
-from app.services.usage_tracker import global_usage
 from app.services.audio_timeline import place_dialogue
 from app.models.line_audio import LineAudio
 from app.websocket.tool_events import tool_event, tool_run
@@ -181,7 +180,11 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 if current is None or rank > (current.status == "APPROVED", current.consistency_score or 0.0):
                     best_by_shot[key] = clip
             for c in best_by_shot.values():
-                resolved.append({"url": c.url, "in": None, "out": None, "clip": c})
+                # editor trims persist on the clip — the AI default honors them
+                resolved.append({"url": c.url,
+                                 "in": getattr(c, "trim_start", None),
+                                 "out": getattr(c, "trim_end", None),
+                                 "clip": c})
 
         if not resolved:
             _stage(project_id, "failed", "Nothing to export yet")
@@ -204,16 +207,23 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             (datetime.now(timezone.utc) - job.created_at.replace(tzinfo=timezone.utc)).total_seconds() / 60
             if job.created_at else 0.0
         )
-        usage = global_usage().snapshot()
+        # LLM figures come from the LEDGER — the worker's in-process tracker is
+        # empty here (every real call lands on cost_events via track_project),
+        # and the report is the artifact that proves the budget held.
+        from app.services.cost_ledger import aggregate
+        ledger = aggregate(db, project_id)
+        by_cat = ledger.get("by_category", {})
         report = build_report(
             project_id=project_id,
             clips=clips_for_export,
             duration_by_clip=duration_by_clip,
             total_retries=sum(c.retries for c in clips_for_export),
             wall_clock_minutes=wall_minutes,
-            llm_input_tokens=usage["input_tokens"],
-            llm_output_tokens=usage["output_tokens"],
-            llm_cost_usd=usage["cost_usd"],
+            llm_input_tokens=ledger["llm"]["input_tokens"],
+            llm_output_tokens=ledger["llm"]["output_tokens"],
+            llm_cost_usd=by_cat.get("llm", 0.0),
+            other_costs_usd=by_cat.get("image", 0.0) + by_cat.get("tts", 0.0),
+            budget=ledger.get("budget", 40.0),
         )
         report_path = os.path.join(tempfile.mkdtemp(), "production_report.json")
         with open(report_path, "w", encoding="utf-8") as f:

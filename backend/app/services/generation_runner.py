@@ -397,9 +397,6 @@ class GenerationRunner:
                 # DashScope URLs are signed and expire (~24h) — keep our own copy
                 clip_url = await asyncio.to_thread(
                     persist_clip_url, pid, f"shot_{shot.id}", clip_url)
-                # TODO(dashboard): if the project has no poster_url yet, extract a
-                # default poster here (frame_sampler.extract_frame_at(clip_url, 2.0)
-                # -> OSS -> project.poster_url) so cards never ship empty.
 
                 emit("continuity.scoring.started", {"shot_id": str(shot.id)}, pid)
                 tool_event(pid, "generate", "verify_face", "started", agent="Continuity",
@@ -449,7 +446,22 @@ class GenerationRunner:
                 emit("clip:completed", {"shot_id": str(shot.id), "clip_url": clip_url,
                      "consistency_score": guard["continuity_score"], "status": status}, pid)
                 # SOFT failures do NOT loop — single generation on the happy path.
-                return self._store_last_frame(pid, shot, clip_url)
+                frame_url = self._store_last_frame(pid, shot, clip_url)
+                if frame_url:
+                    # the chained frame doubles as the clip's poster still — it
+                    # outlives the clip URL's expiry (dashboards, analytics
+                    # evidence), and the first one names the drama's card
+                    try:
+                        clip.poster_url = frame_url
+                        from app.models.project import Project
+                        project = (self.db.query(Project)
+                                   .filter(Project.id == job.project_id).first())
+                        if project and not project.poster_url:
+                            project.poster_url = frame_url
+                        self.db.commit()
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(f"poster persist skipped: {e}")
+                return frame_url
             except Exception as e:  # HARD failure only -> at most one retry
                 logger.error(f"Shot {shot.id} attempt {attempt} hard-failed: {e}")
                 if attempt < MAX_RETRIES:

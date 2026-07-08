@@ -21,5 +21,17 @@ def run_casting_job(self, project_id: str):
             asyncio.run(synth_dialogue_op(db, project_id))
         except Exception as e:  # noqa: BLE001
             logger.warning(f"Casting: dialogue synthesis skipped ({e})")
+    except Exception as e:  # noqa: BLE001
+        # surface the crash — otherwise the casting spinner sticks forever
+        # (mirrors generation_worker's guard)
+        logger.error(f"Casting job for {project_id} crashed: {e}")
+        try:
+            from app.websocket.emitter import emit
+            emit("stage:progress", {"stage": "generate", "status": "failed",
+                 "agent": "Casting",
+                 "label": f"Casting crashed: {str(e)[:120]}"}, str(project_id))
+        except Exception:  # noqa: BLE001
+            pass
+        raise
     finally:
         db.close()
