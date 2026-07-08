@@ -34,6 +34,7 @@ export const RAW_TO_STAGE: Record<string, StageKey> = {
   script: "script",
   characters: "characters",
   relationships: "characters",
+  casting: "characters",
   storyboard: "storyboard",
   generate: "generate",
   export: "export",
@@ -60,7 +61,7 @@ const NODE_TO_STAGE: Record<string, StageKey> = {
   extract_characters: "characters",
   clarify: "characters",
   storyboard: "storyboard",
-  casting: "generate",
+  casting: "characters",
   audio: "generate",
   budget: "generate",
   generate_video: "generate",
@@ -364,10 +365,12 @@ export function ensureLiveRun(projectId: string) {
    * does ("retrying 2/3"), surface them here as kind:"warn" trail entries. */
   const gen = (agent: string, label: string) =>
     upsertRunning("generate", { agent, label });
+  const castingRun = (agent: string, label: string) =>
+    upsertRunning("casting", { agent, label });
 
   on("casting.started", () => {
-    gen("Casting", "Casting the production bible");
-    pushTrail("generate", {
+    castingRun("Casting", "Casting the production bible");
+    pushTrail("characters", {
       at: Date.now(),
       agent: "Casting",
       label: "Casting the production bible",
@@ -375,22 +378,22 @@ export function ensureLiveRun(projectId: string) {
     });
   });
   on("casting.wardrobe_plan.completed", (p) => {
-    pushTrail("generate", {
+    pushTrail("characters", {
       at: Date.now(),
       agent: "Casting",
       label: `Wardrobe planned: ${p?.variant_count ?? "?"} outfit(s)`,
       kind: "done",
     });
   });
-  on("casting.plate.started", () => gen("Casting", "Shooting reference plates"));
+  on("casting.plate.started", () => castingRun("Casting", "Shooting reference plates"));
   on("casting.plate.completed", (p) => {
     const what = `Plate ready: ${p?.kind ?? "plate"} ${String(p?.key ?? "").replace(/_/g, " ")}`.trim();
-    gen("Casting", what);
-    pushTrail("generate", { at: Date.now(), agent: "Casting", label: what, kind: "done" });
+    castingRun("Casting", what);
+    pushTrail("characters", { at: Date.now(), agent: "Casting", label: what, kind: "done" });
   });
   on("casting.awaiting_review", () => {
-    clearRunning("generate");
-    pushTrail("generate", {
+    clearRunning("casting");
+    pushTrail("characters", {
       at: Date.now(),
       agent: "Casting",
       label: "Casting paused, awaiting your review",
@@ -398,8 +401,8 @@ export function ensureLiveRun(projectId: string) {
     });
   });
   on("casting.completed", (p) => {
-    clearRunning("generate");
-    pushTrail("generate", {
+    clearRunning("casting");
+    pushTrail("characters", {
       at: Date.now(),
       agent: "Casting",
       label: p?.auto_approved ? "Bible cast and auto approved" : "Bible cast, awaiting your review",

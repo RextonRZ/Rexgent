@@ -131,7 +131,7 @@ class CastingDirector:
 
         idx += 1
         emit("casting.plate.started", {"kind": "style", "key": "style", "index": idx, "total": total}, pid)
-        tool_event(pid, "generate", "generate_plates", "started", agent="Casting",
+        tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
                    index=idx, total=total)
         s_url, _ = await self.plates.generate_and_store_plate(pid, "style", "style",
                                                               style.get("prompt", ""),
@@ -143,7 +143,7 @@ class CastingDirector:
         for loc in locations:
             idx += 1
             emit("casting.plate.started", {"kind": "location", "key": loc["location_key"], "index": idx, "total": total}, pid)
-            tool_event(pid, "generate", "generate_plates", "started", agent="Casting",
+            tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
                        index=idx, total=total)
             desc = strip_character_names(loc["description"], char_names) or "interior room"
             prompt = f"{desc} background plate. {', '.join(style.get('style_tags', []))}"
@@ -160,7 +160,7 @@ class CastingDirector:
             for i, v in enumerate(variants):
                 idx += 1
                 emit("casting.plate.started", {"kind": "character", "key": f"{c.name}:{v['label']}", "index": idx, "total": total}, pid)
-                tool_event(pid, "generate", "generate_plates", "started", agent="Casting",
+                tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
                            index=idx, total=total)
                 outfit = v.get("outfit_description", "")
                 # identity plate: waist-up, plain background, no style-tag scene drift
@@ -187,13 +187,13 @@ class CastingDirector:
                     c.plate_status = "ai_generated"
                 emit("casting.plate.completed", {"kind": "character", "key": f"{c.name}:{v['label']}", "index": idx, "total": total}, pid)
 
-        tool_event(pid, "generate", "generate_plates", "succeeded", agent="Casting",
+        tool_event(pid, "characters", "generate_plates", "succeeded", agent="Casting",
                    artifact=f"{total} plates")
         if faces_locked:
-            tool_event(pid, "generate", "face_lock", "succeeded", agent="Casting",
+            tool_event(pid, "characters", "face_lock", "succeeded", agent="Casting",
                        artifact=f"{faces_locked} identities locked")
 
-        with tool_run(pid, "generate", "voice_assign", "Casting",
+        with tool_run(pid, "characters", "voice_assign", "Casting",
                       total=len(characters)) as t:
             for idx_v, c in enumerate(characters):
                 emit("casting.voice.started", {"character": c.name}, pid)

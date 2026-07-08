@@ -164,13 +164,19 @@ async def build_relationship_graph(request: dict, db: Session = Depends(get_db))
     pid = str(script.project_id)
     emit("stage:progress", {"stage": "relationships", "status": "started",
          "agent": "Story Analyst", "label": "Mapping character relationships"}, pid)
+    from app.websocket.tool_events import tool_event
+    tool_event(pid, "characters", "map_relationships", "started", agent="Story Analyst")
     builder = RelationshipBuilder()
     try:
         relationships = await builder.extract(script.structured_json, chars_json)
-    except Exception:
+    except Exception as e:
+        tool_event(pid, "characters", "map_relationships", "failed",
+                   agent="Story Analyst", error=str(e))
         emit("stage:progress", {"stage": "relationships", "status": "failed",
              "agent": "Story Analyst", "label": "Relationship mapping failed"}, pid)
         raise
+    tool_event(pid, "characters", "map_relationships", "succeeded",
+               agent="Story Analyst", artifact=f"{len(relationships or [])} bonds")
 
     char_map = {c.name.upper(): c for c in characters}
 

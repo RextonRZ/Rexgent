@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   ChevronDown,
   LayoutGrid,
@@ -56,7 +55,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import type { ProjectOverviewItem } from "@/lib/types";
 import { errText } from "@/lib/errText";
-import { useGo } from "@/components/shared/NavProgress";
+import { GoLink, useGo } from "@/components/shared/NavProgress";
 
 const VIEW_KEY = "rx.dashboard.view";
 
@@ -214,14 +213,14 @@ function Dashboard() {
       <AmbientBackdrop />
       <header className="sticky top-0 z-40 glass border-b hairline">
         <div className="mx-auto max-w-7xl px-6 h-14 flex items-center justify-between">
-          <Link href="/" className="transition-opacity hover:opacity-80">
+          <GoLink href="/" className="transition-opacity hover:opacity-80">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/rexgent_wordmark.png"
               alt="Rexgent"
               className="h-4 w-auto"
             />
-          </Link>
+          </GoLink>
           <UserMenu />
         </div>
       </header>

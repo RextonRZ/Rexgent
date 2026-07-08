@@ -294,5 +294,9 @@ async def judge_script(script_id: str, db: Session = Depends(get_db)):
     if not script.structured_json:
         raise HTTPException(status_code=400, detail="Script has no structured data")
 
+    from app.websocket.tool_events import tool_run
     with track_project(script.project_id, db):
-        return await get_tool("narrative_judge")({"script": script.structured_json})
+        with tool_run(script.project_id, "script", "narrative_judge", "Story Analyst") as t:
+            verdict = await get_tool("narrative_judge")({"script": script.structured_json})
+            t["artifact"] = f"scored {len((verdict or {}).get('scores', {}))} axes"
+        return verdict

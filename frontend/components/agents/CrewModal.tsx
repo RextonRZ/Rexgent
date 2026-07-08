@@ -48,9 +48,9 @@ const STAGE_ICONS: Record<StageKey, LucideIcon> = {
 /** Ledger by_stage keys attributed to each pipeline stage (shown only if > 0). */
 const STAGE_COST_KEYS: Record<StageKey, string[]> = {
   script: ["script", "structure", "judge", "revise", "title", "plot_gap", "ending"],
-  characters: ["characters", "relationships", "mbti", "appearance", "clarify"],
+  characters: ["characters", "relationships", "mbti", "appearance", "clarify", "casting", "wardrobe"],
   storyboard: ["storyboard", "set_dress", "prompt_craft", "style"],
-  generate: ["generation", "casting", "audio", "budget", "wardrobe", "regen_rewrite"],
+  generate: ["generation", "audio", "budget", "regen_rewrite"],
   export: ["export"],
 };
 

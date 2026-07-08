@@ -1,5 +1,7 @@
 import {
   Clapperboard,
+  Scale,
+  Share2,
   Database,
   Film,
   Image,
@@ -57,11 +59,16 @@ export const STAGE_AGENT_ICONS: Record<StageKey, LucideIcon> = {
 export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
   script: [
     { key: "llm_write", icon: Sparkles, kind: "llm" },
+    { key: "narrative_judge", icon: Scale, kind: "validator" },
     { key: "structure_scenes", icon: ListTree, kind: "llm" },
     { key: "write_script_db", icon: Database, kind: "db" },
   ],
   characters: [
     { key: "extract_cast", icon: Users, kind: "llm" },
+    { key: "map_relationships", icon: Share2, kind: "llm" },
+    { key: "generate_plates", icon: Image, kind: "media" },
+    { key: "face_lock", icon: ScanFace, kind: "validator" },
+    { key: "voice_assign", icon: Mic, kind: "service" },
     { key: "write_cast_db", icon: Database, kind: "db" },
   ],
   storyboard: [
@@ -71,9 +78,6 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
   ],
   generate: [
     { key: "budget_allocate", icon: Wallet, kind: "service" },
-    { key: "generate_plates", icon: Image, kind: "media" },
-    { key: "face_lock", icon: ScanFace, kind: "validator" },
-    { key: "voice_assign", icon: Mic, kind: "service" },
     { key: "synth_voices", icon: Volume2, kind: "media" },
     { key: "fit_durations", icon: Timer, kind: "service" },
     { key: "dispatch_video", icon: Film, kind: "media" },

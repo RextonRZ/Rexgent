@@ -60,7 +60,11 @@ def build_pipeline_graph(db=None):
         _emit_node(state, "judge")
         if db is None:
             return state
-        state["judgement"] = await NarrativeJudge().evaluate(state.get("structured", {}))
+        from app.websocket.tool_events import tool_run
+        with tool_run(state["project_id"], "script", "narrative_judge",
+                      "Story Analyst") as tb:
+            state["judgement"] = await NarrativeJudge().evaluate(state.get("structured", {}))
+            tb["artifact"] = (state["judgement"] or {}).get("recommendation", "scored")
         from app.agents.reporter import report_agent
         j = state["judgement"]
         report_agent(db, state["project_id"], agent="narrative_judge", stage="judge",

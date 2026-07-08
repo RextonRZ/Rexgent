@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NextStepButton } from "@/components/shared/NextStepButton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,6 +19,9 @@ import {
 import { useBible, useRunCasting } from "@/hooks/useCasting";
 import type { CastingCharacter } from "@/hooks/useCasting";
 import type { CharacterRelationship } from "@/lib/types";
+
+// projects that already auto-built relationships this session
+const autoBuiltProjects = new Set<string>();
 
 export default function CharactersPage({
   params,
@@ -39,15 +42,17 @@ export default function CharactersPage({
 
   // Relationships build themselves: once after extraction, and once on load if
   // the cast exists but no relationships do (no button to remember).
-  const autoBuilt = useRef(false);
   useEffect(() => {
-    if (autoBuilt.current || buildGraph.isPending) return;
+    // ONE auto-build per project per SESSION — a useRef here resets on every
+    // navigation, so a project whose extraction saved zero relationships
+    // re-mapped (and re-spent tokens) on every visit to this page.
+    if (autoBuiltProjects.has(params.id) || buildGraph.isPending) return;
     if (
       characters.length >= 2 &&
       graph &&
       (graph.relationships?.length ?? 0) === 0
     ) {
-      autoBuilt.current = true;
+      autoBuiltProjects.add(params.id);
       buildGraph.mutate(params.id);
     }
   }, [characters.length, graph, buildGraph, params.id]);
@@ -57,7 +62,7 @@ export default function CharactersPage({
       { projectId: params.id },
       {
         onSuccess: () => {
-          autoBuilt.current = true;
+          autoBuiltProjects.add(params.id);
           buildGraph.mutate(params.id);
         },
       }
