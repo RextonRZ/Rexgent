@@ -24,11 +24,16 @@ function tierOf(model: string): string {
 }
 
 const CATEGORIES = [
-  { key: "llm", label: "LLM" },
-  { key: "image", label: "Image" },
-  { key: "video", label: "Video" },
-  { key: "tts", label: "TTS" },
+  { key: "llm", label: "LLM", unit: "" },
+  { key: "image", label: "Image", unit: "img" },
+  { key: "video", label: "Video", unit: "s" },
+  { key: "tts", label: "TTS", unit: "ch" },
 ];
+
+function fmtQty(q: number, unit: string): string {
+  const n = q >= 1000 ? `${Math.round(q / 1000)}K` : String(Math.round(q));
+  return unit ? `${n}${unit === "img" ? " img" : unit}` : n;
+}
 const STAGES = [
   { key: "casting", label: "Casting" },
   { key: "audio", label: "Audio" },
@@ -121,16 +126,37 @@ export function CostPanelContent({ projectId }: { projectId: string }) {
       <div className="space-y-1.5">
         {CATEGORIES.map((c) => {
           const amt = byCat[c.key] ?? 0;
+          const models = ledger?.media_models?.[c.key];
           return (
-            <div key={c.key} className="flex items-center gap-2 text-xs">
-              <span className="w-12 text-muted-foreground">{c.label}</span>
-              <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-primary"
-                  style={{ width: `${Math.min((amt / maxCat) * 100, 100)}%` }}
-                />
+            <div key={c.key}>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="w-12 text-muted-foreground">{c.label}</span>
+                <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${Math.min((amt / maxCat) * 100, 100)}%` }}
+                  />
+                </div>
+                <span className="w-12 text-right tabular-nums">${amt.toFixed(2)}</span>
               </div>
-              <span className="w-12 text-right tabular-nums">${amt.toFixed(2)}</span>
+              {/* every media model tracked: name · native qty · dollars */}
+              {models && Object.keys(models).length > 0 && (
+                <div className="ml-14 mt-0.5 space-y-0.5">
+                  {Object.entries(models)
+                    .sort((a, b) => b[1].usd - a[1].usd)
+                    .map(([model, v]) => (
+                      <div
+                        key={model}
+                        className="flex items-baseline justify-between gap-2 text-[10px] text-muted-foreground"
+                      >
+                        <span className="truncate font-mono">{model}</span>
+                        <span className="shrink-0 tabular-nums">
+                          {fmtQty(v.qty, c.unit)} · ${v.usd.toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
           );
         })}

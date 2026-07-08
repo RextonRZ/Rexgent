@@ -10,6 +10,7 @@ import {
   Film,
   Image as ImageIcon,
   MessageSquareText,
+  TrendingUp,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -137,6 +138,123 @@ function fmtMediaQty(q: number, unit: string): string {
   if (unit === "image") return `${Math.round(q)} img`;
   if (unit === "character") return `${fmtTokens(q)} chars`;
   return String(Math.round(q));
+}
+
+/** Predictive analytics derived ONLY from this range's real data: linear
+ * pace over the daily trend, average episode cost split by category. Fills
+ * the roster's fourth slot with something that answers "what will the next
+ * one cost me?". */
+function ForecastCard({ data }: { data: UsageAnalytics }) {
+  const totalUsd = Object.values(data.categories).reduce((s, c) => s + c.usd, 0);
+  const produced = data.dramas.filter((d) => d.clips > 0);
+  const perDrama = produced.length ? totalUsd / produced.length : 0;
+  const videoShare =
+    totalUsd > 0 ? (data.categories["video"]?.usd ?? 0) / totalUsd : 0;
+
+  // least-squares over the daily spend series -> a 7-day projection
+  const pts = data.trend.map((d) => d.usd);
+  let projected7: number | null = null;
+  let fit: { slope: number; intercept: number } | null = null;
+  if (pts.length >= 3) {
+    const n = pts.length;
+    const sx = (n * (n - 1)) / 2;
+    const sy = pts.reduce((a, b) => a + b, 0);
+    const sxx = pts.reduce((a, _, i) => a + i * i, 0);
+    const sxy = pts.reduce((a, y, i) => a + i * y, 0);
+    const denom = n * sxx - sx * sx;
+    if (denom !== 0) {
+      const slope = (n * sxy - sx * sy) / denom;
+      const intercept = (sy - slope * sx) / n;
+      fit = { slope, intercept };
+      projected7 = Array.from({ length: 7 }, (_, j) =>
+        Math.max(0, intercept + slope * (n + j))
+      ).reduce((a, b) => a + b, 0);
+    }
+  }
+
+  // sparkline geometry: history solid, projection dashed
+  const proj = fit
+    ? Array.from({ length: 7 }, (_, j) =>
+        Math.max(0, fit!.intercept + fit!.slope * (pts.length + j))
+      )
+    : [];
+  const all = [...pts, ...proj];
+  const maxY = Math.max(...all, 0.01);
+  const W = 100;
+  const H = 30;
+  const xOf = (i: number) => (i / Math.max(1, all.length - 1)) * W;
+  const yOf = (v: number) => H - 3 - (v / maxY) * (H - 8);
+  const path = (arr: number[], offset: number) =>
+    arr.map((v, i) => `${i === 0 ? "M" : "L"} ${xOf(offset + i).toFixed(1)} ${yOf(v).toFixed(1)}`).join(" ");
+
+  return (
+    <div className="mb-4 break-inside-avoid overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]">
+      <div className="flex items-center gap-2 border-b border-white/[0.06] bg-white/[0.015] px-4 py-2.5">
+        <TrendingUp className="size-3.5 text-violet-300/70" />
+        <span className="text-sm font-medium">Forecast</span>
+        <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] text-zinc-500">
+          projected from this range
+        </span>
+      </div>
+      <div className="space-y-3 px-4 py-3">
+        {perDrama > 0 ? (
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs text-zinc-400">Next episode, at your average</span>
+            <span className="text-sm font-semibold tabular-nums">
+              ≈ {fmtUsd(perDrama)}
+            </span>
+          </div>
+        ) : null}
+        {perDrama > 0 && videoShare > 0 && (
+          <p className="text-[10px] text-zinc-600">
+            {fmtPct(videoShare)} of that is footage — the tier split is where
+            the budget is won.
+          </p>
+        )}
+        {projected7 != null && (
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs text-zinc-400">Next 7 days at current pace</span>
+            <span className="text-sm font-semibold tabular-nums">
+              ≈ {fmtUsd(projected7)}
+            </span>
+          </div>
+        )}
+        {perDrama > 0 && (
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs text-zinc-400">Episodes per $10 of voucher</span>
+            <span className="text-sm font-semibold tabular-nums">
+              ≈ {(10 / perDrama).toFixed(1)}
+            </span>
+          </div>
+        )}
+        {pts.length >= 3 ? (
+          <div>
+            <p className="mb-1 text-[10px] uppercase tracking-widest text-zinc-600">
+              Daily spend · dashed = projection
+            </p>
+            <svg viewBox={`0 0 ${W} ${H}`} className="h-14 w-full" preserveAspectRatio="none" aria-hidden>
+              <path d={path(pts, 0)} fill="none" stroke="#8b5cf6" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+              {proj.length > 0 && (
+                <path
+                  d={`M ${xOf(pts.length - 1).toFixed(1)} ${yOf(pts[pts.length - 1]).toFixed(1)} ` + path(proj, pts.length).slice(1)}
+                  fill="none"
+                  stroke="#a78bfa"
+                  strokeWidth="1.5"
+                  strokeDasharray="3 3"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+              <circle cx={xOf(pts.length - 1)} cy={yOf(pts[pts.length - 1])} r="1.8" fill="#c4b5fd" />
+            </svg>
+          </div>
+        ) : (
+          <p className="text-[10px] text-zinc-600">
+            Not enough history in this range for a pace projection yet.
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -670,6 +788,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
               </div>
             );
           })}
+          <ForecastCard data={data} />
         </div>
       </Rise>
 

@@ -40,6 +40,7 @@ function TakeTile({
           preload="metadata"
           onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
           onMouseLeave={(e) => e.currentTarget.pause()}
+          fitPosition="50% 22%"
           className="aspect-video w-full rounded-md border hairline bg-black"
         />
         <span className="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white/90">

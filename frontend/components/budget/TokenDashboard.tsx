@@ -111,6 +111,34 @@ export function TokenDashboard({ projectId }: { projectId: string }) {
         </p>
       )}
 
+      {/* the media models this drama has actually consumed, in native units */}
+      {ledger?.media_models && Object.keys(ledger.media_models).length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t hairline pt-3">
+          {(["video", "image", "tts"] as const).flatMap((cat) =>
+            Object.entries(ledger.media_models?.[cat] ?? {})
+              .sort((a, b) => b[1].usd - a[1].usd)
+              .map(([model, v]) => (
+                <span
+                  key={`${cat}-${model}`}
+                  className="inline-flex items-baseline gap-1.5 text-[11px]"
+                >
+                  <span className="font-mono text-muted-foreground">{model}</span>
+                  <span className="tabular-nums text-foreground/80">
+                    {cat === "video"
+                      ? `${Math.round(v.qty)}s`
+                      : cat === "image"
+                        ? `${Math.round(v.qty)} img`
+                        : `${fmtTokens(v.qty)} ch`}
+                  </span>
+                  <span className="tabular-nums text-muted-foreground">
+                    ${v.usd.toFixed(2)}
+                  </span>
+                </span>
+              ))
+          )}
+        </div>
+      )}
+
       {stages.length > 0 && (
         <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
           {stages.map(([stage, tokens]) => (

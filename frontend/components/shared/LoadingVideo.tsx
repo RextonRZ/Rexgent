@@ -10,8 +10,12 @@ import { cn } from "@/lib/utils";
  * fills it with `fit` (cover|contain). */
 export const LoadingVideo = forwardRef<
   HTMLVideoElement,
-  React.ComponentProps<"video"> & { fit?: "cover" | "contain" }
->(function LoadingVideo({ className, fit = "cover", children, ...rest }, ref) {
+  React.ComponentProps<"video"> & {
+    fit?: "cover" | "contain";
+    /** object-position, e.g. "50% 25%" to keep faces of portrait clips in frame */
+    fitPosition?: string;
+  }
+>(function LoadingVideo({ className, fit = "cover", fitPosition, children, ...rest }, ref) {
   const [ready, setReady] = useState(false);
   const [dead, setDead] = useState(false);
   return (
@@ -24,6 +28,7 @@ export const LoadingVideo = forwardRef<
             "absolute inset-0 h-full w-full",
             fit === "cover" ? "object-cover" : "object-contain"
           )}
+          style={fitPosition ? { objectPosition: fitPosition } : undefined}
           onLoadedData={(e) => {
             setReady(true);
             rest.onLoadedData?.(e);

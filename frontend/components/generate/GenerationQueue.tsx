@@ -133,7 +133,34 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
   }
   if (run.length) rows.push(run);
 
-  const renderTile = (shot: Shot) => {
+  /** The render-in-progress tile, Qwen studio style: a soft violet cloud
+ * drifting behind a white pill — waiting reads as dreaming, not hanging. */
+function DreamingTile({ checking }: { checking: boolean }) {
+  return (
+    <div
+      className="flex h-full w-full flex-col items-center justify-center gap-2.5 motion-safe:animate-[dream-drift_9s_ease-in-out_infinite]"
+      style={{
+        background:
+          "linear-gradient(130deg, #6d28d9 0%, #a78bfa 30%, #c4b5fd 50%, #8b5cf6 72%, #5b21b6 100%)",
+        backgroundSize: "300% 300%",
+      }}
+    >
+      <span className="flex items-center gap-2 rounded-full bg-white px-4 py-1.5 shadow-lg">
+        <span className="h-2 w-2 rounded-full bg-violet-500 motion-safe:animate-pulse" />
+        <span className="bg-gradient-to-r from-violet-600 to-fuchsia-500 bg-clip-text text-sm font-semibold text-transparent">
+          {checking ? "Checking…" : "Dreaming…"}
+        </span>
+      </span>
+      <span className="text-[11px] text-white/85 drop-shadow">
+        {checking
+          ? "Scoring continuity on the fresh take"
+          : "This usually takes a few minutes"}
+      </span>
+    </div>
+  );
+}
+
+const renderTile = (shot: Shot) => {
     const tile = byShot[shot.id];
     const chip = clipStatusChip(tile.status);
     const score = tile.score;
@@ -150,11 +177,11 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
               preload="metadata"
               className="h-full w-full object-contain bg-black"
             />
+          ) : tile.status === "GENERATING" || tile.status === "CHECKING" ? (
+            <DreamingTile checking={tile.status === "CHECKING"} />
           ) : (
             <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
-              {tile.status === "GENERATING" || tile.status === "CHECKING"
-                ? "rendering…"
-                : tile.status.toLowerCase()}
+              {tile.status.toLowerCase()}
             </div>
           )}
           {/* badges live at the top — the bottom belongs to the video controls */}

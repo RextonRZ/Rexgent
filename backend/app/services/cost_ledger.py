@@ -42,10 +42,18 @@ def aggregate(db, project_id, budget=None) -> dict:
     llm_in = llm_out = llm_total = 0
     llm_by_model: dict = {}
     llm_tokens_by_stage: dict = {}
+    media_models: dict = {}
     for r in rows:
         by_cat[r.category] = round(by_cat.get(r.category, 0.0) + (r.amount_usd or 0.0), 4)
         if r.stage:
             by_stage[r.stage] = round(by_stage.get(r.stage, 0.0) + (r.amount_usd or 0.0), 4)
+        if r.category != "llm":
+            # per-model media detail (video seconds, images, tts chars)
+            m = getattr(r, "model", None) or "untracked"
+            cat = media_models.setdefault(r.category, {})
+            entry = cat.setdefault(m, {"qty": 0.0, "usd": 0.0})
+            entry["qty"] = round(entry["qty"] + (r.quantity or 0.0), 2)
+            entry["usd"] = round(entry["usd"] + (r.amount_usd or 0.0), 4)
         if r.category == "llm":
             ti = int(r.input_tokens or 0)
             to = int(r.output_tokens or 0)
@@ -61,6 +69,7 @@ def aggregate(db, project_id, budget=None) -> dict:
                 llm_tokens_by_stage[r.stage] = llm_tokens_by_stage.get(r.stage, 0) + tq
     grand = round(sum(by_cat.values()), 4)
     return {"by_category": by_cat, "by_stage": by_stage, "grand_total": grand,
+            "media_models": media_models,
             "budget": budget, "within_budget": grand <= budget,
             "remaining": round(budget - grand, 4),
             "llm": {"input_tokens": llm_in, "output_tokens": llm_out,

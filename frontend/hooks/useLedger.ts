@@ -13,6 +13,8 @@ export interface LedgerLlm {
 
 export interface Ledger {
   by_category: Record<string, number>;
+  /** per-model media detail: {video|image|tts: {model: {qty, usd}}} */
+  media_models?: Record<string, Record<string, { qty: number; usd: number }>>;
   by_stage: Record<string, number>;
   grand_total: number;
   budget: number;

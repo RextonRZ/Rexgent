@@ -316,3 +316,31 @@
   from { transform: translateX(-100%); }
   to { transform: translateX(400%); }
 }
+
+/* Global thin scrollbars — every scroll area wears the same quiet rounded
+   thumb the dock uses, page scrollbar included. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.28) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.28);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.45);
+}
+
+/* Qwen-style "Dreaming" render tile: a soft violet cloud slowly drifting */
+@keyframes dream-drift {
+  0% { background-position: 0% 30%; }
+  50% { background-position: 100% 70%; }
+  100% { background-position: 0% 30%; }
+}
