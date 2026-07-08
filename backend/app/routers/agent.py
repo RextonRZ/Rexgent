@@ -151,10 +151,20 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
     reports = (db.query(AgentReport).filter(AgentReport.project_id == project.id)
                .order_by(AgentReport.created_at.desc()).limit(10).all())
     agg = aggregate(db, project_id)
+    # WHERE the production actually stands — without this the model only sees
+    # the script digest + the judge's old critique and answers every "what's
+    # next" with "refine the ending", even when the script stage is long done.
+    from app.services.pipeline_progress import STAGE_PAGES, next_stage, stage_progress
+    progress = stage_progress(db, project.id)
+    upcoming = next_stage(progress)
     context = {
         "title": project.title, "genre": project.genre, "premise": project.premise,
         "format": getattr(project, "video_ratio", "9:16"),
         "spend_cap_usd": project.credit_budget,
+        "pipeline_progress": progress,
+        "next_incomplete_stage": (
+            {"stage": upcoming, "page": STAGE_PAGES[upcoming]} if upcoming
+            else "all stages complete, the episode is exported"),
         "script": script_digest(script.structured_json) if script and script.structured_json else {},
         "cast": [{"name": c.name, "role": c.role} for c in chars],
         "spend": {"total_usd": agg.get("grand_total"),
@@ -169,8 +179,13 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
         "You are the Showrunner of this AI short drama production. Answer the "
         "user's question about THIS production only, grounded strictly in the "
         "context given. Be concrete and brief: two to four plain sentences, no "
-        "markdown, no lists. If the context does not contain the answer, say "
-        "so and suggest which page of the studio would."
+        "markdown, no lists. When asked what to do next, answer from "
+        "pipeline_progress and next_incomplete_stage: stages marked true are "
+        "DONE, never suggest redoing or polishing them unless the user asks; "
+        "point to the next incomplete stage and its page. Old agent critique "
+        "notes describe past decisions, not open tasks. If the context does "
+        "not contain the answer, say so and suggest which page of the studio "
+        "would."
     )
     qwen = QwenClient(get_settings())
     with track_project(project_id, db):
