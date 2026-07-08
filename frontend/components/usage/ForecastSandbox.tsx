@@ -193,16 +193,16 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
         chart.weeks,
         Math.max(0, ((x - W * HIST_W) / (W * (1 - HIST_W))) * chart.weeks)
       );
-      // snap to whole days; the run-out day is magnetic (±1 day pulls onto it)
-      let day = Math.round(rawW * 7);
-      const runOutDay = Math.round(runwayWeeks * 7);
+      // snap to whole days; the run-out point is magnetic (±1 day pulls
+      // onto the EXACT crossing, not a rounded day — so crosshair, marker
+      // and drop line always align)
+      const day = Math.round(rawW * 7);
       const onRunOut =
-        runwayWeeks <= chart.weeks && Math.abs(day - runOutDay) <= 1;
-      if (onRunOut) day = runOutDay;
-      const w = day / 7;
+        runwayWeeks <= chart.weeks && Math.abs(day - runwayWeeks * 7) <= 1;
+      const w = onRunOut ? crossW : day / 7;
       setHover({
         xPct: (xProj(w) / W) * 100,
-        date: new Date(Date.now() + day * MS_DAY),
+        date: onRunOut ? runOut : new Date(Date.now() + day * MS_DAY),
         spend: Math.min(chart.cap, chart.spent + w * weeklySpend),
         eps: w * pace,
         daily: weeklySpend / 7,
@@ -575,7 +575,6 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
                 <p className="text-[10px] font-semibold text-amber-300">
                   ⚠ budget runs out here
                 </p>
-                <p className="text-[10px] text-zinc-300">{fmtDate(hover.date)}</p>
                 <p className="text-[10px] tabular-nums text-zinc-400">
                   cap {fmtUsd(chart.cap)} reached · {hover.eps?.toFixed(1)} episodes made
                 </p>
