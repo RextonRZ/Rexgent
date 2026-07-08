@@ -310,3 +310,9 @@
 @media (prefers-reduced-motion: reduce) {
   .dash-flow { animation: none; }
 }
+
+/* instant navigation feedback: the top hairline bar's marching segment */
+@keyframes nav-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(400%); }
+}

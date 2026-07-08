@@ -13,6 +13,7 @@ import { useClarifications } from "@/hooks/useAgents";
 import { useApproveCasting } from "@/hooks/useCasting";
 import { useCalculateBudget } from "@/hooks/useBudget";
 import { useUpdateProject } from "@/hooks/useProjects";
+import { useGo } from "@/components/shared/NavProgress";
 
 // a stable tint per agent so the feed reads like a room of specialists
 const AGENT_DOT: Record<string, string> = {
@@ -220,6 +221,7 @@ interface NextStep {
 
 export function AgentChat({ projectId }: { projectId: string }) {
   const router = useRouter();
+  const go = useGo();
   const { messages, running, pushLocal } = useAgentChat(projectId);
   const [question, setQuestion] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -367,7 +369,7 @@ export function AgentChat({ projectId }: { projectId: string }) {
                 className="h-7 flex-1 text-xs"
                 onClick={() => {
                   setNextStep(null);
-                  router.push(`/projects/${projectId}/${nextStep.path}`);
+                  go(`/projects/${projectId}/${nextStep.path}`);
                 }}
               >
                 Go to {nextStep.label} →

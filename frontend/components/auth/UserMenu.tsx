@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth, useLogout } from "@/hooks/useAuth";
+import { useGo } from "@/components/shared/NavProgress";
 
 function initials(name?: string | null, email?: string) {
   const source = name?.trim() || email || "";
@@ -21,7 +21,7 @@ function initials(name?: string | null, email?: string) {
 export function UserMenu() {
   const { user } = useAuth();
   const logout = useLogout();
-  const router = useRouter();
+  const go = useGo();
 
   return (
     <DropdownMenu>
@@ -41,19 +41,19 @@ export function UserMenu() {
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={() => router.push("/projects")}
+          onClick={() => go("/projects")}
           className="cursor-pointer"
         >
           Your dramas
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => router.push("/usage")}
+          onClick={() => go("/usage")}
           className="cursor-pointer"
         >
           Usage &amp; analytics
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => router.push("/settings")}
+          onClick={() => go("/settings")}
           className="cursor-pointer"
         >
           Settings

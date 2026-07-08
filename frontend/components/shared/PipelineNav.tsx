@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { GoLink as Link } from "@/components/shared/NavProgress";
 import { usePathname } from "next/navigation";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";

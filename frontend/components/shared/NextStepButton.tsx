@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { GoLink as Link } from "@/components/shared/NavProgress";
 import { Button } from "@/components/ui/button";
 
 const ORDER = ["script", "characters", "storyboard", "generate", "export"];

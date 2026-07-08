@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   LayoutGrid,
@@ -57,6 +56,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import type { ProjectOverviewItem } from "@/lib/types";
 import { errText } from "@/lib/errText";
+import { useGo } from "@/components/shared/NavProgress";
 
 const VIEW_KEY = "rx.dashboard.view";
 
@@ -107,7 +107,7 @@ export default function ProjectsPage() {
 }
 
 function Dashboard() {
-  const router = useRouter();
+  const go = useGo();
   const { data, isLoading } = useProjectsOverview();
   const { user } = useAuth();
   const deleteProject = useDeleteProject();
@@ -192,7 +192,7 @@ function Dashboard() {
   const handleAction = (action: ProjectAction, project: ProjectOverviewItem) => {
     switch (action) {
       case "open":
-        router.push(`/projects/${project.id}/script`);
+        go(`/projects/${project.id}/script`);
         break;
       case "poster":
         setPosterTarget(project);
