@@ -26,6 +26,8 @@ export interface GraphScene {
   image?: string | null;
   description?: string | null;
   emotional_beat?: string | null;
+  /** narrative-memory facts established in this scene (Neo4j) */
+  facts?: string[];
 }
 
 export interface GraphResponse {
@@ -48,6 +50,8 @@ export interface GraphLink {
   label?: string | null; // rel_type, or "Scene N"
   info?: string | null; // relationship description, or scene description
   beat?: string | null; // scene emotional beat
+  /** facts the story established in this scene (narrative memory) */
+  facts?: string[];
 }
 
 export interface GraphData {
@@ -103,6 +107,7 @@ function shapeGraph(data?: GraphResponse): GraphData {
         label: `Scene ${s.number}`,
         info: s.description,
         beat: s.emotional_beat,
+        facts: s.facts ?? [],
       });
     }
   }

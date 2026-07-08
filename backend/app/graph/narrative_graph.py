@@ -91,6 +91,16 @@ class NarrativeGraph:
             ctx += " Knows: " + "; ".join(knows[:5]) + "."
         return ctx.strip()
 
+    def get_facts_by_scene(self) -> dict:
+        """{scene_number: [fact texts]} — feeds the Story graph's drawers."""
+        rows = self.client.run(
+            "MATCH (f:Fact {project_id:$pid})-[:ESTABLISHED_IN]->"
+            "(s:Scene {project_id:$pid}) "
+            "RETURN s.number AS num, collect(f.text) AS facts",
+            {"pid": self.project_id},
+        )
+        return {int(r["num"]): [x for x in (r["facts"] or []) if x] for r in rows}
+
     def check_contradiction(self, proposed_fact: str, scene_number: int) -> bool:
         existing = self.get_facts_before_scene(scene_number)
         pl = proposed_fact.lower()

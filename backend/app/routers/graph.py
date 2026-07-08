@@ -247,6 +247,14 @@ async def get_graphs(project_id: str, db: Session = Depends(get_db)):
             if lp.plate_image_url and n not in plate_by_scene:
                 plate_by_scene[n] = lp.plate_image_url
 
+    # narrative memory: facts established per scene (Neo4j, best-effort)
+    facts_by_scene: dict = {}
+    try:
+        from app.graph.narrative_graph import NarrativeGraph
+        facts_by_scene = NarrativeGraph(project_id=str(pid)).get_facts_by_scene()
+    except Exception:  # noqa: BLE001
+        pass
+
     scenes = []
     if script:
         # scenes store the screenplay's short cue names (REN); the cast stores
@@ -261,6 +269,7 @@ async def get_graphs(project_id: str, db: Session = Depends(get_db)):
                 "image": plate_by_scene.get(s.number),
                 "description": s.description,
                 "emotional_beat": s.emotional_beat,
+                "facts": facts_by_scene.get(s.number, []),
             }
             for s in scene_rows
         ]

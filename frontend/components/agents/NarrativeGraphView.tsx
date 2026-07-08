@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ElementType } from "react";
 import { forceCollide } from "d3";
 import { useGraph, type GraphLink, type GraphNode } from "@/hooks/useGraph";
+import { Brain } from "lucide-react";
 
 // force-graph hydrates our data: nodes gain sim coordinates, link endpoints
 // may be raw ids or the hydrated node objects
@@ -130,6 +131,23 @@ function ConnectionDrawer({
           <span className="inline-block rounded bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
             Beat · {link.beat}
           </span>
+        )}
+        {(link.facts?.length ?? 0) > 0 && (
+          <div className="rounded-lg border border-primary/20 bg-primary/[0.05] p-2.5">
+            <p className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-widest text-primary">
+              <Brain className="size-3" /> established here
+            </p>
+            <ul className="space-y-1">
+              {link.facts!.map((f, i) => (
+                <li key={i} className="text-[11px] leading-4 text-foreground/85">
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 text-[9px] text-muted-foreground">
+              from the narrative memory graph — later scenes stage against these
+            </p>
+          </div>
         )}
       </div>
     </div>
