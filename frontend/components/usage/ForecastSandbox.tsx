@@ -110,11 +110,15 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
   const runOut = new Date(Date.now() + runwayWeeks * 7 * MS_DAY);
   const beyondYear = runwayWeeks * 7 > 365;
 
-  // "what changed" vs the fixed baseline: my tier, my pace, $10
+  // "what changed" vs the fixed baseline: my tier, my pace, $10.
+  // Pace never changes HOW MANY episodes the budget buys — only WHEN it runs
+  // out — so the pill speaks in days when pace is the thing that moved.
   const baselineRunway = 10 / costFor(base.myTier);
+  const baselineDays = (baselineRunway / Math.max(base.pace, 0.01)) * 7;
   const dirty =
     tier !== base.myTier || Math.abs(pace - base.pace) > 0.01 || budget !== 10;
   const deltaEps = runwayEps - baselineRunway;
+  const deltaDays = Math.min(999, runwayWeeks * 7) - Math.min(999, baselineDays);
 
   const easedRunway = useEased(runwayEps, reduced);
   const easedWeekly = useEased(weeklySpend, reduced);
@@ -198,17 +202,19 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
 
   const spentPct = Math.min(100, (chart.spent / chart.cap) * 100);
 
+  const chipTitle =
+    "your spending rhythm across this range — history, unaffected by the sliders";
   const trendChip =
     base.direction === "accelerating" ? (
-      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">
+      <span title={chipTitle} className="cursor-help rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">
         ▲ pace accelerating
       </span>
     ) : base.direction === "slowing" ? (
-      <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-300">
+      <span title={chipTitle} className="cursor-help rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-300">
         ▼ pace slowing
       </span>
     ) : (
-      <span className="rounded-full bg-ok/10 px-2 py-0.5 text-[10px] text-ok">
+      <span title={chipTitle} className="cursor-help rounded-full bg-ok/10 px-2 py-0.5 text-[10px] text-ok">
         pace stable
       </span>
     );
@@ -258,11 +264,14 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
             key={`${pace}-${tier}-${budget}`}
             className={cn(
               "rounded-full px-2 py-0.5 text-[10px] motion-safe:animate-in motion-safe:fade-in-0",
-              deltaEps >= 0 ? "bg-ok/10 text-ok" : "bg-amber-500/10 text-amber-300"
+              (Math.abs(deltaEps) >= 0.05 ? deltaEps >= 0 : deltaDays >= 0)
+                ? "bg-ok/10 text-ok"
+                : "bg-amber-500/10 text-amber-300"
             )}
           >
-            {deltaEps >= 0 ? "+" : "−"}
-            {Math.abs(deltaEps).toFixed(1)} episodes vs your current
+            {Math.abs(deltaEps) >= 0.05
+              ? `${deltaEps >= 0 ? "+" : "−"}${Math.abs(deltaEps).toFixed(1)} episodes vs your current`
+              : `${deltaDays >= 0 ? "+" : "−"}${Math.abs(Math.round(deltaDays))} days of runway vs your current`}
           </span>
         )}
         <span className="ml-auto flex items-center gap-2">
@@ -338,9 +347,8 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
               className="w-full accent-violet-500"
             />
             <span
-              aria-hidden
               title="your current pace"
-              className="pointer-events-none absolute top-0 h-full w-px bg-ok/70"
+              className="absolute top-0 h-full w-[3px] cursor-help rounded-full bg-ok/80"
               style={{ left: `${((base.pace - 0.25) / 9.75) * 100}%` }}
             />
           </div>
@@ -371,10 +379,11 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
                 )}
               </button>
             ))}
-            <span className="self-center pl-1.5 pr-1 text-[9px] text-zinc-600">
-              • you&apos;re here
-            </span>
           </div>
+          <span className="mt-1.5 flex items-center gap-1.5 text-[10px] text-zinc-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-ok" />
+            you&apos;re here
+          </span>
         </div>
       </div>
 
@@ -417,7 +426,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
 
       {/* ── projection chart: history solid, projection dashed, one cap line,
        * one run-out marker. Hover anywhere for the readout. ── */}
-      <div className="relative mt-5">
+      <div className="relative mt-5 pb-4">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
@@ -477,27 +486,27 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
             strokeDasharray="4 3"
             vectorEffect="non-scaling-stroke"
           />
-          {/* the run-out moment — the hero of this chart */}
+          {/* run-out annotation, the classic way: a dashed drop line from the
+              crossing down to the axis, a crisp dot on the intersection */}
           {runwayWeeks <= chart.weeks && (
             <>
-              <circle cx={xProj(crossW)} cy={yOf(chart.cap)} r="4.5" fill="rgba(196,181,253,0.18)" />
-              <circle
-                cx={xProj(crossW)}
-                cy={yOf(chart.cap)}
-                r="2.4"
-                fill="#c4b5fd"
-                stroke="#12101c"
-                strokeWidth="1"
-              />
-              {/* leader down to its label */}
               <line
                 x1={xProj(crossW)}
                 x2={xProj(crossW)}
-                y1={yOf(chart.cap) + 2.5}
-                y2={yOf(chart.cap) + 6}
-                stroke="rgba(196,181,253,0.5)"
+                y1={yOf(chart.cap)}
+                y2={H - 5}
+                stroke="rgba(196,181,253,0.4)"
                 strokeWidth="1"
+                strokeDasharray="2 2"
                 vectorEffect="non-scaling-stroke"
+              />
+              <circle
+                cx={xProj(crossW)}
+                cy={yOf(chart.cap)}
+                r="2"
+                fill="#c4b5fd"
+                stroke="#12101c"
+                strokeWidth="1"
               />
             </>
           )}
@@ -527,11 +536,10 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
         </span>
         {runwayWeeks <= chart.weeks && !beyondYear && (
           <span
-            className="pointer-events-none absolute whitespace-nowrap text-[9px] font-medium leading-none text-violet-300"
+            className="pointer-events-none absolute bottom-0 whitespace-nowrap text-[9px] font-medium leading-none text-violet-300"
             style={{
-              left: `${Math.min(82, Math.max(8, (xProj(crossW) / W) * 100))}%`,
-              top: `calc(${(yOf(chart.cap) / H) * 100}% + 14px)`,
-              transform: "translateX(-50%)",
+              left: `${Math.min(84, Math.max(8, (xProj(crossW) / W) * 100))}%`,
+              transform: "translateX(-50%) translateY(120%)",
             }}
           >
             runs out ~{fmtDate(runOut)}
