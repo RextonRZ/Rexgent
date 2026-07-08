@@ -164,12 +164,14 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
     .join(" ");
   const crossW = Math.min(chart.weeks, runwayWeeks);
 
-  // ── ONE way to explore the future: hover the chart ──
+  // ── ONE way to explore the future: hover the chart (day resolution) ──
   const [hover, setHover] = useState<{
     xPct: number;
     date: Date;
     spend: number;
     eps: number | null; // null over history (episodes made only projects forward)
+    daily?: number; // predicted spend on that single day
+    runOut?: boolean; // hovering THE run-out point
   } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const onMove = (clientX: number) => {
@@ -187,15 +189,24 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
         eps: null,
       });
     } else {
-      const w = Math.min(
+      const rawW = Math.min(
         chart.weeks,
         Math.max(0, ((x - W * HIST_W) / (W * (1 - HIST_W))) * chart.weeks)
       );
+      // snap to whole days; the run-out day is magnetic (±1 day pulls onto it)
+      let day = Math.round(rawW * 7);
+      const runOutDay = Math.round(runwayWeeks * 7);
+      const onRunOut =
+        runwayWeeks <= chart.weeks && Math.abs(day - runOutDay) <= 1;
+      if (onRunOut) day = runOutDay;
+      const w = day / 7;
       setHover({
         xPct: (xProj(w) / W) * 100,
-        date: new Date(Date.now() + w * 7 * MS_DAY),
+        date: new Date(Date.now() + day * MS_DAY),
         spend: Math.min(chart.cap, chart.spent + w * weeklySpend),
         eps: w * pace,
+        daily: weeklySpend / 7,
+        runOut: onRunOut,
       });
     }
   };
@@ -357,7 +368,8 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
           <p className="text-[10px] uppercase tracking-widest text-zinc-500">
             Video quality
           </p>
-          <div className="mt-2 flex w-fit gap-0.5 rounded-lg border hairline bg-black/20 p-0.5">
+          <div className="mt-2 flex items-center gap-2.5">
+          <div className="flex w-fit gap-0.5 rounded-lg border hairline bg-black/20 p-0.5">
             {(["economy", "balanced", "premium"] as const).map((t) => (
               <button
                 key={t}
@@ -380,10 +392,11 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
               </button>
             ))}
           </div>
-          <span className="mt-1.5 flex items-center gap-1.5 text-[10px] text-zinc-500">
+          <span className="flex items-center gap-1.5 text-[10px] text-zinc-500">
             <span className="h-1.5 w-1.5 rounded-full bg-ok" />
             you&apos;re here
           </span>
+          </div>
         </div>
       </div>
 
@@ -517,7 +530,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
               x2={(hover.xPct / 100) * W}
               y1={0}
               y2={H}
-              stroke="rgba(167,139,250,0.35)"
+              stroke={hover.runOut ? "rgba(251,191,36,0.5)" : "rgba(167,139,250,0.35)"}
               strokeWidth="1"
               vectorEffect="non-scaling-stroke"
             />
@@ -549,14 +562,38 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
         {/* dark app-native tooltip, same chrome as the Trend chart */}
         {hover && (
           <div
-            className="pointer-events-none absolute -top-2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-white/10 bg-[#161122] px-2.5 py-1.5 shadow-lg"
+            className={cn(
+              "pointer-events-none absolute -top-2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border px-2.5 py-1.5 shadow-lg",
+              hover.runOut
+                ? "border-amber-400/40 bg-[#1c1420]"
+                : "border-white/10 bg-[#161122]"
+            )}
             style={{ left: `${hover.xPct}%` }}
           >
-            <p className="text-[10px] text-zinc-200">{fmtDate(hover.date)}</p>
-            <p className="text-[10px] tabular-nums text-zinc-400">
-              {fmtUsd(hover.spend)} spent
-              {hover.eps != null && ` · ${hover.eps.toFixed(1)} episodes made`}
-            </p>
+            {hover.runOut ? (
+              <>
+                <p className="text-[10px] font-semibold text-amber-300">
+                  ⚠ budget runs out here
+                </p>
+                <p className="text-[10px] text-zinc-300">{fmtDate(hover.date)}</p>
+                <p className="text-[10px] tabular-nums text-zinc-400">
+                  cap {fmtUsd(chart.cap)} reached · {hover.eps?.toFixed(1)} episodes made
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[10px] text-zinc-200">{fmtDate(hover.date)}</p>
+                <p className="text-[10px] tabular-nums text-zinc-400">
+                  {fmtUsd(hover.spend)} spent
+                  {hover.eps != null && ` · ${hover.eps.toFixed(1)} episodes made`}
+                </p>
+                {hover.eps != null && hover.daily != null && (
+                  <p className="text-[10px] tabular-nums text-zinc-500">
+                    ≈ {fmtUsd(hover.daily)} predicted that day
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
