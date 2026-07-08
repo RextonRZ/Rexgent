@@ -74,6 +74,8 @@ async def ensure_location_plates(db: Session, project_id) -> int:
     for idx, loc in enumerate(missing, start=1):
         emit("casting.plate.started",
              {"kind": "location", "key": loc["location_key"], "index": idx, "total": len(missing)}, pid)
+        tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
+                   index=idx, total=len(missing))
         desc = strip_character_names(loc["description"], char_names) or "interior room"
         prompt = f"{desc} background plate"
         if tags:
@@ -86,6 +88,8 @@ async def ensure_location_plates(db: Session, project_id) -> int:
              {"kind": "location", "key": loc["location_key"], "index": idx, "total": len(missing)}, pid)
 
     db.commit()
+    tool_event(pid, "characters", "generate_plates", "succeeded", agent="Casting",
+               artifact=f"{len(missing)} location plates")
     return len(missing)
 
 

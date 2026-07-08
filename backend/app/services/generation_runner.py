@@ -381,9 +381,12 @@ class GenerationRunner:
         for attempt in range(MAX_RETRIES + 1):
             try:
                 ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
+                tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
+                           index=job.completed_shots + 1, total=job.total_shots)
                 prompt = await self._craft_prompt(
                     shot, char_by_name, scene_setting, prev_action, next_action,
                     foreground=foreground)
+                tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
                 if is_wan:
                     task_id = await self.qwen.generate_video_wan(
                         prompt=prompt, duration=shot.estimated_duration_seconds,

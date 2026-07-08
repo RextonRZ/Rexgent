@@ -45,9 +45,12 @@ async def parse_script(
 
     emit("stage:progress", {"stage": "script", "status": "started",
          "agent": "Screenwriter", "label": "Reading your imported script"}, project_id)
+    from app.websocket.tool_events import tool_run
     structurer = ScriptStructurer()
     with track_project(project_id, db):
-        structured = await structurer.structure(raw_text)
+        with tool_run(project_id, "script", "structure_scenes", "Screenwriter") as tb:
+            structured = await structurer.structure(raw_text)
+            tb["artifact"] = f"{len(structured.get('scenes', []))} scenes"
     emit("stage:progress", {"stage": "script", "status": "completed", "agent": "Screenwriter",
          "label": f"Imported: {len(structured.get('scenes', []))} scene(s) found"}, project_id)
 
@@ -79,6 +82,9 @@ async def parse_script(
 
     db.commit()
     db.refresh(script)
+    from app.websocket.tool_events import tool_event
+    tool_event(project_id, "script", "write_script_db", "succeeded",
+               agent="Screenwriter", artifact=f"{len(scene_uuids)} rows")
 
     sync_scenes(str(script.project_id), structured, scene_uuids=scene_uuids)
 
@@ -168,6 +174,9 @@ async def generate_script(
             pass
     db.commit()
     db.refresh(script)
+    from app.websocket.tool_events import tool_event
+    tool_event(project_id, "script", "write_script_db", "succeeded",
+               agent="Screenwriter", artifact=f"{len(scene_uuids)} rows")
 
     sync_scenes(str(script.project_id), structured, scene_uuids=scene_uuids)
 
@@ -233,9 +242,14 @@ async def analyze_script(script_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Script has no structured data")
 
     # Call the shared tool registry — same code path the MCP server serves.
+    from app.websocket.tool_events import tool_run
     with track_project(script.project_id, db):
-        gaps = await get_tool("plot_gap_detector")({"script": script.structured_json})
-        ending = await get_tool("ending_engine")({"script": script.structured_json})
+        with tool_run(script.project_id, "script", "plot_gap_check", "Story Analyst") as tb:
+            gaps = await get_tool("plot_gap_detector")({"script": script.structured_json})
+            tb["artifact"] = f"{len(gaps.get('flags', []))} flags"
+        with tool_run(script.project_id, "script", "ending_lab", "Story Analyst") as tb:
+            ending = await get_tool("ending_engine")({"script": script.structured_json})
+            tb["artifact"] = f"{len((ending or {}).get('variants', []) or (ending or {}).get('options', []) or [])} endings" if isinstance(ending, dict) else None
 
     # Persist plot flags so they can be acknowledged/dismissed later.
     # Re-running analysis replaces any previously stored flags for this script.

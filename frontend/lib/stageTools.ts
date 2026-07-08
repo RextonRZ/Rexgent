@@ -1,7 +1,10 @@
 import {
   Clapperboard,
+  GitBranch,
   Scale,
+  Search,
   Share2,
+  Wand2,
   Database,
   Film,
   Image,
@@ -60,6 +63,8 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
   script: [
     { key: "llm_write", icon: Sparkles, kind: "llm" },
     { key: "narrative_judge", icon: Scale, kind: "validator" },
+    { key: "plot_gap_check", icon: Search, kind: "validator" },
+    { key: "ending_lab", icon: GitBranch, kind: "llm" },
     { key: "structure_scenes", icon: ListTree, kind: "llm" },
     { key: "write_script_db", icon: Database, kind: "db" },
   ],
@@ -80,6 +85,7 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
     { key: "budget_allocate", icon: Wallet, kind: "service" },
     { key: "synth_voices", icon: Volume2, kind: "media" },
     { key: "fit_durations", icon: Timer, kind: "service" },
+    { key: "prompt_craft", icon: Wand2, kind: "llm" },
     { key: "dispatch_video", icon: Film, kind: "media" },
     { key: "verify_face", icon: ShieldCheck, kind: "validator" },
     { key: "self_correct", icon: RefreshCw, kind: "service" },

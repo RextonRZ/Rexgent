@@ -164,9 +164,13 @@ async def upload_face(
     )
     image_url = oss.upload_bytes(content, oss_key, content_type="image/jpeg")
 
+    from app.websocket.tool_events import tool_run
     embedder = FaceEmbedder()
     with track_project(character.project_id, db):
-        result = await embedder.extract(image_bytes=content, image_url=image_url)
+        with tool_run(character.project_id, "characters", "face_lock", "Casting") as tb:
+            result = await embedder.extract(image_bytes=content, image_url=image_url)
+            tb["artifact"] = ("identity locked" if result.get("vector")
+                              else "no face detected")
     description = result["description"]
 
     character.reference_image_url = image_url
@@ -186,8 +190,10 @@ async def generate_appearance(character_id: str, db: Session = Depends(get_db)):
     if not character:
         raise HTTPException(status_code=404, detail="Character not found")
 
+    from app.websocket.tool_events import tool_run
     generator = AppearanceGenerator()
     with track_project(character.project_id, db):
+      with tool_run(character.project_id, "characters", "profile_cast", "Casting") as _tb:
         appearance = await generator.generate(
             character_name=character.name,
             role=character.role or "SUPPORTING",

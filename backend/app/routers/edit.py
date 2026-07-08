@@ -64,6 +64,9 @@ async def regen_clip(request: RegenRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Clip or flag not found")
 
     job = db.query(GenerationJob).filter(GenerationJob.id == clip.job_id).first()
+    from app.websocket.tool_events import tool_event
+    if job:
+        tool_event(str(job.project_id), "generate", "fix_take", "started", agent="Editor")
     rewriter = RegenPromptRewriter()
     if job:
         from app.services.usage_tracker import track_project
@@ -109,6 +112,9 @@ async def regen_clip(request: RegenRequest, db: Session = Depends(get_db)):
     flag.status = "REGENERATING"
     db.commit()
     db.refresh(new_clip)
+    if job:
+        tool_event(str(job.project_id), "generate", "fix_take", "succeeded",
+                   agent="Editor", artifact="take re-rendered")
 
     return {
         "new_clip_id": str(new_clip.id),

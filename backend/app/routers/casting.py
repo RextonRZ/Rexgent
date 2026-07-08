@@ -115,10 +115,13 @@ async def regenerate_variant(variant_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Variant not found")
     char = db.query(Character).filter(Character.id == v.character_id).first()
     prompt = _char_plate_prompt(char, v.outfit_description or "")
-    url, vector = await PlateGenerator().generate_and_store_plate(
-        str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
-        negative_prompt=CHAR_PLATE_NEGATIVE,
-        base_image_url=char.reference_image_url, prompt_extend=False)
+    from app.websocket.tool_events import tool_run
+    with tool_run(str(char.project_id), "characters", "generate_plates", "Casting") as tb:
+        url, vector = await PlateGenerator().generate_and_store_plate(
+            str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
+            negative_prompt=CHAR_PLATE_NEGATIVE,
+            base_image_url=char.reference_image_url, prompt_extend=False)
+        tb["artifact"] = f"{char.name} {v.label} replated"
     v.plate_image_url, v.face_vector, v.plate_status = url, vector, "ai_generated"
     # never clobber an uploaded face — only seed identity if none exists yet
     if v.is_default and not char.reference_image_url:
@@ -173,6 +176,9 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
         db.flush()
         variants = [v]
 
+    from app.websocket.tool_events import tool_event
+    tool_event(project_id, "characters", "generate_plates", "started",
+               agent="Casting", total=len(variants))
     pg = PlateGenerator(db)
     for v in variants:
         prompt = _char_plate_prompt(c, v.outfit_description or "")
@@ -184,6 +190,8 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
         # seed identity from the default plate only when no face exists yet
         if v.is_default and not c.reference_image_url:
             c.reference_image_url, c.face_vector, c.plate_status = url, vector, "ai_generated"
+    tool_event(project_id, "characters", "generate_plates", "succeeded",
+               agent="Casting", artifact=f"{len(variants)} plates on {c.name}")
     if not c.voice_id:
         assign_voice(c, 0)
     db.commit()
@@ -207,6 +215,9 @@ def set_voice(character_id: str, voice: str = "Cherry", db: Session = Depends(ge
     c.voice_id = voice if voice in ALL_IDS else "Cherry"
     c.voice_model, c.voice_source = get_settings().qwen_tts_designed_model, "preset"
     db.commit()
+    from app.websocket.tool_events import tool_event
+    tool_event(str(c.project_id), "characters", "voice_assign", "succeeded",
+               agent="Casting", artifact=f"{c.name} → {c.voice_id}")
     return {"voice_id": c.voice_id}
 
 
@@ -231,11 +242,17 @@ async def clone_voice(character_id: str, file: UploadFile = File(...), db: Sessi
     oss = OSSManager(settings)
     sample_key = oss.get_project_path(str(c.project_id), "voice_samples", f"{c.name}_sample.wav")
     sample_url = oss.upload_bytes(content, sample_key, content_type=ctype)
+    from app.websocket.tool_events import tool_event
+    tool_event(str(c.project_id), "characters", "voice_assign", "started", agent="Casting")
     try:
         voice = await QwenClient(settings).enroll_voice(
             content, preferred_name=c.name, content_type=ctype)
     except Exception as e:  # noqa: BLE001
+        tool_event(str(c.project_id), "characters", "voice_assign", "failed",
+                   agent="Casting", error=str(e))
         raise HTTPException(status_code=502, detail=f"Voice enrollment failed: {e}")
+    tool_event(str(c.project_id), "characters", "voice_assign", "succeeded",
+               agent="Casting", artifact=f"{c.name} voice cloned")
     c.voice_id, c.voice_model, c.voice_source = voice, settings.qwen_tts_cloned_model, "cloned"
     c.voice_sample_url = sample_url
     db.commit()
