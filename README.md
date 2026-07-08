@@ -75,6 +75,7 @@ The #1 quality problem in AI video is drift — faces, outfits, and rooms that c
 - **Deterministic seeds** per shot (same shot, same seed — re-renders differ only by what you changed)
 - **Continuity scoring** after every clip: real ArcFace embeddings (insightface) + a Qwen-VL outfit/background check; weak clips are flagged for review, never silently shipped
 - **Provenance on screen**: every clip tile shows the exact reference images that conditioned it
+- **Narrative memory the agent reads back (Neo4j)**: the set dresser's prop-state changes are written into a knowledge graph as facts known by the characters present — and before staging every scene, the Director recalls everything the story established earlier so shots can't contradict canon. Every agent verdict is mirrored into the same graph.
 
 ---
 

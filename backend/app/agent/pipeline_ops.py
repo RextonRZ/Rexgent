@@ -164,12 +164,24 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             _progress(script.project_id, "storyboard", "update", "Director",
                       f"Scene {scene.number}: staging shots and set dressing",
                       index=scene_index, total=len(scenes))
+            scene_chars = [char_map.get(str(n).upper(), {"name": n}) for n in (scene.characters_json or [])]
+            # ── narrative memory READ: before staging this scene, the Director
+            # recalls everything the story has already established (Neo4j) ──
+            from app.graph.sync import recall_facts_before_scene, sync_scene_facts
+            tool_event(script.project_id, "storyboard", "memory_recall", "started",
+                       agent="Director", index=scene_index, total=len(scenes))
+            established = recall_facts_before_scene(str(script.project_id), scene.number)
+            tool_event(script.project_id, "storyboard", "memory_recall", "succeeded",
+                       agent="Director",
+                       artifact=(f"{len(established)} facts recalled" if established
+                                 else "no prior facts"))
             tool_event(script.project_id, "storyboard", "shot_breakdown", "started",
                        agent="Director", index=scene_index, total=len(scenes))
-            scene_chars = [char_map.get(str(n).upper(), {"name": n}) for n in (scene.characters_json or [])]
             shots = await gen.generate_for_scene(
                 {"scene_number": scene.number, "heading": scene.heading,
-                 "description": scene.description, "emotional_beat": scene.emotional_beat},
+                 "description": scene.description, "emotional_beat": scene.emotional_beat,
+                 # what earlier scenes established — shots must not contradict it
+                 "established_facts": established},
                 scene_chars,
                 max_shots=shots_per_scene,
                 shot_seconds=shot_seconds,
@@ -186,6 +198,12 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     [{"shot_number": sd.get("shot_number"), "action": sd.get("action"),
                       "dialogue": sd.get("dialogue")} for sd in shots])
                 dressed += 1
+                # ── narrative memory WRITE: prop-state changes become Facts,
+                # known by everyone in the scene — recalled by later scenes ──
+                sync_scene_facts(
+                    str(script.project_id), scene.number,
+                    (scene.set_json or {}).get("state_changes") or [],
+                    [c.get("name") for c in scene_chars if c.get("name")])
             except Exception:  # noqa: BLE001
                 pass
             for sd in shots:

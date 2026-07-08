@@ -59,6 +59,16 @@ class NarrativeGraph:
             {"pid": self.project_id, "a": from_char, "b": to_char, "t": rel_type, "s": strength},
         )
 
+    def record_agent_decision(self, agent: str, rationale: str, confidence: float) -> None:
+        """Every crew verdict lands in the graph — the reporter mirrors here."""
+        self.client.write(
+            "MERGE (a:Agent {project_id:$pid, name:$agent}) "
+            "CREATE (d:Decision {project_id:$pid, rationale:$r, confidence:$c, at:timestamp()}) "
+            "MERGE (a)-[:DECIDED]->(d)",
+            {"pid": self.project_id, "agent": agent,
+             "r": (rationale or "")[:300], "c": float(confidence or 0.0)},
+        )
+
     # ── Reads (real Cypher) ───────────────────────────────────
     def get_facts_before_scene(self, scene_number: int, character: str | None = None) -> list[str]:
         cypher, params = facts_before_scene_query(self.project_id, scene_number, character)

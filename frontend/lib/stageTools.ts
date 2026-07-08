@@ -1,4 +1,5 @@
 import {
+  Brain,
   Clapperboard,
   GitBranch,
   Scale,
@@ -77,6 +78,7 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
     { key: "write_cast_db", icon: Database, kind: "db" },
   ],
   storyboard: [
+    { key: "memory_recall", icon: Brain, kind: "db" },
     { key: "shot_breakdown", icon: Clapperboard, kind: "llm" },
     { key: "set_design", icon: Lamp, kind: "llm" },
     { key: "write_shots_db", icon: Database, kind: "db" },

@@ -46,3 +46,49 @@ def sync_relationships(project_id: str, relationships: list, name_by_id: dict) -
             )
     except Exception as e:  # noqa: BLE001
         logger.warning(f"Neo4j relationship sync skipped: {e}")
+
+
+def facts_from_state_changes(scene_number: int, state_changes: list,
+                             characters: list) -> list[dict]:
+    """Pure: the set dresser's prop-state changes become graph Facts, known
+    by everyone present in the scene."""
+    facts = []
+    for i, ch in enumerate(state_changes or []):
+        state = ch.get("state") if isinstance(ch, dict) else None
+        if not state:
+            continue
+        facts.append({
+            "fact_id": f"s{scene_number}-state{i}",
+            "text": str(state),
+            "scene_number": scene_number,
+            "category": "prop_state",
+            "known_by": [str(c) for c in (characters or []) if c],
+        })
+    return facts
+
+
+def sync_scene_facts(project_id: str, scene_number: int, state_changes: list,
+                     characters: list) -> int:
+    """WRITE side of narrative memory: persist a scene's established facts."""
+    try:
+        facts = facts_from_state_changes(scene_number, state_changes, characters)
+        if not facts:
+            return 0
+        ng = NarrativeGraph(project_id=project_id)
+        for f in facts:
+            ng.record_fact(**f)
+        return len(facts)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Neo4j fact sync skipped: {e}")
+        return 0
+
+
+def recall_facts_before_scene(project_id: str, scene_number: int) -> list[str]:
+    """READ side: everything the story has established before this scene —
+    consulted by the Director while staging it."""
+    try:
+        ng = NarrativeGraph(project_id=project_id)
+        return ng.get_facts_before_scene(scene_number)[:6]
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Neo4j recall skipped: {e}")
+        return []
