@@ -154,7 +154,8 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
     # WHERE the production actually stands — without this the model only sees
     # the script digest + the judge's old critique and answers every "what's
     # next" with "refine the ending", even when the script stage is long done.
-    from app.services.pipeline_progress import STAGE_PAGES, next_stage, stage_progress
+    from app.services.pipeline_progress import (STAGE_PAGES, next_stage,
+                                                 next_step_card, stage_progress)
     progress = stage_progress(db, project.id)
     upcoming = next_stage(progress)
     context = {
@@ -198,7 +199,8 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
     from app.agents.reporter import report_agent
     report_agent(db, project_id, agent="Showrunner", stage="chat",
                  decision={"question": question}, rationale=answer, confidence=1.0)
-    return {"answer": answer}
+    # structured guidance rides along so the chat can render a go-there button
+    return {"answer": answer, "next_step": next_step_card(progress)}
 
 
 @router.patch("/{project_id}/auto-clarify")

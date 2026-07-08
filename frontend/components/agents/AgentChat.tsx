@@ -210,6 +210,14 @@ interface BudgetFit {
   suggested_cap: number;
 }
 
+/** Deterministic guidance from the chat endpoint: where to go, what to do. */
+interface NextStep {
+  stage: string;
+  path: string;
+  label: string;
+  hint: string;
+}
+
 export function AgentChat({ projectId }: { projectId: string }) {
   const router = useRouter();
   const { messages, running, pushLocal } = useAgentChat(projectId);
@@ -223,6 +231,7 @@ export function AgentChat({ projectId }: { projectId: string }) {
   const [awaitingCasting, setAwaitingCasting] = useState(false);
   const [budgetFit, setBudgetFit] = useState<BudgetFit | null>(null);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [nextStep, setNextStep] = useState<NextStep | null>(null);
 
   // decision moments arrive as events and park as cards until acted on
   useEffect(() => {
@@ -258,7 +267,7 @@ export function AgentChat({ projectId }: { projectId: string }) {
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, running.length, awaitingCasting, budgetFit, exportUrl]);
+  }, [messages.length, running.length, awaitingCasting, budgetFit, exportUrl, nextStep]);
 
   const ask = async () => {
     const q = question.trim();
@@ -267,8 +276,12 @@ export function AgentChat({ projectId }: { projectId: string }) {
     setQuestion("");
     setThinking(true);
     try {
-      // the answer lands as a persistent Showrunner report over the socket
-      await api.post(`/api/agent/${projectId}/chat`, { question: q });
+      // the answer lands as a persistent Showrunner report over the socket;
+      // the response carries deterministic next-step guidance for the card
+      const { data } = await api.post(`/api/agent/${projectId}/chat`, {
+        question: q,
+      });
+      setNextStep(data?.next_step ?? null);
     } catch {
       pushLocal({
         agent: "Showrunner",
@@ -332,6 +345,36 @@ export function AgentChat({ projectId }: { projectId: string }) {
         )}
 
         <ClarificationCard projectId={projectId} />
+
+        {nextStep && (
+          <ActionCard
+            title={nextStep.stage === "done" ? "All stages complete" : "Next step"}
+          >
+            <p className="text-[11px] leading-4 text-foreground/90">
+              {nextStep.hint}
+            </p>
+            <div className="flex gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 flex-1 text-xs"
+                onClick={() => setNextStep(null)}
+              >
+                Dismiss
+              </Button>
+              <Button
+                size="sm"
+                className="h-7 flex-1 text-xs"
+                onClick={() => {
+                  setNextStep(null);
+                  router.push(`/projects/${projectId}/${nextStep.path}`);
+                }}
+              >
+                Go to {nextStep.label} →
+              </Button>
+            </div>
+          </ActionCard>
+        )}
 
         {awaitingCasting && (
           <ActionCard title="Casting ready for review">

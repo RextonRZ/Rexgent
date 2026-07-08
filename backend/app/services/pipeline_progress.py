@@ -14,6 +14,34 @@ STAGE_PAGES = {
     "export": "the Edit & Export page",
 }
 
+STAGE_LABELS = {
+    "script": "Script",
+    "characters": "Characters",
+    "storyboard": "Storyboard",
+    "generate": "Generate",
+    "export": "Edit & Export",
+}
+
+# what to actually DO there — shown on the chat's go-to-page card
+STAGE_HINTS = {
+    "script": "Write or import your script, or flip Full Auto and let the agent write, judge and revise it for you.",
+    "characters": "Extract the cast from the script, then generate plates to lock each face, costume and location.",
+    "storyboard": "Generate the storyboard to break every scene into shots with set dressing.",
+    "generate": "Start generation. The plan is fitted to your spend cap, hook shots protected on the premium tier.",
+    "export": "Arrange the cut, pick music, then render the final vertical episode with voices and captions.",
+}
+
+
+def next_step_card(progress: dict) -> dict:
+    """Structured guidance for the chat UI: where to go and what to do there.
+    Deterministic — computed from artifacts, never from the LLM."""
+    stage = next_stage(progress)
+    if stage is None:
+        return {"stage": "done", "path": "export", "label": "Edit & Export",
+                "hint": "All stages are complete. Rewatch the episode or re-render a new cut."}
+    return {"stage": stage, "path": stage, "label": STAGE_LABELS[stage],
+            "hint": STAGE_HINTS[stage]}
+
 
 def stage_progress(db, project_id) -> dict:
     from app.models.script import Script, Scene
