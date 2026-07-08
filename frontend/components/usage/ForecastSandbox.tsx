@@ -201,15 +201,15 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
   const trendChip =
     base.direction === "accelerating" ? (
       <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">
-        ▲ accelerating
+        ▲ pace accelerating
       </span>
     ) : base.direction === "slowing" ? (
       <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-300">
-        ▼ slowing
+        ▼ pace slowing
       </span>
     ) : (
       <span className="rounded-full bg-ok/10 px-2 py-0.5 text-[10px] text-ok">
-        stable
+        pace stable
       </span>
     );
 
@@ -262,7 +262,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
             )}
           >
             {deltaEps >= 0 ? "+" : "−"}
-            {Math.abs(deltaEps).toFixed(1)} episodes vs my mix
+            {Math.abs(deltaEps).toFixed(1)} episodes vs your current
           </span>
         )}
         <span className="ml-auto flex items-center gap-2">
@@ -365,14 +365,14 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
                 {t}
                 {base.myTier === t && (
                   <span
-                    title="your current mix"
+                    title="you’re here"
                     className="absolute -top-0.5 right-1 h-1 w-1 rounded-full bg-ok"
                   />
                 )}
               </button>
             ))}
             <span className="self-center pl-1.5 pr-1 text-[9px] text-zinc-600">
-              • your mix
+              • you&apos;re here
             </span>
           </div>
         </div>
@@ -399,7 +399,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
           {
             label: "Episodes per $10",
             value: `≈ ${(10 / costEp).toFixed(1)}`,
-            sub: tier === base.myTier ? "on your mix" : `on ${tier}`,
+            sub: tier === base.myTier ? "on your current mix" : `on ${tier}`,
           },
         ].map((c) => (
           <div
@@ -436,18 +436,31 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
             strokeWidth="1"
             vectorEffect="non-scaling-stroke"
           />
-          {/* budget cap */}
+          <defs>
+            {/* same finish as the Trend chart's area fill */}
+            <linearGradient id="runwayFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.25} />
+              <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          {/* budget cap: thin, muted, SOLID — never confusable with the
+              dashed projection */}
           <line
             x1={0}
             x2={W}
             y1={yOf(chart.cap)}
             y2={yOf(chart.cap)}
-            stroke="rgba(161,161,170,0.35)"
+            stroke="rgba(161,161,170,0.30)"
             strokeWidth="1"
-            strokeDasharray="1.5 2.5"
             vectorEffect="non-scaling-stroke"
           />
-          {/* history + projection */}
+          {/* history: gradient wash under a solid line */}
+          {chart.hist.length > 1 && (
+            <path
+              d={`${histPath} L ${(W * HIST_W).toFixed(1)} ${H - 5} L 0 ${H - 5} Z`}
+              fill="url(#runwayFill)"
+            />
+          )}
           <path
             d={histPath}
             fill="none"
@@ -455,24 +468,38 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
             strokeWidth="1.5"
             vectorEffect="non-scaling-stroke"
           />
+          {/* projection: clearly visible violet dashes */}
           <path
             d={projPath}
             fill="none"
             stroke="#a78bfa"
-            strokeWidth="1.5"
-            strokeDasharray="3 3"
+            strokeWidth="1.8"
+            strokeDasharray="4 3"
             vectorEffect="non-scaling-stroke"
           />
-          {/* the single run-out marker */}
+          {/* the run-out moment — the hero of this chart */}
           {runwayWeeks <= chart.weeks && (
-            <circle
-              cx={xProj(crossW)}
-              cy={yOf(chart.cap)}
-              r="2"
-              fill="#a78bfa"
-              stroke="#12101c"
-              strokeWidth="0.8"
-            />
+            <>
+              <circle cx={xProj(crossW)} cy={yOf(chart.cap)} r="4.5" fill="rgba(196,181,253,0.18)" />
+              <circle
+                cx={xProj(crossW)}
+                cy={yOf(chart.cap)}
+                r="2.4"
+                fill="#c4b5fd"
+                stroke="#12101c"
+                strokeWidth="1"
+              />
+              {/* leader down to its label */}
+              <line
+                x1={xProj(crossW)}
+                x2={xProj(crossW)}
+                y1={yOf(chart.cap) + 2.5}
+                y2={yOf(chart.cap) + 6}
+                stroke="rgba(196,181,253,0.5)"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+            </>
           )}
           {/* hover crosshair */}
           {hover && (
@@ -488,20 +515,23 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
           )}
         </svg>
 
-        {/* cap + run-out labels, muted, anchored to the chart */}
+        {/* labels: cap ABOVE the line at the right edge, run-out BELOW the
+            marker's leader — clamped so their boxes can never meet */}
         <span
-          className="pointer-events-none absolute right-1 text-[9px] text-zinc-500"
-          style={{ top: `${(yOf(chart.cap) / H) * 100}%`, transform: "translateY(-110%)" }}
+          className="pointer-events-none absolute right-1 whitespace-nowrap text-[9px] leading-none text-zinc-500"
+          style={{
+            top: `calc(${(yOf(chart.cap) / H) * 100}% - 11px)`,
+          }}
         >
           budget cap {fmtUsd(chart.cap)}
         </span>
         {runwayWeeks <= chart.weeks && !beyondYear && (
           <span
-            className="pointer-events-none absolute text-[9px] text-violet-300"
+            className="pointer-events-none absolute whitespace-nowrap text-[9px] font-medium leading-none text-violet-300"
             style={{
-              left: `${(xProj(crossW) / W) * 100}%`,
-              top: `${(yOf(chart.cap) / H) * 100}%`,
-              transform: "translate(-50%, 40%)",
+              left: `${Math.min(82, Math.max(8, (xProj(crossW) / W) * 100))}%`,
+              top: `calc(${(yOf(chart.cap) / H) * 100}% + 14px)`,
+              transform: "translateX(-50%)",
             }}
           >
             runs out ~{fmtDate(runOut)}

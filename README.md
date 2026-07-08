@@ -19,7 +19,7 @@ Rexgent is an **autonomous AI showrunner** built on **Qwen Cloud**. Type a one-l
 7. Generation runs live: every clip shows its **reference provenance** (the exact plates that conditioned it) and a continuity score from real ArcFace embeddings
 8. The **crew workflow graph** shows the machinery live: every stage expands into its real tools — model calls, DB writes, validators — ticking one by one, with artifact labels ("8 shots", "5 plates") on the edges
 9. Export renders itself: dialogue placed on the exact shots that speak it, BGM ducking under speech, captions burned in, native 1080×1920 or 1920×1080 per the chosen format
-10. One premise in → one watchable episode out, with a production report proving it stayed under budget
+10. One premise in → one watchable episode out, with a production report proving it stayed under budget — landing on a **cinematic dashboard**: a poster wall with hover previews and a recap shelf that replays your latest episode in a film frame
 11. **Usage & Analytics** proves the routing thesis across every drama: share of language work on cheap tiers, dollars saved vs all-premium, per-model usage down to seconds/images/characters, continuity + retry reliability — plus a **budget-runway planner**: drag your pace, flip video quality between economy and premium, top up the budget, and watch the runway, run-out date and projection respond live
 
 ---
