@@ -7,17 +7,16 @@ import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { fmtUsd } from "@/components/usage/usageCharts";
 import type { UsageAnalytics } from "@/hooks/useUsageAnalytics";
 
-/** ── the budget-planning sandbox ─────────────────────────────────────────
- * Hero = runway: how long the budget lasts at the chosen pace. Every control
- * (pace slider, tier toggle, budget input, future scrubber) recomputes the
- * whole section live. Numbers come from simple averages over this range's
- * real spend — clamped and smoothed so one burst day can't produce nonsense.
- * The math is deliberately never narrated to the user.
+/** ── the budget-runway planner ───────────────────────────────────────────
+ * Hero = runway: how long the remaining budget lasts at the chosen pace.
+ * Three levers (pace, video quality, budget) recompute everything live.
+ * Numbers are simple averages over this range's real spend, clamped so a
+ * burst day can't produce nonsense — and the math is never narrated.
  */
 
-// real per-second video rates — the tier lever maps to actual routing
+// real per-second video rates — the quality lever maps to actual routing
 const RATE = { economy: 0.108, balanced: 0.129, premium: 0.15 };
-type Tier = "actual" | keyof typeof RATE;
+type Tier = keyof typeof RATE;
 
 const MS_DAY = 86_400_000;
 const MAX_WEEKS = 26;
@@ -65,6 +64,8 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
     const hh = data.reliability.by_tier["happyhorse"]?.clips ?? 0;
     const wr = wan + hh > 0 ? wan / (wan + hh) : 0;
     const blendedRate = wr * RATE.premium + (1 - wr) * RATE.economy;
+    // which tier the user's ACTUAL mix is closest to
+    const myTier: Tier = wr > 0.66 ? "premium" : wr < 0.33 ? "economy" : "balanced";
     const spanDays = Math.max(1, data.trend.length);
     const pace = Math.min(
       10,
@@ -76,30 +77,30 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
     if (active.length >= 4) {
       const half = Math.floor(active.length / 2);
       const early = active.slice(0, half).reduce((s, d) => s + d.usd, 0) / half;
-      const late =
-        active.slice(-half).reduce((s, d) => s + d.usd, 0) / half;
+      const late = active.slice(-half).reduce((s, d) => s + d.usd, 0) / half;
       if (early > 0) {
         const r = late / early;
         direction = r > 1.15 ? "accelerating" : r < 0.85 ? "slowing" : "stable";
       }
     }
-    return { totalUsd, costPerEpisode, videoShare, blendedRate, pace, direction };
+    return { costPerEpisode, videoShare, blendedRate, myTier, pace, direction };
   }, [data]);
 
   // ── the levers ──
   const [pace, setPace] = useState(base.pace);
-  const [tier, setTier] = useState<Tier>("actual");
+  const [tier, setTier] = useState<Tier>(base.myTier);
   const [budget, setBudget] = useState(10);
   const [editingBudget, setEditingBudget] = useState(false);
-  const [scrubWeeks, setScrubWeeks] = useState<number | null>(null);
-  const [hoverCard, setHoverCard] = useState<"episode" | "week" | "ten" | null>(null);
   useEffect(() => setPace(base.pace), [base.pace]);
+  useEffect(() => setTier(base.myTier), [base.myTier]);
 
   const costFor = (t: Tier) => {
-    const rate = t === "actual" ? base.blendedRate : RATE[t];
     const video = base.costPerEpisode * base.videoShare;
     const rest = base.costPerEpisode - video;
-    return Math.max(0.05, rest + video * (rate / (base.blendedRate || RATE.economy)));
+    return Math.max(
+      0.05,
+      rest + video * (RATE[t] / (base.blendedRate || RATE.economy))
+    );
   };
 
   const costEp = costFor(tier);
@@ -109,80 +110,93 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
   const runOut = new Date(Date.now() + runwayWeeks * 7 * MS_DAY);
   const beyondYear = runwayWeeks * 7 > 365;
 
-  // "what changed" vs the fixed baseline: my actual mix, my pace, $10
-  const baselineRunway = 10 / costFor("actual");
-  const dirty = tier !== "actual" || Math.abs(pace - base.pace) > 0.01 || budget !== 10;
+  // "what changed" vs the fixed baseline: my tier, my pace, $10
+  const baselineRunway = 10 / costFor(base.myTier);
+  const dirty =
+    tier !== base.myTier || Math.abs(pace - base.pace) > 0.01 || budget !== 10;
   const deltaEps = runwayEps - baselineRunway;
 
   const easedRunway = useEased(runwayEps, reduced);
   const easedWeekly = useEased(weeklySpend, reduced);
   const easedEp = useEased(costEp, reduced);
 
-  // ── chart geometry: cumulative history + projected line + cap ──
+  // ── chart: cumulative history (solid) + projection (dashed) + cap ──
   const chart = useMemo(() => {
     let acc = 0;
     const hist = data.trend.map((d) => {
       acc += d.usd;
-      return acc;
+      return { date: d.date, spend: acc };
     });
     const spent = acc;
     const cap = spent + budget;
     const weeks = Math.min(MAX_WEEKS, Math.max(runwayWeeks * 1.2, 4));
-    const steps = Math.ceil(weeks);
-    const proj = Array.from({ length: steps + 1 }, (_, w) =>
-      Math.min(cap * 1.15, spent + w * weeklySpend)
+    const steps = Math.ceil(weeks * 2); // half-week resolution
+    const proj = Array.from({ length: steps + 1 }, (_, i) =>
+      Math.min(cap * 1.12, spent + (i / 2) * weeklySpend)
     );
-    const maxY = Math.max(cap * 1.05, proj[proj.length - 1], spent, 0.01);
+    const maxY = Math.max(cap * 1.06, spent, 0.01);
     return { hist, spent, cap, proj, weeks, maxY };
   }, [data.trend, budget, weeklySpend, runwayWeeks]);
 
   const W = 100;
   const H = 40;
   const histSpan = Math.max(1, chart.hist.length - 1);
-  // history occupies the left 40%, the future the right 60%
-  const xHist = (i: number) => (i / histSpan) * (W * 0.4);
-  const xProj = (w: number) => W * 0.4 + (w / Math.max(chart.weeks, 1)) * (W * 0.6);
-  const yOf = (v: number) => H - 4 - (v / chart.maxY) * (H - 10);
-  const crossX = xProj(Math.min(chart.weeks, runwayWeeks));
+  const HIST_W = 0.42; // history left, future right
+  const xHist = (i: number) => (i / histSpan) * (W * HIST_W);
+  const xProj = (w: number) =>
+    W * HIST_W + (w / Math.max(chart.weeks, 0.01)) * (W * (1 - HIST_W));
+  const yOf = (v: number) => H - 5 - (v / chart.maxY) * (H - 12);
 
   const histPath = chart.hist
-    .map((v, i) => `${i === 0 ? "M" : "L"} ${xHist(i).toFixed(1)} ${yOf(v).toFixed(1)}`)
+    .map(
+      (p, i) => `${i === 0 ? "M" : "L"} ${xHist(i).toFixed(1)} ${yOf(p.spend).toFixed(1)}`
+    )
     .join(" ");
   const projPath = chart.proj
-    .map((v, w) => `${w === 0 ? "M" : "L"} ${xProj(w).toFixed(1)} ${yOf(v).toFixed(1)}`)
+    .map(
+      (v, i) =>
+        `${i === 0 ? "M" : "L"} ${xProj(i / 2).toFixed(1)} ${yOf(v).toFixed(1)}`
+    )
     .join(" ");
+  const crossW = Math.min(chart.weeks, runwayWeeks);
 
-  // scrubber: weeks into the future (defaults to the run-out point)
-  const scrub = scrubWeeks ?? Math.min(chart.weeks, runwayWeeks);
-  const scrubSpend = chart.spent + scrub * weeklySpend;
-  const scrubEps = scrub * pace;
-  const scrubDate = new Date(Date.now() + scrub * 7 * MS_DAY);
-
+  // ── ONE way to explore the future: hover the chart ──
+  const [hover, setHover] = useState<{
+    xPct: number;
+    date: Date;
+    spend: number;
+    eps: number | null; // null over history (episodes made only projects forward)
+  } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const dragScrub = (clientX: number) => {
+  const onMove = (clientX: number) => {
     const el = svgRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     const x = ((clientX - r.left) / r.width) * W;
-    const w = ((x - W * 0.4) / (W * 0.6)) * chart.weeks;
-    setScrubWeeks(Math.min(chart.weeks, Math.max(0, w)));
+    if (x <= W * HIST_W && chart.hist.length > 0) {
+      const i = Math.round((x / (W * HIST_W)) * histSpan);
+      const p = chart.hist[Math.min(histSpan, Math.max(0, i))];
+      setHover({
+        xPct: (xHist(Math.min(histSpan, Math.max(0, i))) / W) * 100,
+        date: new Date(p.date),
+        spend: p.spend,
+        eps: null,
+      });
+    } else {
+      const w = Math.min(
+        chart.weeks,
+        Math.max(0, ((x - W * HIST_W) / (W * (1 - HIST_W))) * chart.weeks)
+      );
+      setHover({
+        xPct: (xProj(w) / W) * 100,
+        date: new Date(Date.now() + w * 7 * MS_DAY),
+        spend: Math.min(chart.cap, chart.spent + w * weeklySpend),
+        eps: w * pace,
+      });
+    }
   };
 
-  const segBtn = (t: Tier, label: string) => (
-    <button
-      key={t}
-      onClick={() => setTier(t)}
-      aria-pressed={tier === t}
-      className={cn(
-        "rounded-md px-2.5 py-1 text-[11px] transition-colors motion-reduce:transition-none",
-        tier === t
-          ? "bg-primary/20 text-primary"
-          : "text-zinc-500 hover:text-zinc-300"
-      )}
-    >
-      {label}
-    </button>
-  );
+  const spentPct = Math.min(100, (chart.spent / chart.cap) * 100);
 
   const trendChip =
     base.direction === "accelerating" ? (
@@ -199,18 +213,18 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
       </span>
     );
 
-  const spentPct = Math.min(100, (chart.spent / chart.cap) * 100);
-
   return (
     <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5">
-      {/* ── 1 · runway hero ── */}
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      {/* ── runway hero ── */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
         <p className="text-2xl font-semibold tracking-tight">
-          {beyondYear ? "99+" : Math.max(0, easedRunway).toFixed(easedRunway >= 10 ? 0 : 1)}
+          {beyondYear
+            ? "99+"
+            : Math.max(0, easedRunway).toFixed(easedRunway >= 10 ? 0 : 1)}
           <span className="text-base text-zinc-400"> more episodes</span>
         </p>
         <p className="text-sm text-zinc-400">
-          at this pace, your{" "}
+          your{" "}
           {editingBudget ? (
             <input
               autoFocus
@@ -236,7 +250,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
               ${budget}
             </button>
           )}{" "}
-          runs out {beyondYear ? "in a year+" : `~${fmtDate(runOut)}`}
+          budget runs out {beyondYear ? "in a year+" : `~${fmtDate(runOut)}`}
         </p>
         {trendChip}
         {dirty && (
@@ -244,9 +258,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
             key={`${pace}-${tier}-${budget}`}
             className={cn(
               "rounded-full px-2 py-0.5 text-[10px] motion-safe:animate-in motion-safe:fade-in-0",
-              deltaEps >= 0
-                ? "bg-ok/10 text-ok"
-                : "bg-amber-500/10 text-amber-300"
+              deltaEps >= 0 ? "bg-ok/10 text-ok" : "bg-amber-500/10 text-amber-300"
             )}
           >
             {deltaEps >= 0 ? "+" : "−"}
@@ -264,9 +276,8 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
             <button
               onClick={() => {
                 setPace(base.pace);
-                setTier("actual");
+                setTier(base.myTier);
                 setBudget(10);
-                setScrubWeeks(null);
               }}
               className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300"
             >
@@ -276,7 +287,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
         </span>
       </div>
 
-      {/* runway bar: spent solid → remaining ghosted, run-out marked */}
+      {/* runway bar: spent solid, the budget ghosted on top of it */}
       <div className="relative mt-3 h-3 w-full overflow-hidden rounded-full bg-white/[0.04]">
         <div
           className="absolute inset-y-0 left-0 rounded-l-full bg-violet-500 transition-[width] duration-200 motion-reduce:transition-none"
@@ -297,25 +308,25 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
           title="now"
         />
       </div>
-      <div className="mt-1 flex justify-between text-[10px] text-zinc-600">
-        <span>{fmtUsd(chart.spent)} spent</span>
+      <div className="mt-1.5 flex justify-between text-[10px] text-zinc-600">
+        <span>{fmtUsd(chart.spent)} spent so far</span>
         <span>
-          runs out {beyondYear ? "a year+" : fmtDate(runOut)} · cap {fmtUsd(chart.cap)}
+          + ${budget} budget · runs out {beyondYear ? "a year+" : `~${fmtDate(runOut)}`}
         </span>
       </div>
 
-      {/* ── 2 · levers ── */}
+      {/* ── levers ── */}
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div>
           <div className="flex items-baseline justify-between">
-            <label htmlFor="pace" className="text-[11px] text-zinc-500">
+            <label htmlFor="pace" className="text-[10px] uppercase tracking-widest text-zinc-500">
               Pace
             </label>
             <span className="text-[11px] tabular-nums text-zinc-300">
               {pace.toFixed(pace >= 3 ? 0 : 1)} episodes / week
             </span>
           </div>
-          <div className="relative mt-1">
+          <div className="relative mt-2">
             <input
               id="pace"
               type="range"
@@ -326,7 +337,6 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
               onChange={(e) => setPace(Number(e.target.value))}
               className="w-full accent-violet-500"
             />
-            {/* your current pace, marked on the track */}
             <span
               aria-hidden
               title="your current pace"
@@ -336,172 +346,181 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
           </div>
         </div>
         <div>
-          <p className="text-[11px] text-zinc-500">Video quality</p>
-          <div className="mt-1 flex w-fit gap-0.5 rounded-lg border hairline bg-black/20 p-0.5">
-            {segBtn("actual", "my mix")}
-            {segBtn("economy", "economy")}
-            {segBtn("balanced", "balanced")}
-            {segBtn("premium", "premium")}
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500">
+            Video quality
+          </p>
+          <div className="mt-2 flex w-fit gap-0.5 rounded-lg border hairline bg-black/20 p-0.5">
+            {(["economy", "balanced", "premium"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTier(t)}
+                aria-pressed={tier === t}
+                className={cn(
+                  "relative rounded-md px-3 py-1 text-[11px] transition-colors motion-reduce:transition-none",
+                  tier === t
+                    ? "bg-primary/20 text-primary"
+                    : "text-zinc-500 hover:text-zinc-300"
+                )}
+              >
+                {t}
+                {base.myTier === t && (
+                  <span
+                    title="your current mix"
+                    className="absolute -top-0.5 right-1 h-1 w-1 rounded-full bg-ok"
+                  />
+                )}
+              </button>
+            ))}
+            <span className="self-center pl-1.5 pr-1 text-[9px] text-zinc-600">
+              • your mix
+            </span>
           </div>
         </div>
       </div>
 
-      {/* ── 3 · stat cards, live + chart-linked ── */}
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        {(
-          [
-            {
-              key: "episode" as const,
-              label: "Next episode",
-              value: `≈ ${fmtUsd(easedEp)}`,
-              sub:
-                Math.abs(costEp - base.costPerEpisode) < base.costPerEpisode * 0.05
-                  ? "≈ your average"
-                  : `${costEp > base.costPerEpisode ? "▲" : "▼"} ${Math.round(
-                      (Math.abs(costEp - base.costPerEpisode) / base.costPerEpisode) * 100
-                    )}% vs your average`,
-            },
-            {
-              key: "week" as const,
-              label: "Next 7 days",
-              value: `≈ ${fmtUsd(easedWeekly)}`,
-              sub: `${pace.toFixed(1)} ep/wk × ${fmtUsd(costEp)}`,
-            },
-            {
-              key: "ten" as const,
-              label: "Episodes per $10",
-              value: `≈ ${(10 / costEp).toFixed(1)}`,
-              sub: tier === "actual" ? "on my mix" : `on ${tier}`,
-            },
-          ] as const
-        ).map((c) => (
+      {/* ── stat cards, same rhythm as the money section ── */}
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        {[
+          {
+            label: "Next episode",
+            value: `≈ ${fmtUsd(easedEp)}`,
+            sub:
+              Math.abs(costEp - base.costPerEpisode) < base.costPerEpisode * 0.05
+                ? "≈ your average"
+                : `${costEp > base.costPerEpisode ? "▲" : "▼"} ${Math.round(
+                    (Math.abs(costEp - base.costPerEpisode) / base.costPerEpisode) * 100
+                  )}% vs your average`,
+          },
+          {
+            label: "Next 7 days",
+            value: `≈ ${fmtUsd(easedWeekly)}`,
+            sub: `at ${pace.toFixed(pace >= 3 ? 0 : 1)} episodes / week`,
+          },
+          {
+            label: "Episodes per $10",
+            value: `≈ ${(10 / costEp).toFixed(1)}`,
+            sub: tier === base.myTier ? "on your mix" : `on ${tier}`,
+          },
+        ].map((c) => (
           <div
-            key={c.key}
-            onMouseEnter={() => setHoverCard(c.key)}
-            onMouseLeave={() => setHoverCard(null)}
-            className={cn(
-              "rounded-lg border px-3 py-2.5 transition-colors duration-150 motion-reduce:transition-none",
-              hoverCard === c.key
-                ? "border-primary/40 bg-primary/[0.06]"
-                : "border-white/[0.06] bg-white/[0.015]"
-            )}
+            key={c.label}
+            className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3"
           >
             <p className="text-[10px] uppercase tracking-widest text-zinc-500">
               {c.label}
             </p>
-            <p className="mt-0.5 text-lg font-semibold tabular-nums">{c.value}</p>
-            <p className="text-[10px] text-zinc-500">{c.sub}</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">{c.value}</p>
+            <p className="mt-0.5 text-[10px] text-zinc-500">{c.sub}</p>
           </div>
         ))}
       </div>
 
-      {/* ── 4 · projection chart with cap line + draggable future target ── */}
-      <div className="mt-4">
+      {/* ── projection chart: history solid, projection dashed, one cap line,
+       * one run-out marker. Hover anywhere for the readout. ── */}
+      <div className="relative mt-5">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
-          className="h-36 w-full cursor-crosshair touch-none"
+          className="h-32 w-full"
           preserveAspectRatio="none"
-          onPointerDown={(e) => {
-            (e.target as Element).setPointerCapture?.(e.pointerId);
-            dragScrub(e.clientX);
-          }}
-          onPointerMove={(e) => {
-            if (e.buttons === 1) dragScrub(e.clientX);
-          }}
+          onPointerMove={(e) => onMove(e.clientX)}
+          onPointerLeave={() => setHover(null)}
         >
-          {/* hovered card regions */}
-          {hoverCard === "week" && (
-            <rect
-              x={xProj(0)}
-              y={0}
-              width={xProj(1) - xProj(0)}
-              height={H}
-              fill="rgba(139,92,246,0.10)"
-            />
-          )}
-          {hoverCard === "episode" && (
-            <rect
-              x={xProj(0)}
-              y={0}
-              width={Math.max(1, xProj(1 / Math.max(pace, 0.01)) - xProj(0))}
-              height={H}
-              fill="rgba(139,92,246,0.10)"
-            />
-          )}
-          {hoverCard === "ten" && (
-            <rect
-              x={0}
-              y={yOf(Math.min(chart.maxY, chart.spent + 10))}
-              width={W}
-              height={Math.max(1, yOf(chart.spent) - yOf(chart.spent + 10))}
-              fill="rgba(139,92,246,0.10)"
-            />
-          )}
+          {/* baseline */}
+          <line
+            x1={0}
+            x2={W}
+            y1={H - 5}
+            y2={H - 5}
+            stroke="rgba(255,255,255,0.06)"
+            strokeWidth="1"
+            vectorEffect="non-scaling-stroke"
+          />
           {/* budget cap */}
           <line
             x1={0}
             x2={W}
             y1={yOf(chart.cap)}
             y2={yOf(chart.cap)}
-            stroke="rgba(251,191,36,0.45)"
+            stroke="rgba(161,161,170,0.35)"
             strokeWidth="1"
             strokeDasharray="1.5 2.5"
             vectorEffect="non-scaling-stroke"
           />
           {/* history + projection */}
-          <path d={histPath} fill="none" stroke="#8b5cf6" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
           <path
-            d={`M ${(W * 0.4).toFixed(1)} ${yOf(chart.spent).toFixed(1)} ${projPath.slice(projPath.indexOf("L"))}`}
+            d={histPath}
+            fill="none"
+            stroke="#8b5cf6"
+            strokeWidth="1.5"
+            vectorEffect="non-scaling-stroke"
+          />
+          <path
+            d={projPath}
             fill="none"
             stroke="#a78bfa"
             strokeWidth="1.5"
             strokeDasharray="3 3"
             vectorEffect="non-scaling-stroke"
           />
-          {/* run-out crossing */}
+          {/* the single run-out marker */}
           {runwayWeeks <= chart.weeks && (
-            <circle cx={crossX} cy={yOf(chart.cap)} r="2" fill="#fbbf24" />
-          )}
-          {/* the draggable future target */}
-          <line
-            x1={xProj(scrub)}
-            x2={xProj(scrub)}
-            y1={0}
-            y2={H}
-            stroke="rgba(255,255,255,0.18)"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-          />
-          <circle
-            cx={xProj(scrub)}
-            cy={yOf(Math.min(scrubSpend, chart.maxY))}
-            r="2.6"
-            fill="#c4b5fd"
-            stroke="#12101c"
-            strokeWidth="1"
-            className={cn(!reduced && "transition-[cx,cy] duration-100")}
-          />
-        </svg>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[11px] tabular-nums text-zinc-400">
-            by {fmtDate(scrubDate)}: ~{fmtUsd(scrubSpend)} spent ·{" "}
-            {scrubEps.toFixed(1)} episodes made
-          </p>
-          <label className="flex items-center gap-2 text-[10px] text-zinc-600">
-            scrub the future
-            <input
-              type="range"
-              min={0}
-              max={chart.weeks}
-              step={0.25}
-              value={scrub}
-              onChange={(e) => setScrubWeeks(Number(e.target.value))}
-              aria-label="Weeks into the future"
-              className="w-28 accent-violet-500"
+            <circle
+              cx={xProj(crossW)}
+              cy={yOf(chart.cap)}
+              r="2"
+              fill="#a78bfa"
+              stroke="#12101c"
+              strokeWidth="0.8"
             />
-          </label>
-        </div>
+          )}
+          {/* hover crosshair */}
+          {hover && (
+            <line
+              x1={(hover.xPct / 100) * W}
+              x2={(hover.xPct / 100) * W}
+              y1={0}
+              y2={H}
+              stroke="rgba(167,139,250,0.35)"
+              strokeWidth="1"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+        </svg>
+
+        {/* cap + run-out labels, muted, anchored to the chart */}
+        <span
+          className="pointer-events-none absolute right-1 text-[9px] text-zinc-500"
+          style={{ top: `${(yOf(chart.cap) / H) * 100}%`, transform: "translateY(-110%)" }}
+        >
+          budget cap {fmtUsd(chart.cap)}
+        </span>
+        {runwayWeeks <= chart.weeks && !beyondYear && (
+          <span
+            className="pointer-events-none absolute text-[9px] text-violet-300"
+            style={{
+              left: `${(xProj(crossW) / W) * 100}%`,
+              top: `${(yOf(chart.cap) / H) * 100}%`,
+              transform: "translate(-50%, 40%)",
+            }}
+          >
+            runs out ~{fmtDate(runOut)}
+          </span>
+        )}
+
+        {/* dark app-native tooltip, same chrome as the Trend chart */}
+        {hover && (
+          <div
+            className="pointer-events-none absolute -top-2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-white/10 bg-[#161122] px-2.5 py-1.5 shadow-lg"
+            style={{ left: `${hover.xPct}%` }}
+          >
+            <p className="text-[10px] text-zinc-200">{fmtDate(hover.date)}</p>
+            <p className="text-[10px] tabular-nums text-zinc-400">
+              {fmtUsd(hover.spend)} spent
+              {hover.eps != null && ` · ${hover.eps.toFixed(1)} episodes made`}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
