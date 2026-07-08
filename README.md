@@ -102,9 +102,9 @@ flowchart TB
     subgraph WK[Celery workers]
         GEN[generation runner<br/>reference stacks · seeds · continuity]
         CASTW[casting worker<br/>bible plates · voices]
-        EXP[export worker<br/>stitch · captions · audio mix]
+        EXP[export worker<br/>ffmpeg: stitch · fades · duck · captions]
     end
-    API --> WK
+    API -- "dispatch jobs<br/>(Redis broker)" --> WK
 
     subgraph QWEN[Qwen Cloud / DashScope intl]
         LLM[qwen-max · qwen-plus · qwen-flash]
@@ -112,14 +112,16 @@ flowchart TB
         IMG[wan2.6-t2i · qwen-image-edit-max]
         VL[qwen3-vl-plus] & TTS[qwen3-tts-flash · voice cloning]
     end
-    TOOLS --> LLM
+    TOOLS -- "task-routed: max writes,<br/>plus judges, flash structures" --> LLM
     WK --> QWEN
 
     subgraph INFRA[Infrastructure]
-        PG2[(PostgreSQL + pgvector)] & RD[(Redis)] & OSS[(Alibaba OSS)] & N4J[(Neo4j)]
+        PG2[(PostgreSQL + pgvector<br/>512-d face vectors)] & RD[(Redis)] & OSS[(Alibaba OSS<br/>plates · clips · voices · exports)] & N4J[(Neo4j<br/>narrative graph)]
     end
     API --> INFRA
     WK --> INFRA
+    WK -- "stage / tool / ledger events" --> RD
+    RD -- "Socket.IO fan-out: dock, crew<br/>graph, cost meter update live" --> FE
 ```
 
 ---
@@ -175,7 +177,7 @@ Served identically over FastAPI HTTP **and** a real MCP stdio server (official `
 ### Quick Start (Docker)
 
 ```bash
-git clone https://github.com/RZRexton/Rexgent.git
+git clone https://github.com/RextonRZ/Rexgent.git
 cd Rexgent
 cp backend/.env.example backend/.env   # add your keys
 docker-compose up --build              # api + worker + frontend + postgres + redis + neo4j
@@ -219,7 +221,7 @@ is only loaded locally):
 ```bash
 # on an Ubuntu 22.04 ECS instance (>= 2 vCPU / 8 GB, ap-southeast-1), ports 3000 + 8000 open
 sudo apt update && sudo apt install -y docker.io docker-compose-v2 git
-git clone https://github.com/RZRexton/Rexgent.git && cd Rexgent
+git clone https://github.com/RextonRZ/Rexgent.git && cd Rexgent
 # copy your backend/.env onto the server (scp) — never commit it
 
 export PUBLIC_API_URL="http://<server-ip>:8000"      # baked into the frontend build
@@ -230,6 +232,39 @@ docker compose -f docker-compose.yml up -d --build
 Migrations run automatically on backend start. Open `http://<server-ip>:3000`.
 With a domain, put Caddy or Nginx in front for HTTPS and set both URLs to the
 https origin instead.
+
+What runs where — one ECS instance hosts the whole stack; media and models
+stay on managed Alibaba services:
+
+```mermaid
+flowchart LR
+    U([Browser])
+    subgraph ECS["Alibaba Cloud ECS — docker compose"]
+        FE2["frontend :3000<br/>Next.js standalone"]
+        BE["backend :8000<br/>FastAPI + Socket.IO + Alembic"]
+        WK2["worker<br/>Celery ×2 + ffmpeg"]
+        RD2[("Redis 7<br/>broker + event bus")]
+        DB[("PostgreSQL 16<br/>pgvector")]
+        N4[("Neo4j 5")]
+    end
+    DS["Qwen Cloud<br/>DashScope intl — 13 models"]
+    OSS2[("Alibaba OSS<br/>plates · clips · voices · final.mp4")]
+
+    U --> FE2
+    U -- "REST + WebSocket" --> BE
+    BE <--> RD2
+    RD2 <--> WK2
+    BE --> DB & N4
+    WK2 --> DB
+    BE -- "LLM / VL calls" --> DS
+    WK2 -- "video · image · TTS" --> DS
+    WK2 -- "persist media" --> OSS2
+    U -. "signed media URLs" .-> OSS2
+```
+
+> **Submission note:** after `docker compose up`, capture the ECS console
+> screenshot (instance page showing the running host) plus `docker compose ps`
+> output — Devpost requires the deployment verification image.
 
 ### MCP Server (real Model Context Protocol)
 
