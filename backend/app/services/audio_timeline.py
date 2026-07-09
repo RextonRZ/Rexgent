@@ -96,4 +96,16 @@ def place_dialogue(line_rows: list[dict], scene_plan: list[dict], gap: float = 0
                 seg["character"] = ln["character"]
             out.append(seg)
             prev_end = start + float(ln.get("duration") or 0.0) + gap
+
+    # ── the GLOBAL no-overlap sweep: the per-scene guard above resets at
+    # scene boundaries, so a scene whose dialogue overflows its own footage
+    # used to bleed into the next scene's first line. Sort every placed line
+    # by absolute start and push any collision forward — two voices can never
+    # overlap anywhere in the episode, scene boundary or not. ──
+    out.sort(key=lambda s: s["start"])
+    prev_end = None
+    for seg in out:
+        if prev_end is not None and seg["start"] < prev_end:
+            seg["start"] = round(prev_end, 3)
+        prev_end = seg["start"] + float(seg.get("duration") or 0.0) + gap
     return out

@@ -150,6 +150,33 @@ def test_scene_split_across_cut_groups_merges_not_overwrites():
     assert start["l1"] == 10.0  # the second scene-1 group, at its real time
 
 
+def test_scene_overflow_never_overlaps_the_next_scenes_line():
+    # a 10s drama: two 5s scenes, one speaking shot each. Scene 1 holds TWO
+    # 4s lines — the second runs past scene 1's footage into scene 2's time.
+    # Scene 2's line must WAIT for it, not talk over it (the old per-scene
+    # guard reset at the boundary and let them collide).
+    plan = [
+        {"scene_number": 1, "shots": [{"duration": 5.0, "has_dialogue": True}]},
+        {"scene_number": 2, "shots": [{"duration": 5.0, "has_dialogue": True}]},
+    ]
+    rows = [
+        {"scene_number": 1, "line_index": 0, "audio_path": "a", "duration": 4.0},
+        {"scene_number": 1, "line_index": 1, "audio_path": "b", "duration": 4.0},
+        {"scene_number": 2, "line_index": 0, "audio_path": "c", "duration": 2.0},
+    ]
+    segs = place_dialogue(rows, plan)
+    by_path = {s["audio_path"]: s for s in segs}
+    # line b folds onto scene 1's only speaking shot, back-to-back after a
+    assert by_path["b"]["start"] == 4.2
+    # scene 2's line would anchor at 5.0 — but b plays until 8.2 (+gap)
+    assert by_path["c"]["start"] >= 8.4
+    # and the output is globally sorted with zero overlaps
+    ends = None
+    for s in sorted(segs, key=lambda x: x["start"]):
+        assert ends is None or s["start"] >= ends
+        ends = s["start"] + s["duration"]
+
+
 def test_fitting_shots_restores_picture_sync():
     # once the shot is fitted to 10s (audio-first), the reply lands back on its
     # own shot's start — no waiting, no overlap.
