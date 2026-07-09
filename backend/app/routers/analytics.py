@@ -97,7 +97,9 @@ def summarize_clips(clips: list) -> dict:
         "clips_total": total,
         "continuity_pass_rate": round(passed / len(judged), 4) if judged else None,
         "flagged": len(judged) - passed,
-        "avg_face_score": round(sum(faces) / len(faces), 1) if faces else None,
+        # face_score is stored 0–1 (a cosine similarity, like outfit/background);
+        # the dashboard grades 0–100, so scale exactly like combine_scores does
+        "avg_face_score": round(100 * sum(faces) / len(faces), 1) if faces else None,
         "by_tier": by_tier,
     }
 

@@ -57,22 +57,24 @@ def test_media_categories_break_down_by_model():
     assert cats["tts"]["by_model"]["qwen3-tts-flash"]["quantity"] == 800.0
 
 
-def _clip(status="APPROVED", model="wan", retries=0, face=90.0):
+def _clip(status="APPROVED", model="wan", retries=0, face=0.9):
+    # face_score is persisted as a 0–1 cosine similarity (see continuity_agent)
     return SimpleNamespace(status=status, model_used=model, retries=retries,
                            face_score=face)
 
 
 def test_reliability_rates():
     clips = [
-        _clip("APPROVED", "wan", 0, 92.0),
-        _clip("NEEDS_REVIEW", "happyhorse", 1, 60.0),
-        _clip("APPROVED", "happyhorse", 0, 88.0),
+        _clip("APPROVED", "wan", 0, 0.92),
+        _clip("NEEDS_REVIEW", "happyhorse", 1, 0.60),
+        _clip("APPROVED", "happyhorse", 0, 0.88),
         _clip("PENDING", "happyhorse", 0, None),  # not judged yet
     ]
     r = summarize_clips(clips)
     assert r["clips_total"] == 4
     assert r["continuity_pass_rate"] == round(2 / 3, 4)
     assert r["flagged"] == 1
+    assert r["avg_face_score"] == 80.0  # scaled to 0–100 for the dashboard
     assert r["by_tier"]["wan"]["retry_rate"] == 0.0
     assert r["by_tier"]["happyhorse"]["retry_rate"] == round(1 / 3, 4)
 
