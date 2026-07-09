@@ -4,7 +4,6 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { NextStepButton } from "@/components/shared/NextStepButton";
 import { GenerationLauncher } from "@/components/generate/GenerationLauncher";
 import { GenerationQueue } from "@/components/generate/GenerationQueue";
-import { ActivityFeed } from "@/components/casting/ActivityFeed";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { TokenDashboard } from "@/components/budget/TokenDashboard";
 
@@ -21,13 +20,8 @@ export default function GeneratePage({ params }: { params: { id: string } }) {
       {/* the token engineering, front and center */}
       <TokenDashboard projectId={params.id} />
 
-      {/* launcher (left) beside the activity feed (right) */}
-      <div className="grid gap-6 lg:grid-cols-3 items-start">
-        <div className="lg:col-span-2">
-          <GenerationLauncher projectId={params.id} />
-        </div>
-        <ActivityFeed projectId={params.id} />
-      </div>
+      {/* the dock's Showrunner feed narrates the run — no duplicate here */}
+      <GenerationLauncher projectId={params.id} />
 
       <GenerationQueue projectId={params.id} />
       <NextStepButton projectId={params.id} current="generate" />

@@ -124,6 +124,14 @@ async def answer(project_id: str, body: dict, db: Session = Depends(get_db)):
     return {"resumed": True}
 
 
+@router.get("/{project_id}/tools")
+def tool_snapshot(project_id: str):
+    """Latest state per (stage, tool) — the crew graph hydrates from this on
+    load, so finished green ticks survive refresh and dock re-opens."""
+    from app.websocket.tool_events import load_tool_snapshot
+    return {"tools": load_tool_snapshot(project_id)}
+
+
 @router.post("/{project_id}/chat")
 async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depends(get_db)):
     """Ask the showrunner about THIS drama. Answers are grounded in a compact
@@ -158,11 +166,41 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
                                                  next_step_card, stage_progress)
     progress = stage_progress(db, project.id)
     upcoming = next_stage(progress)
+    # CURRENT blockers, computed live — so "what's this error" gets a real
+    # answer instead of generic script advice
+    blockers: list = []
+    try:
+        from app.services.guardrails import PreGenerationValidator
+        from app.models.shot import Shot
+        from app.models.script import Scene as _Scene
+        chars_all = db.query(Character).filter(Character.project_id == project.id).all()
+        script_row = (db.query(Script).filter(Script.project_id == project.id)
+                      .order_by(Script.created_at.desc()).first())
+        shots_all = []
+        if script_row:
+            scene_ids = [s.id for s in db.query(_Scene.id)
+                         .filter(_Scene.script_id == script_row.id).all()]
+            if scene_ids:
+                shots_all = db.query(Shot).filter(Shot.scene_id.in_(scene_ids)).all()
+        if shots_all:
+            preflight = PreGenerationValidator().validate(
+                characters=[{"name": c.name,
+                             "video_prompt_fragment": c.video_prompt_fragment,
+                             "visual_description": c.visual_description}
+                            for c in chars_all],
+                shots=[{"characters_in_frame": s.characters_in_frame,
+                        "estimated_duration_seconds": s.estimated_duration_seconds}
+                       for s in shots_all])
+            if not preflight.get("pass"):
+                blockers = (preflight.get("issues") or []) +                            (preflight.get("missing_visuals") or [])
+    except Exception:  # noqa: BLE001
+        pass
     context = {
         "title": project.title, "genre": project.genre, "premise": project.premise,
         "format": getattr(project, "video_ratio", "9:16"),
         "spend_cap_usd": project.credit_budget,
         "pipeline_progress": progress,
+        "generation_blockers": blockers,
         "next_incomplete_stage": (
             {"stage": upcoming, "page": STAGE_PAGES[upcoming]} if upcoming
             else "all stages complete, the episode is exported"),
@@ -184,9 +222,13 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
         "pipeline_progress and next_incomplete_stage: stages marked true are "
         "DONE, never suggest redoing or polishing them unless the user asks; "
         "point to the next incomplete stage and its page. Old agent critique "
-        "notes describe past decisions, not open tasks. If the context does "
-        "not contain the answer, say so and suggest which page of the studio "
-        "would."
+        "notes describe past decisions, not open tasks. If generation_blockers "
+        "is non-empty and the user asks about an error or being blocked, "
+        "explain the blocker plainly and give the fix: missing visual "
+        "descriptions are fixed on the Characters page by clicking Generate "
+        "Plates (a look is auto-written) or uploading a face photo. If the "
+        "context does not contain the answer, say so and suggest which page "
+        "of the studio would."
     )
     qwen = QwenClient(get_settings())
     with track_project(project_id, db):

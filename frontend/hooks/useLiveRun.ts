@@ -219,6 +219,24 @@ function setFailed(stage: StageKey, label: string | null) {
   });
 }
 
+/** A finished stage cannot have a spinning tool: any tool still "run" when
+ * its stage completes flips to done (or fail) — a dropped websocket event
+ * can no longer leave an eternal spinner. */
+function settleStageTools(stage: StageKey, failed: boolean) {
+  useLiveRunStore.setState((s) => {
+    const current = s.tools[stage];
+    if (!Object.values(current).some((t) => t.status === "run")) return s;
+    const next: Record<string, ToolState> = {};
+    for (const [k, v] of Object.entries(current)) {
+      next[k] =
+        v.status === "run"
+          ? { ...v, status: failed ? "fail" : "done", at: Date.now() }
+          : v;
+    }
+    return { tools: { ...s.tools, [stage]: next } };
+  });
+}
+
 /** `tool:progress` payload from the backend (see app/websocket/tool_events.py). */
 export interface ToolProgress {
   stage: string;
@@ -287,6 +305,49 @@ export function ensureLiveRun(projectId: string) {
   const socket = getSocket();
   socket.connect();
   socket.emit("join_project", { project_id: projectId });
+
+  // hydrate the crew graph from the server snapshot: green ticks survive
+  // refresh and dock re-opens; a dropped websocket event can't fake "idle"
+  import("@/lib/api").then(({ default: api }) =>
+    api
+      .get(`/api/agent/${projectId}/tools`)
+      .then(({ data }) => {
+        const snap = (data?.tools ?? {}) as Record<
+          string,
+          Record<string, ToolProgress>
+        >;
+        useLiveRunStore.setState((s) => {
+          const tools = { ...s.tools };
+          for (const stage of Object.keys(snap)) {
+            if (!STAGE_ORDER.includes(stage as StageKey)) continue;
+            const sk = stage as StageKey;
+            const merged = { ...tools[sk] };
+            for (const [tool, ev] of Object.entries(snap[stage])) {
+              if (merged[tool]) continue; // live events win over the snapshot
+              merged[tool] = {
+                tool,
+                status:
+                  ev.status === "succeeded"
+                    ? "done"
+                    : ev.status === "failed"
+                      ? "fail"
+                      : "run",
+                agent: ev.agent,
+                artifact: ev.artifact,
+                error: ev.error,
+                index: ev.index,
+                total: ev.total,
+                since: Date.now(),
+                at: Date.now(),
+              };
+            }
+            tools[sk] = merged;
+          }
+          return { tools };
+        });
+      })
+      .catch(() => {})
+  );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const on = (event: string, handler: (p: any) => void) => {
     socket.on(event, handler);
@@ -315,6 +376,7 @@ export function ensureLiveRun(projectId: string) {
           kind: failed ? "fail" : "done",
         });
         if (failed) setFailed(mapped, p.label);
+        settleStageTools(mapped, failed);
       }
       finishedSubs.forEach((cb) => cb({ agent, label: p.label, failed }));
     }
@@ -442,6 +504,7 @@ export function ensureLiveRun(projectId: string) {
   });
   on("job:completed", (p) => {
     clearRunning("generate");
+    settleStageTools("generate", false);
     pushTrail("generate", {
       at: Date.now(),
       agent: "Renderer",

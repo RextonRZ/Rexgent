@@ -23,6 +23,8 @@ export interface GraphScene {
   number: number;
   heading: string;
   characters: string[];
+  /** which shots each character actually appears in */
+  shots_by_character?: Record<string, number[]>;
   image?: string | null;
   description?: string | null;
   emotional_beat?: string | null;
@@ -52,6 +54,8 @@ export interface GraphLink {
   beat?: string | null; // scene emotional beat
   /** facts the story established in this scene (narrative memory) */
   facts?: string[];
+  /** the exact shots this character appears in (appears links) */
+  shots?: number[];
 }
 
 export interface GraphData {
@@ -108,6 +112,7 @@ function shapeGraph(data?: GraphResponse): GraphData {
         info: s.description,
         beat: s.emotional_beat,
         facts: s.facts ?? [],
+        shots: s.shots_by_character?.[name] ?? [],
       });
     }
   }

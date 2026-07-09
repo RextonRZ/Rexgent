@@ -261,18 +261,32 @@ async def get_graphs(project_id: str, db: Session = Depends(get_db)):
         # full names (Ren Ishida) — canonicalize so name-keyed links connect
         char_map = {c.name.upper(): c for c in characters}
         scene_rows = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
-        scenes = [
-            {
+        # who ACTUALLY appears: the storyboard's per-shot cast is the accurate
+        # source once shots exist — the script's characters_present over-lists
+        # (a name mentioned in a scene is not a face in its frames)
+        from app.models.shot import Shot
+        scenes = []
+        for s in scene_rows:
+            shots = (db.query(Shot).filter(Shot.scene_id == s.id)
+                     .order_by(Shot.number).all())
+            shots_by_char: dict = {}
+            for sh in shots:
+                for raw in (sh.characters_in_frame or []):
+                    matched = _canonical_names(char_map, [raw])
+                    if matched:
+                        shots_by_char.setdefault(matched[0], []).append(sh.number)
+            names = (list(shots_by_char.keys()) if shots_by_char
+                     else _canonical_names(char_map, s.characters_json))
+            scenes.append({
                 "number": s.number,
                 "heading": s.heading,
-                "characters": _canonical_names(char_map, s.characters_json),
+                "characters": names,
+                "shots_by_character": shots_by_char,
                 "image": plate_by_scene.get(s.number),
                 "description": s.description,
                 "emotional_beat": s.emotional_beat,
                 "facts": facts_by_scene.get(s.number, []),
-            }
-            for s in scene_rows
-        ]
+            })
 
     return {
         "characters": [

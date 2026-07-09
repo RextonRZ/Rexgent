@@ -179,6 +179,21 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
     from app.websocket.tool_events import tool_event
     tool_event(project_id, "characters", "generate_plates", "started",
                agent="Casting", total=len(variants))
+    # no face uploaded must never block generation later — write a look
+    if not (c.visual_description or "").strip() or not (c.video_prompt_fragment or "").strip():
+        try:
+            from app.services.appearance_generator import AppearanceGenerator
+            from app.services.usage_tracker import track_project
+            with track_project(project_id, db):
+                look = await AppearanceGenerator().generate(
+                    character_name=c.name, role=c.role or "SUPPORTING",
+                    personality=c.personality_summary or "",
+                    mbti=getattr(c, "mbti", "") or "",
+                    physical_desc=c.physical_description or "")
+            c.visual_description = (c.visual_description or "").strip() or look.get("full_description", "")
+            c.video_prompt_fragment = (c.video_prompt_fragment or "").strip() or look.get("video_prompt_fragment", "")
+        except Exception:  # noqa: BLE001
+            pass
     pg = PlateGenerator(db)
     for v in variants:
         prompt = _char_plate_prompt(c, v.outfit_description or "")

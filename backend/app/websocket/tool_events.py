@@ -16,8 +16,48 @@ what got validated — ticking individually. One uniform event carries it all:
 
 Best-effort like every WS emit — a socket failure never breaks the pipeline.
 """
+import json
+import time
 from contextlib import contextmanager
 from app.websocket.emitter import emit
+
+_redis = None
+
+
+def _tools_store():
+    """Lazy Redis handle for the tool-state snapshot (survives refresh)."""
+    global _redis
+    if _redis is None:
+        import redis
+        from app.config import get_settings
+        _redis = redis.Redis.from_url(get_settings().redis_url,
+                                      socket_connect_timeout=1, socket_timeout=1)
+    return _redis
+
+
+def _snapshot(project_id, stage: str, tool: str, data: dict) -> None:
+    try:
+        r = _tools_store()
+        key = f"rx:tools:{project_id}"
+        r.hset(key, f"{stage}:{tool}", json.dumps({**data, "ts": time.time()}))
+        r.expire(key, 7 * 24 * 3600)
+    except Exception:  # noqa: BLE001 — snapshot is best-effort, like the emit
+        pass
+
+
+def load_tool_snapshot(project_id) -> dict:
+    """{stage: {tool: last event}} — hydrates the crew graph after a refresh."""
+    try:
+        raw = _tools_store().hgetall(f"rx:tools:{project_id}")
+        out: dict = {}
+        for field, val in raw.items():
+            stage, _, tool = field.decode().partition(":")
+            if not tool:
+                continue
+            out.setdefault(stage, {})[tool] = json.loads(val)
+        return out
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def tool_event(project_id, stage: str, tool: str, status: str,
@@ -37,6 +77,7 @@ def tool_event(project_id, stage: str, tool: str, status: str,
         if total is not None:
             data["total"] = total
         emit("tool:progress", data, str(project_id))
+        _snapshot(project_id, stage, tool, data)
     except Exception:  # noqa: BLE001 — never let telemetry break the pipeline
         pass
 

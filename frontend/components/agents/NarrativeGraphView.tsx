@@ -105,6 +105,12 @@ function ConnectionDrawer({
               {link.label && (
                 <span className="ml-1 text-primary/80">{link.label}</span>
               )}
+              {(link.shots?.length ?? 0) > 0 && (
+                <span className="ml-1 text-muted-foreground">
+                  · shot{link.shots!.length === 1 ? "" : "s"}{" "}
+                  {link.shots!.join(", ")}
+                </span>
+              )}
             </p>
           </div>
           {target?.img ? (

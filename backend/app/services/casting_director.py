@@ -123,6 +123,24 @@ class CastingDirector:
 
         from app.services.usage_tracker import track_project
         with track_project(pid, self.db):
+            # a character without a visual description would BLOCK generation
+            # later (preflight) — users who skip face upload get one generated
+            for c in characters:
+                if (c.visual_description or "").strip() and (c.video_prompt_fragment or "").strip():
+                    continue
+                try:
+                    from app.services.appearance_generator import AppearanceGenerator
+                    look = await AppearanceGenerator().generate(
+                        character_name=c.name, role=c.role or "SUPPORTING",
+                        personality=c.personality_summary or "",
+                        mbti=getattr(c, "mbti", "") or "",
+                        physical_desc=c.physical_description or "")
+                    c.visual_description = (c.visual_description or "").strip() or look.get("full_description", "")
+                    c.video_prompt_fragment = (c.video_prompt_fragment or "").strip() or look.get("video_prompt_fragment", "")
+                except Exception as e:  # noqa: BLE001
+                    import logging
+                    logging.getLogger(__name__).warning(f"appearance autofill skipped for {c.name}: {e}")
+            self.db.commit()
             plan = await self.planner.plan(script.structured_json or {},
                                            [{"name": c.name} for c in characters])
             emit("casting.wardrobe_plan.completed", {"variant_count": sum(len(v) for v in plan.values())}, pid)
