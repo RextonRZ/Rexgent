@@ -9,6 +9,25 @@ from app.services.wardrobe_planner import map_variant_for_scene
 FACE_W, OUTFIT_W, BG_W = 0.5, 0.25, 0.25
 PASS_THRESHOLD = 55   # 0-100
 
+# ArcFace cosine similarity lives on its own scale: genuine same-person pairs
+# clear ~0.35 (buffalo_l's standard verification threshold) and clean matches
+# sit near 0.5-0.7, while wrong faces cluster around 0-0.2. Shown raw as a
+# percent, a STRONG 0.5 match reads as "50/100, failing".
+GENUINE_SIM, STRONG_SIM = 0.35, 0.65
+
+
+def calibrate_face_similarity(sim: float) -> float:
+    """Map raw ArcFace cosine to 0-1 match confidence, the way production face
+    APIs do: the genuine-pair threshold lands at 0.75 (a clear pass) and 0.65+
+    saturates to 1.0; below-threshold similarities stay proportionally low."""
+    if sim <= 0.0:
+        return 0.0
+    if sim >= STRONG_SIM:
+        return 1.0
+    if sim < GENUINE_SIM:
+        return round(sim / GENUINE_SIM * 0.75, 4)
+    return round(0.75 + (sim - GENUINE_SIM) / (STRONG_SIM - GENUINE_SIM) * 0.25, 4)
+
 
 def combine_scores(face, outfit, background) -> int:
     parts, weights = [], []
@@ -43,8 +62,15 @@ class ContinuityAgent:
         # to camera) has no face in frame, so matching it would spuriously tank
         # the score on every reveal / over-the-shoulder shot.
         face_names = [n for n in characters_in_frame if n not in fg]
-        # face
-        face_scores = []
+        # face: every detected face in every sampled frame, embedded once.
+        # The old pass took only the LARGEST face per frame and averaged every
+        # character against it — in a two-person shot each character was graded
+        # against the other person's face half the time, capping a perfect
+        # render near 50. Now each character is judged on their own best match
+        # across all faces; identity drift still reads low because no detected
+        # face matches the reference then.
+        frame_faces = [fv for fr in frames for fv in self.embedder.model.embed_all(fr)]
+        per_char = []
         for name in face_names:
             ch = bible["characters"].get(name)
             if not ch:
@@ -53,11 +79,10 @@ class ContinuityAgent:
             ref = (v or {}).get("face_vector")
             if not ref:
                 continue
-            for fr in frames:
-                fv = self.embedder.model.embed(fr)
-                if fv is not None:
-                    face_scores.append(self.embedder.compare_vectors(ref, fv))
-        face = sum(face_scores) / len(face_scores) if face_scores else None
+            sims = [self.embedder.compare_vectors(ref, fv) for fv in frame_faces]
+            if sims:
+                per_char.append(calibrate_face_similarity(max(sims)))
+        face = round(sum(per_char) / len(per_char), 4) if per_char else None
         # outfit + background via one VL call on the middle frame
         outfit = background = None
         if frames:

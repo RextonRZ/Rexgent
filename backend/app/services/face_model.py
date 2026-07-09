@@ -25,6 +25,10 @@ class FaceEmbeddingModel(Protocol):
         """Return a face embedding vector, or None if no face detected."""
         ...
 
+    def embed_all(self, image_bytes: bytes) -> list[list[float]]:
+        """Every detected face's embedding (empty list when none)."""
+        ...
+
 
 class InsightFaceModel:
     """ArcFace (buffalo_l) embeddings via InsightFace. 512-dim normalised vectors."""
@@ -37,10 +41,13 @@ class InsightFaceModel:
         )
         self._app.prepare(ctx_id=-1, det_size=(640, 640))
 
-    def embed(self, image_bytes: bytes) -> list[float] | None:
+    def _detect(self, image_bytes: bytes):
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         arr = np.array(img)[:, :, ::-1]  # RGB -> BGR for insightface
-        faces = self._app.get(arr)
+        return self._app.get(arr)
+
+    def embed(self, image_bytes: bytes) -> list[float] | None:
+        faces = self._detect(image_bytes)
         if not faces:
             return None
         # Largest face by bbox area.
@@ -49,6 +56,9 @@ class InsightFaceModel:
             key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]),
         )
         return face.normed_embedding.tolist()
+
+    def embed_all(self, image_bytes: bytes) -> list[list[float]]:
+        return [f.normed_embedding.tolist() for f in self._detect(image_bytes)]
 
 
 _model: FaceEmbeddingModel | None = None
