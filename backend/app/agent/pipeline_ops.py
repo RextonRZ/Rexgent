@@ -180,6 +180,11 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             shots = await gen.generate_for_scene(
                 {"scene_number": scene.number, "heading": scene.heading,
                  "description": scene.description, "emotional_beat": scene.emotional_beat,
+                 # the scripted lines: the generator distributes them onto shots so
+                 # has_dialogue is REAL — the audio-first duration fitter and voice
+                 # placement both key on it. Omitting this left every full-auto
+                 # shot silent on paper while the scene still talked.
+                 "dialogue": scene.dialogue_json or [],
                  # what earlier scenes established — shots must not contradict it
                  "established_facts": established},
                 scene_chars,
