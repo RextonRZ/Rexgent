@@ -14,6 +14,22 @@ export interface Shot {
   characters_in_frame: string[] | null;
   notes: string | null;
   director_note: string | null;
+  blocking_json?: ShotBlocking | null;
+}
+
+/** Absolute per-shot geometry from the Director, 180-rule enforced. */
+export interface ShotBlocking {
+  subjects?: BlockingSubject[] | null;
+  reverse_angle?: boolean;
+}
+
+export interface BlockingSubject {
+  character?: string;
+  frame_position?: "FG" | "MG" | "BG" | string;
+  screen_side?: "left" | "center" | "right" | string;
+  facing?: string;
+  eyeline?: string;
+  action?: string;
 }
 
 export type ShotType = "ECU" | "CU" | "MCU" | "MS" | "FS" | "LS" | "EWS" | "POV" | "OTS" | "INSERT";

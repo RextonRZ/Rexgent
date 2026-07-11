@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Lightbulb, Palette, Clock, Users, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { BlockingDiagram } from "./BlockingDiagram";
 import { ShotEditor } from "./ShotEditor";
 import { useDeleteShot } from "@/hooks/useStoryboard";
 import type { Shot } from "@/lib/types";
@@ -94,6 +95,11 @@ export function ShotCard({ shot }: { shot: Shot }) {
           <p className="border-l-2 border-primary/40 pl-3 py-0.5 text-xs italic text-muted-foreground">
             &ldquo;{shot.dialogue}&rdquo;
           </p>
+        )}
+
+        {/* the geometry engine, visible: absolute positions per subject */}
+        {shot.blocking_json?.subjects && shot.blocking_json.subjects.length > 0 && (
+          <BlockingDiagram blocking={shot.blocking_json} />
         )}
 
         {/* one quiet metadata row */}

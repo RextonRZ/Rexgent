@@ -36,5 +36,8 @@ class ShotResponse(BaseModel):
     characters_in_frame: Optional[list[str]] = None
     notes: Optional[str] = None
     director_note: Optional[str] = None
+    # absolute per-shot geometry: {"subjects": [{character, frame_position,
+    # screen_side, facing, eyeline, action}], "reverse_angle": bool}
+    blocking_json: Optional[dict] = None
 
     model_config = {"from_attributes": True}
