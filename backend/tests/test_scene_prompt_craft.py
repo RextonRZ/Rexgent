@@ -153,3 +153,33 @@ async def test_craft_without_foreground_has_no_occlusion_block():
     await crafter.craft(shot={}, character_visuals={}, target_model="wan")
     user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "Foreground occlusion" not in user_msg
+
+
+@pytest.mark.asyncio
+async def test_dialogue_shot_gets_delivery_block():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(
+        shot={"shot_type": "MCU", "dialogue": "We need to go, now."},
+        character_visuals={}, target_model="happyhorse")
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Dialogue delivery" in user_msg
+    assert "mid-conversation" in user_msg
+
+
+@pytest.mark.asyncio
+async def test_silent_shot_has_no_delivery_block():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(shot={"shot_type": "WS"}, character_visuals={},
+                        target_model="happyhorse")
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Dialogue delivery" not in user_msg
