@@ -72,10 +72,28 @@ function feedToMessage(item: FeedItem): ChatMessage | null {
       return { ...base, agent: "Casting Director", kind: "info", text: "Casting the production bible" };
     case "casting.wardrobe_plan.completed":
       return { ...base, agent: "Casting Director", kind: "done", text: `Wardrobe planned: ${p.variant_count ?? "?"} outfit(s)` };
-    case "casting.plate.completed":
-      return { ...base, agent: "Casting Director", kind: "done", text: `Plate ready: ${p.kind ?? "plate"} ${String(p.key ?? "").replace(/_/g, " ")}`, detail: p.total ? `${p.index}/${p.total}` : undefined };
+    case "casting.plate.completed": {
+      // keys are slugs ("IM SOL:fan outfit", "ryu_sun_jae_s_dressing_room") —
+      // say them like a person would
+      const kind = String(p.kind ?? "plate");
+      const rawKey = String(p.key ?? "");
+      let what: string;
+      if (kind === "style") {
+        what = "the visual style frame";
+      } else if (kind === "character") {
+        const [who, outfit] = rawKey.split(":");
+        what = outfit ? `${who} (${outfit})` : who;
+      } else {
+        what = `${kind} ${rawKey.replace(/_/g, " ").replace(/ s /g, "'s ")}`;
+      }
+      return { ...base, agent: "Casting Director", kind: "done", text: `Plate ready: ${what}`, detail: p.total ? `${p.index}/${p.total}` : undefined };
+    }
     case "casting.completed":
-      return { ...base, agent: "Casting Director", kind: "done", text: p.auto_approved ? "Bible cast and auto approved" : "Bible cast, awaiting your review" };
+      // awaiting-review already speaks twice (the stage line and the review
+      // card) — only the auto-approved outcome needs its own line
+      return p.auto_approved
+        ? { ...base, agent: "Casting Director", kind: "done", text: "Bible cast and auto approved" }
+        : null;
     case "generation.shot.completed":
       return { ...base, agent: "Renderer", kind: p.status === "APPROVED" ? "done" : "warn", text: `Scene ${p.scene_number} shot ${p.shot_number} rendered${p.status === "APPROVED" ? "" : ", flagged for review"}` };
     case "continuity.flagged":

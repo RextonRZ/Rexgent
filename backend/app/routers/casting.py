@@ -93,6 +93,13 @@ def approve_casting(project_id: str, db: Session = Depends(get_db)):
 def run_casting(project_id: str, db: Session = Depends(get_db)):
     if not db.query(Project).filter(Project.id == uuid.UUID(project_id)).first():
         raise HTTPException(status_code=404, detail="Project not found")
+    # announce BEFORE dispatching: the worker takes seconds to pick the job
+    # up and its first LLM call takes longer — without this the click felt
+    # dead for half a minute
+    from app.websocket.emitter import emit
+    emit("stage:progress", {"stage": "casting", "status": "started",
+         "agent": "Casting Director", "label": "Casting the production bible"},
+         project_id)
     from app.workers.casting_worker import run_casting_job
     run_casting_job.delay(project_id)
     return {"status": "started"}
