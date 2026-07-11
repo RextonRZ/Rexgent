@@ -17,6 +17,21 @@ DEFAULT_OUTFIT = "a simple, well-fitted everyday outfit"
 IDENTITY_MATCH_SIM = 0.35
 IDENTITY_MAX_ATTEMPTS = 2
 
+import re as _re
+
+# Image models love to invent spectacles onto "gentle/refined" faces, and an
+# invented pair gets locked into the identity forever (the default plate seeds
+# the face reference). Ban eyewear UNLESS the character's own description or
+# outfit actually calls for it.
+_EYEWEAR = _re.compile(r"glasses|spectacles|eyewear|sunglasses|眼镜", _re.I)
+
+
+def char_plate_negative(*texts) -> str:
+    if any(_EYEWEAR.search(x or "") for x in texts):
+        return CHAR_PLATE_NEGATIVE
+    return CHAR_PLATE_NEGATIVE + ", eyeglasses, spectacles, glasses on face"
+
+
 # Keep the reference identity, one person only, and no scene bleed-through.
 CHAR_PLATE_NEGATIVE = (
     "two people, second person, multiple people, another person, crowd, background people, "

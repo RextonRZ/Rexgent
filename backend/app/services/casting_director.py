@@ -8,7 +8,8 @@ from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
 from app.services.wardrobe_planner import WardrobePlanner
 from app.services.plate_generator import (PlateGenerator, character_plate_prompt,
-                                          subject_descriptor, CHAR_PLATE_NEGATIVE)
+                                          subject_descriptor, CHAR_PLATE_NEGATIVE,
+                                          char_plate_negative)
 from app.services.prompt_loader import load_prompt
 from app.services.guardrails import strip_character_names
 from app.websocket.emitter import emit
@@ -202,7 +203,9 @@ class CastingDirector:
                 prompt = character_plate_prompt(bool(c.reference_image_url), subject, outfit)
                 url, vector = await self.plates.generate_and_store_plate(
                     pid, "character", f"{c.name}_{v['label']}", prompt,
-                    negative_prompt=CHAR_PLATE_NEGATIVE,
+                    negative_prompt=char_plate_negative(
+                        c.visual_description, c.physical_description,
+                        c.video_prompt_fragment, outfit),
                     base_image_url=c.reference_image_url, prompt_extend=False,
                     # verify the rendered face against the uploaded one
                     match_vector=c.face_vector if c.reference_image_url else None)

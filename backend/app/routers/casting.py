@@ -8,7 +8,8 @@ from app.models.costume_variant import CostumeVariant
 from app.models.location_plate import LocationPlate
 from app.models.style_preset import StylePreset
 from app.services.plate_generator import (PlateGenerator, character_plate_prompt,
-                                          subject_descriptor, CHAR_PLATE_NEGATIVE)
+                                          subject_descriptor, CHAR_PLATE_NEGATIVE,
+                                          char_plate_negative)
 from app.services.oss_manager import OSSManager
 from app.services.face_embedder import FaceEmbedder
 from app.services.qwen_client import QwenClient
@@ -133,7 +134,9 @@ async def regenerate_variant(variant_id: str, db: Session = Depends(get_db)):
     with tool_run(pid, "characters", "generate_plates", "Casting") as tb:
         url, vector = await PlateGenerator().generate_and_store_plate(
             str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
-            negative_prompt=CHAR_PLATE_NEGATIVE,
+            negative_prompt=char_plate_negative(
+                char.visual_description, char.physical_description,
+                char.video_prompt_fragment, v.outfit_description),
             base_image_url=char.reference_image_url, prompt_extend=False,
             match_vector=char.face_vector if char.reference_image_url else None)
         tb["artifact"] = f"{char.name} {v.label} replated"
@@ -246,7 +249,9 @@ async def swap_variant_outfit(variant_id: str, file: UploadFile = File(...),
                 prompt = _char_plate_prompt(char, outfit)
                 url, vector = await PlateGenerator(db).generate_and_store_plate(
                     str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
-                    negative_prompt=CHAR_PLATE_NEGATIVE,
+                    negative_prompt=char_plate_negative(
+                        char.visual_description, char.physical_description,
+                        char.video_prompt_fragment, outfit),
                     base_image_url=char.reference_image_url, prompt_extend=False,
                     match_vector=char.face_vector if char.reference_image_url else None)
                 tb["artifact"] = f"{char.name} {v.label} re-dressed"
@@ -323,7 +328,9 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
         prompt = _char_plate_prompt(c, v.outfit_description or "")
         url, vector = await pg.generate_and_store_plate(
             project_id, "character", f"{c.name}_{v.label}", prompt,
-            negative_prompt=CHAR_PLATE_NEGATIVE,
+            negative_prompt=char_plate_negative(
+                c.visual_description, c.physical_description,
+                c.video_prompt_fragment, v.outfit_description),
             base_image_url=c.reference_image_url, prompt_extend=False,
             match_vector=c.face_vector if c.reference_image_url else None)
         v.plate_image_url, v.face_vector, v.plate_status = url, vector, "ai_generated"

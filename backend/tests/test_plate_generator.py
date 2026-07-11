@@ -179,3 +179,13 @@ async def test_match_vector_from_pgvector_is_a_numpy_array():
         base_image_url="https://oss/face.png", match_vector=ref)
     assert url == "https://oss/x.png"
     gen.qwen.edit_image.assert_awaited_once()
+
+
+def test_eyewear_banned_unless_the_character_asks_for_it():
+    from app.services.plate_generator import char_plate_negative, CHAR_PLATE_NEGATIVE
+    # invented glasses were getting locked into seeded identities — ban by default
+    assert "eyeglasses" in char_plate_negative("gentle gaze, refined jawline", "", None)
+    # a character whose own description wears glasses keeps them
+    assert char_plate_negative("always wears round glasses", "") == CHAR_PLATE_NEGATIVE
+    # outfit-level eyewear (e.g. sunglasses from an outfit swap) also lifts the ban
+    assert char_plate_negative("", "", "black suit with aviator sunglasses") == CHAR_PLATE_NEGATIVE
