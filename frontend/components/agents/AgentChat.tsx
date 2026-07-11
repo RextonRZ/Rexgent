@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAgentChat, type ChatMessage } from "@/hooks/useAgentChat";
 import { useClarifications } from "@/hooks/useAgents";
-import { useApproveCasting } from "@/hooks/useCasting";
 import { useCalculateBudget } from "@/hooks/useBudget";
+import { useProjectProgress } from "@/hooks/useProjectProgress";
 import { useCharacters, useExtractCharacters } from "@/hooks/useCharacters";
 import { useGenerateStoryboard } from "@/hooks/useStoryboard";
 import { useUpdateProject } from "@/hooks/useProjects";
@@ -278,7 +278,7 @@ export function AgentChat({ projectId }: { projectId: string }) {
   const { messages, running, pushLocal } = useAgentChat(projectId);
   const [question, setQuestion] = useState("");
   const [thinking, setThinking] = useState(false);
-  const approveCasting = useApproveCasting(projectId);
+  const progress = useProjectProgress(projectId);
   const updateProject = useUpdateProject();
   const recalcBudget = useCalculateBudget();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -511,28 +511,37 @@ export function AgentChat({ projectId }: { projectId: string }) {
           <ActionCard title="Casting ready for review">
             <p className="text-[11px] leading-4 text-foreground/90">
               The bible is cast: faces, costumes, locations and style plates.
-              Approving fits the budget and starts paid video generation.
+              Review them, then continue. Paid video generation only starts
+              when you press it on the Generate page.
             </p>
             <div className="flex gap-1.5">
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 flex-1 text-xs"
-                onClick={() => router.push(`/projects/${projectId}/characters`)}
+                onClick={() => {
+                  setAwaitingCasting(false);
+                  router.push(`/projects/${projectId}/characters`);
+                }}
               >
                 Review plates
               </Button>
               <Button
                 size="sm"
                 className="h-7 flex-1 text-xs"
-                disabled={approveCasting.isPending}
-                onClick={() =>
-                  approveCasting.mutate(undefined, {
-                    onSuccess: () => setAwaitingCasting(false),
-                  })
-                }
+                disabled={boardScenes.isPending}
+                onClick={() => {
+                  setAwaitingCasting(false);
+                  if (progress?.storyboard) {
+                    go(`/projects/${projectId}/generate`);
+                  } else {
+                    continueFrom("characters");
+                  }
+                }}
               >
-                {approveCasting.isPending ? "Starting…" : "Approve and generate"}
+                {progress?.storyboard
+                  ? "Go to Generate →"
+                  : "Storyboard the scenes →"}
               </Button>
             </div>
           </ActionCard>

@@ -108,7 +108,7 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
     {
       key: "profile_cast", icon: UserRound, kind: "llm",
       run: "on-demand",
-      trigger: "press Generate appearance on a character card",
+      trigger: "press Generate Appearance (no photo) on a character card to write a look from the personality when there is no face photo",
     },
   ],
   storyboard: [

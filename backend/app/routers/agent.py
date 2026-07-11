@@ -155,7 +155,7 @@ CREW_PIPELINE_GUIDE = {
         "generate_plates (auto: renders style, location and character plates)",
         "voice_assign (auto: gives each character a distinct voice)",
         "face_lock (conditional: locks automatically when plates capture a clear face; uploading a reference photo on a character card locks a real look instead. Uploading a face is ALWAYS optional, never required)",
-        "profile_cast (on-demand: Generate appearance button on a character card)",
+        "profile_cast (on-demand: the Generate Appearance (no photo) button on a character card, writes a visual look from the personality when no face photo exists)",
     ]},
     "storyboard": {"agent": "Director", "steps": [
         "memory_recall (auto: reads facts earlier scenes established, from the narrative memory graph)",
