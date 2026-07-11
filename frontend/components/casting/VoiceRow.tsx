@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SpendConfirm, type SpendRequest } from "@/components/shared/SpendConfirm";
 import { Button } from "@/components/ui/button";
 import {
   useSetPresetVoice,
@@ -31,6 +32,18 @@ export function VoiceRow({
   const [previewing, setPreviewing] = useState(false);
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [spend, setSpend] = useState<SpendRequest | null>(null);
+
+  // both clone paths (recording and file) confirm before enrolling
+  const confirmClone = (file: File) =>
+    setSpend({
+      title: "Clone this voice",
+      costLine:
+        "Cloning enrolls your recording with the speech service, and every line spoken with a cloned voice bills at a higher rate than the presets.",
+      note: "The cloned voice then reads all of this character's dialogue.",
+      confirmLabel: "Clone voice",
+      run: () => cloneVoice.mutate({ characterId, file }),
+    });
 
   const fileRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -77,7 +90,7 @@ export function VoiceRow({
         const type = mr.mimeType || "audio/webm";
         const ext = type.includes("mp4") ? "mp4" : type.includes("ogg") ? "ogg" : "webm";
         const file = new File(chunksRef.current, `sample.${ext}`, { type });
-        cloneVoice.mutate({ characterId, file });
+        confirmClone(file);
       };
       mr.start();
       recorderRef.current = mr;
@@ -187,7 +200,7 @@ export function VoiceRow({
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) cloneVoice.mutate({ characterId, file: f });
+                if (f) confirmClone(f);
               }}
             />
             <Button
@@ -215,6 +228,7 @@ export function VoiceRow({
       )}
 
       {previewUrl && <audio src={previewUrl} controls autoPlay className="w-full h-7" />}
+      <SpendConfirm request={spend} onClose={() => setSpend(null)} />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LiveStageStrip } from "@/components/shared/LiveStageStrip";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { SpendConfirm, type SpendRequest } from "@/components/shared/SpendConfirm";
 import { Skeleton } from "@/components/shared/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StoryboardView } from "@/components/storyboard/StoryboardView";
@@ -66,13 +67,22 @@ export default function StoryboardPage({
       });
   }, [hasShots, budget, calculateBudget, params.id, refetch]);
 
+  const [spend, setSpend] = useState<SpendRequest | null>(null);
   const handleGenerate = () =>
-    generateStoryboard.mutate(params.id, {
-      onSuccess: () => {
-        // new board -> re-allocate
-        setBudget(null);
-        autoBudgeted.current = false;
-      },
+    setSpend({
+      title: "Generate the storyboard",
+      costLine:
+        "Boarding costs a few cents of AI writing, and every new location gets a background plate at about $0.08 each.",
+      note: "Re-boarding replaces the current shots; locations that already have plates are not repainted.",
+      confirmLabel: "Generate storyboard",
+      run: () =>
+        generateStoryboard.mutate(params.id, {
+          onSuccess: () => {
+            // new board -> re-allocate
+            setBudget(null);
+            autoBudgeted.current = false;
+          },
+        }),
     });
 
   return (
@@ -181,6 +191,7 @@ export default function StoryboardPage({
           </div>
         </TabsContent>
       </Tabs>
+      <SpendConfirm request={spend} onClose={() => setSpend(null)} />
       <NextStepButton projectId={params.id} current="storyboard" />
     </div>
   );

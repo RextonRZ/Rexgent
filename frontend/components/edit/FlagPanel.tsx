@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useFlagClip, useRegenClip, useApproveClip } from "@/hooks/useEditFlag";
+import { SpendConfirm, type SpendRequest } from "@/components/shared/SpendConfirm";
 import { RegenComparison } from "./RegenComparison";
 
 const FLAG_TYPES = ["APPEARANCE", "ACTION", "LIGHTING", "AUDIO", "TIMING", "OTHER"];
@@ -30,6 +31,7 @@ export function FlagPanel({
   const [flagType, setFlagType] = useState("APPEARANCE");
   const [severity, setSeverity] = useState("MAJOR");
   const [description, setDescription] = useState("");
+  const [spend, setSpend] = useState<SpendRequest | null>(null);
   const [regen, setRegen] = useState<{
     new_clip_id: string;
     new_url: string;
@@ -112,7 +114,19 @@ export function FlagPanel({
             />
           </div>
           <div className="flex gap-2">
-            <Button onClick={handleRegen} disabled={!description || busy}>
+            <Button
+              onClick={() =>
+                setSpend({
+                  title: "Regenerate this take",
+                  costLine:
+                    "This re-renders the clip on real credit, about $0.55 for a 5s take and up to $1.50 for a long premium one.",
+                  note: "Your note rewrites the prompt first, so the new take targets exactly what you flagged.",
+                  confirmLabel: "Regenerate",
+                  run: handleRegen,
+                })
+              }
+              disabled={!description || busy}
+            >
               {busy ? "Regenerating with Qwen-Max + HappyHorse..." : "Regenerate Clip"}
             </Button>
             <Button variant="outline" onClick={() => handleApprove(clipId)}>
@@ -132,6 +146,7 @@ export function FlagPanel({
           onKeepOriginal={() => setRegen(null)}
         />
       )}
+      <SpendConfirm request={spend} onClose={() => setSpend(null)} />
     </div>
   );
 }
