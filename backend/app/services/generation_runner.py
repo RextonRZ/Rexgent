@@ -326,7 +326,8 @@ class GenerationRunner:
                                  LineAudio.scene_number == scene.number)
                          .order_by(LineAudio.line_index).all())
             scene_lines = [{"audio_url": r.audio_url,
-                            "character_name": r.character_name}
+                            "character_name": r.character_name,
+                            "duration": r.duration_seconds}
                            for r in line_rows if r.audio_url]
             for i, shot in enumerate(active):
                 if self._cancelled:
@@ -457,10 +458,17 @@ class GenerationRunner:
                     from app.services.lipsync import lipsync_media, speaker_matches
                     frame_anchor = prev_last_frame_url or scene_anchor_url
                     lip = (lipsync_line
-                           if (get_settings().lipsync_enabled
+                           # a poll-time lip failure must degrade on the
+                           # retry, not repeat itself
+                           if (attempt == 0
+                               and get_settings().lipsync_enabled
                                and frame_anchor
                                and lipsync_line
                                and lipsync_line.get("audio_url")
+                               # an over-long driving track risks a wan-side
+                               # rejection; unknown duration is treated as unsafe
+                               and (lipsync_line.get("duration") or 0) > 0
+                               and lipsync_line["duration"] <= shot.estimated_duration_seconds
                                and speaker_matches(lipsync_line, in_frame, foreground))
                            else None)
                     task_id = None

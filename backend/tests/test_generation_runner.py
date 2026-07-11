@@ -180,7 +180,8 @@ def _wan_shot():
     return shot
 
 
-LINE = {"audio_url": "http://a/line.mp3", "character_name": "Yuki"}
+LINE = {"audio_url": "http://a/line.mp3", "character_name": "Yuki",
+        "duration": 4.0}  # fits the 5s shot
 
 
 @pytest.mark.asyncio
@@ -248,6 +249,47 @@ async def test_wan_shot_without_frame_anchor_renders_on_happyhorse(monkeypatch):
     added = runner.db.add.call_args[0][0]
     assert added.model_used == "happyhorse"
     assert seen["tier"] == "happyhorse"
+
+
+@pytest.mark.asyncio
+async def test_retry_attempt_never_repeats_the_lip_path(monkeypatch):
+    runner = make_runner()
+    # wan ACCEPTED the driving_audio task but failed it asynchronously — the
+    # dispatch succeeds, the POLL raises into the attempt loop
+    runner.qwen.poll_video_task = AsyncMock(
+        side_effect=[RuntimeError("task failed server-side"), "http://x/clip.mp4"])
+    runner.continuity.validate = _continuity_pass()
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "get_settings",
+                        lambda: SimpleNamespace(lipsync_enabled=True))
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
+                               "prevframe", lipsync_line=LINE)
+    # attempt 0 lip-synced and died at poll time; the retry DEGRADES to plain
+    # first-frame instead of repeating the same doomed lip dispatch
+    assert runner.qwen.generate_video_wan.await_count == 2
+    second = runner.qwen.generate_video_wan.await_args_list[1].kwargs
+    assert second["reference_media"] == [{"type": "first_frame", "url": "prevframe"}]
+    # and the shot survived
+    added = runner.db.add.call_args[0][0]
+    assert added.status == "APPROVED"
+
+
+@pytest.mark.asyncio
+async def test_over_long_line_never_drives_the_shot(monkeypatch):
+    runner = make_runner()
+    runner.continuity.validate = _continuity_pass()
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "get_settings",
+                        lambda: SimpleNamespace(lipsync_enabled=True))
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    long_line = dict(LINE, duration=8.0)  # 8s of audio cannot fit a 5s shot
+    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
+                               "prevframe", lipsync_line=long_line)
+    # otherwise eligible, but the line outruns the shot: plain first-frame only
+    assert runner.qwen.generate_video_wan.await_count == 1
+    kwargs = runner.qwen.generate_video_wan.await_args.kwargs
+    assert kwargs["reference_media"] == [{"type": "first_frame", "url": "prevframe"}]
 
 
 @pytest.mark.asyncio
