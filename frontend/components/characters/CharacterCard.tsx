@@ -200,9 +200,12 @@ export function CharacterCard({
                   disabled={generatePlates.isPending}
                   onClick={() => generatePlates.mutate(character.id)}
                   title={
-                    hasFace
-                      ? "Generate outfits on the face above"
-                      : "No face set — a default face will be invented"
+                    (hasFace
+                      ? "Generate outfits on the face above."
+                      : "No face set, a default face will be invented.") +
+                    ` Costs about $${(
+                      Math.max(casting?.variants.length ?? 0, 1) * 0.075
+                    ).toFixed(2)}.`
                   }
                 >
                   {generatePlates.isPending

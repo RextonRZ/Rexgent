@@ -107,7 +107,7 @@ export function PlateCard({
             {onRegenerate && (
               <button
                 onClick={onRegenerate}
-                title="Regenerate plate"
+                title="Regenerate plate. Costs about $0.08, up to $0.15 if the face check re-rolls."
                 className="h-8 w-8 rounded-full bg-background/90 hover:bg-background flex items-center justify-center text-sm"
               >
                 ↻
@@ -125,7 +125,7 @@ export function PlateCard({
             {onSwapOutfit && (
               <button
                 onClick={() => outfitInputRef.current?.click()}
-                title="Swap outfit from a photo: the clothing is copied, the person in your photo is ignored"
+                title="Swap outfit from a photo: the clothing is copied, the person in your photo is ignored. Costs about $0.09, up to $0.17 with a face re-roll."
                 className="h-8 w-8 rounded-full bg-background/90 hover:bg-background flex items-center justify-center"
               >
                 <Shirt className="size-3.5" />

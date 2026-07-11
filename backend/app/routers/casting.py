@@ -205,6 +205,23 @@ async def swap_variant_outfit(variant_id: str, file: UploadFile = File(...),
     emit("stage:progress", {"stage": "casting", "status": "started",
          "agent": "Casting Director",
          "label": f"Reading the outfit from your photo for {char.name}"}, pid)
+    # normalize the upload: phone photos arrive huge and in any format (HEIC,
+    # webp, PNG) — re-encode to a bounded JPEG so the vision call never chokes
+    # on payload size or an unsupported container
+    try:
+        import io as _io
+        from PIL import Image as _Image
+        img = _Image.open(_io.BytesIO(content)).convert("RGB")
+        img.thumbnail((1280, 1280))
+        buf = _io.BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        content = buf.getvalue()
+    except Exception:
+        emit("stage:progress", {"stage": "casting", "status": "failed",
+             "agent": "Casting Director",
+             "label": "That file does not read as an image"}, pid)
+        raise HTTPException(status_code=422,
+                            detail="That file does not read as an image. Upload a JPG or PNG photo of the outfit.")
     b64 = base64.b64encode(content).decode()
     qwen = QwenClient(get_settings())
     try:
@@ -238,11 +255,15 @@ async def swap_variant_outfit(variant_id: str, file: UploadFile = File(...),
         emit("stage:progress", {"stage": "casting", "status": "failed",
              "agent": "Casting Director", "label": str(e.detail)[:120]}, pid)
         raise
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        # surface the REAL reason — a bare 500 taught the user nothing
+        import logging
+        logging.getLogger(__name__).exception("outfit swap failed for %s", char.name)
+        reason = f"{type(e).__name__}: {str(e)[:140]}"
         emit("stage:progress", {"stage": "casting", "status": "failed",
              "agent": "Casting Director",
-             "label": f"Outfit swap failed for {char.name}"}, pid)
-        raise
+             "label": f"Outfit swap failed for {char.name}: {reason}"}, pid)
+        raise HTTPException(status_code=502, detail=f"Outfit swap failed: {reason}")
     emit("stage:progress", {"stage": "casting", "status": "completed",
          "agent": "Casting Director",
          "label": f"{char.name} re-dressed, plate ready"}, pid)

@@ -95,7 +95,9 @@ export default function CharactersPage({
           variant="outline"
           onClick={() => runCasting.mutate()}
           disabled={runCasting.isPending}
-          title="Generate costume, location & style plates for the whole cast"
+          title={`Generate costume, location & style plates for the whole cast. Costs roughly $${(
+            (characters.length * 2 + 3) * 0.075
+          ).toFixed(2)} in image generation.`}
         >
           {runCasting.isPending ? "Generating…" : "Generate Plates"}
         </Button>
