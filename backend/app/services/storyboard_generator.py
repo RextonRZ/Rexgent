@@ -63,9 +63,11 @@ class StoryboardGenerator:
             f"Characters involved:\n{json.dumps(characters_in_scene, ensure_ascii=False)}\n\n"
             f"Director's style bible:\n{json.dumps(style_bible or {}, ensure_ascii=False)}\n\n"
             f"This scene has {len(lines)} dialogue line(s). Produce at most {cap} "
-            f"shot(s). Preserve EVERY dialogue line verbatim and in order; do not "
-            f"invent beats or endings. Clip length is set automatically to fit each "
-            f"spoken line, so give each shot the dialogue it should carry."
+            f"shot(s), plus ONE extra shot for each react-then-reveal pair if the "
+            f"scene contains an entrance or discovery beat. Preserve EVERY dialogue "
+            f"line verbatim and in order; do not invent beats or endings. Clip "
+            f"length is set automatically to fit each spoken line, so give each "
+            f"shot the dialogue it should carry."
         )
         messages = [
             {"role": "system", "content": self.prompt_template},

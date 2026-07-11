@@ -147,3 +147,28 @@ async def test_shot_budget_capped_for_runaway_scene():
              "dialogue": [{"character": "X", "line": f"l{i}"} for i in range(30)]}
     result = await gen.generate_for_scene(scene_json=scene, characters_in_scene=[])
     assert len(result) == StoryboardGenerator._HARD_CAP
+
+
+@pytest.mark.asyncio
+async def test_reveal_pairs_get_budget_headroom():
+    # react-then-reveal beats are TWO shots; the budget line must say so or
+    # the cap squeezes the pair back into one crammed frame
+    gen = StoryboardGenerator.__new__(StoryboardGenerator)
+    gen.qwen = MagicMock()
+    gen.qwen.chat_json = AsyncMock(return_value=[])
+    gen.prompt_template = "placeholder"
+
+    await gen.generate_for_scene(
+        {"scene_number": 1, "dialogue": ["a", "b"]}, [], max_shots=2)
+    user_msg = gen.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "react-then-reveal pair" in user_msg
+
+
+def test_template_stages_reveals_as_two_shots():
+    from app.services.prompt_loader import load_prompt
+    t = load_prompt("storyboard_generate.txt")
+    assert "REACT-THEN-REVEAL" in t
+    assert "TWO consecutive shots" in t
+    assert "eyeline OFF-camera toward" in t
+    # the old single-shot reveal instruction must be gone
+    assert "never make the reveal a two-shot that splits attention" not in t
