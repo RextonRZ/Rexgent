@@ -35,3 +35,12 @@ def test_zero_or_negative_scope_is_clamped():
     est = estimate_budget(0, 0, characters=0)
     assert est["scope"]["episodes"] == 1
     assert est["credit_usd"] > 0
+
+
+def test_calibrated_against_a_real_production_ledger():
+    # ground truth: a completed 40s full-auto drama (4 scenes, 8 shots,
+    # 4 characters) burned 76K LLM tokens and $4.32 of video. The estimate
+    # must land in that world — the old constants said 19K, a 4x fantasy.
+    est = estimate_budget(1, 40, characters=4)
+    assert 60_000 <= est["llm_tokens"] <= 95_000
+    assert 3.5 <= est["credit_breakdown"]["video"] <= 7.0
