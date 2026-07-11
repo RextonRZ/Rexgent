@@ -362,7 +362,7 @@ class GenerationRunner:
 
     async def _craft_prompt(self, shot, char_by_name, scene_setting=None,
                             prev_action=None, next_action=None, foreground=None,
-                            outfits=None) -> str:
+                            outfits=None, blocking=None, lipsync=False) -> str:
         in_frame = shot.characters_in_frame or []
         fg = set(foreground or [])
         shot_chars = [char_by_name[n] for n in in_frame if n in char_by_name]
@@ -384,6 +384,8 @@ class GenerationRunner:
             prev_action=prev_action,
             next_action=next_action,
             foreground_characters=[n for n in in_frame if n in fg],
+            blocking=blocking,
+            lipsync=lipsync,
         )
         return result.get("prompt", "")
 
@@ -439,24 +441,13 @@ class GenerationRunner:
         for attempt in range(MAX_RETRIES + 1):
             try:
                 ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
-                tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
-                           index=job.completed_shots + 1, total=job.total_shots)
-                prompt = await self._craft_prompt(
-                    shot, char_by_name, scene_setting, prev_action, next_action,
-                    foreground=foreground, outfits=outfits)
-                tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
-                used_tier = shot.quality_tier or "happyhorse"
+                # the lip decision comes BEFORE prompt crafting: a mouth-driven
+                # shot is framed openly talking, every other spoken line gets
+                # mouth-hiding coverage — the crafter needs to know which
+                from app.services.lipsync import lipsync_media, speaker_matches
+                frame_anchor = (prev_last_frame_url or scene_anchor_url) if is_wan else None
+                lip = None
                 if is_wan:
-                    # wan2.7-i2v does NOT take identity references — its media
-                    # schema is first_frame / last_frame / driving_audio /
-                    # first_clip only. Give wan its REAL jobs: continue the
-                    # scene from the previous shot's last frame, and when this
-                    # shot speaks exactly one line with one visible speaker,
-                    # DRIVE the mouth with that line's own TTS audio. Any
-                    # failure falls down the chain: lip-sync -> plain
-                    # first-frame -> happyhorse r2v. Never blocks the shot.
-                    from app.services.lipsync import lipsync_media, speaker_matches
-                    frame_anchor = prev_last_frame_url or scene_anchor_url
                     lip = (lipsync_line
                            # a poll-time lip failure must degrade on the
                            # retry, not repeat itself
@@ -471,6 +462,24 @@ class GenerationRunner:
                                and lipsync_line["duration"] <= shot.estimated_duration_seconds
                                and speaker_matches(lipsync_line, in_frame, foreground))
                            else None)
+                tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
+                           index=job.completed_shots + 1, total=job.total_shots)
+                prompt = await self._craft_prompt(
+                    shot, char_by_name, scene_setting, prev_action, next_action,
+                    foreground=foreground, outfits=outfits,
+                    blocking=getattr(shot, "blocking_json", None),
+                    lipsync=bool(lip))
+                tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
+                used_tier = shot.quality_tier or "happyhorse"
+                if is_wan:
+                    # wan2.7-i2v does NOT take identity references — its media
+                    # schema is first_frame / last_frame / driving_audio /
+                    # first_clip only. Give wan its REAL jobs: continue the
+                    # scene from the previous shot's last frame, and when this
+                    # shot speaks exactly one line with one visible speaker,
+                    # DRIVE the mouth with that line's own TTS audio. Any
+                    # failure falls down the chain: lip-sync -> plain
+                    # first-frame -> happyhorse r2v. Never blocks the shot.
                     task_id = None
                     if lip:
                         try:

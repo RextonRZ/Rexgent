@@ -156,7 +156,47 @@ async def test_craft_without_foreground_has_no_occlusion_block():
 
 
 @pytest.mark.asyncio
-async def test_dialogue_shot_gets_delivery_block():
+async def test_unsynced_dialogue_shot_gets_mouth_hiding_coverage():
+    # the hybrid: a line that will NOT be mouth-driven is framed off the
+    # readable mouth (OTS / profile / listener), never front-facing talking
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    result = await crafter.craft(
+        shot={"shot_type": "MCU", "dialogue": "We need to go, now."},
+        character_visuals={}, target_model="happyhorse")
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Dialogue delivery" in user_msg
+    assert "coverage" in user_msg
+    assert "never be sharply front-facing" in user_msg
+    assert "mid-conversation" not in user_msg
+    assert "We need to go, now." in user_msg
+    # the secondary backstop rides the negative prompt
+    assert "talking mouth close-up" in result["negative_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_lipsynced_dialogue_shot_stays_front_facing():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    result = await crafter.craft(
+        shot={"shot_type": "MCU", "dialogue": "We need to go, now."},
+        character_visuals={}, target_model="wan", lipsync=True)
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "mid-conversation" in user_msg
+    assert "We need to go, now." in user_msg
+    assert "talking mouth close-up" not in result["negative_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_blocking_renders_absolute_positions():
     crafter = ScenePromptCraft.__new__(ScenePromptCraft)
     crafter.qwen = MagicMock()
     crafter.qwen.chat_json = AsyncMock(return_value={
@@ -164,12 +204,36 @@ async def test_dialogue_shot_gets_delivery_block():
     crafter.prompt_template = "placeholder"
 
     await crafter.craft(
-        shot={"shot_type": "MCU", "dialogue": "We need to go, now."},
-        character_visuals={}, target_model="happyhorse")
+        shot={"shot_type": "MS"},
+        character_visuals={}, target_model="happyhorse",
+        blocking={"subjects": [
+            {"character": "SOL", "frame_position": "FG", "screen_side": "right",
+             "facing": "screen-left", "eyeline": "at the figure",
+             "action": "stepping backward toward camera"},
+            {"character": "FIGURE", "frame_position": "BG", "screen_side": "left",
+             "facing": "screen-right", "action": "advancing"},
+        ], "reverse_angle": False})
     user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
-    assert "Dialogue delivery" in user_msg
-    assert "mid-conversation" in user_msg
-    assert "We need to go, now." in user_msg
+    assert "Blocking (rule 12" in user_msg
+    assert "SOL: FG, screen-right, facing screen-left" in user_msg
+    assert "FIGURE: BG, screen-left, facing screen-right, advancing" in user_msg
+    assert "REVERSE ANGLE" not in user_msg
+
+
+@pytest.mark.asyncio
+async def test_reverse_angle_is_declared():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(
+        shot={}, character_visuals={}, target_model="happyhorse",
+        blocking={"subjects": [{"character": "SOL", "screen_side": "left"}],
+                  "reverse_angle": True})
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "deliberate REVERSE ANGLE" in user_msg
 
 
 @pytest.mark.asyncio

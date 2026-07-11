@@ -37,6 +37,8 @@ class ScenePromptCraft:
         prev_action: str | None = None,
         next_action: str | None = None,
         foreground_characters: list | None = None,
+        blocking: dict | None = None,
+        lipsync: bool = False,
     ) -> dict:
         # A location named after a character ("Bear's apartment") must not smuggle
         # the character-noun into the background — strip names from the setting text
@@ -75,26 +77,69 @@ class ScenePromptCraft:
         # Foreground occluders (rule 15): named characters who are only a
         # back/shoulder to camera. Staged as soft-focus foreground, face unseen,
         # so the subject stays the focus.
+        # Absolute geometry (rule 12): each subject's depth, screen side,
+        # facing and eyeline, resolved by the storyboard and enforced by the
+        # stage map — relational verbs never reach the model unresolved.
+        blocking_block = ""
+        if blocking and blocking.get("subjects"):
+            rows = []
+            for s in blocking["subjects"]:
+                bits = [
+                    s.get("frame_position"),
+                    f"screen-{s['screen_side']}" if s.get("screen_side") else None,
+                    f"facing {s['facing']}" if s.get("facing") else None,
+                    f"eyeline {s['eyeline']}" if s.get("eyeline") else None,
+                    s.get("action"),
+                ]
+                rows.append(f"- {s.get('character')}: " + ", ".join(b for b in bits if b))
+            nl = "\n"
+            blocking_block = (
+                "Blocking (rule 12 — ABSOLUTE positions, follow exactly; this is how "
+                "consecutive shots stay in one geometry):" + nl
+                + nl.join(rows)
+                + (nl + "This shot is a deliberate REVERSE ANGLE."
+                   if blocking.get("reverse_angle") else "")
+                + nl + nl
+            )
         foreground_block = (
             f"Foreground occlusion (rule 15 — show ONLY as a soft-focus back or "
             f"shoulder in the near foreground, face turned away and not visible; "
             f"do NOT make them a co-subject): {json.dumps(list(foreground_characters), ensure_ascii=False)}\n\n"
             if foreground_characters else ""
         )
-        # Per-shot reinforcement of template rule 10, placed next to the shot data:
-        # closed mouths or random extras chattering. Audio stays export's job
-        # (TTS overlays there); this rule shapes only the picture.
-        dialogue_block = (
-            "Dialogue delivery (rule 10 applied to THIS shot — the speaker is visibly mid-conversation: "
-            "natural mouth movement while speaking, conversational gesture, eye "
-            "focus on the listener or camera; NO on-screen text or subtitles. "
-            "Background audio: ambient sound, sound effects and light musical "
-            "score only, with NO spoken voices): "
-            f"{json.dumps(str(shot.get('dialogue')), ensure_ascii=False)}\n\n"
-            if str(shot.get("dialogue") or "").strip() else ""
-        )
+        # Per-shot dialogue treatment, two modes. A shot whose mouth will be
+        # DRIVEN by its own line (wan driving_audio) is framed openly talking;
+        # every other spoken line hides the mouth (coverage) so an unsynced
+        # flapping mouth is never front-and-center. Audio itself stays
+        # export's job (TTS overlays there); this shapes only the picture.
+        has_line = bool(str(shot.get("dialogue") or "").strip())
+        if has_line and lipsync:
+            dialogue_block = (
+                "Dialogue delivery (rule 10 applied to THIS shot — the speaker is visibly mid-conversation: "
+                "natural mouth movement while speaking, conversational gesture, eye "
+                "focus on the listener or camera; NO on-screen text or subtitles. "
+                "Background audio: ambient sound, sound effects and light musical "
+                "score only, with NO spoken voices): "
+                + json.dumps(str(shot.get("dialogue")), ensure_ascii=False)
+                + "\n\n"
+            )
+        elif has_line:
+            dialogue_block = (
+                "Dialogue delivery (coverage — this line is spoken OFF a readable mouth: "
+                "frame per the blocking as an over-the-shoulder, three-quarter or profile "
+                "angle, or favor the LISTENER reacting while the line plays; the speaker's "
+                "mouth must never be sharply front-facing and readable. Speech is carried "
+                "by gesture, posture and the listener. NO on-screen text or subtitles. "
+                "Background audio: ambient sound, sound effects and light musical score "
+                "only, with NO spoken voices): "
+                + json.dumps(str(shot.get("dialogue")), ensure_ascii=False)
+                + "\n\n"
+            )
+        else:
+            dialogue_block = ""
         user_content = (
             f"Shot data:\n{json.dumps(shot)}\n\n"
+            f"{blocking_block}"
             f"{setting_block}"
             f"{continuity_block}"
             f"{foreground_block}"
@@ -120,4 +165,8 @@ class ScenePromptCraft:
         result["negative_prompt"] = sanitizer.inject_negative_prompt(
             result.get("negative_prompt", "")
         )
+        if has_line and not lipsync:
+            # secondary backstop to the coverage framing above — negatives
+            # alone are unreliable, but they bias away from readable lips
+            result["negative_prompt"] += ", clear front-facing talking mouth close-up"
         return result
