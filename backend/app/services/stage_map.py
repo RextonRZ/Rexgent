@@ -12,19 +12,53 @@ never a violation and never re-establishes a side.
 """
 
 
+import re
+
+_FLAT_KEY_RE = re.compile(
+    r"\b(character_name|frame_position|screen_side|facing|eyeline|action)\s*:",
+    re.IGNORECASE)
+_GEOMETRY_KEYS = ("frame_position", "screen_side", "facing", "eyeline", "action")
+
+
+def _parse_flat_subject(text: str) -> dict | None:
+    """A worse drift than bare names: the WHOLE subject flattened into one
+    string, 'character_name: IM SOL, frame_position: FG, screen_side: left,
+    action: standing still, looking down' (the name sometimes leads bare).
+    Split on the known key markers, never on commas — values contain commas.
+    None when the string carries no key markers at all."""
+    marks = list(_FLAT_KEY_RE.finditer(text))
+    if not marks:
+        return None
+    out: dict = {}
+    lead = text[: marks[0].start()].strip(" ,;")
+    if lead:
+        out["character"] = lead
+    for mark, nxt in zip(marks, list(marks[1:]) + [None]):
+        key = mark.group(1).lower()
+        val = text[mark.end(): nxt.start() if nxt else len(text)].strip(" ,;")
+        if val:
+            out["character" if key == "character_name" else key] = val
+    return out or None
+
+
 def normalize_subjects(raw) -> list | None:
-    """LLM output drifts: `subjects` sometimes arrives as bare name strings
-    (or junk) instead of the structured dicts the schema asks for. Keep the
-    dicts, coerce strings to {'character': name} (presence without geometry),
-    drop everything else. None when nothing usable remains."""
+    """LLM output drifts: `subjects` sometimes arrives as bare name strings,
+    as whole subjects flattened into one string, or as junk instead of the
+    structured dicts the schema asks for. Keep real dicts, un-flatten
+    flattened strings (including geometry trapped inside a dict's own
+    `character` value), coerce plain names to {'character': name}, drop
+    everything else. None when nothing usable remains."""
     if not isinstance(raw, list):
         return None
     out = []
     for s in raw:
         if isinstance(s, dict):
-            out.append(s)
+            flat = None
+            if not any(k in s for k in _GEOMETRY_KEYS):
+                flat = _parse_flat_subject(str(s.get("character") or ""))
+            out.append({**s, **flat} if flat else s)
         elif isinstance(s, str) and s.strip():
-            out.append({"character": s.strip()})
+            out.append(_parse_flat_subject(s.strip()) or {"character": s.strip()})
     return out or None
 
 

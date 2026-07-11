@@ -57,6 +57,48 @@ def test_string_subjects_do_not_crash_the_enforcer():
     assert notes == []
 
 
+def test_flattened_subject_string_unpacks_to_fields():
+    from app.services.stage_map import normalize_subjects
+    subs = normalize_subjects([
+        "character_name: IM SOL, frame_position: FG, screen_side: left, "
+        "facing: screen-right, eyeline: at DOCTOR, action: standing still, looking down"
+    ])
+    assert subs == [{
+        "character": "IM SOL",
+        "frame_position": "FG",
+        "screen_side": "left",
+        "facing": "screen-right",
+        "eyeline": "at DOCTOR",
+        "action": "standing still, looking down",
+    }]
+
+
+def test_flattened_subject_with_bare_leading_name():
+    from app.services.stage_map import normalize_subjects
+    subs = normalize_subjects(["IM SOL, frame_position: MG, screen_side: right"])
+    assert subs == [{"character": "IM SOL", "frame_position": "MG",
+                     "screen_side": "right"}]
+
+
+def test_dict_with_geometry_trapped_in_character_value_is_repaired():
+    from app.services.stage_map import normalize_subjects
+    subs = normalize_subjects([
+        {"character": "character_name: NURSE, screen_side: left, facing: screen-right"}
+    ])
+    assert subs == [{"character": "NURSE", "screen_side": "left",
+                     "facing": "screen-right"}]
+
+
+def test_structured_dicts_and_plain_names_stay_untouched():
+    from app.services.stage_map import normalize_subjects
+    subs = normalize_subjects([
+        {"character": "IM SOL", "screen_side": "left"},
+        "DOCTOR",
+    ])
+    assert subs == [{"character": "IM SOL", "screen_side": "left"},
+                    {"character": "DOCTOR"}]
+
+
 def test_normalize_subjects_coerces_and_filters():
     from app.services.stage_map import normalize_subjects
     assert normalize_subjects(["IM SOL", {"character": "RYU", "screen_side": "left"},
