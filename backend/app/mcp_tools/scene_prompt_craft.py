@@ -81,14 +81,14 @@ class ScenePromptCraft:
             f"do NOT make them a co-subject): {json.dumps(list(foreground_characters), ensure_ascii=False)}\n\n"
             if foreground_characters else ""
         )
-        # Dialogue shots must LOOK like talking: the model otherwise renders
+        # Per-shot reinforcement of template rule 10, placed next to the shot data:
         # closed mouths or random extras chattering. Audio stays export's job
         # (TTS overlays there); this rule shapes only the picture.
         dialogue_block = (
-            "Dialogue delivery (rule 16 — the speaker is visibly mid-conversation: "
+            "Dialogue delivery (rule 10 applied to THIS shot — the speaker is visibly mid-conversation: "
             "natural mouth movement while speaking, conversational gesture, eye "
             "focus on the listener or camera; NO on-screen text or subtitles): "
-            f"{json.dumps(str(shot.get('dialogue'))[:160], ensure_ascii=False)}\n\n"
+            f"{json.dumps(str(shot.get('dialogue')), ensure_ascii=False)}\n\n"
             if str(shot.get("dialogue") or "").strip() else ""
         )
         user_content = (

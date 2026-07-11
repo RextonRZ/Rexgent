@@ -169,6 +169,7 @@ async def test_dialogue_shot_gets_delivery_block():
     user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "Dialogue delivery" in user_msg
     assert "mid-conversation" in user_msg
+    assert "We need to go, now." in user_msg
 
 
 @pytest.mark.asyncio
