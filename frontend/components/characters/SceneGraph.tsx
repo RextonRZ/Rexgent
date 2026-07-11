@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { BlockingDiagram } from "@/components/storyboard/BlockingDiagram";
-import { explainFilmTerm } from "@/lib/filmTerms";
+import { explainFilmTerm, fullShotType } from "@/lib/filmTerms";
 import type {
   GraphScene,
   GraphCharacterInfo,
@@ -163,39 +163,121 @@ export function SceneGraph({
             </button>
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
-            {open.shots.map((shot) => (
-              <div key={shot.id} className="space-y-1.5">
-                <p className="flex items-center gap-2 text-xs">
-                  <span className="rounded bg-primary/15 px-1.5 py-0.5 font-semibold text-primary">
-                    Shot {shot.number}
-                  </span>
-                  {shot.shot_type && (
-                    <span
-                      className="cursor-help text-muted-foreground underline decoration-dotted decoration-white/20 underline-offset-2"
-                      title={explainFilmTerm(shot.shot_type)}
-                    >
-                      {shot.shot_type}
+            {open.shots.map((shot) => {
+              const isWan = shot.quality_tier === "wan";
+              const isDeferred = shot.quality_tier === "deferred";
+              return (
+                <div
+                  key={shot.id}
+                  className="overflow-hidden rounded-lg border hairline bg-background/40"
+                >
+                  {/* header: number · full shot type · movement · duration */}
+                  <div className="flex items-center gap-2 border-b hairline px-3 py-2 text-xs">
+                    <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 font-semibold text-primary">
+                      Shot {shot.number}
                     </span>
-                  )}
-                  <span className="ml-auto text-muted-foreground">
-                    {shot.estimated_duration_seconds}s
-                  </span>
-                </p>
-                {shot.action && (
-                  <p className="line-clamp-2 text-[11px] text-muted-foreground">
-                    {shot.action}
-                  </p>
-                )}
-                {shot.blocking_json?.subjects &&
-                shot.blocking_json.subjects.length > 0 ? (
-                  <BlockingDiagram blocking={shot.blocking_json} />
-                ) : (
-                  <p className="text-[11px] text-muted-foreground/70">
-                    No camera geometry recorded for this shot.
-                  </p>
-                )}
-              </div>
-            ))}
+                    <span className="min-w-0 truncate">
+                      {shot.shot_type && (
+                        <span
+                          className="cursor-help underline decoration-dotted decoration-white/20 underline-offset-2"
+                          title={explainFilmTerm(shot.shot_type)}
+                        >
+                          {fullShotType(shot.shot_type)}
+                        </span>
+                      )}
+                      {shot.camera_movement && (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {shot.camera_movement.toLowerCase().replace(/_/g, " ")}
+                        </span>
+                      )}
+                    </span>
+                    <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
+                      {shot.estimated_duration_seconds}s
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 px-3 py-2.5">
+                    {shot.action && (
+                      <p className="text-xs leading-relaxed">{shot.action}</p>
+                    )}
+                    {shot.dialogue && (
+                      <p className="border-l-2 border-primary/40 py-0.5 pl-2.5 text-[11px] italic text-muted-foreground">
+                        &ldquo;{shot.dialogue}&rdquo;
+                      </p>
+                    )}
+                    {shot.blocking_json?.subjects &&
+                    shot.blocking_json.subjects.length > 0 ? (
+                      <BlockingDiagram
+                        blocking={shot.blocking_json}
+                        cameraMovement={shot.camera_movement}
+                      />
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground/70">
+                        No camera geometry recorded for this shot.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* footer: who is in it, the mood, and which model renders it */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t hairline px-3 py-2 text-[10px] text-zinc-300">
+                    {(shot.characters_in_frame ?? []).length > 0 && (
+                      <span className="flex items-center -space-x-1">
+                        {shot.characters_in_frame!.map((name) => {
+                          const img = faceByName.get(String(name).toUpperCase());
+                          return img ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              key={name}
+                              src={img}
+                              alt={name}
+                              title={name}
+                              className="h-5 w-5 rounded-full border border-card object-cover"
+                            />
+                          ) : (
+                            <span
+                              key={name}
+                              title={name}
+                              className="flex h-5 w-5 items-center justify-center rounded-full border border-card bg-secondary text-[8px] font-medium text-muted-foreground"
+                            >
+                              {String(name).slice(0, 2)}
+                            </span>
+                          );
+                        })}
+                      </span>
+                    )}
+                    {(shot.lighting || shot.colour_mood) && (
+                      <span className="text-zinc-400">
+                        {[shot.lighting, shot.colour_mood]
+                          .filter(Boolean)
+                          .map((v) => String(v).toLowerCase().replace(/_/g, " "))
+                          .join(" · ")}
+                      </span>
+                    )}
+                    <span className="ml-auto flex items-center gap-1.5">
+                      {shot.emotional_beat && (
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary/90">
+                          {shot.emotional_beat}
+                        </span>
+                      )}
+                      {shot.quality_tier && (
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 font-medium ${
+                            isDeferred
+                              ? "bg-warn/15 text-warn"
+                              : isWan
+                                ? "bg-wan/15 text-wan"
+                                : "bg-hh/15 text-hh"
+                          }`}
+                        >
+                          {isDeferred ? "Deferred" : isWan ? "Wan 2.7" : "HappyHorse"}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
             {open.shots.length === 0 && (
               <p className="text-sm text-muted-foreground">
                 No shots in this scene.

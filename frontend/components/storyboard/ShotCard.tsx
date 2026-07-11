@@ -5,7 +5,7 @@ import { Lightbulb, Palette, Clock, Users, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ShotEditor } from "./ShotEditor";
 import { useDeleteShot } from "@/hooks/useStoryboard";
-import { explainFilmTerm } from "@/lib/filmTerms";
+import { explainFilmTerm, fullShotType } from "@/lib/filmTerms";
 import type { Shot } from "@/lib/types";
 
 function Meta({
@@ -53,7 +53,7 @@ export function ShotCard({ shot }: { shot: Shot }) {
                 className="text-muted-foreground cursor-help underline decoration-dotted decoration-white/20 underline-offset-2"
                 title={explainFilmTerm(shot.shot_type)}
               >
-                {shot.shot_type}
+                {fullShotType(shot.shot_type)}
               </span>
             )}
             {shot.camera_movement && (
