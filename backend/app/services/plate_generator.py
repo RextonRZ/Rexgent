@@ -64,12 +64,15 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "") -> st
                   "them younger or older.")
         if outfit:
             return (f"The exact same subject as the reference image ({subject}) — keep the "
-                    f"identical face and hair. {anchor} Wearing {outfit}. {frame}")
+                    f"identical face, and the same hair where the outfit does not cover it. "
+                    f"{anchor} Wearing {outfit}. Render EVERY item of the outfit, including "
+                    f"any headwear, eyewear and accessories. {frame}")
         # no story costume: preserve the reference's own clothing too
         return (f"The exact same subject as the reference image ({subject}) — keep the identical "
                 f"face, hair and the same clothing as the reference. {anchor} {frame}")
     if outfit:
-        return f"{subject}, wearing {outfit}. {frame}"
+        return (f"{subject}, wearing {outfit}. Render every item of the outfit, "
+                f"including any headwear and accessories. {frame}")
     return f"{subject}. {frame}"
 
 

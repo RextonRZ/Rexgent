@@ -122,8 +122,15 @@ async def regenerate_variant(variant_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Variant not found")
     char = db.query(Character).filter(Character.id == v.character_id).first()
     prompt = _char_plate_prompt(char, v.outfit_description or "")
+    # narrate over the stage channel too — the chat bubble and dock listen to
+    # stage:progress, tool events alone light only the crew graph
+    from app.websocket.emitter import emit
+    pid = str(char.project_id)
+    emit("stage:progress", {"stage": "casting", "status": "started",
+         "agent": "Casting Director",
+         "label": f"Re-rendering {char.name} ({v.label})"}, pid)
     from app.websocket.tool_events import tool_run
-    with tool_run(str(char.project_id), "characters", "generate_plates", "Casting") as tb:
+    with tool_run(pid, "characters", "generate_plates", "Casting") as tb:
         url, vector = await PlateGenerator().generate_and_store_plate(
             str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
             negative_prompt=CHAR_PLATE_NEGATIVE,
@@ -135,6 +142,9 @@ async def regenerate_variant(variant_id: str, db: Session = Depends(get_db)):
     if v.is_default and not char.reference_image_url:
         char.reference_image_url, char.face_vector = url, vector
     db.commit()
+    emit("stage:progress", {"stage": "casting", "status": "completed",
+         "agent": "Casting Director",
+         "label": f"{char.name} ({v.label}) replated"}, pid)
     return {"plate_image_url": url}
 
 
@@ -166,7 +176,8 @@ def _char_plate_prompt(char, outfit: str) -> str:
 _OUTFIT_READ_PROMPT = (
     "You are a costume designer. Describe ONLY the outfit visible in this image "
     "in precise, render-ready detail: every garment, its color, material, pattern, "
-    "fit and layering, plus accessories and footwear if visible. COMPLETELY IGNORE "
+    "fit and layering, plus ALL headwear (caps, hats, hoods, beanies), eyewear, "
+    "accessories and footwear if visible. COMPLETELY IGNORE "
     "whoever is wearing it: no face, hair, age, gender, body or identity details "
     "of any person may appear in your answer. "
     'Return ONLY JSON: {"outfit_description": "..."}'
@@ -188,31 +199,53 @@ async def swap_variant_outfit(variant_id: str, file: UploadFile = File(...),
 
     import base64
     from app.services.usage_tracker import track_project
+    from app.websocket.emitter import emit
     from app.websocket.tool_events import tool_run
+    pid = str(char.project_id)
+    emit("stage:progress", {"stage": "casting", "status": "started",
+         "agent": "Casting Director",
+         "label": f"Reading the outfit from your photo for {char.name}"}, pid)
     b64 = base64.b64encode(content).decode()
     qwen = QwenClient(get_settings())
-    with track_project(char.project_id, db):
-        with tool_run(str(char.project_id), "characters", "generate_plates", "Casting") as tb:
-            vl = await qwen.chat_vision_json(
-                messages=[{"role": "user", "content": [
-                    {"type": "image_url",
-                     "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                    {"type": "text", "text": _OUTFIT_READ_PROMPT},
-                ]}],
-                task="casting")
-            outfit = (vl or {}).get("outfit_description") if isinstance(vl, dict) else None
-            if not (outfit or "").strip():
-                raise HTTPException(
-                    status_code=422,
-                    detail="Could not read an outfit from that image. Try a clearer photo of the clothing.")
-            v.outfit_description = outfit
-            prompt = _char_plate_prompt(char, outfit)
-            url, vector = await PlateGenerator(db).generate_and_store_plate(
-                str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
-                negative_prompt=CHAR_PLATE_NEGATIVE,
-                base_image_url=char.reference_image_url, prompt_extend=False,
-                match_vector=char.face_vector if char.reference_image_url else None)
-            tb["artifact"] = f"{char.name} {v.label} re-dressed"
+    try:
+        with track_project(char.project_id, db):
+            with tool_run(pid, "characters", "generate_plates", "Casting") as tb:
+                vl = await qwen.chat_vision_json(
+                    messages=[{"role": "user", "content": [
+                        {"type": "image_url",
+                         "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                        {"type": "text", "text": _OUTFIT_READ_PROMPT},
+                    ]}],
+                    task="casting")
+                outfit = (vl or {}).get("outfit_description") if isinstance(vl, dict) else None
+                if not (outfit or "").strip():
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Could not read an outfit from that image. Try a clearer photo of the clothing.")
+                v.outfit_description = outfit
+                emit("stage:progress", {"stage": "casting", "status": "update",
+                     "agent": "Casting Director",
+                     "label": f"Re-dressing {char.name} ({v.label}) in the new outfit"}, pid)
+                prompt = _char_plate_prompt(char, outfit)
+                url, vector = await PlateGenerator(db).generate_and_store_plate(
+                    str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
+                    negative_prompt=CHAR_PLATE_NEGATIVE,
+                    base_image_url=char.reference_image_url, prompt_extend=False,
+                    match_vector=char.face_vector if char.reference_image_url else None)
+                tb["artifact"] = f"{char.name} {v.label} re-dressed"
+    except HTTPException as e:
+        # close the bubble honestly — an error must never leave it spinning
+        emit("stage:progress", {"stage": "casting", "status": "failed",
+             "agent": "Casting Director", "label": str(e.detail)[:120]}, pid)
+        raise
+    except Exception:
+        emit("stage:progress", {"stage": "casting", "status": "failed",
+             "agent": "Casting Director",
+             "label": f"Outfit swap failed for {char.name}"}, pid)
+        raise
+    emit("stage:progress", {"stage": "casting", "status": "completed",
+         "agent": "Casting Director",
+         "label": f"{char.name} re-dressed, plate ready"}, pid)
     v.plate_image_url, v.face_vector, v.plate_status = url, vector, "ai_generated"
     # never clobber an uploaded face — only seed identity if none exists yet
     if v.is_default and not char.reference_image_url:
@@ -242,6 +275,10 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
         db.flush()
         variants = [v]
 
+    from app.websocket.emitter import emit
+    emit("stage:progress", {"stage": "casting", "status": "started",
+         "agent": "Casting Director",
+         "label": f"Casting {c.name}'s plates"}, project_id)
     from app.websocket.tool_events import tool_event
     tool_event(project_id, "characters", "generate_plates", "started",
                agent="Casting", total=len(variants))
@@ -277,6 +314,9 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
     if not c.voice_id:
         assign_voice(c, 0)
     db.commit()
+    emit("stage:progress", {"stage": "casting", "status": "completed",
+         "agent": "Casting Director",
+         "label": f"{c.name}: {len(variants)} plate(s) ready"}, project_id)
     return {"variants": [{"id": str(v.id), "label": v.label,
                           "plate_image_url": v.plate_image_url,
                           "plate_status": v.plate_status} for v in variants],
