@@ -29,6 +29,41 @@ export function useLatestScript(projectId: string) {
   });
 }
 
+/** Write (or rewrite) the screenplay. `notes` carries the judge's critique on
+ *  a rewrite pass so the new draft actually fixes what failed. */
+export function useGenerateScript() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: {
+      project_id: string;
+      premise: string;
+      genre: string;
+      tone?: string;
+      episode_count?: number;
+      target_length?: number;
+      notes?: string;
+      language?: string;
+    }) => {
+      const { data } = await api.post("/api/script/generate", params, {
+        timeout: 420000,
+      });
+      return data as {
+        script_id: string;
+        raw_text: string;
+      };
+    },
+    onSuccess: (_data, params) => {
+      queryClient.invalidateQueries({
+        queryKey: ["latest-script", params.project_id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["progress", params.project_id],
+      });
+    },
+  });
+}
+
 export function useUpdateScript() {
   const queryClient = useQueryClient();
 

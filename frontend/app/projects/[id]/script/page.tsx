@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { NextStepButton } from "@/components/shared/NextStepButton";
 import { useSearchParams } from "next/navigation";
 import { useProject } from "@/hooks/useProjects";
-import { useLatestScript } from "@/hooks/useScript";
+import { useGenerateScript, useLatestScript } from "@/hooks/useScript";
 import { ScriptImport } from "@/components/script/ScriptImport";
 import { ScriptEditor } from "@/components/script/ScriptEditor";
 import { BeatSheet } from "@/components/script/BeatSheet";
@@ -59,6 +59,38 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
   const analyzeScript = useAnalyzeScript();
   const judgeScript = useJudgeScript();
   const dismissFlag = useDismissFlag();
+  const generateScript = useGenerateScript();
+
+  // a rejected verdict is an ACTION, not a verdict to live with: rewrite the
+  // draft with the judge's own critique as revision notes. The old version
+  // stays in history; the stale report clears because it graded the old text.
+  const handleRewrite = async () => {
+    if (!judgement || !scriptData) return;
+    const points = [
+      ...judgement.blocking_issues,
+      ...judgement.top_weaknesses,
+    ].slice(0, 6);
+    const notes =
+      "REVISION PASS. The previous draft was rejected by the script judge. " +
+      "Fix these specific problems while keeping what worked:\n- " +
+      points.join("\n- ") +
+      (judgement.judge_summary
+        ? `\nJudge summary: ${judgement.judge_summary}`
+        : "");
+    const data = await generateScript.mutateAsync({
+      project_id: params.id,
+      premise: projectPremise || scriptData.raw_text.slice(0, 280),
+      genre: projectGenre || "drama",
+      episode_count: epParam,
+      target_length: lenParam,
+      notes,
+    });
+    setScriptData({ script_id: data.script_id, raw_text: data.raw_text });
+    setJudgement(null);
+    setAnalysis(null);
+    judgedTextRef.current = null;
+    analyzedTextRef.current = null;
+  };
 
   // Skip pointless re-runs: only call the LLM again if the text changed since
   // the last analysis/judgement.
@@ -187,6 +219,7 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
               <BeatSheet structured={latestScript.structured_json} />
             )}
             <ScriptEditor
+              key={scriptData.script_id}
               scriptId={scriptData.script_id}
               initialContent={scriptData.raw_text}
               onTextChange={(t) => (currentTextRef.current = t)}
@@ -199,7 +232,31 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
               <h2 className="text-sm font-medium text-muted-foreground">
                 AI analysis
               </h2>
-              {judgement && <NarrativeJudgeReport result={judgement} />}
+              {judgement && (
+                <>
+                  <NarrativeJudgeReport result={judgement} />
+                  {judgement.recommendation !== "PROCEED" && (
+                    <div className="space-y-1.5">
+                      <Button
+                        onClick={handleRewrite}
+                        disabled={generateScript.isPending}
+                        className="w-full"
+                        size="sm"
+                      >
+                        {generateScript.isPending
+                          ? "Rewriting with the critique…"
+                          : "Rewrite with this critique"}
+                      </Button>
+                      <p className="text-[11px] leading-4 text-muted-foreground">
+                        The judge already used its free rewrite. This writes a
+                        fresh draft targeting the blocking issues above; your
+                        current version stays in history. Or edit the text
+                        yourself and press Score Quality again.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
               {analysis && (
                 <>
                   <PlotGapPanel

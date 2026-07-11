@@ -24,10 +24,15 @@ def route_after_judge(state: PipelineState) -> str:
         return "revise"
     # Only NOW is the script final — this completion is what the chat's
     # "Script is ready" checkpoint card keys off, so it can never appear
-    # mid-judging or between self-correction passes.
+    # mid-judging or between self-correction passes. The label tells the
+    # TRUTH: a draft that used up its rewrite budget while the judge still
+    # objects is handed over as exactly that, never as an approval.
     if pid:
+        approved = rec not in ("REVISE_FIRST", "MAJOR_REWRITE")
         emit("stage:progress", {"stage": "script", "status": "completed",
-             "agent": "Story Analyst", "label": "Judge approved the script"},
+             "agent": "Story Analyst",
+             "label": ("Judge approved the script" if approved else
+                       "Judge still wants work after the rewrite, your call now")},
              str(pid))
     # Full Auto rolls straight on. Otherwise the run ENDS here, at the script
     # checkpoint: the Showrunner chat hands the user the controls (review the
