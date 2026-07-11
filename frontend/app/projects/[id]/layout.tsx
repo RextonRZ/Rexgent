@@ -9,7 +9,7 @@ import { DockRail } from "@/components/shared/DockRail";
 import { AmbientBackdrop } from "@/components/shared/AmbientBackdrop";
 import { SiteFooter } from "@/components/shared/SiteFooter";
 import { useProject } from "@/hooks/useProjects";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 export default function ProjectLayout({
   children,
@@ -32,9 +32,9 @@ export default function ProjectLayout({
               It was deleted, so there is no script, cast or progress left to
               show here.
             </p>
-            <Button asChild>
-              <Link href="/projects">Back to your dramas</Link>
-            </Button>
+            <Link href="/projects" className={buttonVariants()}>
+              Back to your dramas
+            </Link>
           </div>
         </div>
       </AuthGate>
