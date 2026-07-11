@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import api from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
 import type { Script } from "@/lib/types";
 
 export function useScript(scriptId: string | null) {
@@ -14,8 +16,29 @@ export function useScript(scriptId: string | null) {
 }
 
 /** The project's most recent script, so opening an existing project resumes into
- *  the editor. 404 (no script yet) is expected for brand-new projects. */
+ *  the editor. 404 (no script yet) is expected for brand-new projects.
+ *  Self-healing: a finished script stage refetches this over the websocket, so
+ *  the editor gets the new draft even when the HTTP request that wrote it
+ *  died mid-flight (proxy drop, backend restart, long generation). */
 export function useLatestScript(projectId: string) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!projectId) return;
+    const socket = getSocket();
+    socket.connect();
+    socket.emit("join_project", { project_id: projectId });
+    const onStage = (p: { stage?: string; status?: string }) => {
+      if (p.stage === "script" && p.status === "completed") {
+        queryClient.invalidateQueries({ queryKey: ["latest-script", projectId] });
+      }
+    };
+    socket.on("stage:progress", onStage);
+    return () => {
+      socket.off("stage:progress", onStage);
+    };
+  }, [projectId, queryClient]);
+
   return useQuery<Script>({
     queryKey: ["latest-script", projectId],
     queryFn: async () => {

@@ -109,7 +109,9 @@ async def generate_script(
 
     pid = str(request.project_id)
     emit("stage:progress", {"stage": "script", "status": "started",
-         "agent": "Screenwriter", "label": "Writing your screenplay"}, pid)
+         "agent": "Screenwriter",
+         "label": ("Rewriting with the judge's notes"
+                   if (request.notes or "").strip() else "Writing your screenplay")}, pid)
     generator = ScriptGenerator()
     try:
         with track_project(request.project_id, db):
@@ -175,7 +177,7 @@ async def generate_script(
     db.commit()
     db.refresh(script)
     from app.websocket.tool_events import tool_event
-    tool_event(project_id, "script", "write_script_db", "succeeded",
+    tool_event(pid, "script", "write_script_db", "succeeded",
                agent="Screenwriter", artifact=f"{len(scene_uuids)} rows")
 
     sync_scenes(str(script.project_id), structured, scene_uuids=scene_uuids)

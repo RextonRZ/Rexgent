@@ -46,13 +46,25 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
 
   // Resume an existing project straight into the editor instead of the blank
   // "write a script" tabs. (404 for a brand-new project just leaves scriptData null.)
+  // When a NEWER draft lands (a rewrite finished — even one whose HTTP response
+  // was lost mid-flight), adopt it and clear the old draft's stale critique.
   const { data: latestScript } = useLatestScript(params.id);
   useEffect(() => {
-    if (!scriptData && latestScript?.id) {
+    if (!latestScript?.id) return;
+    if (!scriptData) {
       setScriptData({
         script_id: latestScript.id,
         raw_text: latestScript.raw_text ?? "",
       });
+    } else if (latestScript.id !== scriptData.script_id) {
+      setScriptData({
+        script_id: latestScript.id,
+        raw_text: latestScript.raw_text ?? "",
+      });
+      setJudgement(null);
+      setAnalysis(null);
+      judgedTextRef.current = null;
+      analyzedTextRef.current = null;
     }
   }, [latestScript, scriptData]);
 
@@ -64,8 +76,10 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
   // a rejected verdict is an ACTION, not a verdict to live with: rewrite the
   // draft with the judge's own critique as revision notes. The old version
   // stays in history; the stale report clears because it graded the old text.
+  const [rewriteError, setRewriteError] = useState<string | null>(null);
   const handleRewrite = async () => {
     if (!judgement || !scriptData) return;
+    setRewriteError(null);
     const points = [
       ...judgement.blocking_issues,
       ...judgement.top_weaknesses,
@@ -77,19 +91,27 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
       (judgement.judge_summary
         ? `\nJudge summary: ${judgement.judge_summary}`
         : "");
-    const data = await generateScript.mutateAsync({
-      project_id: params.id,
-      premise: projectPremise || scriptData.raw_text.slice(0, 280),
-      genre: projectGenre || "drama",
-      episode_count: epParam,
-      target_length: lenParam,
-      notes,
-    });
-    setScriptData({ script_id: data.script_id, raw_text: data.raw_text });
-    setJudgement(null);
-    setAnalysis(null);
-    judgedTextRef.current = null;
-    analyzedTextRef.current = null;
+    try {
+      const data = await generateScript.mutateAsync({
+        project_id: params.id,
+        premise: projectPremise || scriptData.raw_text.slice(0, 280),
+        genre: projectGenre || "drama",
+        episode_count: epParam,
+        target_length: lenParam,
+        notes,
+      });
+      setScriptData({ script_id: data.script_id, raw_text: data.raw_text });
+      setJudgement(null);
+      setAnalysis(null);
+      judgedTextRef.current = null;
+      analyzedTextRef.current = null;
+    } catch {
+      // the request can die while the crew keeps writing server side; the
+      // editor self-heals over the websocket when the new draft lands
+      setRewriteError(
+        "The connection dropped. If the crew was still writing, the editor refreshes itself when the new draft lands; watch the dock."
+      );
+    }
   };
 
   // Skip pointless re-runs: only call the LLM again if the text changed since
@@ -247,6 +269,11 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
                           ? "Rewriting with the critique…"
                           : "Rewrite with this critique"}
                       </Button>
+                      {rewriteError && (
+                        <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-4 text-amber-300">
+                          {rewriteError}
+                        </p>
+                      )}
                       <p className="text-[11px] leading-4 text-muted-foreground">
                         The judge already used its free rewrite. This writes a
                         fresh draft targeting the blocking issues above; your
