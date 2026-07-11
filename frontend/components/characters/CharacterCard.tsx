@@ -11,7 +11,6 @@ import { VoiceRow } from "@/components/casting/VoiceRow";
 import { ZoomableImage } from "@/components/shared/Lightbox";
 import {
   useRegenerateVariant,
-  useOverrideVariant,
   useSwapOutfit,
   useGenerateCharacterPlates,
   type CastingCharacter,
@@ -99,7 +98,6 @@ export function CharacterCard({
   casting?: CastingCharacter;
 }) {
   const regenerateVariant = useRegenerateVariant();
-  const overrideVariant = useOverrideVariant();
   const swapOutfit = useSwapOutfit();
   const generatePlates = useGenerateCharacterPlates();
   const hasFace = !!character.reference_image_url;
@@ -108,7 +106,6 @@ export function CharacterCard({
   // only the plate being worked on shows the spinner, not its siblings
   const variantBusy = (variantId: string) =>
     (swapOutfit.isPending && swapOutfit.variables?.variantId === variantId) ||
-    (overrideVariant.isPending && overrideVariant.variables?.variantId === variantId) ||
     (regenerateVariant.isPending && regenerateVariant.variables === variantId);
 
   return (
@@ -235,9 +232,6 @@ export function CharacterCard({
                       status={variant.plate_status}
                       busy={variantBusy(variant.id)}
                       onRegenerate={() => regenerateVariant.mutate(variant.id)}
-                      onUpload={(file) =>
-                        overrideVariant.mutate({ variantId: variant.id, file })
-                      }
                       onSwapOutfit={(file) =>
                         swapOutfit.mutate({ variantId: variant.id, file })
                       }
