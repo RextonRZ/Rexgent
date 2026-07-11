@@ -78,3 +78,59 @@ def next_stage(progress: dict) -> str | None:
         if not progress.get(stage):
             return stage
     return None
+
+
+def stale_stages(db, project_id) -> dict:
+    """Downstream stages built BEFORE an upstream stage was redone. Going back
+    and rewriting the script (or re-boarding) doesn't break the later
+    artifacts, it strands them on the OLD upstream — these flags say which
+    stages should be re-run. Detection uses what the schema records:
+
+    - characters: cast extracted before the current script was written
+    - generate:   clips whose shot no longer exists (storyboard re-generated)
+    - export:     final cut rendered before the newest clip
+    (storyboard self-reports: shots hang off the latest script's scenes, so a
+    re-written script already flips its progress back to not-done.)
+    """
+    from app.models.script import Script
+    from app.models.shot import Shot
+    from app.models.character import Character
+    from app.models.generation_job import GenerationJob
+    from app.models.generated_clip import GeneratedClip
+    from app.models.final_export import FinalExport
+    from sqlalchemy import func
+
+    out = {s: False for s in STAGE_ORDER}
+    script = (db.query(Script).filter(Script.project_id == project_id)
+              .order_by(Script.created_at.desc()).first())
+    cast_at = (db.query(func.max(Character.created_at))
+               .filter(Character.project_id == project_id).scalar())
+    if script and cast_at and cast_at < script.created_at:
+        out["characters"] = True
+
+    job_ids = [j.id for j in db.query(GenerationJob.id)
+               .filter(GenerationJob.project_id == project_id).all()]
+    last_clip_at = None
+    if job_ids:
+        clips = (db.query(GeneratedClip)
+                 .filter(GeneratedClip.job_id.in_(job_ids),
+                         GeneratedClip.url.isnot(None)).all())
+        if clips:
+            last_clip_at = max((c.created_at for c in clips if c.created_at),
+                               default=None)
+            shot_ids: set = set()
+            if script:
+                from app.models.script import Scene
+                scene_ids = [sid for sid, in db.query(Scene.id)
+                             .filter(Scene.script_id == script.id).all()]
+                if scene_ids:
+                    shot_ids = {sid for sid, in db.query(Shot.id)
+                                .filter(Shot.scene_id.in_(scene_ids)).all()}
+            if any(c.shot_id not in shot_ids for c in clips):
+                out["generate"] = True
+
+    export_at = (db.query(func.max(FinalExport.created_at))
+                 .filter(FinalExport.project_id == project_id).scalar())
+    if export_at and last_clip_at and last_clip_at > export_at:
+        out["export"] = True
+    return out

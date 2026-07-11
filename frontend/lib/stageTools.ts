@@ -93,22 +93,22 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
   characters: [
     { key: "extract_cast", icon: Users, kind: "llm" },
     { key: "write_cast_db", icon: Database, kind: "db" },
+    {
+      key: "map_relationships", icon: Share2, kind: "llm",
+      run: "conditional",
+      trigger: "builds itself right after extraction, and heals on page load if the bonds are missing",
+    },
     { key: "generate_plates", icon: Image, kind: "media" },
+    { key: "voice_assign", icon: Mic, kind: "service" },
     {
       key: "face_lock", icon: ScanFace, kind: "validator",
       run: "conditional",
       trigger: "locks automatically when plates capture a clear face; uploading a reference photo on a character card locks a real look instead",
     },
-    { key: "voice_assign", icon: Mic, kind: "service" },
     {
       key: "profile_cast", icon: UserRound, kind: "llm",
       run: "on-demand",
       trigger: "press Generate appearance on a character card",
-    },
-    {
-      key: "map_relationships", icon: Share2, kind: "llm",
-      run: "on-demand",
-      trigger: "drawn the first time you open the Story map",
     },
   ],
   storyboard: [

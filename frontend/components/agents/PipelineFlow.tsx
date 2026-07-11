@@ -33,20 +33,29 @@ export function PipelineFlow({ projectId }: { projectId: string }) {
     <div className="flex flex-wrap items-center gap-1 gap-y-1.5">
       {STAGE_ORDER.map((key, i) => {
         const active = Boolean(activeByStage[key]);
-        const done = !active && Boolean(progress?.[key]);
+        const stale = !active && Boolean(progress?.stale?.[key]);
+        const done = !active && !stale && Boolean(progress?.[key]);
         return (
           <div key={key} className="flex items-center gap-1">
             <span
+              title={
+                stale
+                  ? "An earlier stage was redone after this one ran. Re-run it to catch up."
+                  : undefined
+              }
               className={cn(
                 "rounded px-1.5 py-0.5 text-[9px] font-medium transition-colors",
                 active
                   ? "bg-primary text-primary-foreground motion-safe:animate-pulse"
-                  : done
-                    ? "bg-ok/20 text-ok"
-                    : "bg-secondary text-muted-foreground"
+                  : stale
+                    ? "bg-warn/20 text-warn"
+                    : done
+                      ? "bg-ok/20 text-ok"
+                      : "bg-secondary text-muted-foreground"
               )}
             >
               {CHIP_LABELS[key]}
+              {stale && " ↺"}
             </span>
             {i < STAGE_ORDER.length - 1 && (
               <span className={cn("h-px w-1.5", done ? "bg-ok/40" : "bg-border")} />

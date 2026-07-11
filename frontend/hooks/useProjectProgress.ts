@@ -9,6 +9,11 @@ export interface ProjectProgress {
   storyboard: boolean;
   generate: boolean;
   export: boolean;
+  /** done stages stranded on an OLDER upstream (script rewritten after
+   * casting, storyboard redone after clips) — they should be re-run */
+  stale?: Partial<
+    Record<"script" | "characters" | "storyboard" | "generate" | "export", boolean>
+  >;
 }
 
 /** Which stages have real artifacts — refreshed whenever a stage finishes. */

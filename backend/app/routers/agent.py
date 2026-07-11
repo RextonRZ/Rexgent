@@ -149,11 +149,11 @@ CREW_PIPELINE_GUIDE = {
     "characters": {"agent": "Casting Director", "steps": [
         "extract_cast (auto: reads the cast from the script)",
         "write_cast_db (auto: saves the cast)",
+        "map_relationships (conditional: builds itself right after extraction and heals on page load if bonds are missing, no button needed)",
         "generate_plates (auto: renders style, location and character plates)",
-        "face_lock (conditional: locks automatically when plates capture a clear face; uploading a reference photo on a character card locks a real look instead. Uploading a face is ALWAYS optional, never required)",
         "voice_assign (auto: gives each character a distinct voice)",
+        "face_lock (conditional: locks automatically when plates capture a clear face; uploading a reference photo on a character card locks a real look instead. Uploading a face is ALWAYS optional, never required)",
         "profile_cast (on-demand: Generate appearance button on a character card)",
-        "map_relationships (on-demand: drawn the first time the Story map is opened)",
     ]},
     "storyboard": {"agent": "Director", "steps": [
         "memory_recall (auto: reads facts earlier scenes established, from the narrative memory graph)",
@@ -223,9 +223,11 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
     # the script digest + the judge's old critique and answers every "what's
     # next" with "refine the ending", even when the script stage is long done.
     from app.services.pipeline_progress import (STAGE_PAGES, next_stage,
-                                                 next_step_card, stage_progress)
+                                                 next_step_card, stage_progress,
+                                                 stale_stages)
     progress = stage_progress(db, project.id)
     upcoming = next_stage(progress)
+    stale = [s for s, flag in stale_stages(db, project.id).items() if flag]
     # CURRENT blockers, computed live — so "what's this error" gets a real
     # answer instead of generic script advice
     blockers: list = []
@@ -270,6 +272,7 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
         "format": getattr(project, "video_ratio", "9:16"),
         "spend_cap_usd": project.credit_budget,
         "pipeline_progress": progress,
+        "stale_stages": stale,
         "generation_blockers": blockers,
         "crew_pipeline": CREW_PIPELINE_GUIDE,
         "tool_status": tool_status,
@@ -303,8 +306,11 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
         "answer from crew_pipeline and tool_status: conditional and on-demand "
         "steps are healthy when idle, so say exactly what triggers them "
         "instead of treating idle as a problem, and never tell the user a "
-        "face upload is required. If the context does not contain the answer, "
-        "say so and suggest which page of the studio would."
+        "face upload is required. If stale_stages is non-empty, the user went "
+        "back and redid an earlier stage, so those later stages still reflect "
+        "the OLD version: when asked what to do next, say they should be "
+        "re-run, in pipeline order. If the context does not contain the "
+        "answer, say so and suggest which page of the studio would."
     )
     qwen = QwenClient(get_settings())
     with track_project(project_id, db):

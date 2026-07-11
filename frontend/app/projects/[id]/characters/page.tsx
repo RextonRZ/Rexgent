@@ -99,14 +99,6 @@ export default function CharactersPage({
         >
           {runCasting.isPending ? "Generating…" : "Generate Plates"}
         </Button>
-        <Button
-          variant="outline"
-          onClick={() => buildGraph.mutate(params.id)}
-          disabled={buildGraph.isPending || characters.length < 2}
-          title="Re-extract character relationships from the current script"
-        >
-          {buildGraph.isPending ? "Building…" : "Rebuild Relationships"}
-        </Button>
       </PageHeader>
 
       <LiveStageStrip

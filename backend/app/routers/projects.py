@@ -372,8 +372,12 @@ def project_progress(
     """Which pipeline stages have real artifacts — drives the step nav, so
     done means done (data exists), not merely visited."""
     project = _get_owned_project(project_id, db, current_user)
-    from app.services.pipeline_progress import stage_progress
-    return stage_progress(db, project.id)
+    from app.services.pipeline_progress import stage_progress, stale_stages
+    # "stale" marks a done stage stranded on an OLDER upstream (script was
+    # rewritten after casting, storyboard redone after clips) — still watchable,
+    # but it should be re-run before moving on
+    return {**stage_progress(db, project.id),
+            "stale": stale_stages(db, project.id)}
 
 
 @router.post("/{project_id}/duplicate", response_model=ProjectResponse)

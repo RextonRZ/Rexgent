@@ -12,6 +12,8 @@ import { useAgentChat, type ChatMessage } from "@/hooks/useAgentChat";
 import { useClarifications } from "@/hooks/useAgents";
 import { useApproveCasting } from "@/hooks/useCasting";
 import { useCalculateBudget } from "@/hooks/useBudget";
+import { useCharacters, useExtractCharacters } from "@/hooks/useCharacters";
+import { useGenerateStoryboard } from "@/hooks/useStoryboard";
 import { useUpdateProject } from "@/hooks/useProjects";
 import { useGo } from "@/components/shared/NavProgress";
 
@@ -211,6 +213,57 @@ interface BudgetFit {
   suggested_cap: number;
 }
 
+/** ── the manual-mode checkpoint ─────────────────────────────────────────
+ * When a stage finishes and NOTHING starts next (so not Full Auto, which
+ * rolls straight on), the crew reports in and hands over the controls:
+ * review what was made, or continue to the next stage from right here. */
+type CheckpointStage = "script" | "characters" | "storyboard" | "generate";
+
+// raw stage names the backend emits → the canonical checkpoint stage
+const CHECKPOINT_STAGE: Record<string, CheckpointStage> = {
+  script: "script",
+  characters: "characters",
+  casting: "characters",
+  relationships: "characters",
+  storyboard: "storyboard",
+  generate: "generate",
+  generation: "generate",
+};
+
+const CHECKPOINT_COPY: Record<
+  CheckpointStage,
+  { title: string; text: string; review: string; reviewPath: string; continueLabel: string }
+> = {
+  script: {
+    title: "Script is ready",
+    text: "Read it in the editor and tweak any line. Judge score and Analyze story are optional extras on that page. When it reads right, continue and the Casting Director takes over.",
+    review: "Review script",
+    reviewPath: "script",
+    continueLabel: "Cast the characters →",
+  },
+  characters: {
+    title: "Cast is ready",
+    text: "Review the cast, their bonds and plates. You can storyboard right away; plates only need to exist before video generation, and a face upload is never required.",
+    review: "Review cast",
+    reviewPath: "characters",
+    continueLabel: "Storyboard the scenes →",
+  },
+  storyboard: {
+    title: "Storyboard is ready",
+    text: "Check the shot list and set dressing scene by scene. Generation is the paid step, so you press start yourself when the board looks right.",
+    review: "Review the board",
+    reviewPath: "storyboard",
+    continueLabel: "Go to Generate →",
+  },
+  generate: {
+    title: "Footage is ready",
+    text: "Every take is rendered and continuity scored. Review any flagged takes, arrange the cut and render the final episode.",
+    review: "Review takes",
+    reviewPath: "generate",
+    continueLabel: "Edit and export →",
+  },
+};
+
 /** Deterministic guidance from the chat endpoint: where to go, what to do. */
 interface NextStep {
   stage: string;
@@ -234,6 +287,10 @@ export function AgentChat({ projectId }: { projectId: string }) {
   const [budgetFit, setBudgetFit] = useState<BudgetFit | null>(null);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
+  const [checkpoint, setCheckpoint] = useState<CheckpointStage | null>(null);
+  const extractCast = useExtractCharacters();
+  const boardScenes = useGenerateStoryboard();
+  const { data: castData } = useCharacters(projectId);
 
   // decision moments arrive as events and park as cards until acted on
   useEffect(() => {
@@ -246,17 +303,58 @@ export function AgentChat({ projectId }: { projectId: string }) {
     };
     const onFit = (p: BudgetFit) => setBudgetFit(p?.deferred > 0 ? p : null);
     const onExport = (p: { url?: string }) => setExportUrl(p?.url ?? null);
+    // ── checkpoint: a completed stage schedules a hand-back; any stage
+    // STARTING within the grace window cancels it (Full Auto rolling on, or
+    // a sibling step like relationship mapping right after extraction) ──
+    let handback: ReturnType<typeof setTimeout> | null = null;
+    const onStage = (p: { stage?: string; status?: string }) => {
+      const mapped = CHECKPOINT_STAGE[p.stage ?? ""];
+      if (p.status === "started" || p.status === "update") {
+        if (handback) clearTimeout(handback);
+        handback = null;
+        setCheckpoint(null);
+        return;
+      }
+      if (p.status !== "completed" || !mapped) return;
+      if (handback) clearTimeout(handback);
+      handback = setTimeout(() => setCheckpoint(mapped), 2500);
+    };
     socket.on("casting.awaiting_review", onAwait);
     socket.on("casting.completed", onCast);
     socket.on("budget:fitted", onFit);
     socket.on("export.completed", onExport);
+    socket.on("stage:progress", onStage);
     return () => {
       socket.off("casting.awaiting_review", onAwait);
       socket.off("casting.completed", onCast);
       socket.off("budget:fitted", onFit);
       socket.off("export.completed", onExport);
+      socket.off("stage:progress", onStage);
+      if (handback) clearTimeout(handback);
     };
   }, [projectId]);
+
+  // the checkpoint's continue button DOES the next step, right from the chat
+  const continueFrom = (stage: CheckpointStage) => {
+    setCheckpoint(null);
+    if (stage === "script") {
+      // re-extracting replaces an existing cast (plates included) — if one
+      // exists, review it instead of silently recasting
+      if ((castData?.characters?.length ?? 0) > 0) {
+        go(`/projects/${projectId}/characters`);
+        return;
+      }
+      extractCast.mutate({ projectId });
+      go(`/projects/${projectId}/characters`);
+    } else if (stage === "characters") {
+      boardScenes.mutate(projectId);
+      go(`/projects/${projectId}/storyboard`);
+    } else if (stage === "storyboard") {
+      go(`/projects/${projectId}/generate`);
+    } else {
+      go(`/projects/${projectId}/export`);
+    }
+  };
 
   // tick the elapsed timers only while something is running
   useEffect(() => {
@@ -269,7 +367,7 @@ export function AgentChat({ projectId }: { projectId: string }) {
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, running.length, awaitingCasting, budgetFit, exportUrl, nextStep]);
+  }, [messages.length, running.length, awaitingCasting, budgetFit, exportUrl, nextStep, checkpoint]);
 
   const ask = async () => {
     const q = question.trim();
@@ -347,6 +445,37 @@ export function AgentChat({ projectId }: { projectId: string }) {
         )}
 
         <ClarificationCard projectId={projectId} />
+
+        {checkpoint && !awaitingCasting && (
+          <ActionCard title={CHECKPOINT_COPY[checkpoint].title}>
+            <p className="text-[11px] leading-4 text-foreground/90">
+              {CHECKPOINT_COPY[checkpoint].text}
+            </p>
+            <div className="flex gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 flex-1 text-xs"
+                onClick={() => {
+                  setCheckpoint(null);
+                  go(
+                    `/projects/${projectId}/${CHECKPOINT_COPY[checkpoint].reviewPath}`
+                  );
+                }}
+              >
+                {CHECKPOINT_COPY[checkpoint].review}
+              </Button>
+              <Button
+                size="sm"
+                className="h-7 flex-1 text-xs"
+                disabled={extractCast.isPending || boardScenes.isPending}
+                onClick={() => continueFrom(checkpoint)}
+              >
+                {CHECKPOINT_COPY[checkpoint].continueLabel}
+              </Button>
+            </div>
+          </ActionCard>
+        )}
 
         {nextStep && (
           <ActionCard
