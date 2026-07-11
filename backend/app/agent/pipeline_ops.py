@@ -236,6 +236,20 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
     with tool_run(script.project_id, "storyboard", "write_shots_db", "Director") as t:
         db.commit()
         t["artifact"] = f"{len(created)} rows"
+    # Location plates ride along, exactly like the manual storyboard path:
+    # the scenes exist now, so every location gets its background image here
+    # instead of waiting for the user to press Generate Plates. Idempotent
+    # and an enhancement only — never fails the storyboard.
+    try:
+        from app.services.casting_director import ensure_location_plates
+        _progress(script.project_id, "storyboard", "update", "Director",
+                  "Painting location plates")
+        with track_project(script.project_id, db):
+            await ensure_location_plates(db, script.project_id)
+    except Exception:  # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning(
+            "location plate generation failed after storyboard", exc_info=True)
     _progress(script.project_id, "storyboard", "completed", "Director",
               f"Storyboard ready: {len(created)} shots across {len(scenes)} scene(s)")
     # scene_number + shot_number ride along so the budget allocator can

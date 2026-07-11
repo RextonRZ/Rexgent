@@ -228,7 +228,8 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
 
         emit("stage:progress", {"stage": "storyboard", "status": "update", "agent": "Director",
              "label": "Painting location plates"}, pid)
-        await ensure_location_plates(db, script.project_id)
+        with track_project(script.project_id, db):
+            await ensure_location_plates(db, script.project_id)
     except Exception:
         import logging
 
