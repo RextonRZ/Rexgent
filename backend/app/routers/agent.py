@@ -132,6 +132,66 @@ def tool_snapshot(project_id: str):
     return {"tools": load_tool_snapshot(project_id)}
 
 
+# What the crew graph shows, in TRUE execution order — the chat's manual for
+# "what is this node / why is it idle". Mirrors frontend/lib/stageTools.ts:
+# auto nodes fire by themselves every run; conditional nodes fire by themselves
+# only when their condition holds; on-demand nodes fire only from a user action
+# and never block the stage.
+CREW_PIPELINE_GUIDE = {
+    "script": {"agent": "Screenwriter", "steps": [
+        "llm_write (auto: drafts the screenplay)",
+        "structure_scenes (auto: splits the draft into scenes)",
+        "write_script_db (auto: saves the scenes)",
+        "narrative_judge (conditional: Full Auto judges every draft automatically; on the Script page it runs when the user presses Judge)",
+        "plot_gap_check (on-demand: Analyze story button on the Script page)",
+        "ending_engine (on-demand: runs with Analyze story, pitches alternate endings)",
+    ]},
+    "characters": {"agent": "Casting Director", "steps": [
+        "extract_cast (auto: reads the cast from the script)",
+        "write_cast_db (auto: saves the cast)",
+        "generate_plates (auto: renders style, location and character plates)",
+        "face_lock (conditional: locks automatically when plates capture a clear face; uploading a reference photo on a character card locks a real look instead. Uploading a face is ALWAYS optional, never required)",
+        "voice_assign (auto: gives each character a distinct voice)",
+        "profile_cast (on-demand: Generate appearance button on a character card)",
+        "map_relationships (on-demand: drawn the first time the Story map is opened)",
+    ]},
+    "storyboard": {"agent": "Director", "steps": [
+        "memory_recall (auto: reads facts earlier scenes established, from the narrative memory graph)",
+        "shot_breakdown (auto: stages each scene into shots)",
+        "set_design (auto: pins props and set state per scene)",
+        "write_shots_db (auto: saves the shots)",
+    ]},
+    "generate": {"agent": "Showrunner", "steps": [
+        "budget_allocate (auto: splits the render budget across shots)",
+        "synth_voices (conditional: first generation only, later runs reuse the synthesized lines)",
+        "fit_durations (auto: sizes each speaking shot to its real dialogue audio)",
+        "prompt_craft (auto, per shot: writes the video prompt)",
+        "dispatch_video (auto, per shot: renders the clip)",
+        "verify_face (auto, per shot: continuity scoring of face, outfit, background)",
+        "write_clip_db (auto, per shot: saves the clip)",
+        "self_correct (conditional: only when a render fails and the crew retries it, idle means nothing broke)",
+        "fix_take (on-demand: Fix take on a flagged clip in the Edit room)",
+    ]},
+    "export": {"agent": "Editor", "steps": [
+        "stitch_clips (auto: joins the approved clips into one cut)",
+        "synth_voices (conditional: fills any voice line still missing before placement)",
+        "assemble_timeline (auto: places each voice line on the shot that speaks it)",
+        "burn_captions (conditional: when the cut has dialogue to caption)",
+        "mix_audio (conditional: when there are voices or music to mix)",
+        "render_mp4 (auto: uploads the final cut)",
+        "write_export_db (auto: records the export)",
+    ]},
+    "stage_order_rules": (
+        "Stages run in order: script, then characters, then storyboard, then "
+        "generate, then export. Manual mode enforces it: casting needs a "
+        "script, storyboarding needs a cast, generation needs storyboard shots "
+        "and every character to have a look. A look is auto-written by "
+        "Generate Plates or taken from an uploaded face photo, and uploading "
+        "a face is always optional."
+    ),
+}
+
+
 @router.post("/{project_id}/chat")
 async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depends(get_db)):
     """Ask the showrunner about THIS drama. Answers are grounded in a compact
@@ -195,12 +255,24 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
                 blockers = (preflight.get("issues") or []) +                            (preflight.get("missing_visuals") or [])
     except Exception:  # noqa: BLE001
         pass
+    # what each crew node actually is + what has ACTUALLY run this production,
+    # so "why is synth_voices idle" gets the real answer (conditional, healthy)
+    # instead of an invented problem
+    tool_status: dict = {}
+    try:
+        from app.websocket.tool_events import load_tool_snapshot
+        tool_status = {stage: {tool: ev.get("status") for tool, ev in tools.items()}
+                       for stage, tools in load_tool_snapshot(project_id).items()}
+    except Exception:  # noqa: BLE001
+        pass
     context = {
         "title": project.title, "genre": project.genre, "premise": project.premise,
         "format": getattr(project, "video_ratio", "9:16"),
         "spend_cap_usd": project.credit_budget,
         "pipeline_progress": progress,
         "generation_blockers": blockers,
+        "crew_pipeline": CREW_PIPELINE_GUIDE,
+        "tool_status": tool_status,
         "next_incomplete_stage": (
             {"stage": upcoming, "page": STAGE_PAGES[upcoming]} if upcoming
             else "all stages complete, the episode is exported"),
@@ -226,9 +298,13 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
         "is non-empty and the user asks about an error or being blocked, "
         "explain the blocker plainly and give the fix: missing visual "
         "descriptions are fixed on the Characters page by clicking Generate "
-        "Plates (a look is auto-written) or uploading a face photo. If the "
-        "context does not contain the answer, say so and suggest which page "
-        "of the studio would."
+        "Plates (a look is auto-written) or uploading a face photo. When asked "
+        "about a node in the crew graph or why a step is idle or not running, "
+        "answer from crew_pipeline and tool_status: conditional and on-demand "
+        "steps are healthy when idle, so say exactly what triggers them "
+        "instead of treating idle as a problem, and never tell the user a "
+        "face upload is required. If the context does not contain the answer, "
+        "say so and suggest which page of the studio would."
     )
     qwen = QwenClient(get_settings())
     with track_project(project_id, db):

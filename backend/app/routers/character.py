@@ -41,7 +41,10 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="script_id or project_id is required")
 
     if not script or not script.structured_json:
-        raise HTTPException(status_code=404, detail="Script not found or not structured")
+        raise HTTPException(
+            status_code=400,
+            detail="The script has to exist before casting: write or import one on the Script page, then extract the cast from it.",
+        )
 
     # MBTI is a "for fun" extra — off by default so it does not burn Qwen-Max tokens.
     infer_mbti = bool(request.get("infer_mbti", False))

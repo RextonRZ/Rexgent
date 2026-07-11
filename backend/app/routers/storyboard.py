@@ -129,6 +129,16 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
         )
 
     characters = db.query(Character).filter(Character.project_id == script.project_id).all()
+    # ── stage order is real, not decorative: the Director stages shots AROUND
+    # the cast (who is in frame, what they look like). Storyboarding before
+    # casting produces shots with unknown names that generation then rejects.
+    if not characters:
+        emit("stage:progress", {"stage": "storyboard", "status": "failed", "agent": "Director",
+             "label": "Cast the characters first"}, pid)
+        raise HTTPException(
+            status_code=400,
+            detail="Cast the characters first: the Director stages every shot around them. Open the Characters page and extract the cast, then storyboard.",
+        )
     char_map = {
         c.name.upper(): {
             "name": c.name,

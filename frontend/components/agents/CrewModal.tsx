@@ -34,6 +34,7 @@ import {
   STAGE_AGENT_ICONS,
   STAGE_TOOLS,
   TOOL_KIND_COPY,
+  TOOL_RUN_HINT,
   type ToolSpec,
 } from "@/lib/stageTools";
 
@@ -110,14 +111,22 @@ function ToolNode({
     st === "fail" && state?.index && state?.total
       ? `retry ${state.index}/${state.total}`
       : null;
+  // a node that won't fire by itself says so while idle, instead of looking
+  // like a step the crew forgot
+  const idleHint = st === "idle" && spec.run ? TOOL_RUN_HINT[spec.run] : null;
   return (
     <div
       title={`${spec.key} · ${TOOL_KIND_COPY[spec.kind]}${
         state?.agent ? ` · ${state.agent}` : ""
-      }${state?.error ? ` · ${state.error}` : ""}`}
+      }${spec.trigger ? ` · ${spec.trigger}` : ""}${
+        state?.error ? ` · ${state.error}` : ""
+      }`}
       className={cn(
         "relative flex w-full flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 transition-colors duration-150 motion-reduce:transition-none",
-        st === "idle" && "border-white/[0.06] text-zinc-600",
+        st === "idle" &&
+          (spec.run
+            ? "border-dashed border-white/[0.08] text-zinc-600"
+            : "border-white/[0.06] text-zinc-600"),
         st === "run" &&
           "border-violet-400/50 bg-violet-500/10 text-violet-200 ring-2 ring-violet-400/20",
         st === "done" && "border-ok/30 bg-ok/[0.04] text-zinc-300",
@@ -136,10 +145,15 @@ function ToolNode({
       <span className="max-w-full truncate font-mono text-[9px] leading-3">
         {spec.key}
       </span>
-      <span className="h-3 max-w-full truncate text-[9px] leading-3 text-zinc-500">
+      <span
+        className={cn(
+          "h-3 max-w-full truncate text-[9px] leading-3",
+          idleHint ? "italic text-zinc-600" : "text-zinc-500"
+        )}
+      >
         {st === "run" && state?.index && state?.total
           ? `${state.index}/${state.total}`
-          : retry ?? (st === "fail" ? "failed" : "")}
+          : retry ?? (st === "fail" ? "failed" : idleHint ?? "")}
       </span>
       {st === "done" && (
         <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-ok text-black">
@@ -250,8 +264,14 @@ function StageToolGraph({
           {nodes.map((t) => {
             const st = toolStatus(t.state);
             const Icon = t.spec.icon;
+            const idleHint =
+              st === "idle" && t.spec.run ? TOOL_RUN_HINT[t.spec.run] : null;
             return (
-              <div key={t.spec.key} className="flex items-center gap-2 py-1">
+              <div
+                key={t.spec.key}
+                title={t.spec.trigger}
+                className="flex items-center gap-2 py-1"
+              >
                 {st === "run" ? (
                   reduced ? (
                     <span className="h-2 w-2 shrink-0 rounded-full bg-violet-400" />
@@ -279,11 +299,15 @@ function StageToolGraph({
                 >
                   {t.spec.key}
                 </span>
-                {t.state?.artifact && (
+                {t.state?.artifact ? (
                   <span className="truncate text-[9px] text-zinc-500">
                     {t.state.artifact}
                   </span>
-                )}
+                ) : idleHint ? (
+                  <span className="truncate text-[9px] italic text-zinc-600">
+                    {idleHint}
+                  </span>
+                ) : null}
               </div>
             );
           })}
@@ -823,6 +847,12 @@ function CrewModalBody({
               {/* the workflow sub-graph */}
               <div className="px-3 pb-2 pt-3">
                 <StageToolGraph stage={key} live={stageTools} reduced={reduced} />
+                {STAGE_TOOLS[key].some((t) => t.run) && (
+                  <p className="mt-2 text-[10px] text-zinc-600">
+                    Dashed steps run only when needed or when you press their
+                    button. Idle is healthy — hover one to see what triggers it.
+                  </p>
+                )}
                 {Object.keys(stageTools).length === 0 && (
                   <p className="mt-2 text-center text-[10px] text-zinc-600">
                     {progress?.[key]
