@@ -7,7 +7,7 @@ JSON schema for each character:
   "name": "string — full name as it appears in script",
   "role": "PROTAGONIST|ANTAGONIST|SUPPORTING|MINOR",
   "first_appearance_scene": 1,
-  "gender": "string or null if not specified",
+  "gender": "male|female — REQUIRED, never null. Scripts rarely state it outright: infer it from the name, honorifics (MR./MRS./MS.), pronouns (he/she) and context. Every character gets cast a voice and a face, so commit to the most plausible reading even for minor roles.",
   "estimated_age": "string (e.g. 'late 30s', '20s', 'elderly') or null",
   "physical_description": "string — any physical details mentioned in script, or null",
   "personality_summary": "string — inferred from dialogue and actions, 2-3 sentences",

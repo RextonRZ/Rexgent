@@ -39,3 +39,27 @@ async def test_extract_handles_non_list():
 
     result = await extractor.extract(script_json={"scenes": []})
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_missing_gender_falls_back_to_honorifics():
+    # the model returned gender null for half the cast once — MR. ROARKE got a
+    # female voice. Honorifics in the name settle it deterministically.
+    extractor = CharacterExtractor.__new__(CharacterExtractor)
+    extractor.qwen = MagicMock()
+    extractor.qwen.chat_json = AsyncMock(return_value=[
+        {"name": "MR. ROARKE", "gender": None},
+        {"name": "MRS. COLE", "gender": ""},
+        {"name": "KAITO", "gender": None},        # no honorific -> left as-is
+        {"name": "LADY WHISTLE", "gender": None},
+        {"name": "GWEN", "gender": "female"},     # explicit stays untouched
+    ])
+    extractor.prompt_template = "placeholder"
+
+    out = await extractor.extract(script_json={"scenes": []})
+    by = {c["name"]: c.get("gender") for c in out}
+    assert by["MR. ROARKE"] == "male"
+    assert by["MRS. COLE"] == "female"
+    assert by["LADY WHISTLE"] == "female"
+    assert by["KAITO"] is None
+    assert by["GWEN"] == "female"
