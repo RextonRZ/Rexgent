@@ -275,10 +275,12 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
                         </p>
                       )}
                       <p className="text-[11px] leading-4 text-muted-foreground">
-                        The judge already used its free rewrite. This writes a
-                        fresh draft targeting the blocking issues above; your
-                        current version stays in history. Or edit the text
-                        yourself and press Score Quality again.
+                        The agent already spent one automatic rewrite on this
+                        script. This writes another draft targeting the
+                        blocking issues above, a few thousand more tokens;
+                        your current version stays in history. Or edit the
+                        text yourself for zero tokens and press Score Quality
+                        again.
                       </p>
                     </div>
                   )}
