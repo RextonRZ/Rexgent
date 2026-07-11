@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     qwen_image_model: str = "wan2.6-t2i"
     qwen_image_edit_model: str = "qwen-image-edit-max"
     qwen_vl_continuity_model: str = "qwen3-vl-plus"
+    # Wan lip-sync (first_frame + driving_audio on eligible shots). Flip to
+    # false to disable instantly — the fallback path is today's renderer.
+    lipsync_enabled: bool = True
     qwen_image_path: str = "/services/aigc/image-generation/generation"
     # qwen-image-edit-max lives on the SYNCHRONOUS multimodal endpoint — the async
     # image-generation endpoint rejects it with InvalidParameter "url error".
