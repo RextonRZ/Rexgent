@@ -77,17 +77,17 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
     {
       key: "narrative_judge", icon: Scale, kind: "validator",
       run: "conditional",
-      trigger: "Full Auto judges every draft automatically; on the Script page it runs when you press Judge",
+      trigger: "Full Auto judges every draft automatically; on the Script page it runs when you press Score Quality",
     },
     {
       key: "plot_gap_check", icon: Search, kind: "validator",
       run: "on-demand",
-      trigger: "press Analyze story on the Script page",
+      trigger: "press Run AI Analysis on the Script page to scan for plot holes",
     },
     {
       key: "ending_engine", icon: GitBranch, kind: "llm",
       run: "on-demand",
-      trigger: "runs with Analyze story to pitch alternate endings",
+      trigger: "runs with Run AI Analysis to grade the ending and pitch alternates",
     },
   ],
   characters: [

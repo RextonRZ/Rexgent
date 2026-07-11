@@ -144,9 +144,9 @@ CREW_PIPELINE_GUIDE = {
         "llm_write (auto: drafts the screenplay)",
         "structure_scenes (auto: splits the draft into scenes)",
         "write_script_db (auto: saves the scenes)",
-        "narrative_judge (conditional: Full Auto judges every draft automatically; on the Script page it runs when the user presses Judge)",
-        "plot_gap_check (on-demand: Analyze story button on the Script page)",
-        "ending_engine (on-demand: runs with Analyze story, pitches alternate endings)",
+        "narrative_judge (conditional: Full Auto judges every draft automatically; on the Script page it runs when the user presses Score Quality)",
+        "plot_gap_check (on-demand: the Run AI Analysis button on the Script page, scans for plot holes and pacing problems)",
+        "ending_engine (on-demand: runs with Run AI Analysis, grades the ending and pitches alternates)",
     ]},
     "characters": {"agent": "Casting Director", "steps": [
         "extract_cast (auto: reads the cast from the script)",
