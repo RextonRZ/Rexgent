@@ -17,6 +17,12 @@ class QwenClient:
         self.client = AsyncOpenAI(
             api_key=settings.qwen_api_key,
             base_url=settings.qwen_base_url,
+            # the SDK default is 600s per attempt PLUS retries — one dropped
+            # connection froze a boarding job for many minutes with no error.
+            # 180s covers the longest legitimate call (a full screenplay);
+            # everything else fails fast and visibly instead of hanging.
+            timeout=180.0,
+            max_retries=1,
         )
         self.api_key = settings.qwen_api_key
         self.video_base_url = settings.qwen_video_base_url.rstrip("/")

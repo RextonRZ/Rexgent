@@ -14,6 +14,7 @@ celery_app = Celery(
         "app.workers.generation_worker",
         "app.workers.export_worker",
         "app.workers.casting_worker",
+        "app.workers.storyboard_worker",
     ],
 )
 
