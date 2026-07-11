@@ -29,7 +29,7 @@ export function RegenComparison({
             <p className="text-xs text-muted-foreground">Original</p>
             {originalUrl ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
-              <video src={originalUrl} className="w-full rounded" controls preload="metadata" />
+              <video src={originalUrl} className="w-full rounded" controls muted preload="metadata" />
             ) : (
               <div className="aspect-video bg-muted rounded" />
             )}
@@ -37,7 +37,7 @@ export function RegenComparison({
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Regenerated</p>
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <video src={regenUrl} className="w-full rounded" controls preload="metadata" />
+            <video src={regenUrl} className="w-full rounded" controls muted preload="metadata" />
           </div>
         </div>
         {changesMade.length > 0 && (

@@ -172,7 +172,7 @@ const renderTile = (shot: Shot) => {
           {tile.url ? (
             <video
               src={`${tile.url}#t=0.1`}
-              controls
+              controls muted
               playsInline
               preload="metadata"
               className="h-full w-full object-contain bg-black"
@@ -239,6 +239,12 @@ const renderTile = (shot: Shot) => {
 
   return (
     <div className="space-y-6">
+      <p className="text-[11px] text-muted-foreground">
+        Previews play muted: raw takes carry the video model&apos;s own
+        placeholder sound, sometimes fake chatter in another language. It is
+        replaced at export, where your cast&apos;s real voices and captions go
+        on. Unmute a tile only to check ambience.
+      </p>
       {rows.map((row, i) =>
         row.length > 1 ? (
           <div key={`row-${i}`} className="grid gap-6 md:grid-cols-2 items-start">
@@ -268,7 +274,7 @@ const renderTile = (shot: Shot) => {
                   <div className={mediaBox}>
                     <video
                       src={`${tile.url}#t=0.1`}
-                      controls
+                      controls muted
                       playsInline
                       preload="metadata"
                       className="h-full w-full object-contain bg-black"
