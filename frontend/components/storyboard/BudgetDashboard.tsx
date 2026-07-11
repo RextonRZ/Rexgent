@@ -113,10 +113,6 @@ export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
           cap; the opening hook gets premium treatment first.
         </p>
       </div>
-
-      <p className="text-xs text-zinc-400 border-t hairline pt-3">
-        {budget.optimisation_summary}
-      </p>
     </div>
   );
 }
