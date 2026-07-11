@@ -8,7 +8,6 @@ from app.models.shot import Shot
 from app.models.character import Character
 from app.schemas.shot import ShotResponse
 from app.services.script_structurer import ScriptStructurer
-from app.services.storyboard_generator import StoryboardGenerator, plan_shot_budget
 from app.services.usage_tracker import track_project
 from app.websocket.emitter import emit
 
@@ -139,163 +138,15 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
             status_code=400,
             detail="Cast the characters first: the Director stages every shot around them. Open the Characters page and extract the cast, then storyboard.",
         )
-    char_map = {
-        c.name.upper(): {
-            "name": c.name,
-            "role": c.role,
-            "visual_description": c.visual_description or "",
-        }
-        for c in characters
-    }
-
-    # Replace existing shots for these scenes (re-generation).
-    scene_ids = [s.id for s in scenes]
-    db.query(Shot).filter(Shot.scene_id.in_(scene_ids)).delete(synchronize_session=False)
-
-    shots_per_scene, shot_seconds = plan_shot_budget(len(scenes), target_length)
-    generator = StoryboardGenerator()
-    all_shots = []
-    dressed = 0
-    # full parity with the full-auto path: the same narrative-memory loop and
-    # the same crew-graph tool events, so the manual button is not a lesser
-    # Director (memory_recall / shot_breakdown / set_design nodes all light)
-    from app.graph.sync import recall_facts_before_scene, sync_scene_facts
-    from app.websocket.tool_events import tool_event, tool_run
-
-    for scene_index, scene in enumerate(scenes, start=1):
-        emit("stage:progress", {"stage": "storyboard", "status": "update", "agent": "Director",
-             "label": f"Scene {scene.number}: staging shots and set dressing",
-             "index": scene_index, "total": len(scenes)}, pid)
-        scene_chars = [
-            char_map.get(str(name).upper(), {"name": name})
-            for name in (scene.characters_json or [])
-        ]
-        # ── narrative memory READ: what earlier scenes established (Neo4j) ──
-        tool_event(pid, "storyboard", "memory_recall", "started",
-                   agent="Director", index=scene_index, total=len(scenes))
-        established = recall_facts_before_scene(pid, scene.number)
-        tool_event(pid, "storyboard", "memory_recall", "succeeded", agent="Director",
-                   artifact=(f"{len(established)} facts recalled" if established
-                             else "no prior facts"))
-        # Feed the generator the ACTUAL scene — its written dialogue, stage
-        # directions, cast and location — not just a one-line summary. Without
-        # this the shot-writer invents shots and paraphrases the dialogue.
-        scene_data = {
-            "scene_number": scene.number,
-            "heading": scene.heading,
-            "location": scene.location,
-            "description": scene.description,
-            "emotional_beat": scene.emotional_beat,
-            "characters_present": scene.characters_json or [],
-            "stage_directions": scene.stage_directions or [],
-            "dialogue": scene.dialogue_json or [],
-            # what earlier scenes established — shots must not contradict it
-            "established_facts": established,
-        }
-
-        tool_event(pid, "storyboard", "shot_breakdown", "started",
-                   agent="Director", index=scene_index, total=len(scenes))
-        with track_project(script.project_id, db):
-            shots_data = await generator.generate_for_scene(
-                scene_data, scene_chars,
-                max_shots=shots_per_scene, shot_seconds=shot_seconds,
-            )
-            # Pin the background down: which props every shot of this scene
-            # must render identically, and how the action changes them.
-            # An enhancement — never fail the storyboard over it.
-            try:
-                from app.services.set_dresser import SetDresser
-
-                tool_event(pid, "storyboard", "set_design", "started",
-                           agent="Director", index=scene_index, total=len(scenes))
-                scene.set_json = await SetDresser().dress(
-                    scene_data,
-                    [{"shot_number": sd.get("shot_number"),
-                      "action": sd.get("action"),
-                      "dialogue": sd.get("dialogue")} for sd in shots_data],
-                )
-                dressed += 1
-                # ── narrative memory WRITE: prop-state changes become Facts,
-                # known by everyone in the scene — recalled by later scenes ──
-                sync_scene_facts(
-                    pid, scene.number,
-                    (scene.set_json or {}).get("state_changes") or [],
-                    [c.get("name") for c in scene_chars if c.get("name")])
-            except Exception:
-                pass
-
-            # the 180-degree rule, enforced not requested: first placement
-            # establishes each character's screen side; drift snaps back,
-            # a flagged reverse angle re-establishes the line of action
-            from app.services.stage_map import enforce_scene_sides
-            _, _side_notes = enforce_scene_sides(
-                [{"subjects": sd.get("subjects"),
-                  "reverse_angle": bool(sd.get("reverse_angle"))}
-                 if sd.get("subjects") else None for sd in shots_data])
-            if _side_notes:
-                import logging
-                logging.getLogger(__name__).info(
-                    "stage map corrections scene %s: %s", scene.number, _side_notes)
-        for shot_data in shots_data:
-            in_frame = shot_data.get("characters_in_frame", []) or []
-            # foreground names must be a subset of who is actually in frame
-            foreground = [n for n in (shot_data.get("foreground_characters") or [])
-                          if n in in_frame]
-            shot = Shot(
-                scene_id=scene.id,
-                number=shot_data.get("shot_number", 1),
-                shot_type=shot_data.get("shot_type"),
-                camera_movement=shot_data.get("camera_movement"),
-                lighting=shot_data.get("lighting"),
-                colour_mood=shot_data.get("colour_mood"),
-                action=shot_data.get("action"),
-                dialogue=shot_data.get("dialogue"),
-                emotional_beat=shot_data.get("emotional_beat"),
-                estimated_duration_seconds=shot_data.get("estimated_duration_seconds", 5),
-                characters_in_frame=in_frame,
-                foreground_characters=foreground,
-                blocking_json=({"subjects": shot_data.get("subjects"),
-                                "reverse_angle": bool(shot_data.get("reverse_angle"))}
-                               if shot_data.get("subjects") else None),
-                notes=shot_data.get("notes"),
-            )
-            db.add(shot)
-            all_shots.append(shot)
-
-    tool_event(pid, "storyboard", "shot_breakdown", "succeeded",
-               agent="Director", artifact=f"{len(all_shots)} shots")
-    tool_event(pid, "storyboard", "set_design", "succeeded",
-               agent="Director", artifact=f"{dressed} scenes dressed")
-    with tool_run(pid, "storyboard", "write_shots_db", "Director") as t:
-        db.commit()
-        t["artifact"] = f"{len(all_shots)} rows"
-    for s in all_shots:
-        db.refresh(s)
-
-    # Location plates ride along: the scenes exist now, so every location
-    # gets a background plate for the story map and reference stacks. Plates
-    # are an enhancement — never fail the storyboard over them.
-    try:
-        from app.services.casting_director import ensure_location_plates
-
-        emit("stage:progress", {"stage": "storyboard", "status": "update", "agent": "Director",
-             "label": "Painting location plates"}, pid)
-        with track_project(script.project_id, db):
-            await ensure_location_plates(db, script.project_id)
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "location plate generation failed after storyboard", exc_info=True
-        )
-
-    emit("stage:progress", {"stage": "storyboard", "status": "completed", "agent": "Director",
-         "label": f"Storyboard ready: {len(all_shots)} shots across {len(scenes)} scene(s)"}, pid)
-
-    return {
-        "total_shots": len(all_shots),
-        "shots": [ShotResponse.model_validate(s) for s in all_shots],
-    }
+    # Boarding runs in the BACKGROUND: a multi-scene board takes minutes of
+    # per-scene staging, set dressing and location plates — far too long for
+    # one HTTP request. A browser hiccup used to CANCEL the request
+    # server-side and kill the board mid-scene with zero shots saved. The op
+    # narrates itself over stage:progress and tool events; the storyboard
+    # page refreshes when the completed event lands.
+    from app.workers.storyboard_worker import run_storyboard_job
+    run_storyboard_job.delay(str(script.id), target_length)
+    return {"status": "started", "scenes": len(scenes)}
 
 
 @router.get("/project/{project_id}")

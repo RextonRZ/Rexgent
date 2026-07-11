@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import api from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
 import type { Shot } from "@/lib/types";
 
 export interface SceneShots {
@@ -13,6 +15,27 @@ export interface SceneShots {
 }
 
 export function useStoryboard(projectId: string) {
+  const queryClient = useQueryClient();
+
+  // boarding runs as a BACKGROUND job now — the page learns the board landed
+  // (or died) from the stage events, not from an HTTP response
+  useEffect(() => {
+    if (!projectId) return;
+    const socket = getSocket();
+    socket.connect();
+    socket.emit("join_project", { project_id: projectId });
+    const onStage = (p: { stage?: string; status?: string }) => {
+      if (p.stage === "storyboard" && (p.status === "completed" || p.status === "failed")) {
+        queryClient.invalidateQueries({ queryKey: ["storyboard", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["bible", projectId] });
+      }
+    };
+    socket.on("stage:progress", onStage);
+    return () => {
+      socket.off("stage:progress", onStage);
+    };
+  }, [projectId, queryClient]);
+
   return useQuery<{ scenes: SceneShots[] }>({
     queryKey: ["storyboard", projectId],
     queryFn: async () => {
