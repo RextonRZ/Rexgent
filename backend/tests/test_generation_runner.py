@@ -166,6 +166,107 @@ async def test_hard_failure_retries_then_needs_review(monkeypatch):
     assert runner.qwen.generate_video_happyhorse.await_count == 2
 
 
+# --- wan lip-sync render chain: lip-sync -> plain first-frame -> happyhorse ---
+
+def _continuity_pass():
+    return AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+
+
+def _wan_shot():
+    shot = make_shot()
+    shot.quality_tier = "wan"
+    return shot
+
+
+LINE = {"audio_url": "http://a/line.mp3", "character_name": "Yuki"}
+
+
+@pytest.mark.asyncio
+async def test_eligible_wan_shot_lip_syncs_to_its_own_line(monkeypatch):
+    runner = make_runner()
+    runner.continuity.validate = _continuity_pass()
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "get_settings",
+                        lambda: SimpleNamespace(lipsync_enabled=True))
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
+                               "prevframe", lipsync_line=LINE)
+    # ONE wan dispatch: continue from the frame AND drive the mouth
+    assert runner.qwen.generate_video_wan.await_count == 1
+    kwargs = runner.qwen.generate_video_wan.await_args.kwargs
+    assert kwargs["reference_media"] == [
+        {"type": "first_frame", "url": "prevframe"},
+        {"type": "driving_audio", "url": "http://a/line.mp3"}]
+    assert runner.qwen.generate_video_happyhorse.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_lipsync_dispatch_failure_falls_back_to_plain_first_frame(monkeypatch):
+    runner = make_runner()
+    runner.qwen.generate_video_wan = AsyncMock(
+        side_effect=[RuntimeError("400 driving_audio rejected"), "task1"])
+    runner.continuity.validate = _continuity_pass()
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "get_settings",
+                        lambda: SimpleNamespace(lipsync_enabled=True))
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
+                               "prevframe", lipsync_line=LINE)
+    # first call (lip-sync) blew up, second call retries WITHOUT driving_audio
+    assert runner.qwen.generate_video_wan.await_count == 2
+    second = runner.qwen.generate_video_wan.await_args_list[1].kwargs
+    assert second["reference_media"] == [{"type": "first_frame", "url": "prevframe"}]
+    # the chain recovered on wan — happyhorse never entered, tier stays truthful
+    assert runner.qwen.generate_video_happyhorse.await_count == 0
+    added = runner.db.add.call_args[0][0]
+    assert added.model_used == "wan"
+
+
+@pytest.mark.asyncio
+async def test_wan_shot_without_frame_anchor_renders_on_happyhorse(monkeypatch):
+    runner = make_runner()
+    runner.continuity.validate = _continuity_pass()
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "get_settings",
+                        lambda: SimpleNamespace(lipsync_enabled=True))
+    seen = {}
+
+    def fake_record(db, pid, duration, tier, ref_id=None):
+        seen["tier"] = tier
+        return 0.54
+    monkeypatch.setattr(gr, "record_video", fake_record)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
+                               None, lipsync_line=LINE)
+    # no frame to continue from: wan never dispatches, happyhorse r2v renders
+    assert runner.qwen.generate_video_wan.await_count == 0
+    assert runner.qwen.generate_video_happyhorse.await_count == 1
+    assert runner.qwen.generate_video_happyhorse.await_args.kwargs["mode"] == "r2v"
+    # the tier that ACTUALLY rendered — clip row and cost ledger agree
+    added = runner.db.add.call_args[0][0]
+    assert added.model_used == "happyhorse"
+    assert seen["tier"] == "happyhorse"
+
+
+@pytest.mark.asyncio
+async def test_lipsync_kill_switch_renders_plain_first_frame(monkeypatch):
+    runner = make_runner()
+    runner.continuity.validate = _continuity_pass()
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    # settings read via the MODULE import, so this patch is the kill switch
+    monkeypatch.setattr(gr, "get_settings",
+                        lambda: SimpleNamespace(lipsync_enabled=False))
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
+                               "prevframe", lipsync_line=LINE)
+    # otherwise-eligible shot: wan still continues the scene, mouth NOT driven
+    assert runner.qwen.generate_video_wan.await_count == 1
+    kwargs = runner.qwen.generate_video_wan.await_args.kwargs
+    assert kwargs["reference_media"] == [{"type": "first_frame", "url": "prevframe"}]
+
+
 @pytest.mark.asyncio
 async def test_scenes_run_concurrently_under_semaphore():
     import asyncio

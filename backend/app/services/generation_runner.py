@@ -454,18 +454,17 @@ class GenerationRunner:
                     # DRIVE the mouth with that line's own TTS audio. Any
                     # failure falls down the chain: lip-sync -> plain
                     # first-frame -> happyhorse r2v. Never blocks the shot.
-                    from app.config import get_settings as _settings
                     from app.services.lipsync import lipsync_media, speaker_matches
                     frame_anchor = prev_last_frame_url or scene_anchor_url
                     lip = (lipsync_line
-                           if (_settings().lipsync_enabled
+                           if (get_settings().lipsync_enabled
                                and frame_anchor
                                and lipsync_line
                                and lipsync_line.get("audio_url")
                                and speaker_matches(lipsync_line, in_frame, foreground))
                            else None)
                     task_id = None
-                    if frame_anchor and lip:
+                    if lip:
                         try:
                             task_id = await self.qwen.generate_video_wan(
                                 prompt=prompt, duration=shot.estimated_duration_seconds,
