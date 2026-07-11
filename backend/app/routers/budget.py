@@ -52,8 +52,15 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
         "estimated_duration_seconds": s.estimated_duration_seconds,
     } for s in shots]
 
+    # this IS the Producer's budget_allocate tool — the storyboard page's
+    # auto-budget is the path real (non full-auto) runs take, and the crew
+    # graph node stayed dark on it
+    from app.websocket.tool_events import tool_run
     optimizer = TokenOptimizer()
-    result = optimizer.allocate(shots_data, budget)
+    with tool_run(project_id, "generate", "budget_allocate", "Producer") as tb:
+        result = optimizer.allocate(shots_data, budget)
+        tb["artifact"] = (f"{result.get('wan_shots', 0)} wan / "
+                          f"{result.get('happyhorse_shots', 0)} happyhorse")
 
     # Persist the assigned tier back onto each shot.
     tier_by_id = {s["shot_id"]: s["quality_tier"] for s in result["scored_shots"]}
