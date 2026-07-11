@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button";
 /** What a paid click is about to do, priced, awaiting a yes. */
 export interface SpendRequest {
   title: string;
-  /** e.g. "$0.08, up to $0.15 if the face check re-rolls" */
-  cost: string;
+  /** a COMPLETE sentence stating the price, e.g.
+   * "This costs about $0.08 of your credit." */
+  costLine: string;
   /** what happens, one plain sentence */
   note?: string;
   confirmLabel?: string;
@@ -36,8 +37,7 @@ export function SpendConfirm({
           <DialogTitle>{request?.title}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          This spends about <span className="font-medium text-foreground">{request?.cost}</span> from
-          your credit.
+          <span className="text-foreground">{request?.costLine}</span>
           {request?.note ? ` ${request.note}` : ""}
         </p>
         <div className="flex gap-2 pt-1">
@@ -55,7 +55,7 @@ export function SpendConfirm({
               onClose();
             }}
           >
-            {request?.confirmLabel ?? "Spend it"}
+            {request?.confirmLabel ?? "Continue"}
           </Button>
         </div>
       </DialogContent>

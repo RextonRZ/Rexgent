@@ -98,8 +98,10 @@ export default function CharactersPage({
           onClick={() =>
             setSpend({
               title: "Cast the whole bible",
-              cost: `roughly $${((characters.length * 2 + 3) * 0.075).toFixed(2)} in image generation`,
-              note: "Style frame, every location and every outfit plate render in one run; looks are written for anyone missing one and voices get assigned.",
+              costLine: `This costs roughly $${(
+                (characters.length * 2 + 3) * 0.075
+              ).toFixed(2)} of your credit in image generation.`,
+              note: "One run renders the style frame, every location and every outfit plate. Anyone missing a look gets one written, and voices get assigned.",
               confirmLabel: "Generate plates",
               run: () => runCasting.mutate(),
             })

@@ -202,12 +202,12 @@ export function CharacterCard({
                   disabled={generatePlates.isPending}
                   onClick={() =>
                     setSpend({
-                      title: `Generate ${character.name}'s plates`,
-                      cost: `$${(
+                      title: `Generate plates for ${character.name}`,
+                      costLine: `This costs about $${(
                         Math.max(casting?.variants.length ?? 0, 1) * 0.075
-                      ).toFixed(2)}, a little more if the face check re-rolls`,
+                      ).toFixed(2)} of your credit, a little more if the face check needs a second try.`,
                       note: hasFace
-                        ? "Outfits render on the locked face above."
+                        ? "Every outfit renders on the locked face above."
                         : "No face is set, so a default face gets invented and locked.",
                       confirmLabel: "Generate",
                       run: () => generatePlates.mutate(character.id),

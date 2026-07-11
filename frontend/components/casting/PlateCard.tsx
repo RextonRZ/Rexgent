@@ -57,10 +57,11 @@ export function PlateCard({
     // the photo is picked first, then the price is stated before anything runs
     if (file && onSwapOutfit)
       setSpend({
-        title: `Swap ${label}'s outfit`,
-        cost: "$0.09, up to $0.17 if the face check re-rolls",
-        note: "The clothing is copied from your photo; whoever wears it there is ignored.",
-        confirmLabel: "Re-dress",
+        title: `Swap the ${label.replace(" (default)", "")} outfit`,
+        costLine:
+          "This costs about $0.09 of your credit, or up to $0.17 if the face check needs a second try.",
+        note: "Only the clothing is taken from your photo. The person wearing it is ignored, and the plate keeps this character's own face.",
+        confirmLabel: "Swap outfit",
         run: () => onSwapOutfit(file),
       });
     e.target.value = "";
@@ -118,8 +119,9 @@ export function PlateCard({
               <button
                 onClick={() =>
                   setSpend({
-                    title: `Regenerate ${label}`,
-                    cost: "$0.08, up to $0.15 if the face check re-rolls",
+                    title: `Regenerate the ${label.replace(" (default)", "")} plate`,
+                    costLine:
+                      "This costs about $0.08 of your credit, or up to $0.15 if the face check needs a second try.",
                     confirmLabel: "Regenerate",
                     run: onRegenerate,
                   })
