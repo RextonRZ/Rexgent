@@ -1,3 +1,6 @@
+import math
+
+
 class TokenOptimizer:
     """Adaptive video-budget allocator.
 
@@ -124,6 +127,13 @@ class TokenOptimizer:
         hh_count = len(active) - wan_count
         hook_count = sum(1 for s in scored if s["is_hook"])
 
+        # When the plan had to shrink, name the cap that would NOT shrink it:
+        # the smallest whole dollar whose 85% covers the unfitted plan. The
+        # weakness is never the fitting, it is fitting silently.
+        recommended = None
+        if downgraded or deferred:
+            recommended = int(math.ceil(unfitted_cost / (1 - self.RESERVE_PCT)))
+
         summary = f"{wan_count} key scenes -> Wan 2.7, {hh_count} supporting -> HappyHorse 1.1"
         if hook_count:
             summary += f"; {hook_count} hook shot(s) protected"
@@ -131,6 +141,8 @@ class TokenOptimizer:
             summary += f"; {downgraded} downgraded to fit the cap"
         if deferred:
             summary += f"; {deferred} deferred to fit the cap"
+        if recommended:
+            summary += f"; a ${recommended} cap renders the full plan"
 
         for s in scored:
             s.pop("duration", None)
@@ -148,6 +160,7 @@ class TokenOptimizer:
             "downgraded_shots": downgraded,
             "deferred_shots": deferred,
             "unfitted_cost_usd": unfitted_cost,
+            "recommended_budget_usd": recommended,
             "fits_budget": video_cost <= available,
             "video_cost_usd": round(video_cost, 2),
             "total_estimated_cost": round(video_cost, 2),

@@ -1,9 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import { cn } from "@/lib/utils";
+import api from "@/lib/api";
 import type { BudgetResult } from "@/hooks/useBudget";
 
-export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
+export function BudgetDashboard({
+  budget,
+  projectId,
+  onBudget,
+}: {
+  budget: BudgetResult;
+  projectId?: string;
+  onBudget?: (b: BudgetResult) => void;
+}) {
   const llmCost = budget.llm_cost_usd ?? 0;
   const videoCost = budget.video_cost_usd;
   const total = budget.grand_total_cost ?? budget.total_estimated_cost + llmCost;
@@ -11,6 +21,26 @@ export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
   const cap = budget.budget_usd ?? 40;
   const pct = Math.min((total / cap) * 100, 100);
   const over = total > cap;
+  const deferredN = budget.deferred_shots ?? 0;
+  const downgradedN = budget.downgraded_shots ?? 0;
+  const rec = budget.recommended_budget_usd;
+  const [raising, setRaising] = useState(false);
+
+  const raiseCap = async () => {
+    if (!projectId || !rec) return;
+    setRaising(true);
+    try {
+      await api.patch(`/api/projects/${projectId}`, { credit_budget: rec });
+      const { data } = await api.post<BudgetResult>("/api/budget/calculate", {
+        project_id: projectId,
+      });
+      onBudget?.(data);
+    } catch {
+      window.alert("Could not update the budget. Check that the backend is running.");
+    } finally {
+      setRaising(false);
+    }
+  };
 
   return (
     <div className="glass rounded-xl p-5 space-y-4">
@@ -43,6 +73,28 @@ export function BudgetDashboard({ budget }: { budget: BudgetResult }) {
           style={{ width: `${pct}%` }}
         />
       </div>
+
+      {/* an undersized cap must say so out loud, with the number that fixes
+          it; silently shrinking the episode reads as a defect */}
+      {rec && (deferredN > 0 || downgradedN > 0) && (
+        <div className="rounded-lg border border-warn/30 bg-warn/10 p-3 space-y-2">
+          <p className="text-xs leading-relaxed text-warn">
+            {deferredN > 0
+              ? `${deferredN} shot${deferredN !== 1 ? "s" : ""} of your episode do not fit the $${cap.toFixed(0)} cap, so the Producer parked them.`
+              : `${downgradedN} shot${downgradedN !== 1 ? "s" : ""} lost premium quality to fit the $${cap.toFixed(0)} cap.`}{" "}
+            A ${rec} cap renders the full plan.
+          </p>
+          {projectId && (
+            <button
+              onClick={raiseCap}
+              disabled={raising}
+              className="rounded-md bg-warn/20 px-2.5 py-1 text-xs font-medium text-warn hover:bg-warn/30 disabled:opacity-50"
+            >
+              {raising ? "Replanning…" : `Set budget to $${rec}`}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* the rubric proof point gets the stage, not a footnote: token
           efficiency through tiered routing is what differentiates this

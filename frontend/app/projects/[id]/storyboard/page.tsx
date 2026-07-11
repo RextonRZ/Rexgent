@@ -148,7 +148,11 @@ export default function StoryboardPage({
             </div>
             <div className="space-y-4">
               {budget ? (
-                <BudgetDashboard budget={budget} />
+                <BudgetDashboard
+                  budget={budget}
+                  projectId={params.id as string}
+                  onBudget={setBudget}
+                />
               ) : calculateBudget.isPending ? (
                 <Skeleton className="h-48 rounded-xl" />
               ) : (

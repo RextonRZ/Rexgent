@@ -120,6 +120,20 @@ def test_hook_follows_shot_number_not_list_order():
     assert not by_id["late"]["is_hook"]
 
 
+def test_tight_cap_recommends_a_budget_that_actually_fits():
+    optimizer = TokenOptimizer()
+    shots = [_hero(f"s{i}", scene=2) for i in range(12)]
+    squeezed = optimizer.allocate(shots, budget_usd=5.0)
+    assert squeezed["deferred_shots"] > 0
+    rec = squeezed["recommended_budget_usd"]
+    assert isinstance(rec, int) and rec > 5
+    # re-planning at the recommended cap renders every shot at full tier
+    healed = optimizer.allocate(shots, budget_usd=float(rec))
+    assert healed["deferred_shots"] == 0
+    assert healed["downgraded_shots"] == 0
+    assert healed["recommended_budget_usd"] is None
+
+
 def test_generous_budget_changes_nothing():
     optimizer = TokenOptimizer()
     shots = [_hero(f"s{i}") for i in range(3)]

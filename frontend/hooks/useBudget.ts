@@ -24,6 +24,7 @@ export interface BudgetResult {
   downgraded_shots?: number;
   deferred_shots?: number;
   fits_budget?: boolean;
+  recommended_budget_usd?: number | null;
   video_cost_usd: number;
   total_estimated_cost: number;
   budget_remaining: number;
