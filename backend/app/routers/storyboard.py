@@ -155,6 +155,12 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
     shots_per_scene, shot_seconds = plan_shot_budget(len(scenes), target_length)
     generator = StoryboardGenerator()
     all_shots = []
+    dressed = 0
+    # full parity with the full-auto path: the same narrative-memory loop and
+    # the same crew-graph tool events, so the manual button is not a lesser
+    # Director (memory_recall / shot_breakdown / set_design nodes all light)
+    from app.graph.sync import recall_facts_before_scene, sync_scene_facts
+    from app.websocket.tool_events import tool_event, tool_run
 
     for scene_index, scene in enumerate(scenes, start=1):
         emit("stage:progress", {"stage": "storyboard", "status": "update", "agent": "Director",
@@ -164,6 +170,13 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
             char_map.get(str(name).upper(), {"name": name})
             for name in (scene.characters_json or [])
         ]
+        # ── narrative memory READ: what earlier scenes established (Neo4j) ──
+        tool_event(pid, "storyboard", "memory_recall", "started",
+                   agent="Director", index=scene_index, total=len(scenes))
+        established = recall_facts_before_scene(pid, scene.number)
+        tool_event(pid, "storyboard", "memory_recall", "succeeded", agent="Director",
+                   artifact=(f"{len(established)} facts recalled" if established
+                             else "no prior facts"))
         # Feed the generator the ACTUAL scene — its written dialogue, stage
         # directions, cast and location — not just a one-line summary. Without
         # this the shot-writer invents shots and paraphrases the dialogue.
@@ -176,8 +189,12 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
             "characters_present": scene.characters_json or [],
             "stage_directions": scene.stage_directions or [],
             "dialogue": scene.dialogue_json or [],
+            # what earlier scenes established — shots must not contradict it
+            "established_facts": established,
         }
 
+        tool_event(pid, "storyboard", "shot_breakdown", "started",
+                   agent="Director", index=scene_index, total=len(scenes))
         with track_project(script.project_id, db):
             shots_data = await generator.generate_for_scene(
                 scene_data, scene_chars,
@@ -189,16 +206,29 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
             try:
                 from app.services.set_dresser import SetDresser
 
+                tool_event(pid, "storyboard", "set_design", "started",
+                           agent="Director", index=scene_index, total=len(scenes))
                 scene.set_json = await SetDresser().dress(
                     scene_data,
                     [{"shot_number": sd.get("shot_number"),
                       "action": sd.get("action"),
                       "dialogue": sd.get("dialogue")} for sd in shots_data],
                 )
+                dressed += 1
+                # ── narrative memory WRITE: prop-state changes become Facts,
+                # known by everyone in the scene — recalled by later scenes ──
+                sync_scene_facts(
+                    pid, scene.number,
+                    (scene.set_json or {}).get("state_changes") or [],
+                    [c.get("name") for c in scene_chars if c.get("name")])
             except Exception:
                 pass
 
         for shot_data in shots_data:
+            in_frame = shot_data.get("characters_in_frame", []) or []
+            # foreground names must be a subset of who is actually in frame
+            foreground = [n for n in (shot_data.get("foreground_characters") or [])
+                          if n in in_frame]
             shot = Shot(
                 scene_id=scene.id,
                 number=shot_data.get("shot_number", 1),
@@ -210,13 +240,20 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
                 dialogue=shot_data.get("dialogue"),
                 emotional_beat=shot_data.get("emotional_beat"),
                 estimated_duration_seconds=shot_data.get("estimated_duration_seconds", 5),
-                characters_in_frame=shot_data.get("characters_in_frame", []),
+                characters_in_frame=in_frame,
+                foreground_characters=foreground,
                 notes=shot_data.get("notes"),
             )
             db.add(shot)
             all_shots.append(shot)
 
-    db.commit()
+    tool_event(pid, "storyboard", "shot_breakdown", "succeeded",
+               agent="Director", artifact=f"{len(all_shots)} shots")
+    tool_event(pid, "storyboard", "set_design", "succeeded",
+               agent="Director", artifact=f"{dressed} scenes dressed")
+    with tool_run(pid, "storyboard", "write_shots_db", "Director") as t:
+        db.commit()
+        t["artifact"] = f"{len(all_shots)} rows"
     for s in all_shots:
         db.refresh(s)
 

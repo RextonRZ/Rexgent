@@ -52,10 +52,15 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
     pid = str(script.project_id)
     emit("stage:progress", {"stage": "characters", "status": "started",
          "agent": "Casting Director", "label": "Reading the cast from the script"}, pid)
+    # instrument the tools like the full-auto path does — the crew graph's
+    # extract_cast / write_cast_db nodes light from these events
+    from app.websocket.tool_events import tool_event, tool_run
     extractor = CharacterExtractor()
     try:
         with track_project(script.project_id, db):
-            characters_data = await extractor.extract(script.structured_json)
+            with tool_run(pid, "characters", "extract_cast", "Casting Director") as tb:
+                characters_data = await extractor.extract(script.structured_json)
+                tb["artifact"] = f"{len(characters_data)} characters"
     except Exception:
         emit("stage:progress", {"stage": "characters", "status": "failed",
              "agent": "Casting Director", "label": "Character extraction failed"}, pid)
@@ -64,6 +69,7 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
     inferrer = MBTIInferrer() if infer_mbti else None
     created = []
 
+    tool_event(pid, "characters", "write_cast_db", "started", agent="Casting Director")
     # Replace any previously extracted characters for this project.
     db.query(Character).filter(Character.project_id == script.project_id).delete()
 
@@ -97,6 +103,8 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
     db.commit()
     for c in created:
         db.refresh(c)
+    tool_event(pid, "characters", "write_cast_db", "succeeded",
+               agent="Casting Director", artifact=f"{len(created)} rows")
 
     sync_characters(str(script.project_id), created, script.structured_json)
 

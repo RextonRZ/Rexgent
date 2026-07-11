@@ -113,23 +113,28 @@ async def generate_script(
          "label": ("Rewriting with the judge's notes"
                    if (request.notes or "").strip() else "Writing your screenplay")}, pid)
     generator = ScriptGenerator()
+    from app.websocket.tool_events import tool_run
     try:
         with track_project(request.project_id, db):
-            raw_text = await generator.generate(
-                genre=request.genre,
-                premise=clean_premise,
-                tone=request.tone,
-                episode_count=request.episode_count,
-                target_length=request.target_length,
-                notes=request.notes or "",
-                language=request.language,
-                model=request.model,
-            )
+            with tool_run(pid, "script", "llm_write", "Screenwriter") as tb:
+                raw_text = await generator.generate(
+                    genre=request.genre,
+                    premise=clean_premise,
+                    tone=request.tone,
+                    episode_count=request.episode_count,
+                    target_length=request.target_length,
+                    notes=request.notes or "",
+                    language=request.language,
+                    model=request.model,
+                )
+                tb["artifact"] = "1 draft"
 
             emit("stage:progress", {"stage": "script", "status": "update",
                  "agent": "Screenwriter", "label": "Structuring scenes and beats"}, pid)
             structurer = ScriptStructurer()
-            structured = await structurer.structure(raw_text, language=request.language)
+            with tool_run(pid, "script", "structure_scenes", "Screenwriter") as tb:
+                structured = await structurer.structure(raw_text, language=request.language)
+                tb["artifact"] = f"{len(structured.get('scenes', []))} scenes"
     except Exception:
         emit("stage:progress", {"stage": "script", "status": "failed",
              "agent": "Screenwriter", "label": "Script generation failed"}, pid)
