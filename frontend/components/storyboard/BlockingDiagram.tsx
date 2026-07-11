@@ -1,16 +1,20 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import type { ShotBlocking, BlockingSubject } from "@/lib/types";
 
 /** Top-down mini shot-plan: the camera sits at the bottom throwing a soft
  * field-of-view cone up a stage; characters are colored directional markers
  * placed by screen side (x) and depth (y, nearer the camera = lower and
  * LARGER), each with a facing wedge and their name underneath. Posture
- * renders distinctly (a lying character is a horizontal pill, a seated one
- * gets a seat bar), curved sky-tinted eyelines connect who looks at whom,
- * and the camera itself moves: an Over-the-Shoulder frames from behind the
- * foreground character's shoulder, and cone width follows shot size.
+ * renders distinctly (lying = horizontal pill, seated = seat bar), curved
+ * sky-tinted eyelines connect who looks at whom, and the camera is derived
+ * from the shot type: tight shots creep closer and aim at their subject, an
+ * OTS shoots from behind the foreground shoulder, a POV lines up with the
+ * looker's eyes, wides swallow the stage.
+ *
+ * The encodings are self-explaining: hovering or tapping a marker spells its
+ * geometry out in words under the stage, and the ? button opens a legend.
  *
  * Colors come from the validated dark-mode categorical set (8 slots, checked
  * against this app's #0b0912 surface: lightness band, chroma, ≥3:1 contrast;
@@ -43,13 +47,18 @@ const X: Record<string, number> = { left: 22, center: 50, right: 78 };
 const Y: Record<string, number> = { BG: 14, MG: 28, FG: 42 };
 // closer to the camera = larger: depth you can read without a legend
 const R: Record<string, number> = { BG: 4.5, MG: 6, FG: 7.5 };
+const DEPTH_WORDS: Record<string, string> = {
+  FG: "near the camera",
+  MG: "midground",
+  BG: "far from the camera",
+};
 
-// how wide the lens sees, per shot size — a close-up is a sliver of stage,
-// a wide swallows it
+// per shot type: how wide the lens sees (a close-up is a sliver of stage, a
+// wide swallows it) and how close the camera creeps to the actors
 const CONE_SPREAD: Record<string, number> = {
-  ECU: 14,
+  ECU: 13,
   CU: 16,
-  MCU: 22,
+  MCU: 21,
   INSERT: 13,
   POV: 24,
   OTS: 24,
@@ -59,6 +68,13 @@ const CONE_SPREAD: Record<string, number> = {
   LS: 38,
   EWS: 42,
 };
+const CAM_Y: Record<string, number> = {
+  ECU: 51,
+  CU: 52.5,
+  MCU: 55,
+  INSERT: 53,
+};
+const TIGHT = new Set(["ECU", "CU", "MCU", "INSERT"]);
 
 /** Explicit posture wins; otherwise read it out of the subject's own action
  * prose ("lying unconscious on the bed" must not draw an upright pin). */
@@ -71,20 +87,6 @@ function posture(s: BlockingSubject): string | null {
   if (/\b(sitting|seated|sits)\b/.test(act)) return "sitting";
   if (/\bkneel/.test(act)) return "kneeling";
   return null;
-}
-
-function subjectTitle(s: BlockingSubject, pose: string | null): string {
-  return [
-    s.character,
-    pose && (s.posture ? pose : `${pose} (from action)`),
-    s.frame_position,
-    s.screen_side && `screen-${s.screen_side}`,
-    s.facing && `facing ${s.facing}`,
-    s.eyeline && `eyeline ${s.eyeline}`,
-    s.action,
-  ]
-    .filter(Boolean)
-    .join(" · ");
 }
 
 /** The facing wedge: a triangle riding the token's rim, big enough to read
@@ -127,28 +129,29 @@ function eyelineMentions(eyeline: string, character: string): boolean {
 }
 
 /** A small arrow beside the camera body for pan/dolly moves. */
-function movementArrow(movement: string | null | undefined, camX: number) {
+function movementArrow(movement: string | null | undefined, camX: number, camY: number) {
   const mv = (movement || "").toUpperCase();
   if (!mv || mv.includes("STATIC")) return null;
+  const midY = camY + 2.7;
   if (mv.includes("LEFT"))
     return {
-      line: [camX - 7, 60.7, camX - 14, 60.7],
-      head: `M ${camX - 14} 60.7 l 2.6 -1.7 l 0 3.4 z`,
+      line: [camX - 7, midY, camX - 14, midY],
+      head: `M ${camX - 14} ${midY} l 2.6 -1.7 l 0 3.4 z`,
     };
   if (mv.includes("RIGHT"))
     return {
-      line: [camX + 7, 60.7, camX + 14, 60.7],
-      head: `M ${camX + 14} 60.7 l -2.6 -1.7 l 0 3.4 z`,
+      line: [camX + 7, midY, camX + 14, midY],
+      head: `M ${camX + 14} ${midY} l -2.6 -1.7 l 0 3.4 z`,
     };
   if (mv.includes("IN") || mv.includes("PUSH") || mv.includes("FORWARD"))
     return {
-      line: [camX - 9, 63, camX - 9, 57.5],
-      head: `M ${camX - 9} 57.5 l -1.7 2.6 l 3.4 0 z`,
+      line: [camX - 9, camY + 5, camX - 9, camY - 0.5],
+      head: `M ${camX - 9} ${camY - 0.5} l -1.7 2.6 l 3.4 0 z`,
     };
   if (mv.includes("OUT") || mv.includes("PULL") || mv.includes("BACK"))
     return {
-      line: [camX - 9, 57.5, camX - 9, 63],
-      head: `M ${camX - 9} 63 l -1.7 -2.6 l 3.4 0 z`,
+      line: [camX - 9, camY - 0.5, camX - 9, camY + 5],
+      head: `M ${camX - 9} ${camY + 5} l -1.7 -2.6 l 3.4 0 z`,
     };
   return null;
 }
@@ -163,6 +166,9 @@ export function BlockingDiagram({
   shotType?: string | null;
 }) {
   const gradientId = useId();
+  const [focusIdx, setFocusIdx] = useState<number | null>(null);
+  const [pinnedIdx, setPinnedIdx] = useState<number | null>(null);
+  const [showLegend, setShowLegend] = useState(false);
   const subjects = (blocking.subjects ?? []).filter(
     (s): s is BlockingSubject => !!s && typeof s === "object"
   );
@@ -181,33 +187,65 @@ export function BlockingDiagram({
     const x = (X[side] ?? 50) + (nth === 0 ? 0 : nth % 2 === 1 ? 9 : -9);
     const y = Y[depth] ?? 28;
     const r = R[depth] ?? 6;
-    return { s, x, y, r, pose: posture(s) };
+    return { s, x, y, r, depth, pose: posture(s) };
   });
 
-  // the camera is shot-specific: an OTS shoots from behind the foreground
-  // character's shoulder, aimed past them at the far subject
+  // ---- the camera, derived from the shot type ----
   const type = (shotType || "").toUpperCase().trim();
-  const fg = placed.find((t) => (t.s.frame_position || "").toUpperCase() === "FG");
-  const isOts = type === "OTS" && !!fg;
-  const camX = isOts ? fg!.x + (fg!.x <= 50 ? 7.5 : -7.5) : 50;
-  const farthest = placed
-    .filter((t) => t !== fg)
-    .reduce<(typeof placed)[number] | null>(
-      (a, b) => (a === null || b.y < a.y ? b : a),
-      null
-    );
   const spread = CONE_SPREAD[type] ?? 28;
-  const aimX = isOts && farthest
-    ? Math.min(Math.max(farthest.x, 2 + spread), 98 - spread)
-    : 50;
-  const arrow = movementArrow(cameraMovement, camX);
+  const camY = CAM_Y[type] ?? 58;
+  const fg = placed.find((t) => t.depth === "FG");
+  const meanX =
+    placed.reduce((sum, t) => sum + t.x, 0) / Math.max(placed.length, 1) || 50;
+  const clampAim = (x: number) => Math.min(Math.max(x, 2 + spread), 98 - spread);
 
-  // eyelines: connect a looker to the character their eyeline names
+  let camX = 50;
+  let aimX = clampAim(meanX);
+  let camNote: string | null = null;
+  if (type === "OTS" && fg) {
+    // over the shoulder: behind the foreground character, aimed at the far one
+    camX = fg.x + (fg.x <= 50 ? 7.5 : -7.5);
+    const far = placed
+      .filter((t) => t !== fg)
+      .reduce<(typeof placed)[number] | null>(
+        (a, b) => (a === null || b.y < a.y ? b : a),
+        null
+      );
+    aimX = clampAim(far ? far.x : meanX);
+    camNote = `over ${fg.s.character}'s shoulder`;
+  } else if (type === "POV") {
+    // point of view: the camera borrows a character's eyes — line up with the
+    // subject facing into the scene (away from us), else the nearest one
+    const looker =
+      placed.find((t) => (t.s.facing || "").toLowerCase().includes("away")) ?? fg;
+    if (looker) {
+      camX = looker.x;
+      const others = placed.filter((t) => t !== looker);
+      aimX = clampAim(
+        others.length
+          ? others.reduce((sum, t) => sum + t.x, 0) / others.length
+          : meanX
+      );
+      camNote = `through ${looker.s.character}'s eyes`;
+    }
+  } else if (TIGHT.has(type)) {
+    // a close-up hunts its subject: aim at the single/most-foreground face
+    // and creep the camera toward the action
+    const primary = placed.length === 1 ? placed[0] : fg ?? placed[0];
+    aimX = clampAim(primary.x);
+    camX = 50 + (primary.x - 50) * 0.3;
+    camNote = `close on ${primary.s.character}`;
+  }
+  const arrow = movementArrow(cameraMovement, camX, camY);
+
+  // ---- eyelines: connect a looker to the character their eyeline names ----
   const eyelines: Array<{
     path: string;
     fromDot: { x: number; y: number } | null;
     toDot: { x: number; y: number };
     label: string;
+    a: number;
+    b: number;
   }> = [];
   const linked = new Set<string>();
   placed.forEach((a, i) => {
@@ -248,9 +286,16 @@ export function BlockingDiagram({
         label: mutual
           ? `${a.s.character} and ${b.s.character} look at each other`
           : `${a.s.character} looks at ${b.s.character}`,
+        a: i,
+        b: j,
       });
     });
   });
+
+  const active = focusIdx ?? pinnedIdx;
+  const focused = active != null ? placed[active] : null;
+  const focusedLine =
+    active != null ? eyelines.find((l) => l.a === active || l.b === active) : null;
 
   return (
     <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-1.5">
@@ -258,14 +303,27 @@ export function BlockingDiagram({
         <span className="text-[10px] uppercase tracking-widest text-zinc-300">
           blocking
         </span>
-        {blocking.reverse_angle && (
-          <span
-            className="rounded bg-amber-500/15 px-1 text-[9px] font-medium text-amber-300"
-            title="A deliberate cut across the line of action — everyone's screen sides re-establish from this shot"
+        <span className="flex items-center gap-1">
+          {blocking.reverse_angle && (
+            <span
+              className="rounded bg-amber-500/15 px-1 text-[9px] font-medium text-amber-300"
+              title="A deliberate cut across the line of action — everyone's screen sides re-establish from this shot"
+            >
+              reverse angle
+            </span>
+          )}
+          <button
+            onClick={() => setShowLegend((v) => !v)}
+            title="What do the shapes mean?"
+            className={`h-4 w-4 rounded-full text-[9px] font-semibold leading-none ${
+              showLegend
+                ? "bg-primary/30 text-primary"
+                : "bg-white/[0.06] text-zinc-300 hover:bg-white/[0.12]"
+            }`}
           >
-            reverse angle
-          </span>
-        )}
+            ?
+          </button>
+        </span>
       </div>
 
       <svg
@@ -273,6 +331,7 @@ export function BlockingDiagram({
         className="block w-full"
         role="img"
         aria-label="Top-down stage plan for this shot"
+        onMouseLeave={() => setFocusIdx(null)}
       >
         <defs>
           {/* the cone glows from the lens and fades up the stage */}
@@ -294,32 +353,39 @@ export function BlockingDiagram({
           strokeWidth={0.4}
         />
 
-        {/* the camera's field of view: apex at the (possibly offset) camera,
-            width from shot size, aimed at the OTS subject when relevant */}
+        {/* the camera's field of view: apex at the shot-specific camera,
+            width from shot size, aimed at the shot's own subject(s) */}
         <polygon
-          points={`${camX},58 ${aimX - spread},6 ${aimX + spread},6`}
+          points={`${camX},${camY} ${aimX - spread},6 ${aimX + spread},6`}
           fill={`url(#${gradientId})`}
           stroke="rgba(139,92,246,0.14)"
           strokeWidth={0.3}
         />
 
         {/* who looks at whom — curved, sky-tinted, dotted at the looked-at end */}
-        {eyelines.map((l, i) => (
-          <g key={i} opacity={0.9}>
-            <title>{l.label}</title>
-            <path
-              d={l.path}
-              fill="none"
-              stroke="#7dd3fc"
-              strokeWidth={0.55}
-              strokeDasharray="1.8 1.5"
-            />
-            <circle cx={l.toDot.x} cy={l.toDot.y} r={0.9} fill="#7dd3fc" />
-            {l.fromDot && (
-              <circle cx={l.fromDot.x} cy={l.fromDot.y} r={0.9} fill="#7dd3fc" />
-            )}
-          </g>
-        ))}
+        {eyelines.map((l, i) => {
+          const involved = active == null || l.a === active || l.b === active;
+          return (
+            <g
+              key={i}
+              opacity={involved ? 0.95 : 0.25}
+              style={{ transition: "opacity 120ms" }}
+            >
+              <title>{l.label}</title>
+              <path
+                d={l.path}
+                fill="none"
+                stroke="#7dd3fc"
+                strokeWidth={involved && active != null ? 0.8 : 0.55}
+                strokeDasharray="1.8 1.5"
+              />
+              <circle cx={l.toDot.x} cy={l.toDot.y} r={0.9} fill="#7dd3fc" />
+              {l.fromDot && (
+                <circle cx={l.fromDot.x} cy={l.fromDot.y} r={0.9} fill="#7dd3fc" />
+              )}
+            </g>
+          );
+        })}
 
         {placed.map(({ s, x, y, r, pose }, i) => {
           const color = slotFor(String(s.character || "?"));
@@ -328,9 +394,16 @@ export function BlockingDiagram({
           const bodyR = seated ? r * 0.85 : r;
           const wedge = lying ? null : wedgePath(x, y, bodyR, s.facing);
           const halfBelow = lying ? r * 0.62 : seated ? r * 0.95 + 0.8 : r;
+          const isActive = active === i;
+          const dimmed = active != null && !isActive;
           return (
-            <g key={`${s.character}-${i}`}>
-              <title>{subjectTitle(s, pose)}</title>
+            <g
+              key={`${s.character}-${i}`}
+              opacity={dimmed ? 0.45 : 1}
+              style={{ transition: "opacity 120ms", cursor: "pointer" }}
+              onMouseEnter={() => setFocusIdx(i)}
+              onClick={() => setPinnedIdx((p) => (p === i ? null : i))}
+            >
               {lying ? (
                 // a horizontal pill: someone lying in a bed or on the floor
                 <rect
@@ -340,9 +413,9 @@ export function BlockingDiagram({
                   height={r * 1.24}
                   rx={r * 0.62}
                   fill={color}
-                  fillOpacity={0.18}
+                  fillOpacity={isActive ? 0.32 : 0.18}
                   stroke={color}
-                  strokeWidth={1.3}
+                  strokeWidth={isActive ? 1.8 : 1.3}
                 />
               ) : (
                 <circle
@@ -350,9 +423,9 @@ export function BlockingDiagram({
                   cy={y}
                   r={bodyR}
                   fill={color}
-                  fillOpacity={0.18}
+                  fillOpacity={isActive ? 0.32 : 0.18}
                   stroke={color}
-                  strokeWidth={1.3}
+                  strokeWidth={isActive ? 1.8 : 1.3}
                 />
               )}
               {seated && (
@@ -385,15 +458,13 @@ export function BlockingDiagram({
         {/* the camera anchor */}
         <g>
           <title>
-            {isOts
-              ? `The camera, over ${fg!.s.character}'s shoulder`
-              : cameraMovement && !/static/i.test(cameraMovement)
-                ? `The camera — ${String(cameraMovement).toLowerCase().replace(/_/g, " ")}`
-                : "The camera — nearer tokens are closer to it (foreground)"}
+            {camNote
+              ? `The camera, ${camNote}`
+              : "The camera — nearer tokens are closer to it (foreground)"}
           </title>
           <rect
             x={camX - 4.5}
-            y={58}
+            y={camY}
             width={9}
             height={5.4}
             rx={1.4}
@@ -401,7 +472,14 @@ export function BlockingDiagram({
             stroke="#71717a"
             strokeWidth={0.7}
           />
-          <circle cx={camX} cy={60.7} r={1.5} fill="none" stroke="#a1a1aa" strokeWidth={0.7} />
+          <circle
+            cx={camX}
+            cy={camY + 2.7}
+            r={1.5}
+            fill="none"
+            stroke="#a1a1aa"
+            strokeWidth={0.7}
+          />
           {arrow && (
             <g>
               <line
@@ -418,11 +496,86 @@ export function BlockingDiagram({
         </g>
       </svg>
 
-      <div className="flex justify-between px-0.5 text-[10px] text-zinc-300">
-        <span>screen left</span>
-        <span>camera</span>
-        <span>screen right</span>
-      </div>
+      {/* the hovered/tapped marker, spelled out in words */}
+      {focused ? (
+        <div className="flex items-start gap-1.5 px-0.5 pb-0.5 text-[10px] leading-snug text-zinc-200">
+          <span
+            className="mt-[3px] h-2 w-2 shrink-0 rounded-full"
+            style={{ background: slotFor(String(focused.s.character || "?")) }}
+          />
+          <span>
+            <span className="font-semibold">{focused.s.character}</span>
+            {" · "}
+            {focused.pose
+              ? `${focused.pose}${focused.s.posture ? "" : " (from action)"}`
+              : "standing"}
+            {" · "}
+            {DEPTH_WORDS[focused.depth] ?? "midground"}
+            {focused.s.facing && ` · facing ${focused.s.facing}`}
+            {focusedLine && (
+              <>
+                {" · "}
+                <span className="text-sky-300">{focusedLine.label}</span>
+              </>
+            )}
+            {focused.s.action && (
+              <span className="italic text-zinc-400"> · {focused.s.action}</span>
+            )}
+          </span>
+        </div>
+      ) : (
+        <div className="flex justify-between px-0.5 text-[10px] text-zinc-300">
+          <span>screen left</span>
+          <span>{camNote ? `camera ${camNote}` : "camera"}</span>
+          <span>screen right</span>
+        </div>
+      )}
+
+      {/* the legend: what every mark means */}
+      {showLegend && (
+        <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-white/[0.07] px-0.5 pt-1.5 text-[10px] text-zinc-300">
+          <span className="flex items-center gap-1.5">
+            <svg viewBox="0 0 20 10" className="h-2.5 w-5 shrink-0">
+              <circle cx={5} cy={5} r={4} fill="none" stroke="#a1a1aa" strokeWidth={1} />
+              <circle cx={15} cy={5} r={2.2} fill="none" stroke="#a1a1aa" strokeWidth={1} />
+            </svg>
+            bigger means closer to the camera
+          </span>
+          <span className="flex items-center gap-1.5">
+            <svg viewBox="0 0 20 10" className="h-2.5 w-5 shrink-0">
+              <circle cx={7} cy={4} r={3.2} fill="none" stroke="#a1a1aa" strokeWidth={1} />
+              <path d="M 10 4 L 14 4 L 10.5 1.8 Z" fill="#a1a1aa" />
+            </svg>
+            the wedge points where they face
+          </span>
+          <span className="flex items-center gap-1.5">
+            <svg viewBox="0 0 20 10" className="h-2.5 w-5 shrink-0">
+              <rect x={3} y={2.5} width={14} height={5} rx={2.5} fill="none" stroke="#a1a1aa" strokeWidth={1} />
+            </svg>
+            a pill is someone lying down
+          </span>
+          <span className="flex items-center gap-1.5">
+            <svg viewBox="0 0 20 10" className="h-2.5 w-5 shrink-0">
+              <circle cx={10} cy={4} r={3} fill="none" stroke="#a1a1aa" strokeWidth={1} />
+              <line x1={6} y1={8.6} x2={14} y2={8.6} stroke="#a1a1aa" strokeWidth={1.2} strokeLinecap="round" />
+            </svg>
+            a bar underneath is someone seated
+          </span>
+          <span className="flex items-center gap-1.5">
+            <svg viewBox="0 0 20 10" className="h-2.5 w-5 shrink-0">
+              <path d="M 2 8 Q 10 1 17 6" fill="none" stroke="#7dd3fc" strokeWidth={0.9} strokeDasharray="2 1.5" />
+              <circle cx={17} cy={6} r={1.3} fill="#7dd3fc" />
+            </svg>
+            blue curve shows who looks at whom
+          </span>
+          <span className="flex items-center gap-1.5">
+            <svg viewBox="0 0 20 10" className="h-2.5 w-5 shrink-0">
+              <polygon points="10,9 4,1 16,1" fill="rgba(139,92,246,0.25)" />
+            </svg>
+            the cone is what the lens sees
+          </span>
+        </div>
+      )}
     </div>
   );
 }
