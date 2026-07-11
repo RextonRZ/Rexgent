@@ -10,7 +10,7 @@ export interface Shot {
   dialogue: string | null;
   emotional_beat: string | null;
   estimated_duration_seconds: number;
-  quality_tier: "wan" | "happyhorse" | "happyhorse_fast" | null;
+  quality_tier: "wan" | "happyhorse" | "happyhorse_fast" | "deferred" | null;
   characters_in_frame: string[] | null;
   notes: string | null;
   director_note: string | null;
