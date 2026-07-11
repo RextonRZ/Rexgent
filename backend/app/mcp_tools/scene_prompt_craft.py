@@ -87,7 +87,9 @@ class ScenePromptCraft:
         dialogue_block = (
             "Dialogue delivery (rule 10 applied to THIS shot — the speaker is visibly mid-conversation: "
             "natural mouth movement while speaking, conversational gesture, eye "
-            "focus on the listener or camera; NO on-screen text or subtitles): "
+            "focus on the listener or camera; NO on-screen text or subtitles. "
+            "Background audio: ambient sound, sound effects and light musical "
+            "score only, with NO spoken voices): "
             f"{json.dumps(str(shot.get('dialogue')), ensure_ascii=False)}\n\n"
             if str(shot.get("dialogue") or "").strip() else ""
         )

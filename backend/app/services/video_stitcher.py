@@ -46,10 +46,13 @@ class VideoStitcher:
         norm_paths = []
         for i, clip in enumerate(clips):
             if isinstance(clip, str):
-                path, tin, tout, mute = clip, None, None, False
+                path, tin, tout, mute, vol = clip, None, None, False, None
             else:
                 path, tin, tout = clip.get("path"), clip.get("in"), clip.get("out")
                 mute = bool(clip.get("mute"))
+                # optional bed level for a KEPT dialogue soundtrack (the real
+                # TTS voice overlays it, so it must sit underneath)
+                vol = clip.get("volume")
             norm = os.path.join(norm_dir, f"n{i:03d}.mp4")
             # effective chunk length places the fade-out; fall back to probe
             if tout is not None:
@@ -76,6 +79,8 @@ class VideoStitcher:
                 afade = f"afade=t=in:st=0:d={f},afade=t=out:st={max(0.0, eff - f):.3f}:d={f}"
             else:
                 afade = "anull"
+            if not mute and vol is not None and float(vol) != 1.0:
+                afade = f"volume={max(0.0, float(vol))},{afade}" if afade != "anull"                     else f"volume={max(0.0, float(vol))}"
             cmd += ["-vf", self._vf_for(ratio), "-af", afade]
             if not has_audio:
                 cmd += ["-map", "0:v", "-map", "1:a", "-shortest"]

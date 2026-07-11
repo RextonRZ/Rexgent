@@ -251,17 +251,33 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         # the ACTUAL cut, chunk by chunk, with REAL durations — dialogue and
         # captions are placed on this, not on the storyboard's estimates
         cut_entries: list = []
+        kept_beds = 0
         for i, seg in enumerate(resolved):
             local = os.path.join(workdir, f"seg_{i:03d}.mp4")
             meta = shot_meta.get(str(seg["clip"].shot_id)) if seg["clip"] else None
-            mute = bool(meta and meta["dialogue"])
+            has_dialogue = bool(meta and meta["dialogue"])
             try:
                 resp = httpx.get(seg["url"], timeout=180.0)
                 resp.raise_for_status()
                 with open(local, "wb") as fh:
                     fh.write(resp.content)
+                # the model's own music/ambience/SFX survive whenever the
+                # track is measurably free of fake speech — only polluted
+                # dialogue chunks get muted (audio_policy decides)
+                from app.services.audio_policy import (BED_VOLUME, keep_clip_audio,
+                                                       speech_ratio)
+                mute, vol = False, None
+                if has_dialogue:
+                    ratio = speech_ratio(local)
+                    if keep_clip_audio(True, ratio):
+                        vol = BED_VOLUME
+                        kept_beds += 1
+                        logger.info("chunk %d: original soundtrack kept as bed "
+                                    "(speech ratio %.2f)", i, ratio or 0.0)
+                    else:
+                        mute = True
                 stitch_inputs.append({"path": local, "in": seg["in"], "out": seg["out"],
-                                      "mute": mute})
+                                      "mute": mute, "volume": vol})
                 # what this chunk really contributes to the final timeline
                 probed = VideoStitcher._duration(local)
                 tin = float(seg["in"] or 0.0)
@@ -294,6 +310,9 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
 
         stitcher = VideoStitcher()
         final_local = os.path.join(workdir, "final.mp4")
+        if kept_beds:
+            _stage(project_id, "update",
+                   f"Keeping {kept_beds} original soundtrack(s) as the ambient bed")
         _stage(project_id, "update", f"Stitching {len(stitch_inputs)} clip(s)")
         with tool_run(project_id, "export", "stitch_clips", "Editor") as t:
             stitcher.stitch(stitch_inputs, final_local, ratio=ratio)
