@@ -389,18 +389,29 @@ export function ensureLiveRun(projectId: string) {
   on("tool:progress", (p: ToolProgress) => {
     if (!p?.stage || !p?.tool) return;
     upsertTool(p);
-    const verb =
-      p.status === "succeeded" ? " done" : p.status === "failed" ? " failed" : "";
-    upsertRunning(p.stage, {
-      agent: p.agent ?? "Crew",
-      label: `${p.tool.replace(/_/g, " ")}${verb}`,
-      index: p.index,
-      total: p.total,
-      fromTool: true,
-    });
+    const terminal = p.status !== "started";
+    const existing = useLiveRunStore.getState().running[p.stage];
+    // A terminal tool event must never BIRTH a bubble: event order across the
+    // worker's pubsub isn't guaranteed, and a trailing "succeeded" arriving
+    // after the stage already completed used to resurrect a ghost spinner
+    // ("dispatch video done" ticking forever). It also never overwrites
+    // stage-level narration — only tool-owned entries take the "done" label.
+    if (!terminal || existing?.fromTool) {
+      const verb =
+        p.status === "succeeded" ? " done" : p.status === "failed" ? " failed" : "";
+      if (!terminal || existing) {
+        upsertRunning(p.stage, {
+          agent: p.agent ?? "Crew",
+          label: `${p.tool.replace(/_/g, " ")}${verb}`,
+          index: p.index,
+          total: p.total,
+          fromTool: true,
+        });
+      }
+    }
     // tool-only entries self-clear once their stage has no tool running —
     // a standalone budget fit must not leave the stage spinning forever
-    if (p.status !== "started") {
+    if (terminal) {
       const s = useLiveRunStore.getState();
       const entry = s.running[p.stage];
       const anyToolRunning = Object.values(
