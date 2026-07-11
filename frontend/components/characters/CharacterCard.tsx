@@ -9,6 +9,7 @@ import { AppearanceGenerator } from "./AppearanceGenerator";
 import { PlateCard } from "@/components/casting/PlateCard";
 import { VoiceRow } from "@/components/casting/VoiceRow";
 import { ZoomableImage } from "@/components/shared/Lightbox";
+import { SpendConfirm, type SpendRequest } from "@/components/shared/SpendConfirm";
 import {
   useRegenerateVariant,
   useSwapOutfit,
@@ -100,6 +101,7 @@ export function CharacterCard({
   const regenerateVariant = useRegenerateVariant();
   const swapOutfit = useSwapOutfit();
   const generatePlates = useGenerateCharacterPlates();
+  const [spend, setSpend] = useState<SpendRequest | null>(null);
   const hasFace = !!character.reference_image_url;
   const hasPlates = (casting?.variants.length ?? 0) > 0;
 
@@ -198,7 +200,19 @@ export function CharacterCard({
                   size="sm"
                   variant="ghost"
                   disabled={generatePlates.isPending}
-                  onClick={() => generatePlates.mutate(character.id)}
+                  onClick={() =>
+                    setSpend({
+                      title: `Generate ${character.name}'s plates`,
+                      cost: `$${(
+                        Math.max(casting?.variants.length ?? 0, 1) * 0.075
+                      ).toFixed(2)}, a little more if the face check re-rolls`,
+                      note: hasFace
+                        ? "Outfits render on the locked face above."
+                        : "No face is set, so a default face gets invented and locked.",
+                      confirmLabel: "Generate",
+                      run: () => generatePlates.mutate(character.id),
+                    })
+                  }
                   title={
                     (hasFace
                       ? "Generate outfits on the face above."
@@ -257,6 +271,7 @@ export function CharacterCard({
             </Section>
           </>
         )}
+        <SpendConfirm request={spend} onClose={() => setSpend(null)} />
       </CardContent>
     </Card>
   );

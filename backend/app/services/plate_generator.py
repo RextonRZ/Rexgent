@@ -133,7 +133,10 @@ class PlateGenerator:
         closest attempt wins — the edit model drifts sometimes, and one cheap retry
         beats shipping a stranger in the character's costume."""
         from app.services.face_model import cosine_similarity
-        verify = bool(base_image_url and match_vector and kind == "character")
+        # match_vector arrives as a numpy array when loaded from pgvector —
+        # bool(array) raises, so test presence by length, never truthiness
+        has_ref_vector = match_vector is not None and len(match_vector) > 0
+        verify = bool(base_image_url) and has_ref_vector and kind == "character"
         attempts = IDENTITY_MAX_ATTEMPTS if verify else 1
         content: bytes | None = None
         best_sim = -1.0

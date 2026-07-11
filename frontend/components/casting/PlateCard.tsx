@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Loader2, Shirt, ZoomIn } from "lucide-react";
 import { Lightbox } from "@/components/shared/Lightbox";
+import { SpendConfirm, type SpendRequest } from "@/components/shared/SpendConfirm";
 
 const STATUS_LABEL: Record<string, string> = {
   ai_generated: "AI generated",
@@ -43,6 +44,7 @@ export function PlateCard({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const outfitInputRef = useRef<HTMLInputElement>(null);
   const [zoom, setZoom] = useState(false);
+  const [spend, setSpend] = useState<SpendRequest | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,7 +54,15 @@ export function PlateCard({
 
   const handleOutfitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && onSwapOutfit) onSwapOutfit(file);
+    // the photo is picked first, then the price is stated before anything runs
+    if (file && onSwapOutfit)
+      setSpend({
+        title: `Swap ${label}'s outfit`,
+        cost: "$0.09, up to $0.17 if the face check re-rolls",
+        note: "The clothing is copied from your photo; whoever wears it there is ignored.",
+        confirmLabel: "Re-dress",
+        run: () => onSwapOutfit(file),
+      });
     e.target.value = "";
   };
 
@@ -106,7 +116,14 @@ export function PlateCard({
           <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
             {onRegenerate && (
               <button
-                onClick={onRegenerate}
+                onClick={() =>
+                  setSpend({
+                    title: `Regenerate ${label}`,
+                    cost: "$0.08, up to $0.15 if the face check re-rolls",
+                    confirmLabel: "Regenerate",
+                    run: onRegenerate,
+                  })
+                }
                 title="Regenerate plate. Costs about $0.08, up to $0.15 if the face check re-rolls."
                 className="h-8 w-8 rounded-full bg-background/90 hover:bg-background flex items-center justify-center text-sm"
               >
@@ -165,6 +182,7 @@ export function PlateCard({
         open={zoom}
         onClose={() => setZoom(false)}
       />
+      <SpendConfirm request={spend} onClose={() => setSpend(null)} />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { CharacterList } from "@/components/characters/CharacterList";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LiveStageStrip } from "@/components/shared/LiveStageStrip";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { SpendConfirm, type SpendRequest } from "@/components/shared/SpendConfirm";
 import { RelationshipGraph } from "@/components/characters/RelationshipGraph";
 import { RelationshipEdgePanel } from "@/components/characters/RelationshipEdgePanel";
 import { Skeleton } from "@/components/shared/Skeleton";
@@ -37,6 +38,7 @@ export default function CharactersPage({
 
   const [selectedEdge, setSelectedEdge] =
     useState<CharacterRelationship | null>(null);
+  const [spend, setSpend] = useState<SpendRequest | null>(null);
 
   const characters = data?.characters || [];
 
@@ -93,11 +95,16 @@ export default function CharactersPage({
         </Button>
         <Button
           variant="outline"
-          onClick={() => runCasting.mutate()}
+          onClick={() =>
+            setSpend({
+              title: "Cast the whole bible",
+              cost: `roughly $${((characters.length * 2 + 3) * 0.075).toFixed(2)} in image generation`,
+              note: "Style frame, every location and every outfit plate render in one run; looks are written for anyone missing one and voices get assigned.",
+              confirmLabel: "Generate plates",
+              run: () => runCasting.mutate(),
+            })
+          }
           disabled={runCasting.isPending}
-          title={`Generate costume, location & style plates for the whole cast. Costs roughly $${(
-            (characters.length * 2 + 3) * 0.075
-          ).toFixed(2)} in image generation.`}
         >
           {runCasting.isPending ? "Generating…" : "Generate Plates"}
         </Button>
@@ -176,6 +183,7 @@ export default function CharactersPage({
         characterById={characterById}
         onClose={() => setSelectedEdge(null)}
       />
+      <SpendConfirm request={spend} onClose={() => setSpend(null)} />
       <NextStepButton projectId={params.id} current="characters" />
     </div>
   );

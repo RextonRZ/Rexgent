@@ -150,3 +150,32 @@ async def test_identity_match_on_first_try_needs_no_retry():
         prompt="same person, navy uniform",
         base_image_url="https://oss/face.png", match_vector=ref)
     gen.qwen.edit_image.assert_awaited_once()  # no wasted second image
+
+
+@pytest.mark.asyncio
+async def test_match_vector_from_pgvector_is_a_numpy_array():
+    # face_vector loads from the DB as a numpy array — bool(array) raises
+    # ("truth value of an array is ambiguous") and killed every verified plate
+    import numpy as np
+    gen = PlateGenerator.__new__(PlateGenerator)
+    gen.db = None
+    gen.qwen = MagicMock()
+    gen.qwen.edit_image = AsyncMock(return_value="https://img/a.png")
+    gen.qwen.generate_image = AsyncMock()
+    gen.oss = MagicMock()
+    gen.oss.get_project_path = MagicMock(return_value="proj/plates/x.png")
+    gen.oss.upload_bytes = MagicMock(return_value="https://oss/x.png")
+    gen._fetch_bytes = MagicMock(return_value=b"good")
+    ref = np.array([1.0] + [0.0] * 511)
+    close = [0.5] + [(1 - 0.5**2) ** 0.5] + [0.0] * 510
+    gen.embedder = MagicMock()
+    gen.embedder.model = MagicMock()
+    gen.embedder.model.embed = MagicMock(return_value=close)
+    gen.embedder.extract = AsyncMock(return_value={"vector": close, "description": {}})
+
+    url, _ = await gen.generate_and_store_plate(
+        project_id="p1", kind="character", key="Mia:uniform",
+        prompt="same person, navy uniform",
+        base_image_url="https://oss/face.png", match_vector=ref)
+    assert url == "https://oss/x.png"
+    gen.qwen.edit_image.assert_awaited_once()
