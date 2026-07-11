@@ -224,6 +224,18 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
             except Exception:
                 pass
 
+            # the 180-degree rule, enforced not requested: first placement
+            # establishes each character's screen side; drift snaps back,
+            # a flagged reverse angle re-establishes the line of action
+            from app.services.stage_map import enforce_scene_sides
+            _, _side_notes = enforce_scene_sides(
+                [{"subjects": sd.get("subjects"),
+                  "reverse_angle": bool(sd.get("reverse_angle"))}
+                 if sd.get("subjects") else None for sd in shots_data])
+            if _side_notes:
+                import logging
+                logging.getLogger(__name__).info(
+                    "stage map corrections scene %s: %s", scene.number, _side_notes)
         for shot_data in shots_data:
             in_frame = shot_data.get("characters_in_frame", []) or []
             # foreground names must be a subset of who is actually in frame
