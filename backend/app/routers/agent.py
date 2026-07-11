@@ -61,7 +61,9 @@ async def run_auto(request: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail=f"Agent run failed: {msg}")
 
     return {
-        "status": "complete",
+        # without Full Auto the graph ends at the script checkpoint — the
+        # Showrunner chat's cards drive each later stage from there
+        "status": "complete" if dispatch_video else "script_ready",
         "script_id": final_state.get("script_id"),
         "judgement": final_state.get("judgement"),
         "characters": len(final_state.get("characters", [])),

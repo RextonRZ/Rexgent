@@ -17,7 +17,10 @@ def route_after_judge(state: PipelineState) -> str:
     rec = (state.get("judgement") or {}).get("recommendation", "PROCEED")
     if rec in ("REVISE_FIRST", "MAJOR_REWRITE") and state.get("revise_count", 0) < MAX_REVISIONS:
         return "revise"
-    return "extract_characters"
+    # Full Auto rolls straight on. Otherwise the run ENDS here, at the script
+    # checkpoint: the Showrunner chat hands the user the controls (review the
+    # script, or continue to casting) — later stages never start themselves.
+    return "extract_characters" if state.get("dispatch_video") else "END"
 
 
 def _emit_node(state: PipelineState, node: str) -> None:
@@ -175,7 +178,9 @@ def build_pipeline_graph(db=None):
     g.add_edge(START, "generate_script")
     g.add_edge("generate_script", "judge")
     g.add_conditional_edges("judge", route_after_judge,
-                            {"revise": "revise", "extract_characters": "extract_characters"})
+                            {"revise": "revise",
+                             "extract_characters": "extract_characters",
+                             "END": END})
     g.add_edge("revise", "generate_script")  # self-correction loop
     g.add_edge("extract_characters", "clarify")
     g.add_conditional_edges("clarify",

@@ -37,12 +37,20 @@ def test_clarify_node_in_graph():
 
 def test_judge_gate_branches():
     assert route_after_judge({"judgement": {"recommendation": "REVISE_FIRST"}, "revise_count": 0}) == "revise"
-    assert route_after_judge({"judgement": {"recommendation": "PROCEED"}}) == "extract_characters"
+    # Full Auto rolls on to casting; otherwise the approved script ENDS the
+    # run at its checkpoint — later stages wait for the user to continue.
+    assert route_after_judge({"judgement": {"recommendation": "PROCEED"},
+                              "dispatch_video": True}) == "extract_characters"
+    assert route_after_judge({"judgement": {"recommendation": "PROCEED"}}) == "END"
 
 
 def test_judge_gate_stops_revising_after_max():
-    # Already revised once -> proceed even if still flagged.
-    assert route_after_judge({"judgement": {"recommendation": "REVISE_FIRST"}, "revise_count": 1}) == "extract_characters"
+    # Already revised once -> stop revising even if still flagged; where it
+    # goes next still depends on Full Auto vs the checkpoint stop.
+    assert route_after_judge({"judgement": {"recommendation": "REVISE_FIRST"}, "revise_count": 1,
+                              "dispatch_video": True}) == "extract_characters"
+    assert route_after_judge({"judgement": {"recommendation": "REVISE_FIRST"},
+                              "revise_count": 1}) == "END"
 
 
 @pytest.mark.asyncio

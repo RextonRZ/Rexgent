@@ -144,11 +144,12 @@ export function AutoRunPanel({
       </CardHeader>
       <CardContent className="px-6 space-y-5">
         <p className="text-sm text-muted-foreground">
-          The agent writes the script, judges it (rewriting weak drafts),
-          extracts characters, storyboards, and allocates the budget, then
-          hands you a plan to review. Planning itself costs a few cents of AI
-          writing; your voucher only goes to plates, voices and video after
-          you choose to generate.
+          The agent writes your script and judges it, rewriting weak drafts.
+          With Full Auto on it then casts, storyboards, renders and exports
+          the whole episode by itself. With it off, the run stops at the
+          script checkpoint and you continue each stage from the Showrunner
+          chat, so nothing runs before you say so. Writing costs a few cents;
+          your voucher only goes to plates, voices and video.
         </p>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -319,7 +320,7 @@ export function AutoRunPanel({
           <span className="mt-0.5 block text-[11px] text-muted-foreground">
             {fullAuto
               ? `Casts, voices, renders and exports the episode automatically under the $${cap.toFixed(0)} cap. This spends your voucher.`
-              : "Off: plan only. A few cents of AI writing; plates, voices and video wait until you choose."}
+              : "Off: writes and judges the script, then stops. You review it and continue each stage from the Showrunner chat."}
           </span>
         </button>
 
@@ -331,10 +332,10 @@ export function AutoRunPanel({
           {autoRun.isPending
             ? fullAuto
               ? "Producing your episode…"
-              : "Planning…"
+              : "Writing…"
             : fullAuto
             ? "Produce my episode (spends voucher)"
-            : "Plan my drama (no video spend)"}
+            : "Write my script (no video spend)"}
         </Button>
 
         {runError && (
@@ -361,7 +362,7 @@ export function AutoRunPanel({
         {result && (
           <div className="border-t pt-3 text-sm space-y-2">
             <p className="font-medium">
-              {fullAuto ? "✓ Episode in production" : "✓ Plan ready"}
+              {fullAuto ? "✓ Episode in production" : "✓ Script ready"}
             </p>
             {result.judgement && (
               <p>
@@ -370,10 +371,16 @@ export function AutoRunPanel({
                 {result.judgement.overall?.toFixed?.(1)}/10
               </p>
             )}
-            <p>
-              {result.characters} characters · {result.shots} shots ·{" "}
-              {result.revisions} self-revision(s)
-            </p>
+            {result.status === "script_ready" ? (
+              <p>
+                {result.revisions} self-revision(s) before the judge approved
+              </p>
+            ) : (
+              <p>
+                {result.characters} characters · {result.shots} shots ·{" "}
+                {result.revisions} self-revision(s)
+              </p>
+            )}
             {result.budget && (
               <p>
                 Projected video budget:{" "}
@@ -394,24 +401,21 @@ export function AutoRunPanel({
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Script, cast and storyboard are done; no need to extract
-                anything again. Two clicks remain: Generate Plates on the
-                Characters step locks each face and voice, then Start
-                generation renders the video. Those two are what spend your
-                voucher.
+                The run paused at the script checkpoint, nothing else has
+                started. Read the script in the editor, then continue from
+                the Showrunner chat: cast, storyboard, generate. Only plates,
+                voices and video spend your voucher.
               </p>
             )}
             <Button
               onClick={() =>
                 router.push(
-                  `/projects/${projectId}/${fullAuto ? "generate" : "characters"}`
+                  `/projects/${projectId}/${fullAuto ? "generate" : "script"}`
                 )
               }
               className="w-full glow"
             >
-              {fullAuto
-                ? "Watch it render →"
-                : "Review cast & generate plates →"}
+              {fullAuto ? "Watch it render →" : "Review the script →"}
             </Button>
           </div>
         )}
