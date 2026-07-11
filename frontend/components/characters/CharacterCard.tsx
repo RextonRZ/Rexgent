@@ -12,6 +12,7 @@ import { ZoomableImage } from "@/components/shared/Lightbox";
 import {
   useRegenerateVariant,
   useOverrideVariant,
+  useSwapOutfit,
   useGenerateCharacterPlates,
   type CastingCharacter,
 } from "@/hooks/useCasting";
@@ -99,9 +100,16 @@ export function CharacterCard({
 }) {
   const regenerateVariant = useRegenerateVariant();
   const overrideVariant = useOverrideVariant();
+  const swapOutfit = useSwapOutfit();
   const generatePlates = useGenerateCharacterPlates();
   const hasFace = !!character.reference_image_url;
   const hasPlates = (casting?.variants.length ?? 0) > 0;
+
+  // only the plate being worked on shows the spinner, not its siblings
+  const variantBusy = (variantId: string) =>
+    (swapOutfit.isPending && swapOutfit.variables?.variantId === variantId) ||
+    (overrideVariant.isPending && overrideVariant.variables?.variantId === variantId) ||
+    (regenerateVariant.isPending && regenerateVariant.variables === variantId);
 
   return (
     <Card>
@@ -225,9 +233,13 @@ export function CharacterCard({
                       }
                       description={variant.outfit_description ?? undefined}
                       status={variant.plate_status}
+                      busy={variantBusy(variant.id)}
                       onRegenerate={() => regenerateVariant.mutate(variant.id)}
                       onUpload={(file) =>
                         overrideVariant.mutate({ variantId: variant.id, file })
+                      }
+                      onSwapOutfit={(file) =>
+                        swapOutfit.mutate({ variantId: variant.id, file })
                       }
                     />
                   ))}

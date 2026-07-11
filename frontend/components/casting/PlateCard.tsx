@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ZoomIn } from "lucide-react";
+import { Loader2, Shirt, ZoomIn } from "lucide-react";
 import { Lightbox } from "@/components/shared/Lightbox";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -23,6 +23,11 @@ export interface PlateCardProps {
   status?: string;
   onRegenerate?: () => void;
   onUpload?: (file: File) => void;
+  /** re-dress from ANY outfit photo: the clothing is read from the image and
+   * the plate re-renders with this character's own face wearing it */
+  onSwapOutfit?: (file: File) => void;
+  /** an action on THIS plate is running — show it working, block re-clicks */
+  busy?: boolean;
 }
 
 export function PlateCard({
@@ -32,8 +37,11 @@ export function PlateCard({
   status,
   onRegenerate,
   onUpload,
+  onSwapOutfit,
+  busy,
 }: PlateCardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const outfitInputRef = useRef<HTMLInputElement>(null);
   const [zoom, setZoom] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,7 +50,13 @@ export function PlateCard({
     e.target.value = "";
   };
 
-  const hasActions = Boolean(onRegenerate || onUpload);
+  const handleOutfitChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onSwapOutfit) onSwapOutfit(file);
+    e.target.value = "";
+  };
+
+  const hasActions = Boolean(onRegenerate || onUpload || onSwapOutfit);
 
   return (
     <div className="group relative overflow-hidden rounded-lg border border-border bg-card">
@@ -62,7 +76,7 @@ export function PlateCard({
           </div>
         )}
         {/* view-larger affordance, top-left so it clears the status badge */}
-        {imageUrl && (
+        {imageUrl && !busy && (
           <button
             onClick={() => setZoom(true)}
             title="View larger"
@@ -80,8 +94,15 @@ export function PlateCard({
             {STATUS_LABEL[status] || status}
           </span>
         )}
+        {/* a running action owns the plate: spinner, no competing buttons */}
+        {busy && (
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-1.5 bg-black/60">
+            <Loader2 className="size-5 animate-spin text-white/90" />
+            <span className="text-[10px] text-white/80">working on it…</span>
+          </div>
+        )}
         {/* actions appear on hover as icon buttons over the image */}
-        {hasActions && (
+        {hasActions && !busy && (
           <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
             {onRegenerate && (
               <button
@@ -95,10 +116,19 @@ export function PlateCard({
             {onUpload && (
               <button
                 onClick={() => fileInputRef.current?.click()}
-                title="Upload replacement"
+                title="Upload replacement image"
                 className="h-8 w-8 rounded-full bg-background/90 hover:bg-background flex items-center justify-center text-sm"
               >
                 ⬆
+              </button>
+            )}
+            {onSwapOutfit && (
+              <button
+                onClick={() => outfitInputRef.current?.click()}
+                title="Swap outfit from a photo: the clothing is copied, the person in your photo is ignored"
+                className="h-8 w-8 rounded-full bg-background/90 hover:bg-background flex items-center justify-center"
+              >
+                <Shirt className="size-3.5" />
               </button>
             )}
           </div>
@@ -120,6 +150,13 @@ export function PlateCard({
         accept="image/*"
         className="hidden"
         onChange={handleFileChange}
+      />
+      <input
+        ref={outfitInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleOutfitChange}
       />
 
       <Lightbox

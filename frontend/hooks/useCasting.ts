@@ -150,6 +150,38 @@ export function useOverrideVariant() {
   });
 }
 
+/** Re-dress a variant from ANY outfit photo: the clothing is read from the
+ *  image (whoever wears it is ignored) and the plate re-renders with the
+ *  character's own locked face wearing it. Slower than override — it runs a
+ *  vision read plus an identity-verified render. */
+export function useSwapOutfit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      variantId,
+      file,
+    }: {
+      variantId: string;
+      file: File;
+    }) => {
+      const form = new FormData();
+      form.append("file", file);
+      const { data } = await api.post(
+        `/api/casting/variant/${variantId}/outfit`,
+        form,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+          timeout: 300000,
+        }
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bible"] });
+    },
+  });
+}
+
 export function useSetPresetVoice() {
   const queryClient = useQueryClient();
   return useMutation({

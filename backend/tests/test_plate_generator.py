@@ -94,3 +94,59 @@ async def test_character_plate_falls_back_to_text_when_edit_fails():
         prompt="same person, navy uniform", base_image_url="https://oss/face.png")
     assert url == "https://oss/x.png"
     gen.qwen.generate_image.assert_awaited_once()  # fell back
+
+
+@pytest.mark.asyncio
+async def test_identity_mismatch_rerolls_and_keeps_the_closest_face():
+    # attempt 1 renders a stranger (cosine 0.1 vs the reference); the plate is
+    # re-rolled once and the better attempt (0.6) ships. One extra image, no
+    # stranger in the character's costume.
+    gen = PlateGenerator.__new__(PlateGenerator)
+    gen.db = None
+    gen.qwen = MagicMock()
+    gen.qwen.edit_image = AsyncMock(side_effect=["https://img/a.png", "https://img/b.png"])
+    gen.qwen.generate_image = AsyncMock()
+    gen.oss = MagicMock()
+    gen.oss.get_project_path = MagicMock(return_value="proj/plates/x.png")
+    gen.oss.upload_bytes = MagicMock(return_value="https://oss/x.png")
+    gen._fetch_bytes = MagicMock(side_effect=[b"stranger", b"match"])
+    ref = [1.0] + [0.0] * 511
+    stranger = [0.1] + [(1 - 0.1**2) ** 0.5] + [0.0] * 510   # cosine 0.1
+    match = [0.6] + [(1 - 0.6**2) ** 0.5] + [0.0] * 510      # cosine 0.6
+    gen.embedder = MagicMock()
+    gen.embedder.model = MagicMock()
+    gen.embedder.model.embed = MagicMock(side_effect=[stranger, match])
+    gen.embedder.extract = AsyncMock(return_value={"vector": match, "description": {}})
+
+    url, _ = await gen.generate_and_store_plate(
+        project_id="p1", kind="character", key="Mia:uniform",
+        prompt="same person, navy uniform",
+        base_image_url="https://oss/face.png", match_vector=ref)
+    assert gen.qwen.edit_image.await_count == 2       # re-rolled once
+    assert gen.oss.upload_bytes.call_args.args[0] == b"match"  # best attempt ships
+    assert url == "https://oss/x.png"
+
+
+@pytest.mark.asyncio
+async def test_identity_match_on_first_try_needs_no_retry():
+    gen = PlateGenerator.__new__(PlateGenerator)
+    gen.db = None
+    gen.qwen = MagicMock()
+    gen.qwen.edit_image = AsyncMock(return_value="https://img/a.png")
+    gen.qwen.generate_image = AsyncMock()
+    gen.oss = MagicMock()
+    gen.oss.get_project_path = MagicMock(return_value="proj/plates/x.png")
+    gen.oss.upload_bytes = MagicMock(return_value="https://oss/x.png")
+    gen._fetch_bytes = MagicMock(return_value=b"good")
+    ref = [1.0] + [0.0] * 511
+    close = [0.5] + [(1 - 0.5**2) ** 0.5] + [0.0] * 510      # cosine 0.5 >= 0.35
+    gen.embedder = MagicMock()
+    gen.embedder.model = MagicMock()
+    gen.embedder.model.embed = MagicMock(return_value=close)
+    gen.embedder.extract = AsyncMock(return_value={"vector": close, "description": {}})
+
+    await gen.generate_and_store_plate(
+        project_id="p1", kind="character", key="Mia:uniform",
+        prompt="same person, navy uniform",
+        base_image_url="https://oss/face.png", match_vector=ref)
+    gen.qwen.edit_image.assert_awaited_once()  # no wasted second image

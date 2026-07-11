@@ -203,7 +203,9 @@ class CastingDirector:
                 url, vector = await self.plates.generate_and_store_plate(
                     pid, "character", f"{c.name}_{v['label']}", prompt,
                     negative_prompt=CHAR_PLATE_NEGATIVE,
-                    base_image_url=c.reference_image_url, prompt_extend=False)
+                    base_image_url=c.reference_image_url, prompt_extend=False,
+                    # verify the rendered face against the uploaded one
+                    match_vector=c.face_vector if c.reference_image_url else None)
                 if vector:
                     faces_locked += 1
                 is_default = (i == 0)
