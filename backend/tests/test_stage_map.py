@@ -47,3 +47,23 @@ def test_shots_without_blocking_pass_through():
     shots = [None, blocking(("SOL", "right")), None, blocking(("SOL", "right"))]
     _, notes = enforce_scene_sides(shots)
     assert notes == []
+
+
+def test_string_subjects_do_not_crash_the_enforcer():
+    # the live crash: the model returned subjects as bare name strings
+    shots = [{"subjects": ["IM SOL", "RYU SUN-JAE"], "reverse_angle": False},
+             blocking(("IM SOL", "left"))]
+    _, notes = enforce_scene_sides(shots)
+    assert notes == []
+
+
+def test_normalize_subjects_coerces_and_filters():
+    from app.services.stage_map import normalize_subjects
+    assert normalize_subjects(["IM SOL", {"character": "RYU", "screen_side": "left"},
+                               42, "  "]) == [
+        {"character": "IM SOL"},
+        {"character": "RYU", "screen_side": "left"},
+    ]
+    assert normalize_subjects("IM SOL") is None
+    assert normalize_subjects([]) is None
+    assert normalize_subjects(None) is None

@@ -193,8 +193,13 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             )
             # the 180-degree rule, enforced not requested: first placement
             # establishes each character's screen side; drift snaps back,
-            # a flagged reverse angle re-establishes the line of action
-            from app.services.stage_map import enforce_scene_sides
+            # a flagged reverse angle re-establishes the line of action.
+            # Subjects are normalized FIRST — the model sometimes returns
+            # bare name strings instead of the structured dicts.
+            from app.services.stage_map import enforce_scene_sides, normalize_subjects
+            for sd in shots:
+                if isinstance(sd, dict):
+                    sd["subjects"] = normalize_subjects(sd.get("subjects"))
             _, _side_notes = enforce_scene_sides(
                 [{"subjects": sd.get("subjects"),
                   "reverse_angle": bool(sd.get("reverse_angle"))}

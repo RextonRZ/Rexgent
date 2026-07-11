@@ -12,6 +12,22 @@ never a violation and never re-establishes a side.
 """
 
 
+def normalize_subjects(raw) -> list | None:
+    """LLM output drifts: `subjects` sometimes arrives as bare name strings
+    (or junk) instead of the structured dicts the schema asks for. Keep the
+    dicts, coerce strings to {'character': name} (presence without geometry),
+    drop everything else. None when nothing usable remains."""
+    if not isinstance(raw, list):
+        return None
+    out = []
+    for s in raw:
+        if isinstance(s, dict):
+            out.append(s)
+        elif isinstance(s, str) and s.strip():
+            out.append({"character": s.strip()})
+    return out or None
+
+
 def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
     """shots_blocking: per shot, {"subjects": [...], "reverse_angle": bool}
     or None for shots without blocking. Mutates screen_side in place on
@@ -25,6 +41,8 @@ def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
             # a deliberate reverse crosses the line: everyone re-establishes
             established = {}
         for s in blocking["subjects"]:
+            if not isinstance(s, dict):
+                continue  # defense in depth — normalize_subjects upstream
             name = str(s.get("character") or "").strip().upper()
             side = s.get("screen_side")
             if not name or side not in ("left", "center", "right"):
