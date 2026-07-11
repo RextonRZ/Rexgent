@@ -41,12 +41,13 @@ export function SceneSection({
 
   return (
     <div className="rounded-xl border border-border bg-card">
-      {/* the collapse toggle and the delete control are siblings: a button
-          can't legally nest inside a button */}
+      {/* header: title and shot count are both collapse toggles with the
+          delete control between them (a button can't legally nest inside a
+          button, so the row is three siblings) */}
       <div className="group flex items-center">
         <button
           onClick={() => setOpen((o) => !o)}
-          className="flex-1 min-w-0 flex items-center justify-between px-5 py-3.5 text-left"
+          className="flex-1 min-w-0 flex items-center pl-5 pr-2 py-3.5 text-left"
         >
           <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
             <span className="shrink-0">Scene {scene.scene_number}</span>
@@ -59,24 +60,27 @@ export function SceneSection({
               </>
             )}
           </span>
-          <span className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-            {scene.shots.length} shot{scene.shots.length !== 1 ? "s" : ""}
-            <span
-              className={`text-[10px] transition-transform duration-200 ${
-                open ? "rotate-90" : ""
-              }`}
-            >
-              ▸
-            </span>
-          </span>
         </button>
         <button
           onClick={handleDelete}
           disabled={deleteScene.isPending}
           title="Delete scene"
-          className="mr-3 h-7 w-7 shrink-0 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-bad hover:bg-bad/10 flex items-center justify-center disabled:opacity-50 transition-opacity"
+          className="h-7 w-7 shrink-0 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-bad hover:bg-bad/10 flex items-center justify-center disabled:opacity-50 transition-opacity"
         >
           <Trash2 className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-2 pl-2 pr-5 py-3.5 text-xs text-muted-foreground shrink-0"
+        >
+          {scene.shots.length} shot{scene.shots.length !== 1 ? "s" : ""}
+          <span
+            className={`text-[10px] transition-transform duration-200 ${
+              open ? "rotate-90" : ""
+            }`}
+          >
+            ▸
+          </span>
         </button>
       </div>
       {/* animated collapse: children stay mounted, height eases via grid-rows */}
