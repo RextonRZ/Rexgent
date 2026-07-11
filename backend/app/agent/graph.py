@@ -15,8 +15,20 @@ MAX_REVISIONS = 1
 
 def route_after_judge(state: PipelineState) -> str:
     rec = (state.get("judgement") or {}).get("recommendation", "PROCEED")
+    pid = state.get("project_id")
     if rec in ("REVISE_FIRST", "MAJOR_REWRITE") and state.get("revise_count", 0) < MAX_REVISIONS:
+        if pid:
+            emit("stage:progress", {"stage": "script", "status": "update",
+                 "agent": "Story Analyst",
+                 "label": "The judge sent the draft back for a rewrite"}, str(pid))
         return "revise"
+    # Only NOW is the script final — this completion is what the chat's
+    # "Script is ready" checkpoint card keys off, so it can never appear
+    # mid-judging or between self-correction passes.
+    if pid:
+        emit("stage:progress", {"stage": "script", "status": "completed",
+             "agent": "Story Analyst", "label": "Judge approved the script"},
+             str(pid))
     # Full Auto rolls straight on. Otherwise the run ENDS here, at the script
     # checkpoint: the Showrunner chat hands the user the controls (review the
     # script, or continue to casting) — later stages never start themselves.
@@ -36,15 +48,26 @@ def build_pipeline_graph(db=None):
             return state
         # On a revision pass, feed the judge's actual critique back in — a
         # regeneration that ignores WHY the draft failed just rolls the dice.
+        # notes must be NON-EMPTY on every revision, even when the judge gave
+        # no itemized points: the rewrite label ("Rewriting with the judge's
+        # notes") keys off it, and a blank fell back to "Writing your
+        # screenplay" — the user couldn't tell self-correction was happening.
         notes = ""
-        if state.get("revise_count", 0) > 0 and state.get("judgement"):
-            j = state["judgement"]
+        if state.get("revise_count", 0) > 0:
+            j = state.get("judgement") or {}
             points = list(j.get("blocking_issues") or []) + list(j.get("top_weaknesses") or [])
             if points:
                 notes = (
                     "REVISION PASS — the previous draft was rejected by the script "
                     "judge. Fix these specific problems while keeping what worked:\n- "
                     + "\n- ".join(str(p) for p in points[:6])
+                )
+            else:
+                notes = (
+                    "REVISION PASS — the previous draft was rejected by the script "
+                    f"judge (recommendation: {j.get('recommendation', 'REVISE_FIRST')}). "
+                    "Tighten the pacing, sharpen the hook and the ending, and keep "
+                    "what already worked."
                 )
         out = await pipeline_ops.generate_script_op(
             db, state["project_id"], state["premise"], state.get("genre", "drama"),
@@ -63,6 +86,11 @@ def build_pipeline_graph(db=None):
         _emit_node(state, "judge")
         if db is None:
             return state
+        # the judge is a real working beat — without this the chat goes silent
+        # after "Script ready" and mistakes the pause for the final checkpoint
+        emit("stage:progress", {"stage": "script", "status": "started",
+             "agent": "Story Analyst", "label": "Judging the draft"},
+             str(state["project_id"]))
         from app.websocket.tool_events import tool_run
         with tool_run(state["project_id"], "script", "narrative_judge",
                       "Story Analyst") as tb:
