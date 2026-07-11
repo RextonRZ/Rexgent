@@ -13,6 +13,27 @@ export function useStartGeneration() {
   });
 }
 
+/** The latest job, kept fresh while it runs — drives the dreaming tiles
+ *  through page refreshes (the live socket store is session-only, so without
+ *  this a mid-run refresh showed NOTHING for rendering shots). */
+export function useLatestJobLive(projectId: string) {
+  return useQuery<GenerationJob>({
+    queryKey: ["generation-job-live", projectId],
+    queryFn: async () => {
+      const { data } = await api.get(
+        `/api/generate/project/${projectId}/latest`
+      );
+      return data;
+    },
+    enabled: !!projectId,
+    retry: false,
+    refetchInterval: (q) =>
+      q.state.data?.status === "RUNNING" || q.state.data?.status === "PENDING"
+        ? 5000
+        : false,
+  });
+}
+
 export function useLatestJob(projectId: string) {
   return useQuery<GenerationJob>({
     queryKey: ["generation-job", projectId],

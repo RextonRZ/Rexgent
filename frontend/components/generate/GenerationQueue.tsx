@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useGenerationStore } from "@/stores/generationStore";
 import { useStoryboard, type SceneShots } from "@/hooks/useStoryboard";
 import { useLatestJobClips } from "@/hooks/useClips";
+import { useLatestJobLive } from "@/hooks/useGeneration";
 import { useProject } from "@/hooks/useProjects";
 import { clipStatusChip } from "@/lib/clipStatus";
 import type { ClipReference, Shot } from "@/lib/types";
@@ -55,6 +56,7 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
   const live = useGenerationStore((s) => s.clips);
   const { data: storyboard } = useStoryboard(projectId);
   const { data: persisted } = useLatestJobClips(projectId);
+  const { data: latestJob } = useLatestJobLive(projectId);
   const { data: project } = useProject(projectId);
   const scenes = storyboard?.scenes ?? [];
   // frame the tiles the way THIS drama renders — vertical unless 16:9 was picked
@@ -89,8 +91,18 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
         refs: map[sid]?.refs,
       };
     }
+    // 3) a RUNNING job means every unrendered shot is queued or rendering —
+    // show the dreaming tile even after a refresh wiped the live store,
+    // so the page never reads as "nothing happening" mid-run
+    if (latestJob?.status === "RUNNING" || latestJob?.status === "PENDING") {
+      for (const scene of scenes) {
+        for (const sh of scene.shots) {
+          if (!map[sh.id]) map[sh.id] = { url: undefined, status: "GENERATING" };
+        }
+      }
+    }
     return map;
-  }, [persisted, live]);
+  }, [persisted, live, latestJob, scenes]);
 
   const hasAny = Object.keys(byShot).length > 0;
   if (!hasAny) {
