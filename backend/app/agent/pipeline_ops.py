@@ -225,6 +225,9 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     estimated_duration_seconds=sd.get("estimated_duration_seconds", 5),
                     characters_in_frame=in_frame,
                     foreground_characters=foreground,
+                    blocking_json=({"subjects": sd.get("subjects"),
+                                    "reverse_angle": bool(sd.get("reverse_angle"))}
+                                   if sd.get("subjects") else None),
                     notes=sd.get("notes"),
                 )
                 db.add(shot)

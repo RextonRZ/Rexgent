@@ -25,6 +25,10 @@ class Shot(Base):
     # (face unseen). They anchor outfit, not identity, and the shot is really
     # ABOUT the other character(s).
     foreground_characters = Column(JSONB, nullable=True)
+    # absolute per-shot geometry: {"subjects": [{character, frame_position,
+    # screen_side, facing, eyeline, action}], "reverse_angle": bool} — the
+    # stage map enforces screen sides across the scene (180-degree rule)
+    blocking_json = Column(JSONB, nullable=True)
     notes = Column(Text, nullable=True)
     director_note = Column(Text, nullable=True)
 

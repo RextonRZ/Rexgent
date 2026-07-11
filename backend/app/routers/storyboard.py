@@ -242,6 +242,9 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
                 estimated_duration_seconds=shot_data.get("estimated_duration_seconds", 5),
                 characters_in_frame=in_frame,
                 foreground_characters=foreground,
+                blocking_json=({"subjects": shot_data.get("subjects"),
+                                "reverse_angle": bool(shot_data.get("reverse_angle"))}
+                               if shot_data.get("subjects") else None),
                 notes=shot_data.get("notes"),
             )
             db.add(shot)
