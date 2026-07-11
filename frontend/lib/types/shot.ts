@@ -30,6 +30,7 @@ export interface BlockingSubject {
   facing?: string;
   eyeline?: string;
   action?: string;
+  posture?: "standing" | "sitting" | "lying" | "collapsed" | "kneeling" | string;
 }
 
 export type ShotType = "ECU" | "CU" | "MCU" | "MS" | "FS" | "LS" | "EWS" | "POV" | "OTS" | "INSERT";
