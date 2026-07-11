@@ -245,7 +245,6 @@ export function CharacterCard({
                       label={
                         variant.label + (variant.is_default ? " (default)" : "")
                       }
-                      description={variant.outfit_description ?? undefined}
                       status={variant.plate_status}
                       busy={variantBusy(variant.id)}
                       onRegenerate={() => regenerateVariant.mutate(variant.id)}

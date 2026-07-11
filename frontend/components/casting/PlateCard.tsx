@@ -70,7 +70,7 @@ export function PlateCard({
   const hasActions = Boolean(onRegenerate || onUpload || onSwapOutfit);
 
   return (
-    <div className="group relative overflow-hidden rounded-lg border border-border bg-card">
+    <div className="group relative isolate overflow-hidden rounded-lg border border-border bg-card">
       {/* square + contain so the whole plate is visible (plates are 1:1; uploads letterbox) */}
       <div className="relative aspect-square w-full bg-background/40">
         {imageUrl ? (
