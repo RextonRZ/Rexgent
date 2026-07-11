@@ -124,10 +124,17 @@ class CastingDirector:
         from app.services.usage_tracker import track_project
         with track_project(pid, self.db):
             # a character without a visual description would BLOCK generation
-            # later (preflight) — users who skip face upload get one generated
-            for c in characters:
-                if (c.visual_description or "").strip() and (c.video_prompt_fragment or "").strip():
-                    continue
+            # later (preflight) — users who skip face upload get one generated.
+            # This IS the profile_cast tool running automatically, so the crew
+            # graph node lights up instead of pretending nothing happened.
+            needing_look = [c for c in characters
+                            if not ((c.visual_description or "").strip()
+                                    and (c.video_prompt_fragment or "").strip())]
+            if needing_look:
+                tool_event(pid, "characters", "profile_cast", "started",
+                           agent="Casting", total=len(needing_look))
+            looks_written = 0
+            for c in needing_look:
                 try:
                     from app.services.appearance_generator import AppearanceGenerator
                     look = await AppearanceGenerator().generate(
@@ -137,9 +144,13 @@ class CastingDirector:
                         physical_desc=c.physical_description or "")
                     c.visual_description = (c.visual_description or "").strip() or look.get("full_description", "")
                     c.video_prompt_fragment = (c.video_prompt_fragment or "").strip() or look.get("video_prompt_fragment", "")
+                    looks_written += 1
                 except Exception as e:  # noqa: BLE001
                     import logging
                     logging.getLogger(__name__).warning(f"appearance autofill skipped for {c.name}: {e}")
+            if needing_look:
+                tool_event(pid, "characters", "profile_cast", "succeeded",
+                           agent="Casting", artifact=f"{looks_written} looks written")
             self.db.commit()
             plan = await self.planner.plan(script.structured_json or {},
                                            [{"name": c.name} for c in characters])

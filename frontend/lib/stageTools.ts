@@ -98,17 +98,17 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
       run: "conditional",
       trigger: "builds itself right after extraction, and heals on page load if the bonds are missing",
     },
+    {
+      key: "profile_cast", icon: UserRound, kind: "llm",
+      run: "conditional",
+      trigger: "runs by itself inside Generate Plates for any character still missing a look; Generate Appearance (no photo) on a character card re-runs it for one character",
+    },
     { key: "generate_plates", icon: Image, kind: "media" },
     { key: "voice_assign", icon: Mic, kind: "service" },
     {
       key: "face_lock", icon: ScanFace, kind: "validator",
       run: "conditional",
       trigger: "locks automatically when plates capture a clear face; uploading a reference photo on a character card locks a real look instead",
-    },
-    {
-      key: "profile_cast", icon: UserRound, kind: "llm",
-      run: "on-demand",
-      trigger: "press Generate Appearance (no photo) on a character card to write a look from the personality when there is no face photo",
     },
   ],
   storyboard: [

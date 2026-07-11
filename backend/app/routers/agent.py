@@ -152,10 +152,10 @@ CREW_PIPELINE_GUIDE = {
         "extract_cast (auto: reads the cast from the script)",
         "write_cast_db (auto: saves the cast)",
         "map_relationships (conditional: builds itself right after extraction and heals on page load if bonds are missing, no button needed)",
+        "profile_cast (conditional: runs by itself inside Generate Plates for any character still missing a visual look, so skipping face upload never blocks anything; the Generate Appearance (no photo) button on a character card re-runs it for one character)",
         "generate_plates (auto: renders style, location and character plates)",
         "voice_assign (auto: gives each character a distinct voice)",
         "face_lock (conditional: locks automatically when plates capture a clear face; uploading a reference photo on a character card locks a real look instead. Uploading a face is ALWAYS optional, never required)",
-        "profile_cast (on-demand: the Generate Appearance (no photo) button on a character card, writes a visual look from the personality when no face photo exists)",
     ]},
     "storyboard": {"agent": "Director", "steps": [
         "memory_recall (auto: reads facts earlier scenes established, from the narrative memory graph)",
