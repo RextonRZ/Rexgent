@@ -308,6 +308,26 @@ class GenerationRunner:
             active = [s for s in shots
                       if (s.quality_tier or "") != "deferred"
                       and s.id not in already_good]
+
+            # lip-sync inputs: the scene's synthesized lines (audio-first, so
+            # they exist before rendering) + which shots speak, in order. The
+            # k-th speaking shot speaks the k-th line — same convention as
+            # place_dialogue, so mouth and overlay can't disagree.
+            from app.services.lipsync import pick_lipsync_line
+            from app.models.line_audio import LineAudio
+            # over ALL non-deferred shots of the scene, NOT `active`: on a
+            # resume run `active` excludes already-approved shots, which would
+            # shift every speaking index and drive mouths with the WRONG line
+            speaking_ids = [s.id for s in shots
+                            if (s.quality_tier or "") != "deferred"
+                            and (s.dialogue or "").strip()]
+            line_rows = (db2.query(LineAudio)
+                         .filter(LineAudio.project_id == job2.project_id,
+                                 LineAudio.scene_number == scene.number)
+                         .order_by(LineAudio.line_index).all())
+            scene_lines = [{"audio_url": r.audio_url,
+                            "character_name": r.character_name}
+                           for r in line_rows if r.audio_url]
             for i, shot in enumerate(active):
                 if self._cancelled:
                     break
@@ -319,7 +339,8 @@ class GenerationRunner:
                     job2, shot, char_by_name, bible, scene.number, prev_last_frame,
                     scene_anchor_url=scene_anchor, scene_setting=scene_setting,
                     suppress_location=state_changed,
-                    prev_action=prev_action, next_action=next_action)
+                    prev_action=prev_action, next_action=next_action,
+                    lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines))
                 # the first wide shot's closing frame anchors the room for the
                 # rest of the scene — a run of close-ups can't erase the set
                 if (scene_anchor is None and prev_last_frame
@@ -379,7 +400,8 @@ class GenerationRunner:
     async def _process_shot(self, job, shot, char_by_name, bible, scene_number,
                             prev_last_frame_url, scene_anchor_url=None,
                             scene_setting=None, suppress_location=False,
-                            prev_action=None, next_action=None):
+                            prev_action=None, next_action=None,
+                            lipsync_line=None):
         pid = str(job.project_id)
         in_frame = shot.characters_in_frame or []
         foreground = [n for n in (getattr(shot, "foreground_characters", None) or [])
@@ -426,21 +448,47 @@ class GenerationRunner:
                 if is_wan:
                     # wan2.7-i2v does NOT take identity references — its media
                     # schema is first_frame / last_frame / driving_audio /
-                    # first_clip only (every reference_image call 400'd and the
-                    # shot died). Give wan its REAL job: continue the scene
-                    # from the previous shot's last frame. With no frame to
-                    # continue from, the shot renders on HappyHorse r2v, which
-                    # is the model that actually understands the bible stack.
+                    # first_clip only. Give wan its REAL jobs: continue the
+                    # scene from the previous shot's last frame, and when this
+                    # shot speaks exactly one line with one visible speaker,
+                    # DRIVE the mouth with that line's own TTS audio. Any
+                    # failure falls down the chain: lip-sync -> plain
+                    # first-frame -> happyhorse r2v. Never blocks the shot.
+                    from app.config import get_settings as _settings
+                    from app.services.lipsync import lipsync_media, speaker_matches
                     frame_anchor = prev_last_frame_url or scene_anchor_url
-                    if frame_anchor:
-                        task_id = await self.qwen.generate_video_wan(
-                            prompt=prompt, duration=shot.estimated_duration_seconds,
-                            reference_media=[{"type": "first_frame", "url": frame_anchor}],
-                            seed=seed, ratio=ratio)
-                    else:
-                        logger.info("shot %s: wan has no frame to continue from — "
-                                    "rendering on happyhorse r2v with the bible stack",
-                                    shot.id)
+                    lip = (lipsync_line
+                           if (_settings().lipsync_enabled
+                               and frame_anchor
+                               and lipsync_line
+                               and lipsync_line.get("audio_url")
+                               and speaker_matches(lipsync_line, in_frame, foreground))
+                           else None)
+                    task_id = None
+                    if frame_anchor and lip:
+                        try:
+                            task_id = await self.qwen.generate_video_wan(
+                                prompt=prompt, duration=shot.estimated_duration_seconds,
+                                reference_media=lipsync_media(frame_anchor, lip["audio_url"]),
+                                seed=seed, ratio=ratio)
+                            logger.info("shot %s: lip-synced to its line", shot.id)
+                        except Exception as le:  # noqa: BLE001 — never blocks
+                            logger.warning("lip-sync dispatch failed for shot %s (%s) — "
+                                           "falling back to plain first-frame", shot.id, le)
+                    if task_id is None and frame_anchor:
+                        try:
+                            task_id = await self.qwen.generate_video_wan(
+                                prompt=prompt, duration=shot.estimated_duration_seconds,
+                                reference_media=[{"type": "first_frame", "url": frame_anchor}],
+                                seed=seed, ratio=ratio)
+                        except Exception as we:  # noqa: BLE001 — chain to happyhorse
+                            logger.warning("wan first-frame failed for shot %s (%s) — "
+                                           "falling back to happyhorse r2v", shot.id, we)
+                    if task_id is None:
+                        if not frame_anchor:
+                            logger.info("shot %s: wan has no frame to continue from — "
+                                        "rendering on happyhorse r2v with the bible stack",
+                                        shot.id)
                         used_tier = "happyhorse"
                         task_id = await self.qwen.generate_video_happyhorse(
                             prompt=prompt, duration=shot.estimated_duration_seconds,
