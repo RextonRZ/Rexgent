@@ -25,7 +25,6 @@ import {
   UserRound,
   Users,
   Volume2,
-  Wallet,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -117,12 +116,11 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
     { key: "set_design", icon: Lamp, kind: "llm" },
     { key: "write_shots_db", icon: Database, kind: "db" },
   ],
+  // budget_allocate is deliberately NOT predeclared: it fires on the
+  // Storyboard page (pre-production), so a permanent idle node here read as
+  // broken — when it does run, the graph appends it dynamically with its
+  // artifact, so the Producer still shows up the moment money gets fitted.
   generate: [
-    {
-      key: "budget_allocate", icon: Wallet, kind: "service",
-      run: "conditional",
-      trigger: "fits itself on the Storyboard page as soon as the board lands, and re-fits when the spend cap changes — dramas budgeted before this was instrumented show it idle",
-    },
     {
       key: "synth_voices", icon: Volume2, kind: "media",
       run: "conditional",
