@@ -353,7 +353,7 @@ export function CrewDockPanel({
         </span>
         {activeKeys.length
           ? `Crew working · ${activeKeys.map((k) => STAGE_LABELS[k]).join(" + ")}`
-          : `Crew idle · ${doneCount}/${STAGE_ORDER.length} done`}
+          : `Crew waiting on you · ${doneCount} of ${STAGE_ORDER.length} stages done`}
       </p>
 
       {STAGE_ORDER.map((key) => {
@@ -401,11 +401,14 @@ export function CrewDockPanel({
                           : "text-zinc-600"
                   )}
                 >
-                  {STAGE_LABELS[key]}
+                  {STAGE_AGENT[key]}
+                  <span className="ml-1.5 font-normal text-muted-foreground">
+                    {STAGE_LABELS[key]}
+                  </span>
                 </p>
                 {live && (
                   <p className="truncate text-[10px] text-muted-foreground">
-                    {live.agent}: {live.label}
+                    {live.label}
                     {live.index && live.total ? ` · ${live.index}/${live.total}` : ""}
                   </p>
                 )}
@@ -590,7 +593,7 @@ function CrewModalBody({
     ? `Working on ${activeKeys.map((k) => STAGE_LABELS[k]).join(" + ")}`
     : doneCount === STAGE_ORDER.length
       ? "All caught up"
-      : `Crew idle · ${doneCount}/${STAGE_ORDER.length} stages done`;
+      : `Crew waiting on you · ${doneCount} of ${STAGE_ORDER.length} stages done`;
 
   // screen-reader narration of tool transitions ("dispatch_video complete,
   // verify_face running") — announced only when a status actually changes
@@ -655,7 +658,7 @@ function CrewModalBody({
         {announcement ||
           (activeKeys.length
             ? `Crew working on ${activeKeys.map((k) => STAGE_LABELS[k]).join(" and ")}`
-            : "Crew idle")}
+            : "Crew waiting")}
       </p>
 
       <div className="scroll-clean min-h-0 flex-1 space-y-4 overflow-y-auto p-6">

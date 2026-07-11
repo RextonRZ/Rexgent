@@ -19,7 +19,7 @@ STAGE_LABELS = {
     "characters": "Characters",
     "storyboard": "Storyboard",
     "generate": "Generate",
-    "export": "Edit & Export",
+    "export": "Export",
 }
 
 # what to actually DO there — shown on the chat's go-to-page card

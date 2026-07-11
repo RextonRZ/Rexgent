@@ -15,7 +15,7 @@ const STEPS: { n: number; label: string; path: string; key: keyof ProjectProgres
   { n: 2, label: "Characters", path: "characters", key: "characters" },
   { n: 3, label: "Storyboard", path: "storyboard", key: "storyboard" },
   { n: 4, label: "Generate", path: "generate", key: "generate" },
-  { n: 5, label: "Edit & Export", path: "export", key: "export" },
+  { n: 5, label: "Export", path: "export", key: "export" },
 ];
 
 export function PipelineNav({ projectId }: { projectId: string }) {

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getSocket } from "@/lib/websocket";
-import { PipelineFlow } from "./PipelineFlow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAgentChat, type ChatMessage } from "@/hooks/useAgentChat";
@@ -405,10 +404,6 @@ export function AgentChat({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="shrink-0">
-        <PipelineFlow projectId={projectId} />
-      </div>
-
       <div
         ref={scrollRef}
         className="scroll-clean min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1"

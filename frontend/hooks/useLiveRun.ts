@@ -26,7 +26,7 @@ export const STAGE_LABELS: Record<StageKey, string> = {
   characters: "Characters",
   storyboard: "Storyboard",
   generate: "Generate",
-  export: "Edit & Export",
+  export: "Export",
 };
 
 /** Raw stage:progress keys → pipeline stage (relationships ride under Characters). */
