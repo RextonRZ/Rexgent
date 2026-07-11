@@ -7,6 +7,11 @@ export interface AutoRunResult {
   judgement: {
     overall?: number;
     recommendation?: string;
+    scores?: Record<string, number>;
+    blocking_issues?: string[];
+    top_strengths?: string[];
+    top_weaknesses?: string[];
+    judge_summary?: string;
   } | null;
   characters: number;
   shots: number;

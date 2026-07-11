@@ -124,6 +124,23 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
                 initialGenre={projectGenre}
                 initialEpisodes={epParam}
                 initialTargetLength={lenParam}
+                onScriptReady={(r) => {
+                  // the page flips to the editor (query invalidation refetches
+                  // the fresh script); carry the judge's verdict into the
+                  // analysis rail so the score is right there beside the text
+                  if (!r.judgement) return;
+                  const j = r.judgement;
+                  setJudgement({
+                    scores: j.scores ?? {},
+                    overall: j.overall ?? 0,
+                    blocking_issues: j.blocking_issues ?? [],
+                    top_strengths: j.top_strengths ?? [],
+                    top_weaknesses: j.top_weaknesses ?? [],
+                    recommendation: (j.recommendation ??
+                      "PROCEED") as JudgeResult["recommendation"],
+                    judge_summary: j.judge_summary ?? "",
+                  });
+                }}
               />
             </TabsContent>
             <TabsContent value="import">

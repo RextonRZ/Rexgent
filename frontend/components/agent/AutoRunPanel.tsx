@@ -15,9 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAutoRun, type AutoRunResult } from "@/hooks/useAgent";
 import { useProject } from "@/hooks/useProjects";
-import { getSocket } from "@/lib/websocket";
 import { GENRES } from "@/lib/genres";
 import { errText } from "@/lib/errText";
 import { cn } from "@/lib/utils";
@@ -32,29 +32,22 @@ const TONES = [
   "comedic",
 ];
 
-const NODE_LABELS: Record<string, string> = {
-  generate_script: "Writing script",
-  judge: "Judging quality",
-  revise: "Revising (self-correction)",
-  extract_characters: "Extracting characters",
-  storyboard: "Storyboarding",
-  budget: "Allocating budget",
-  finalize: "Finalizing plan",
-  generate_video: "Dispatching video generation",
-};
-
 export function AutoRunPanel({
   projectId,
   initialPremise = "",
   initialGenre = "sci-fi",
   initialEpisodes,
   initialTargetLength,
+  onScriptReady,
 }: {
   projectId: string;
   initialPremise?: string;
   initialGenre?: string;
   initialEpisodes?: number;
   initialTargetLength?: number;
+  /** fires when a checkpoint run finishes writing the script, with the run
+   * result — the Script page uses it to surface the judge's report */
+  onScriptReady?: (result: AutoRunResult) => void;
 }) {
   const router = useRouter();
   const { data: project } = useProject(projectId);
@@ -68,10 +61,10 @@ export function AutoRunPanel({
   const [targetLength, setTargetLength] = useState(initialTargetLength || 30); // seconds
   const [episodeCount, setEpisodeCount] = useState(initialEpisodes || 1);
   const [fullAuto, setFullAuto] = useState(false);
-  const [trace, setTrace] = useState<string[]>([]);
   const [result, setResult] = useState<AutoRunResult | null>(null);
   const [touched, setTouched] = useState(false);
   const autoRun = useAutoRun();
+  const queryClient = useQueryClient();
   const cap = project?.credit_budget ?? 40;
 
   // Rough pre-flight scope estimate (the agent computes the real budget).
@@ -97,22 +90,9 @@ export function AutoRunPanel({
     if (initialTargetLength && !touched) setTargetLength(initialTargetLength);
   }, [initialTargetLength, touched]);
 
-  useEffect(() => {
-    const socket = getSocket();
-    socket.connect();
-    socket.emit("join_project", { project_id: projectId });
-    socket.on("agent:node", (d: { node: string }) => {
-      setTrace((t) => [...t, d.node]);
-    });
-    return () => {
-      socket.off("agent:node");
-    };
-  }, [projectId]);
-
   const [runError, setRunError] = useState<string | null>(null);
 
   const handleRun = async () => {
-    setTrace([]);
     setResult(null);
     setRunError(null);
     try {
@@ -126,13 +106,21 @@ export function AutoRunPanel({
         target_length: targetLength,
         episode_count: episodeCount,
         // Full Auto renders + exports the finished episode under the spend cap;
-        // otherwise plan only — the user spends on the Generate tab.
+        // otherwise the run stops at the script checkpoint.
         dispatch_video: fullAuto,
       });
       setResult(res);
+      if (!fullAuto) {
+        // the script exists NOW — refresh the queries so the Script page
+        // flips straight into the editor instead of hanging on stale data,
+        // and hand the judge's report up for the analysis rail
+        onScriptReady?.(res);
+        queryClient.invalidateQueries({ queryKey: ["latest-script", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["progress", projectId] });
+      }
     } catch (err) {
       // long runs can outlive the HTTP timeout while STILL progressing
-      // server-side — keep the trace visible and say so, never go mute
+      // server-side — say so, never go mute
       setRunError(errText(err));
     }
   };
@@ -340,23 +328,9 @@ export function AutoRunPanel({
 
         {runError && (
           <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-            {runError}
-            {trace.length > 0 &&
-              " The agent trace below shows how far the run got."}
+            {runError} The Showrunner chat and crew dock show how far the run
+            got.
           </p>
-        )}
-
-        {trace.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-xs font-medium">Agent trace</p>
-            <div className="flex flex-wrap gap-1">
-              {trace.map((node, i) => (
-                <Badge key={i} variant="secondary" className="text-xs">
-                  {NODE_LABELS[node] || node}
-                </Badge>
-              ))}
-            </div>
-          </div>
         )}
 
         {result && (
