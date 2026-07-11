@@ -15,9 +15,9 @@ never a violation and never re-establishes a side.
 import re
 
 _FLAT_KEY_RE = re.compile(
-    r"\b(character_name|frame_position|screen_side|facing|eyeline|action)\s*:",
+    r"\b(character_name|frame_position|screen_side|facing|posture|eyeline|action)\s*:",
     re.IGNORECASE)
-_GEOMETRY_KEYS = ("frame_position", "screen_side", "facing", "eyeline", "action")
+_GEOMETRY_KEYS = ("frame_position", "screen_side", "facing", "posture", "eyeline", "action")
 
 
 def _parse_flat_subject(text: str) -> dict | None:

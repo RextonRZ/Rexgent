@@ -73,6 +73,17 @@ def test_flattened_subject_string_unpacks_to_fields():
     }]
 
 
+def test_flattened_subject_with_posture_key():
+    from app.services.stage_map import normalize_subjects
+    subs = normalize_subjects([
+        "character_name: RYU SUN-JAE, frame_position: BG, posture: lying, "
+        "action: lying unconscious on the bed"
+    ])
+    assert subs == [{"character": "RYU SUN-JAE", "frame_position": "BG",
+                     "posture": "lying",
+                     "action": "lying unconscious on the bed"}]
+
+
 def test_flattened_subject_with_bare_leading_name():
     from app.services.stage_map import normalize_subjects
     subs = normalize_subjects(["IM SOL, frame_position: MG, screen_side: right"])
