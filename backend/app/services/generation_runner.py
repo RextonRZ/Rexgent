@@ -61,6 +61,10 @@ class GenerationRunner:
             chars[c.name] = {"variants": [
                 {"plate_image_url": v.plate_image_url, "scene_numbers": v.scene_numbers or [],
                  "is_default": v.is_default,
+                 # the wardrobe TEXT rides along: the prompt must dress the
+                 # character in this scene's outfit, or a swapped costume only
+                 # exists in the reference image and the render ignores it
+                 "outfit_description": getattr(v, "outfit_description", None),
                  # the continuity agent's face-lock check reads THIS — without
                  # it every clip scores face=None and the check is dead.
                  # list() so a pgvector numpy array survives `if not ref`.
@@ -335,12 +339,15 @@ class GenerationRunner:
         return prev_last_frame
 
     async def _craft_prompt(self, shot, char_by_name, scene_setting=None,
-                            prev_action=None, next_action=None, foreground=None) -> str:
+                            prev_action=None, next_action=None, foreground=None,
+                            outfits=None) -> str:
         in_frame = shot.characters_in_frame or []
         fg = set(foreground or [])
         shot_chars = [char_by_name[n] for n in in_frame if n in char_by_name]
         character_visuals = {
-            c.name: {"video_prompt_fragment": c.video_prompt_fragment or c.visual_description or ""}
+            c.name: {"video_prompt_fragment": c.video_prompt_fragment or c.visual_description or "",
+                     **({"outfit_this_shot": outfits[c.name]}
+                        if outfits and c.name in outfits else {})}
             for c in shot_chars
         }
         result = await self.prompt_crafter.craft(
@@ -379,6 +386,16 @@ class GenerationRunner:
                       if n in in_frame]
         is_wan = shot.quality_tier == "wan"
         model_cap = 5 if is_wan else 9
+        # this scene's wardrobe, per character — fed into the PROMPT, not just
+        # the reference stack, so an updated costume actually renders
+        from app.services.wardrobe_planner import map_variant_for_scene
+        outfits = {}
+        for n in in_frame:
+            ch_b = bible["characters"].get(n)
+            if ch_b:
+                v = map_variant_for_scene(ch_b.get("variants", []), scene_number)
+                if v and (v.get("outfit_description") or "").strip():
+                    outfits[n] = v["outfit_description"].strip()
         ref_stack, ref_provenance = build_reference_stack_labeled(
             characters_in_frame=in_frame, scene_number=scene_number, bible=bible,
             prev_last_frame_url=prev_last_frame_url, model_cap=model_cap,
@@ -403,7 +420,7 @@ class GenerationRunner:
                            index=job.completed_shots + 1, total=job.total_shots)
                 prompt = await self._craft_prompt(
                     shot, char_by_name, scene_setting, prev_action, next_action,
-                    foreground=foreground)
+                    foreground=foreground, outfits=outfits)
                 tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
                 used_tier = shot.quality_tier or "happyhorse"
                 if is_wan:

@@ -86,7 +86,7 @@ class ScenePromptCraft:
             f"{setting_block}"
             f"{continuity_block}"
             f"{foreground_block}"
-            f"Character visual descriptions (use these, NOT names):\n{json.dumps(character_visuals)}\n\n"
+            f"Character visual descriptions (use these, NOT names; when a character has outfit_this_shot, dress them EXACTLY in it, that costume overrides any clothing mentioned anywhere else):\n{json.dumps(character_visuals)}\n\n"
             f"Target model: {target_model}\n"
             f"Duration: {shot.get('estimated_duration_seconds', 5)}s\n"
             f"Style bible: {json.dumps(style_bible or {})}"
