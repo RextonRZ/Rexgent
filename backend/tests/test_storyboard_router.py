@@ -49,6 +49,11 @@ def test_delete_shot_missing_returns_404():
     assert r.status_code in (200, 404)
 
 
+def test_delete_scene_missing_returns_404():
+    r = client.delete(f"/api/storyboard/scene/{ZERO}")
+    assert r.status_code == 404
+
+
 def test_update_shot_missing_returns_404():
     r = client.patch(f"/api/storyboard/{ZERO}", json={"lighting": "NIGHT"})
     assert r.status_code in (200, 404)

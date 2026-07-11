@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import { ShotCard } from "./ShotCard";
 import { ZoomableImage } from "@/components/shared/Lightbox";
 import { SettingChip } from "@/components/script/BeatSheet";
 import { parseSceneHeading } from "@/lib/sceneHeading";
+import { useDeleteScene } from "@/hooks/useStoryboard";
 import type { SceneShots } from "@/hooks/useStoryboard";
 
 export interface SceneLocation {
@@ -20,35 +22,63 @@ export function SceneSection({
   location?: SceneLocation;
 }) {
   const [open, setOpen] = useState(true);
+  const deleteScene = useDeleteScene();
+
+  const handleDelete = () => {
+    const shots = scene.shots.length;
+    const what =
+      shots > 0
+        ? `scene ${scene.scene_number} and its ${shots} shot${shots !== 1 ? "s" : ""}`
+        : `scene ${scene.scene_number}`;
+    if (
+      window.confirm(
+        `Delete ${what}? Its synthesized voice lines are removed too. This can't be undone.`
+      )
+    ) {
+      deleteScene.mutate(scene.id);
+    }
+  };
 
   return (
     <div className="rounded-xl border border-border bg-card">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-5 py-3.5 text-left"
-      >
-        <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-          <span className="shrink-0">Scene {scene.scene_number}</span>
-          {scene.heading && (
-            <>
-              <SettingChip heading={scene.heading} />
-              <span className="truncate font-normal text-muted-foreground">
-                {parseSceneHeading(scene.heading).text}
-              </span>
-            </>
-          )}
-        </span>
-        <span className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-          {scene.shots.length} shot{scene.shots.length !== 1 ? "s" : ""}
-          <span
-            className={`text-[10px] transition-transform duration-200 ${
-              open ? "rotate-90" : ""
-            }`}
-          >
-            ▸
+      {/* the collapse toggle and the delete control are siblings: a button
+          can't legally nest inside a button */}
+      <div className="group flex items-center">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex-1 min-w-0 flex items-center justify-between px-5 py-3.5 text-left"
+        >
+          <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+            <span className="shrink-0">Scene {scene.scene_number}</span>
+            {scene.heading && (
+              <>
+                <SettingChip heading={scene.heading} />
+                <span className="truncate font-normal text-muted-foreground">
+                  {parseSceneHeading(scene.heading).text}
+                </span>
+              </>
+            )}
           </span>
-        </span>
-      </button>
+          <span className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+            {scene.shots.length} shot{scene.shots.length !== 1 ? "s" : ""}
+            <span
+              className={`text-[10px] transition-transform duration-200 ${
+                open ? "rotate-90" : ""
+              }`}
+            >
+              ▸
+            </span>
+          </span>
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={deleteScene.isPending}
+          title="Delete scene"
+          className="mr-3 h-7 w-7 shrink-0 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-bad hover:bg-bad/10 flex items-center justify-center disabled:opacity-50 transition-opacity"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
       {/* animated collapse: children stay mounted, height eases via grid-rows */}
       <div
         className={`grid transition-all duration-300 ease-in-out ${

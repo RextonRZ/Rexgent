@@ -5,6 +5,7 @@ import { getSocket } from "@/lib/websocket";
 import type { Shot } from "@/lib/types";
 
 export interface SceneShots {
+  id: string;
   scene_number: number;
   heading: string | null;
   /** props every shot of this scene must render identically (set dresser) */
@@ -78,6 +79,19 @@ export function useUpdateShot() {
       updates: Partial<Shot>;
     }) => {
       const { data } = await api.patch(`/api/storyboard/${shotId}`, updates);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["storyboard"] });
+    },
+  });
+}
+
+export function useDeleteScene() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (sceneId: string) => {
+      const { data } = await api.delete(`/api/storyboard/scene/${sceneId}`);
       return data;
     },
     onSuccess: () => {
