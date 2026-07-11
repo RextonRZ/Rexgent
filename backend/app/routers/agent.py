@@ -164,7 +164,7 @@ CREW_PIPELINE_GUIDE = {
         "write_shots_db (auto: saves the shots)",
     ]},
     "generate": {"agent": "Showrunner", "steps": [
-        "budget_allocate (auto: splits the render budget across shots)",
+        "budget_allocate (conditional: fits itself on the Storyboard page the moment the board lands, splitting the cap across shots and picking tiers; idle on dramas budgeted before it was instrumented)",
         "synth_voices (conditional: first generation only, later runs reuse the synthesized lines)",
         "fit_durations (auto: sizes each speaking shot to its real dialogue audio)",
         "prompt_craft (auto, per shot: writes the video prompt)",

@@ -118,7 +118,11 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
     { key: "write_shots_db", icon: Database, kind: "db" },
   ],
   generate: [
-    { key: "budget_allocate", icon: Wallet, kind: "service" },
+    {
+      key: "budget_allocate", icon: Wallet, kind: "service",
+      run: "conditional",
+      trigger: "fits itself on the Storyboard page as soon as the board lands, and re-fits when the spend cap changes — dramas budgeted before this was instrumented show it idle",
+    },
     {
       key: "synth_voices", icon: Volume2, kind: "media",
       run: "conditional",
