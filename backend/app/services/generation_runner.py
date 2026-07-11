@@ -174,8 +174,23 @@ class GenerationRunner:
                  str(job.project_id))
             return
 
+        # Resume, never re-pay: a shot with an APPROVED take (from any job of
+        # this drama) is not re-rendered — re-running generation only fills
+        # failures and gaps instead of re-billing the whole plan.
+        from app.models.generated_clip import GeneratedClip as _Clip
+        prior_job_ids = [j.id for j in
+                         self.db.query(GenerationJob)
+                         .filter(GenerationJob.project_id == job.project_id).all()]
+        self._approved_shot_ids = {
+            sid for sid, in self.db.query(_Clip.shot_id)
+            .filter(_Clip.job_id.in_(prior_job_ids),
+                    _Clip.status == "APPROVED",
+                    _Clip.url.isnot(None)).all()} if prior_job_ids else set()
+
         # Deferred shots were cut by the allocator to fit the spend cap.
-        job.total_shots = len([s for s in shots if (s.quality_tier or "") != "deferred"])
+        job.total_shots = len([s for s in shots
+                               if (s.quality_tier or "") != "deferred"
+                               and s.id not in self._approved_shot_ids])
         self.db.commit()
 
         pid = str(job.project_id)
@@ -285,7 +300,10 @@ class GenerationRunner:
             # previous/next picture — never a deferred shot. Prev/next stay
             # within the scene: a scene change is a clean cut, so the first
             # shot has no "previous" to continue from.
-            active = [s for s in shots if (s.quality_tier or "") != "deferred"]
+            already_good = getattr(self, "_approved_shot_ids", set())
+            active = [s for s in shots
+                      if (s.quality_tier or "") != "deferred"
+                      and s.id not in already_good]
             for i, shot in enumerate(active):
                 if self._cancelled:
                     break
@@ -387,10 +405,31 @@ class GenerationRunner:
                     shot, char_by_name, scene_setting, prev_action, next_action,
                     foreground=foreground)
                 tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
+                used_tier = shot.quality_tier or "happyhorse"
                 if is_wan:
-                    task_id = await self.qwen.generate_video_wan(
-                        prompt=prompt, duration=shot.estimated_duration_seconds,
-                        reference_media=ref_stack or None, seed=seed, ratio=ratio)
+                    # wan2.7-i2v does NOT take identity references — its media
+                    # schema is first_frame / last_frame / driving_audio /
+                    # first_clip only (every reference_image call 400'd and the
+                    # shot died). Give wan its REAL job: continue the scene
+                    # from the previous shot's last frame. With no frame to
+                    # continue from, the shot renders on HappyHorse r2v, which
+                    # is the model that actually understands the bible stack.
+                    frame_anchor = prev_last_frame_url or scene_anchor_url
+                    if frame_anchor:
+                        task_id = await self.qwen.generate_video_wan(
+                            prompt=prompt, duration=shot.estimated_duration_seconds,
+                            reference_media=[{"type": "first_frame", "url": frame_anchor}],
+                            seed=seed, ratio=ratio)
+                    else:
+                        logger.info("shot %s: wan has no frame to continue from — "
+                                    "rendering on happyhorse r2v with the bible stack",
+                                    shot.id)
+                        used_tier = "happyhorse"
+                        task_id = await self.qwen.generate_video_happyhorse(
+                            prompt=prompt, duration=shot.estimated_duration_seconds,
+                            mode="r2v" if ref_stack else "t2v",
+                            reference_media=ref_stack or None,
+                            seed=seed, ratio=ratio)
                 else:
                     task_id = await self.qwen.generate_video_happyhorse(
                         prompt=prompt, duration=shot.estimated_duration_seconds,
@@ -422,7 +461,9 @@ class GenerationRunner:
                 tool_event(pid, "generate", "write_clip_db", "started", agent="Renderer")
                 clip = GeneratedClip(
                     job_id=job.id, shot_id=shot.id,
-                    model_used=shot.quality_tier or "happyhorse", prompt=prompt, url=clip_url,
+                    # the tier that ACTUALLY rendered (a wan shot with no frame
+                    # anchor falls back to happyhorse) — costs stay truthful
+                    model_used=used_tier, prompt=prompt, url=clip_url,
                     consistency_score=guard["continuity_score"],
                     face_score=guard.get("face_score"), outfit_score=guard.get("outfit_score"),
                     background_score=guard.get("background_score"),
@@ -437,7 +478,7 @@ class GenerationRunner:
                     tool_event(pid, "generate", "self_correct", "succeeded",
                                agent="Renderer", artifact="recovered on retry")
                 amt = record_video(self.db, str(job.project_id), shot.estimated_duration_seconds,
-                                   shot.quality_tier or "happyhorse", ref_id=str(clip.id))
+                                   used_tier, ref_id=str(clip.id))
                 job.actual_cost += amt
                 if status == "NEEDS_REVIEW":
                     emit("continuity.flagged", {"shot_id": str(shot.id),
