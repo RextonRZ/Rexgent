@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { BlockingDiagram } from "./BlockingDiagram";
 import { ShotEditor } from "./ShotEditor";
 import { useDeleteShot } from "@/hooks/useStoryboard";
+import { explainFilmTerm } from "@/lib/filmTerms";
 import type { Shot } from "@/lib/types";
 
 function Meta({
@@ -37,13 +38,6 @@ export function ShotCard({ shot }: { shot: Shot }) {
     }
   };
 
-  const technicals = [
-    shot.shot_type,
-    shot.camera_movement?.toLowerCase().replace(/_/g, " "),
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
   const isWan = shot.quality_tier === "wan";
 
   return (
@@ -55,8 +49,18 @@ export function ShotCard({ shot }: { shot: Shot }) {
             <span className="rounded bg-primary/15 text-primary px-1.5 py-0.5 font-semibold">
               Shot {shot.number}
             </span>
-            {technicals && (
-              <span className="text-muted-foreground">{technicals}</span>
+            {shot.shot_type && (
+              <span
+                className="text-muted-foreground cursor-help underline decoration-dotted decoration-white/20 underline-offset-2"
+                title={explainFilmTerm(shot.shot_type)}
+              >
+                {shot.shot_type}
+              </span>
+            )}
+            {shot.camera_movement && (
+              <span className="text-muted-foreground">
+                {shot.camera_movement.toLowerCase().replace(/_/g, " ")}
+              </span>
             )}
           </p>
           <div className="flex items-center gap-1.5 shrink-0">

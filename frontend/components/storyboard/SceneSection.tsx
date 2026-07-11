@@ -85,7 +85,10 @@ export function SceneSection({
               {(scene.set_items?.length ?? 0) > 0 && (
                 <div className="rounded-lg border hairline bg-background/40 px-3 py-2">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground mr-0.5">
+                    <span
+                      className="text-[10px] uppercase tracking-widest text-zinc-400 mr-0.5"
+                      title="The set dresser's contract: these props render identically in every shot of the scene"
+                    >
                       Set
                     </span>
                     {scene.set_items!.map((item) => (
@@ -100,8 +103,12 @@ export function SceneSection({
                   {(scene.state_changes?.length ?? 0) > 0 && (
                     <div className="mt-1.5 space-y-0.5">
                       {scene.state_changes!.map((c, i) => (
-                        <p key={i} className="text-[11px] text-warn">
-                          from shot {c.from_shot}: {c.state}
+                        <p
+                          key={i}
+                          className="text-[11px] text-sky-300/90"
+                          title="A deliberate set change the story causes — later shots render the changed state, never the original"
+                        >
+                          ↻ set change · from shot {c.from_shot}: {c.state}
                         </p>
                       ))}
                     </div>

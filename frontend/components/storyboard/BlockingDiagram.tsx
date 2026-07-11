@@ -93,7 +93,10 @@ export function BlockingDiagram({ blocking }: { blocking: ShotBlocking }) {
           })
         )}
       </div>
-      <div className="mt-0.5 flex justify-between px-0.5 text-[8px] text-zinc-600">
+      <div
+        className="mt-0.5 flex justify-between px-0.5 text-[9px] text-zinc-400"
+        title="Top-down frame: top row is the background, bottom row is nearest the camera"
+      >
         <span>screen left</span>
         <span>camera ▼</span>
         <span>screen right</span>
