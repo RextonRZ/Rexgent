@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { isAxiosError } from "axios";
 import { PipelineNav } from "@/components/shared/PipelineNav";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { DockRail } from "@/components/shared/DockRail";
 import { AmbientBackdrop } from "@/components/shared/AmbientBackdrop";
 import { SiteFooter } from "@/components/shared/SiteFooter";
+import { useProject } from "@/hooks/useProjects";
+import { Button } from "@/components/ui/button";
 
 export default function ProjectLayout({
   children,
@@ -15,6 +18,28 @@ export default function ProjectLayout({
   children: React.ReactNode;
   params: { id: string };
 }) {
+  // A deleted drama's tab used to render a ghost studio: every query 404s,
+  // all progress reads as blank, and nothing says why. Say it plainly.
+  const { error } = useProject(params.id);
+  if (isAxiosError(error) && error.response?.status === 404) {
+    return (
+      <AuthGate>
+        <div className="relative flex min-h-screen items-center justify-center">
+          <AmbientBackdrop />
+          <div className="relative z-10 max-w-sm space-y-3 text-center">
+            <p className="text-lg font-semibold">This drama no longer exists</p>
+            <p className="text-sm text-muted-foreground">
+              It was deleted, so there is no script, cast or progress left to
+              show here.
+            </p>
+            <Button asChild>
+              <Link href="/projects">Back to your dramas</Link>
+            </Button>
+          </div>
+        </div>
+      </AuthGate>
+    );
+  }
   return (
     <AuthGate>
       <div className="relative min-h-screen">
