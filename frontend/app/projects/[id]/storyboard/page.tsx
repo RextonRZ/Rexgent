@@ -191,6 +191,7 @@ export default function StoryboardPage({
             <SceneGraph
               scenes={graph?.scenes || []}
               characters={graph?.characters || []}
+              boardScenes={scenes}
             />
           </div>
         </TabsContent>
