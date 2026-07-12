@@ -162,9 +162,10 @@ def _retime_rushed_lines(db, project_id: str, line_rows: list, scene_plan: list,
     settings = get_settings()
     qwen, oss = QwenClient(settings), OSSManager(settings)
     chars = db.query(Character).filter(Character.project_id == uuid.UUID(project_id)).all()
-    by_name = {canonical_character(c.name): c for c in chars if c.voice_id}
+    by_name = {c.name: c for c in chars if c.voice_id}
     for ln, mouth in targets:
-        c = by_name.get(canonical_character(ln.get("character_name") or ""))
+        raw_name = ln.get("character_name") or ""
+        c = by_name.get(raw_name) or by_name.get(canonical_character(raw_name, by_name))
         if not c:
             continue
         best = None  # (duration, audio_bytes, level)
