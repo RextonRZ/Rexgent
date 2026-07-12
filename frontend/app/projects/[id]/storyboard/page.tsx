@@ -223,12 +223,18 @@ export default function StoryboardPage({
                   </button>
                 ))}
                 <span className="ml-2 text-[11px] text-muted-foreground">
-                  The narrative memory spans the whole drama; the scene flow
-                  follows the selected episode.
+                  The story graph and scene flow follow the selected episode.
                 </span>
               </div>
             )}
-            <NarrativeGraphView projectId={params.id} />
+            <NarrativeGraphView
+              projectId={params.id}
+              sceneNumbers={
+                mapEpisodes.length > 1
+                  ? mapBoardScenes.map((s) => s.scene_number)
+                  : undefined
+              }
+            />
             <SceneGraph
               scenes={mapGraphScenes}
               characters={graph?.characters || []}

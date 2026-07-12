@@ -160,8 +160,45 @@ function ConnectionDrawer({
   );
 }
 
-export function NarrativeGraphView({ projectId }: { projectId: string }) {
-  const { nodes, links } = useGraph(projectId);
+export function NarrativeGraphView({
+  projectId,
+  sceneNumbers,
+}: {
+  projectId: string;
+  /** when set (multi-episode dramas), only these scenes and their cast show */
+  sceneNumbers?: number[] | null;
+}) {
+  const { nodes: allNodes, links: allLinks } = useGraph(projectId);
+  const sceneKey = (sceneNumbers ?? []).join(",");
+  // the force graph hydrates link ends into node objects in place — read ids
+  // defensively so episode re-filtering works after the first layout
+  const endId = (end: unknown): string =>
+    typeof end === "object" && end !== null
+      ? String((end as { id?: string }).id ?? "")
+      : String(end ?? "");
+  const { nodes, links } = useMemo(() => {
+    if (!sceneKey) return { nodes: allNodes, links: allLinks };
+    const keepScenes = new Set(sceneKey.split(",").map((n) => `scene-${n}`));
+    const keptChars = new Set<string>();
+    const appears = allLinks.filter((l) => {
+      if (l.kind !== "appears") return false;
+      if (!keepScenes.has(endId(l.target))) return false;
+      keptChars.add(endId(l.source));
+      return true;
+    });
+    const rels = allLinks.filter(
+      (l) =>
+        l.kind === "relationship" &&
+        keptChars.has(endId(l.source)) &&
+        keptChars.has(endId(l.target))
+    );
+    return {
+      nodes: allNodes.filter((n) =>
+        n.group === "scene" ? keepScenes.has(n.id) : keptChars.has(n.id)
+      ),
+      links: [...rels, ...appears],
+    };
+  }, [allNodes, allLinks, sceneKey]);
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphHandle | null>(null);
   const [width, setWidth] = useState(0);
