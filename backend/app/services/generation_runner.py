@@ -401,7 +401,7 @@ class GenerationRunner:
             blocking=blocking,
             lipsync=lipsync,
         )
-        return result.get("prompt", "")
+        return result
 
     def _store_last_frame(self, pid, shot, clip_url):
         try:
@@ -478,11 +478,15 @@ class GenerationRunner:
                            else None)
                 tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
                            index=job.completed_shots + 1, total=job.total_shots)
-                prompt = await self._craft_prompt(
+                crafted = await self._craft_prompt(
                     shot, char_by_name, scene_setting, prev_action, next_action,
                     foreground=foreground, outfits=outfits,
                     blocking=getattr(shot, "blocking_json", None),
                     lipsync=bool(lip))
+                prompt = crafted.get("prompt", "")
+                # the crafter has ALWAYS produced a negative prompt; until now
+                # it was dropped on the floor before dispatch
+                negative = (crafted.get("negative_prompt") or "").strip() or None
                 tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
                 used_tier = shot.quality_tier or "happyhorse"
                 if is_wan:
@@ -500,7 +504,7 @@ class GenerationRunner:
                             task_id = await self.qwen.generate_video_wan(
                                 prompt=prompt, duration=shot.estimated_duration_seconds,
                                 reference_media=lipsync_media(frame_anchor, lip["audio_url"]),
-                                seed=seed, ratio=ratio)
+                                seed=seed, ratio=ratio, negative_prompt=negative)
                             logger.info("shot %s: lip-synced to its line", shot.id)
                         except Exception as le:  # noqa: BLE001 — never blocks
                             logger.warning("lip-sync dispatch failed for shot %s (%s) — "
@@ -510,7 +514,7 @@ class GenerationRunner:
                             task_id = await self.qwen.generate_video_wan(
                                 prompt=prompt, duration=shot.estimated_duration_seconds,
                                 reference_media=[{"type": "first_frame", "url": frame_anchor}],
-                                seed=seed, ratio=ratio)
+                                seed=seed, ratio=ratio, negative_prompt=negative)
                         except Exception as we:  # noqa: BLE001 — chain to happyhorse
                             logger.warning("wan first-frame failed for shot %s (%s) — "
                                            "falling back to happyhorse r2v", shot.id, we)
@@ -524,12 +528,12 @@ class GenerationRunner:
                             prompt=prompt, duration=shot.estimated_duration_seconds,
                             mode="r2v" if ref_stack else "t2v",
                             reference_media=ref_stack or None,
-                            seed=seed, ratio=ratio)
+                            seed=seed, ratio=ratio, negative_prompt=negative)
                 else:
                     task_id = await self.qwen.generate_video_happyhorse(
                         prompt=prompt, duration=shot.estimated_duration_seconds,
                         mode="r2v" if ref_stack else "t2v", reference_media=ref_stack or None,
-                        seed=seed, ratio=ratio)
+                        seed=seed, ratio=ratio, negative_prompt=negative)
                 clip_url = await self.qwen.poll_video_task(task_id)
                 # DashScope URLs are signed and expire (~24h) — keep our own copy
                 clip_url = await asyncio.to_thread(

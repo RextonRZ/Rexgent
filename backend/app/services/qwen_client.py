@@ -164,20 +164,30 @@ class QwenClient:
         return [{"type": "reference_image", "url": image_url}]
 
     async def _dispatch_video(self, model: str, input_obj: dict, parameters: dict) -> str:
-        payload = {"model": model, "input": input_obj, "parameters": parameters}
-        async with httpx.AsyncClient() as http:
-            response = await http.post(
-                self.video_base_url + self.VIDEO_PATH,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "X-DashScope-Async": "enable",
-                },
-                json=payload,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            return response.json()["output"]["task_id"]
+        async def _submit(inp: dict) -> httpx.Response:
+            payload = {"model": model, "input": inp, "parameters": parameters}
+            async with httpx.AsyncClient() as http:
+                return await http.post(
+                    self.video_base_url + self.VIDEO_PATH,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "X-DashScope-Async": "enable",
+                    },
+                    json=payload,
+                    timeout=30.0,
+                )
+
+        response = await _submit(input_obj)
+        # negative_prompt support varies by model family; a schema rejection
+        # must degrade to a plain submit, never fail the shot
+        if response.status_code == 400 and "negative_prompt" in input_obj:
+            logger.warning("%s rejected the submit (%s) - retrying without "
+                           "negative_prompt", model, response.text[:200])
+            response = await _submit({k: v for k, v in input_obj.items()
+                                      if k != "negative_prompt"})
+        response.raise_for_status()
+        return response.json()["output"]["task_id"]
 
     async def generate_video_wan(
         self,
@@ -188,10 +198,13 @@ class QwenClient:
         model: str | None = None,
         seed: int | None = None,
         ratio: str | None = None,
+        negative_prompt: str | None = None,
     ) -> str:
         # wan2.7-t2v (text) or wan2.7-i2v (image-to-video when a reference image exists)
         chosen = model or ("wan2.7-i2v" if (reference_media or reference_image_url) else "wan2.7-t2v")
         input_obj: dict = {"prompt": prompt}
+        if negative_prompt:
+            input_obj["negative_prompt"] = negative_prompt[:500]
         if reference_media:
             input_obj["media"] = reference_media
         elif reference_image_url:
@@ -217,6 +230,7 @@ class QwenClient:
         model: str | None = None,
         seed: int | None = None,
         ratio: str | None = None,
+        negative_prompt: str | None = None,
     ) -> str:
         model_map = {
             "t2v": "happyhorse-1.1-t2v",
@@ -227,6 +241,8 @@ class QwenClient:
         }
         chosen = model or model_map.get(mode, "happyhorse-1.1-t2v")
         input_obj: dict = {"prompt": prompt}
+        if negative_prompt:
+            input_obj["negative_prompt"] = negative_prompt[:500]
         if reference_media:
             input_obj["media"] = reference_media
         elif reference_image_url:
