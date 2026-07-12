@@ -14,8 +14,20 @@ from app.routers.agent import router as agent_router
 from app.routers.analytics import router as analytics_router
 from app.routers.auth import router as auth_router
 from app.routers.casting import router as casting_router
+from app.routers.api_keys import router as api_keys_router
 
 app = FastAPI(title="Rexgent", version="1.0.0", description="AI Drama Production Pipeline")
+
+# bring-your-own-key: a paid call without a usable key answers 402 with the
+# fix, instead of a 500 the user cannot act on
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from app.services.api_keys import MissingApiKey
+
+
+@app.exception_handler(MissingApiKey)
+async def _missing_key(request: Request, exc: MissingApiKey):
+    return JSONResponse(status_code=402, content={"detail": str(exc)})
 
 # localhost for dev; FRONTEND_ORIGIN (env) adds the deployed site.
 _origins = ["http://localhost:3000"]
@@ -32,6 +44,7 @@ app.add_middleware(
 
 
 app.include_router(auth_router)
+app.include_router(api_keys_router)
 app.include_router(projects_router)
 app.include_router(script_router)
 app.include_router(character_router)

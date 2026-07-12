@@ -14,8 +14,12 @@ logger = logging.getLogger(__name__)
 
 class QwenClient:
     def __init__(self, settings: Settings):
+        # bring-your-own-key: the request's user (or the project's owner in a
+        # worker) supplies the credential; the .env key is only the fallback
+        from app.services.api_keys import resolve_qwen_key
+        key = resolve_qwen_key(settings)
         self.client = AsyncOpenAI(
-            api_key=settings.qwen_api_key,
+            api_key=key,
             base_url=settings.qwen_base_url,
             # the SDK default is 600s per attempt PLUS retries — one dropped
             # connection froze a boarding job for many minutes with no error.
@@ -24,7 +28,7 @@ class QwenClient:
             timeout=180.0,
             max_retries=1,
         )
-        self.api_key = settings.qwen_api_key
+        self.api_key = key
         self.video_base_url = settings.qwen_video_base_url.rstrip("/")
         self.max_retries = 3
 

@@ -3,6 +3,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     qwen_api_key: str = ""
+    # Bring-your-own-key: when true, users MUST paste their own DashScope key
+    # in Settings — the server key above is never used for their work. Set
+    # this on any public deployment so visitors bill their own accounts.
+    require_user_api_key: bool = False
     # International Qwen Cloud / Model Studio (Singapore). Use the China endpoints
     # (dashscope.aliyuncs.com) only if your key is from the China console.
     qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"

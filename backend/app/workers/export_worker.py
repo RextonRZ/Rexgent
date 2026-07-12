@@ -157,6 +157,8 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
+        from app.services.api_keys import use_project_key
+        use_project_key(db, project_id)  # bill the project owner's key
         job = db.query(GenerationJob).filter(GenerationJob.id == uuid.UUID(job_id)).first()
         if not job:
             return

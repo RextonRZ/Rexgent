@@ -309,12 +309,15 @@ cd frontend && npm install && npm run dev
 ### Environment Variables
 
 ```bash
-QWEN_API_KEY=your_qwen_api_key
+QWEN_API_KEY=your_qwen_api_key            # local-dev fallback key
+REQUIRE_USER_API_KEY=false                # true on public deploys: every user must paste
+                                          # their own DashScope key in Settings (stored
+                                          # encrypted; all their work bills their account)
 QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 OSS_ACCESS_KEY_ID=... / OSS_ACCESS_KEY_SECRET=... / OSS_BUCKET_NAME=... / OSS_ENDPOINT=...
 DATABASE_URL=postgresql://user:password@localhost:5432/rexgent
 REDIS_URL=redis://localhost:6379/0
-SECRET_KEY=your_secret_key
+SECRET_KEY=your_secret_key                # also encrypts stored user API keys
 ```
 
 ### Deploy (Alibaba Cloud ECS)
@@ -334,8 +337,27 @@ docker compose -f docker-compose.yml up -d --build
 ```
 
 Migrations run automatically on backend start. Open `http://<server-ip>:3000`.
-With a domain, put Caddy or Nginx in front for HTTPS and set both URLs to the
-https origin instead.
+
+**Public deploys: protect your wallet.** Set `REQUIRE_USER_API_KEY=true` in the
+server's `backend/.env` — every visitor must paste their own DashScope key in
+Settings (validated live, stored encrypted) and all their dramas bill *their*
+Qwen Cloud account. Without the flag, the server key is the fallback, which is
+what you want locally and never on the open internet.
+
+**With your own domain** — two DNS A records (`@` and `api`) pointing at the
+ECS IP, then Caddy gives you automatic HTTPS:
+
+```bash
+sudo apt install -y caddy
+# /etc/caddy/Caddyfile
+#   yourdomain.com     { reverse_proxy localhost:3000 }
+#   api.yourdomain.com { reverse_proxy localhost:8000 }
+sudo systemctl reload caddy
+
+export PUBLIC_API_URL="https://api.yourdomain.com"
+export FRONTEND_ORIGIN="https://yourdomain.com"
+docker compose -f docker-compose.yml up -d --build   # rebuild: the API URL is baked into the frontend
+```
 
 What runs where — one ECS instance hosts the whole stack; media and models
 stay on managed Alibaba services:
@@ -415,7 +437,7 @@ Rexgent/
 │   │   └── websocket/          # Socket.IO events (Redis emitter)
 │   ├── prompts/                # 17 prompt templates
 │   ├── migrations/             # Alembic (21 revisions)
-│   └── tests/                  # 472 unit tests
+│   └── tests/                  # 479 unit tests
 ├── frontend/                   # Next.js 14 + TypeScript + Tailwind
 │   └── app/projects/[id]/      # Script → Characters → Storyboard → Generate → Export
 ├── docker-compose.yml          # api + worker + frontend + postgres + redis + neo4j
@@ -446,7 +468,7 @@ Rexgent/
 - **Preview = export by construction** — one placement algorithm, one stored audio verdict per clip, and a final-render toggle to audit the shipped file
 - **Multi-episode delivery** — cliffhanger-structured writing to per-episode cuts and a season zip
 - **Glass-box orchestration** — a live two-level crew graph (stages → tools), per-clip provenance and prompt-engineering panels, and a Usage & Analytics page with per-model receipts
-- **472 unit tests**, CI against Postgres, 21 migrations, graceful degradation on every external dependency
+- **479 unit tests**, CI against Postgres, 22 migrations, graceful degradation on every external dependency
 
 ---
 

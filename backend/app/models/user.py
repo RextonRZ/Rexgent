@@ -13,4 +13,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
     persona = Column(String(50), nullable=True)  # onboarding answer
+    # Bring-your-own-key: the user's DashScope key, Fernet-encrypted with the
+    # server secret. Their dramas bill their own Qwen Cloud account.
+    dashscope_key_enc = Column(String(1024), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

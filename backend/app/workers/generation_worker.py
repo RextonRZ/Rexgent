@@ -12,6 +12,12 @@ def run_generation_job(self, job_id: str):
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
+        import uuid as _uuid
+        from app.models.generation_job import GenerationJob
+        from app.services.api_keys import use_project_key
+        _job = db.query(GenerationJob).filter(GenerationJob.id == _uuid.UUID(job_id)).first()
+        if _job:
+            use_project_key(db, _job.project_id)  # bill the project owner's key
         runner = GenerationRunner(db)
         asyncio.run(runner.run_job(job_id))
     except Exception as e:  # noqa: BLE001

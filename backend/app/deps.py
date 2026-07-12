@@ -37,4 +37,8 @@ def get_current_user(
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise unauthorized
+    # bring-your-own-key: everything this request bills runs on THIS user's
+    # DashScope key (the .env key only backstops when the deploy allows it)
+    from app.services.api_keys import set_key_from_user
+    set_key_from_user(user)
     return user

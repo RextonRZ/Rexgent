@@ -17,6 +17,12 @@ def run_storyboard_job(self, script_id: str, target_length: int = 30):
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
+        import uuid as _uuid
+        from app.models.script import Script as _Script
+        from app.services.api_keys import use_project_key
+        _script = db.query(_Script).filter(_Script.id == _uuid.UUID(script_id)).first()
+        if _script:
+            use_project_key(db, _script.project_id)  # bill the project owner's key
         from app.agent.pipeline_ops import generate_storyboard_op
         asyncio.run(generate_storyboard_op(db, script_id, target_length=target_length))
     except Exception as e:  # noqa: BLE001

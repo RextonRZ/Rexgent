@@ -105,12 +105,14 @@ def speech_span(video_path: str) -> tuple[float, float] | None:
         if proc.returncode != 0 or not os.path.exists(wav):
             return None
         from app.config import get_settings
+        from app.services.api_keys import resolve_qwen_key
         settings = get_settings()
-        if not settings.qwen_api_key:
+        key = resolve_qwen_key(settings)
+        if not key:
             return None
         import dashscope
         from dashscope.audio.asr import Recognition
-        dashscope.api_key = settings.qwen_api_key
+        dashscope.api_key = key
         dashscope.base_websocket_api_url = (
             "wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference")
         rec = Recognition(model="fun-asr-realtime", format="wav",
@@ -165,14 +167,16 @@ def transcribed_words(video_path: str) -> int:
         if proc.returncode != 0 or not os.path.exists(wav):
             return -1
         from app.config import get_settings
+        from app.services.api_keys import resolve_qwen_key
         settings = get_settings()
-        if not settings.qwen_api_key:
+        key = resolve_qwen_key(settings)
+        if not key:
             return -1
         import dashscope
         dashscope.base_http_api_url = settings.qwen_video_base_url
         resp = dashscope.MultiModalConversation.call(
             model="qwen3-asr-flash",
-            api_key=settings.qwen_api_key,
+            api_key=key,
             messages=[{"role": "user",
                        "content": [{"audio": "file://" + wav.replace("\\", "/")}]}],
             result_format="message")

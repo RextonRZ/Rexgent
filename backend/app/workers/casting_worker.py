@@ -13,6 +13,8 @@ def run_casting_job(self, project_id: str, design_voice: bool = True):
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
+        from app.services.api_keys import use_project_key
+        use_project_key(db, project_id)  # bill the project owner's key
         # Plate generation is the primary job — must succeed.
         asyncio.run(CastingDirector(db).cast_bible(uuid.UUID(project_id),
                                                    design_voice=design_voice))

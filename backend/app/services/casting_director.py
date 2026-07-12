@@ -125,8 +125,13 @@ def design_voice(char, db=None, project_id=None) -> bool:
     import re as _re
     import httpx
     from app.config import get_settings
+    from app.services.api_keys import resolve_qwen_key, MissingApiKey
     s = get_settings()
-    if not s.qwen_api_key:
+    try:
+        key = resolve_qwen_key(s)
+    except MissingApiKey:
+        return False
+    if not key:
         return False
     name = _re.sub(r"[^a-z0-9]", "", str(getattr(char, "name", "voice")).lower())[:10] or "voice"
     try:
@@ -139,7 +144,7 @@ def design_voice(char, db=None, project_id=None) -> bool:
                             "voice_prompt": voice_design_prompt(char),
                             "preview_text": "This is how I sound."},
                   "parameters": {"sample_rate": 24000, "response_format": "wav"}},
-            headers={"Authorization": f"Bearer {s.qwen_api_key}"}, timeout=120.0)
+            headers={"Authorization": f"Bearer {key}"}, timeout=120.0)
         voice = (r.json().get("output") or {}).get("voice") if r.status_code == 200 else None
         if not voice:
             raise RuntimeError(f"{r.status_code}: {r.text[:150]}")
