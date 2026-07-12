@@ -339,11 +339,6 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     return () => clearTimeout(h);
   }, [timeline, shotMeta, projectId]);
 
-  const totalSeconds = useMemo(
-    () => timeline.reduce((s, t) => s + Math.max(0, t.trimEnd - t.trimStart), 0),
-    [timeline]
-  );
-
   // ── the true rendered file for the open episode, once an export exists ──
   const downloadData = download.data;
   const finalUrl = useMemo(() => {
