@@ -58,3 +58,35 @@ def test_qwen_client_uses_request_key():
     set_request_key("sk-context-key")
     client = QwenClient(get_settings())
     assert client.api_key == "sk-context-key"
+
+
+def test_get_current_user_is_async_so_the_key_propagates():
+    """A SYNC dependency runs in a threadpool whose context is discarded, so
+    the per-request key never reached inline endpoints. get_current_user must
+    stay async for BYOK to work outside the Celery workers."""
+    import inspect
+    from app.deps import get_current_user
+    assert inspect.iscoroutinefunction(get_current_user)
+
+
+def test_async_dependency_contextvar_reaches_endpoint():
+    """Prove the fix at the framework level: a ContextVar set inside an ASYNC
+    FastAPI dependency is visible in the endpoint (shared request context),
+    which a sync/threadpool dependency would not guarantee."""
+    from fastapi import Depends, FastAPI
+    from fastapi.testclient import TestClient
+    from app.services.api_keys import set_request_key, resolve_qwen_key
+    from app.config import get_settings
+
+    async def dep():
+        set_request_key("sk-context-propagated")
+
+    app = FastAPI()
+
+    @app.get("/probe", dependencies=[Depends(dep)])
+    def probe():
+        return {"key": resolve_qwen_key(get_settings())}
+
+    set_request_key(None)
+    r = TestClient(app).get("/probe")
+    assert r.json()["key"] == "sk-context-propagated"
