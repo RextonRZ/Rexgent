@@ -96,13 +96,22 @@ export function useRegenerateVariant() {
   });
 }
 
-/** Generate/regenerate ONE character's costume plates on their current face. */
+/** Generate/regenerate ONE character's costume plates on their current face.
+ *  designVoice buys a bespoke designed voice when the character has none yet. */
 export function useGenerateCharacterPlates() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (characterId: string) => {
+    mutationFn: async ({
+      characterId,
+      designVoice = true,
+    }: {
+      characterId: string;
+      designVoice?: boolean;
+    }) => {
       const { data } = await api.post(
-        `/api/casting/character/${characterId}/plates`
+        `/api/casting/character/${characterId}/plates`,
+        null,
+        { params: { design_voice: designVoice } }
       );
       return data;
     },

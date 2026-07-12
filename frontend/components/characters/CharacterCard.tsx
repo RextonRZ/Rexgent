@@ -210,7 +210,22 @@ export function CharacterCard({
                         ? "Every outfit renders on the locked face above."
                         : "No face is set, so a default face gets invented and locked.",
                       confirmLabel: "Generate",
-                      run: () => generatePlates.mutate(character.id),
+                      options: casting?.voice_id
+                        ? undefined
+                        : [
+                            {
+                              key: "designVoice",
+                              label: "Design a bespoke voice",
+                              priceLine: "$0.20 once",
+                              note: "A voice written from this character's age and personality. Untick for a free preset voice instead.",
+                              defaultOn: true,
+                            },
+                          ],
+                      run: (choices) =>
+                        generatePlates.mutate({
+                          characterId: character.id,
+                          designVoice: choices?.designVoice ?? true,
+                        }),
                     })
                   }
                   title={

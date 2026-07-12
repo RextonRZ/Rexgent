@@ -283,11 +283,13 @@ async def swap_variant_outfit(variant_id: str, file: UploadFile = File(...),
 
 
 @router.post("/character/{character_id}/plates")
-async def generate_character_plates(character_id: str, db: Session = Depends(get_db)):
+async def generate_character_plates(character_id: str, design_voice: bool = True,
+                                    db: Session = Depends(get_db)):
     """Generate (or regenerate) one character's costume plates on their CURRENT face.
     - No face set  -> text-to-image invents a face and seeds it as the identity.
     - Face set     -> plates are image-edited onto that exact face.
-    Call it again after changing the face to re-match. Also assigns a voice if none."""
+    Call it again after changing the face to re-match. Also assigns a voice if none:
+    design_voice=True buys a bespoke designed voice ($0.20), False takes a free preset."""
     from app.services.casting_director import assign_voice
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c:
@@ -342,7 +344,11 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
     tool_event(project_id, "characters", "generate_plates", "succeeded",
                agent="Casting", artifact=f"{len(variants)} plates on {c.name}")
     if not c.voice_id:
-        assign_voice(c, 0, db=db, project_id=str(c.project_id))
+        # the db-guard doubles as the switch: no db means no paid design
+        if design_voice:
+            assign_voice(c, 0, db=db, project_id=str(c.project_id))
+        else:
+            assign_voice(c, 0)
     db.commit()
     emit("stage:progress", {"stage": "casting", "status": "completed",
          "agent": "Casting Director",
