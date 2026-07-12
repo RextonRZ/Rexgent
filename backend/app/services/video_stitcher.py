@@ -164,7 +164,11 @@ class VideoStitcher:
         for i, seg in enumerate(dialogue_segments):
             inputs += ["-i", seg["audio_path"]]
             delay_ms = int(float(seg["start"]) * 1000)
-            filters.append(f"[{i+1}:a]adelay={delay_ms}|{delay_ms}[d{i}]")
+            # pace the line to the on-screen mouth: atempo is pitch-preserving,
+            # and placement pre-clamped the factor to a natural range
+            tempo = seg.get("tempo")
+            chain = (f"atempo={float(tempo):.3f}," if tempo else "")
+            filters.append(f"[{i+1}:a]{chain}adelay={delay_ms}|{delay_ms}[d{i}]")
             dlg_labels.append(f"[d{i}]")
         n = len(dialogue_segments)
         dlg = None

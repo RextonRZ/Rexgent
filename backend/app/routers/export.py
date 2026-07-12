@@ -114,6 +114,10 @@ async def preview_plan(request: dict, db: Session = Depends(get_db)):
             tin = float(e.get("trim_start") or 0.0)
             dur = float(e.get("duration") or 0.0)
             e["speech_onset"] = min(max(0.0, float(raw) - tin), max(0.0, dur - 1.0))
+            raw_mouth = pol.get("mouth_dur") if isinstance(pol, dict) else None
+            if raw_mouth:
+                e["mouth_dur"] = min(float(raw_mouth),
+                                     max(0.0, dur - e["speech_onset"]))
     scene_plan = build_cut_plan(entries)
     line_rows = [
         {"scene_number": r.scene_number, "line_index": r.line_index,
@@ -144,7 +148,7 @@ async def preview_plan(request: dict, db: Session = Depends(get_db)):
     return {"segments": [
         {"start": s["start"], "duration": s.get("duration", 0.0),
          "text": s.get("text"), "character": s.get("character"),
-         "audio_url": s.get("audio_path")}
+         "audio_url": s.get("audio_path"), "tempo": s.get("tempo")}
         for s in segments
     ], "chunks": chunks}
 

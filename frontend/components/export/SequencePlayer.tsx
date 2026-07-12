@@ -23,6 +23,8 @@ export interface PreviewSegment {
   text?: string | null;
   character?: string | null;
   audio_url?: string | null;
+  /** pitch-preserving pace factor matching the on-screen mouth's span */
+  tempo?: number | null;
 }
 
 /** Plays the timeline clips back-to-back, respecting each clip's trim.
@@ -89,13 +91,16 @@ export function SequencePlayer({
     const voice = voiceRef.current;
     if (seg?.audio_url && isPlaying) {
       const offset = globalTime - seg.start;
+      const rate = seg.tempo ?? 1;
       if (!voice.src.includes(seg.audio_url)) {
         voice.src = seg.audio_url;
-        voice.currentTime = Math.max(0, offset);
+        voice.playbackRate = rate;
+        voice.currentTime = Math.max(0, offset * rate);
         voice.play().catch(() => {});
-      } else if (Math.abs(voice.currentTime - offset) > 0.4) {
-        voice.currentTime = Math.max(0, offset);
+      } else if (Math.abs(voice.currentTime - offset * rate) > 0.4) {
+        voice.currentTime = Math.max(0, offset * rate);
       }
+      if (voice.playbackRate !== rate) voice.playbackRate = rate;
       if (voice.paused) voice.play().catch(() => {});
     } else if (!voice.paused) {
       voice.pause();

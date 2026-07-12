@@ -201,3 +201,23 @@ def test_speech_onset_shifts_the_line_to_the_mouth():
         {"duration": 5.0, "has_dialogue": True, "speech_onset": None},
     ]}]
     assert dialogue_shot_offsets(plan) == {1: [1.4, 5.0]}
+
+
+def test_line_tempo_clamps_to_natural_range():
+    from app.services.audio_timeline import line_tempo
+    assert line_tempo(2.0, 2.97) == 0.75      # big stretch clamps
+    assert line_tempo(3.0, 3.1) is None       # close enough already
+    assert line_tempo(4.0, 2.0) == 1.3        # big compress clamps
+    assert line_tempo(2.0, None) is None      # unmeasured mouth: leave alone
+
+
+def test_placement_paces_the_line_across_the_mouth():
+    from app.services.audio_timeline import place_dialogue
+    plan = [{"scene_number": 1, "shots": [
+        {"duration": 5.0, "has_dialogue": True,
+         "speech_onset": 2.17, "mouth_dur": 2.97}]}]
+    segs = place_dialogue([{"scene_number": 1, "line_index": 0,
+                            "audio_path": "l.wav", "duration": 2.0}], plan)
+    assert segs[0]["start"] == 2.17
+    assert segs[0]["tempo"] == 0.75
+    assert abs(segs[0]["duration"] - 2.0 / 0.75) < 0.01

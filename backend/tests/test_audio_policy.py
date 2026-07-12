@@ -73,3 +73,12 @@ def test_first_spoken_onset_none_without_words():
     from app.services.audio_policy import first_spoken_onset
     assert first_spoken_onset([{"text": "", "begin_time": 0}]) is None
     assert first_spoken_onset([]) is None
+
+
+def test_spoken_span_covers_first_to_last_worded_sentence():
+    from app.services.audio_policy import spoken_span
+    sents = [{"text": "", "begin_time": 0, "end_time": 900},
+             {"text": "I can't", "begin_time": 2170, "end_time": 3600},
+             {"text": "do this anymore", "begin_time": 4000, "end_time": 5140}]
+    assert spoken_span(sents) == (2.17, 2.97)
+    assert spoken_span([{"text": "", "begin_time": 0}]) is None

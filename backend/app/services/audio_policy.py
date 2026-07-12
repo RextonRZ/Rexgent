@@ -65,21 +65,37 @@ def first_spoken_onset(sentences: list) -> float | None:
     """First sentence that carries actual words -> its begin_time in seconds.
     Empty-text sentences are music the recognizer half-heard; their
     timestamps are noise. Pure function, testable."""
+    span = spoken_span(sentences)
+    return span[0] if span else None
+
+
+def spoken_span(sentences: list) -> tuple[float, float] | None:
+    """(onset, mouth_duration) of the clip's own speech: from the first
+    worded sentence's begin to the last worded sentence's end. This is how
+    long the on-screen mouth actually talks — the real TTS line stretches or
+    compresses to match it. None when no words occur."""
+    begins, ends = [], []
     for s in sentences or []:
         if not isinstance(s, dict):
             continue
         if str(s.get("text") or "").strip() and s.get("begin_time") is not None:
-            return round(float(s["begin_time"]) / 1000.0, 2)
-    return None
+            begins.append(float(s["begin_time"]))
+            end = s.get("end_time")
+            ends.append(float(end) if end is not None else float(s["begin_time"]))
+    if not begins:
+        return None
+    onset = round(min(begins) / 1000.0, 2)
+    tail = round(max(ends) / 1000.0, 2)
+    return onset, max(0.0, round(tail - onset, 2))
 
 
-def speech_onset(video_path: str) -> float | None:
-    """When the clip's own (fake) speech STARTS, in seconds — the model's
-    audio tracks its on-screen mouth, so placing the real TTS line at this
-    onset makes voice and mouth move together. Measured with fun-asr
-    sentence timestamps: the VAD cannot do this job, its music bias flags
-    frame one on every scored clip (measured 0.03-0.06s across a whole
-    drama). None when no recognizable words occur."""
+def speech_span(video_path: str) -> tuple[float, float] | None:
+    """(onset, mouth_duration) of the clip's own (fake) speech — the model's
+    audio tracks its on-screen mouth, so the real TTS line is placed at the
+    onset AND paced across the mouth's span. Measured with fun-asr sentence
+    timestamps: the VAD cannot do this job, its music bias flags frame one
+    on every scored clip (measured 0.03-0.06s across a whole drama). None
+    when no recognizable words occur."""
     wav = tempfile.mktemp(suffix=".wav")
     try:
         proc = subprocess.run(
@@ -106,7 +122,7 @@ def speech_onset(video_path: str) -> float | None:
         sentences = result.get_sentence() or []
         if isinstance(sentences, dict):
             sentences = [sentences]
-        return first_spoken_onset(sentences)
+        return spoken_span(sentences)
     except Exception as e:  # noqa: BLE001 — measurement is best-effort
         logger.warning("speech_onset failed for %s: %s", video_path, e)
         return None
@@ -115,6 +131,12 @@ def speech_onset(video_path: str) -> float | None:
             os.unlink(wav)
         except OSError:
             pass
+
+
+def speech_onset(video_path: str) -> float | None:
+    """Back-compat wrapper: just the onset from speech_span."""
+    span = speech_span(video_path)
+    return span[0] if span else None
 
 
 def keep_clip_audio(has_dialogue: bool, ratio: float | None) -> bool:

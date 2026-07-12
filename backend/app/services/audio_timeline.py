@@ -48,6 +48,36 @@ def dialogue_shot_offsets(scene_plan: list[dict]) -> dict[int, list[float]]:
     return offs
 
 
+# the voice may stretch or compress to match the on-screen mouth, but only
+# within what still sounds human: beyond these bounds a partial match wins
+TEMPO_MIN, TEMPO_MAX = 0.75, 1.3
+
+
+def dialogue_shot_mouths(scene_plan: list[dict]) -> dict[int, list]:
+    """Per scene, each dialogue-bearing shot's measured MOUTH duration (how
+    long its fake speech ran, from ASR sentence spans) — parallel to
+    dialogue_shot_offsets. None where unmeasured."""
+    mouths: dict[int, list] = {}
+    for scene in scene_plan:
+        lst = mouths.setdefault(scene["scene_number"], [])
+        for shot in scene.get("shots", []):
+            if shot.get("has_dialogue"):
+                lst.append(shot.get("mouth_dur"))
+    return mouths
+
+
+def line_tempo(line_duration: float, mouth_duration) -> float | None:
+    """atempo factor that plays the line across the mouth's real speaking
+    span. tempo < 1 stretches, > 1 compresses; clamped to stay natural, and
+    tiny mismatches are left alone."""
+    if not mouth_duration or mouth_duration <= 0.5 or line_duration <= 0:
+        return None
+    tempo = max(TEMPO_MIN, min(TEMPO_MAX, line_duration / float(mouth_duration)))
+    if abs(tempo - 1.0) < 0.08:
+        return None
+    return round(tempo, 3)
+
+
 def place_dialogue(line_rows: list[dict], scene_plan: list[dict], gap: float = 0.2) -> list[dict]:
     """Align each scene's dialogue lines to the shots that actually speak them:
     line k of a scene starts when that scene's k-th dialogue-bearing shot starts,
@@ -55,6 +85,7 @@ def place_dialogue(line_rows: list[dict], scene_plan: list[dict], gap: float = 0
     line_rows: [{scene_number, line_index, audio_path, duration}]. Order-based —
     no fragile text matching. Extra lines (a shot folded two) continue back-to-back."""
     offs = dialogue_shot_offsets(scene_plan)
+    mouths = dialogue_shot_mouths(scene_plan)
     scene_offs = scene_global_offsets(scene_plan)
     by_scene: dict = {}
     for r in sorted(line_rows, key=lambda x: (x["scene_number"], x["line_index"])):
@@ -88,8 +119,19 @@ def place_dialogue(line_rows: list[dict], scene_plan: list[dict], gap: float = 0
             # for it to finish instead of talking over it.
             if prev_end is not None and start < prev_end:
                 start = prev_end
-            seg = {"audio_path": ln["audio_path"], "start": round(start, 3),
-                   "duration": round(float(ln.get("duration") or 0.0), 3)}
+            raw_dur = float(ln.get("duration") or 0.0)
+            played_dur = raw_dur
+            seg = {"audio_path": ln["audio_path"], "start": round(start, 3)}
+            # match the voice's pace to the on-screen mouth: if the clip's
+            # fake speech ran 3.5s and the TTS line is 2.0s, stretch the line
+            # (pitch-preserving atempo downstream) so lips and voice end together
+            scene_mouths = mouths.get(n, [])
+            mouth = scene_mouths[i] if i < len(scene_mouths) else None
+            tempo = line_tempo(raw_dur, mouth)
+            if tempo:
+                seg["tempo"] = tempo
+                played_dur = raw_dur / tempo
+            seg["duration"] = round(played_dur, 3)
             # text/character ride along so burned captions share the exact
             # timing of the voice they subtitle
             if ln.get("text"):
@@ -97,7 +139,7 @@ def place_dialogue(line_rows: list[dict], scene_plan: list[dict], gap: float = 0
             if ln.get("character"):
                 seg["character"] = ln["character"]
             out.append(seg)
-            prev_end = start + float(ln.get("duration") or 0.0) + gap
+            prev_end = start + played_dur + gap
 
     # ── the GLOBAL no-overlap sweep: the per-scene guard above resets at
     # scene boundaries, so a scene whose dialogue overflows its own footage
