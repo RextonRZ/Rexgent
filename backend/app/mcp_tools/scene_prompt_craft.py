@@ -176,6 +176,14 @@ class ScenePromptCraft:
         result["prompt"] = sanitizer.sanitize(
             result.get("prompt", ""), character_names=list(character_visuals.keys())
         )
+        # the anti-text number-stripper eats the duration digit ("Duration:
+        # seconds."); restate it AFTER sanitization so the pacing hint survives
+        import re as _re
+        cleaned = _re.sub(r"\s*Duration:?\s*(\d+\s*)?seconds?\.?\s*$", "",
+                          result["prompt"], flags=_re.IGNORECASE).rstrip()
+        result["prompt"] = (
+            f"{cleaned} Duration: {shot.get('estimated_duration_seconds', 5)} seconds."
+        )
         result["negative_prompt"] = sanitizer.inject_negative_prompt(
             result.get("negative_prompt", "")
         )
