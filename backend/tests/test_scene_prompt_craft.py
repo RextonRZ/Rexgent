@@ -248,3 +248,25 @@ async def test_silent_shot_has_no_delivery_block():
                         target_model="happyhorse")
     user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "Dialogue delivery" not in user_msg
+
+
+@pytest.mark.asyncio
+async def test_blocking_posture_reaches_the_prompt():
+    """posture=sitting must be SAID, not implied — without it the model
+    invented one ('sitting on the bed' rendered standing at a window)."""
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(
+        shot={"shot_type": "OTS"},
+        character_visuals={}, target_model="happyhorse",
+        blocking={"subjects": [
+            {"character": "LINDA", "frame_position": "MG", "screen_side": "right",
+             "posture": "sitting", "facing": "away-from-camera",
+             "action": "holding the phone"},
+        ], "reverse_angle": False})
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "LINDA: MG, sitting, screen-right, facing away-from-camera" in user_msg

@@ -87,6 +87,9 @@ class ScenePromptCraft:
             for s in blocking["subjects"]:
                 bits = [
                     s.get("frame_position"),
+                    # posture is load-bearing: without it the model invents one
+                    # ("sitting on the bed" rendered as standing at a window)
+                    s.get("posture"),
                     f"screen-{s['screen_side']}" if s.get("screen_side") else None,
                     f"facing {s['facing']}" if s.get("facing") else None,
                     f"eyeline {s['eyeline']}" if s.get("eyeline") else None,
