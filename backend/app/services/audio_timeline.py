@@ -41,7 +41,9 @@ def dialogue_shot_offsets(scene_plan: list[dict]) -> dict[int, list[float]]:
         starts = offs.setdefault(scene["scene_number"], [])
         for shot in scene.get("shots", []):
             if shot.get("has_dialogue"):
-                starts.append(round(t, 3))
+                # the line starts where the clip's own mouth starts moving
+                # (VAD onset of its fake speech), not at the hard cut
+                starts.append(round(t + float(shot.get("speech_onset") or 0.0), 3))
             t += float(shot.get("duration") or 0.0)
     return offs
 

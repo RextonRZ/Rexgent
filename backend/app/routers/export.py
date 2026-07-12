@@ -98,6 +98,22 @@ async def preview_plan(request: dict, db: Session = Depends(get_db)):
     from app.workers.export_worker import build_cut_plan
     from app.services.audio_timeline import place_dialogue
     from app.models.line_audio import LineAudio
+    from app.models.generated_clip import GeneratedClip
+
+    # inject each clip's stored speech onset (trim-adjusted) so the preview
+    # places every line where the mouth starts moving — same as the export
+    onset_ids = [uuid.UUID(str(e["clip_id"])) for e in entries if e.get("clip_id")]
+    onset_clips = ({str(c.id): c for c in
+                    db.query(GeneratedClip).filter(GeneratedClip.id.in_(onset_ids)).all()}
+                   if onset_ids else {})
+    for e in entries:
+        c = onset_clips.get(str(e.get("clip_id") or ""))
+        pol = getattr(c, "audio_json", None) if c is not None else None
+        raw = pol.get("onset") if isinstance(pol, dict) else None
+        if e.get("has_dialogue") and raw is not None:
+            tin = float(e.get("trim_start") or 0.0)
+            dur = float(e.get("duration") or 0.0)
+            e["speech_onset"] = min(max(0.0, float(raw) - tin), max(0.0, dur - 1.0))
     scene_plan = build_cut_plan(entries)
     line_rows = [
         {"scene_number": r.scene_number, "line_index": r.line_index,
@@ -112,15 +128,9 @@ async def preview_plan(request: dict, db: Session = Depends(get_db)):
     segments = place_dialogue(line_rows, scene_plan)
 
     # per-chunk audio policy: the STORED verdict every export will also use
-    from app.models.generated_clip import GeneratedClip
-    clip_ids = [e.get("clip_id") for e in entries]
-    wanted = [uuid.UUID(str(c)) for c in clip_ids if c]
-    clip_by_id = ({str(c.id): c for c in
-                   db.query(GeneratedClip).filter(GeneratedClip.id.in_(wanted)).all()}
-                  if wanted else {})
     chunks = []
     for e in entries:
-        c = clip_by_id.get(str(e.get("clip_id") or ""))
+        c = onset_clips.get(str(e.get("clip_id") or ""))
         pol = getattr(c, "audio_json", None) if c is not None else None
         if isinstance(pol, dict) and "mute" in pol:
             chunks.append({"mute": bool(pol.get("mute")), "volume": pol.get("volume")})

@@ -61,6 +61,43 @@ def speech_ratio(video_path: str) -> float | None:
         return None
 
 
+def speech_onset(video_path: str) -> float | None:
+    """When the clip's own (fake) speech STARTS, in seconds — the model's
+    audio tracks its on-screen mouth, so placing the real TTS line at this
+    onset makes voice and mouth move together. None when unmeasurable or no
+    sustained voiced run exists."""
+    try:
+        import webrtcvad
+    except ImportError:
+        return None
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-i", video_path, "-vn", "-ac", "1",
+             "-ar", str(_SAMPLE_RATE), "-f", "s16le", "-acodec", "pcm_s16le",
+             "pipe:1"],
+            capture_output=True, timeout=120,
+        )
+        pcm = proc.stdout
+        if proc.returncode != 0 or len(pcm) < _FRAME_BYTES * 10:
+            return None
+        vad = webrtcvad.Vad(2)
+        run_start, run_len = None, 0
+        need = 10  # 10 x 30ms = 0.3s of sustained voice = a real onset
+        for i, off in enumerate(range(0, len(pcm) - _FRAME_BYTES + 1, _FRAME_BYTES)):
+            if vad.is_speech(pcm[off:off + _FRAME_BYTES], _SAMPLE_RATE):
+                if run_start is None:
+                    run_start = i
+                run_len += 1
+                if run_len >= need:
+                    return round(run_start * _FRAME_MS / 1000.0, 2)
+            else:
+                run_start, run_len = None, 0
+        return None
+    except Exception as e:  # noqa: BLE001 — measurement is best-effort
+        logger.warning("speech_onset failed for %s: %s", video_path, e)
+        return None
+
+
 def keep_clip_audio(has_dialogue: bool, ratio: float | None) -> bool:
     """Whether the clip's original soundtrack survives into the cut.
     Non-dialogue chunks always keep theirs (existing behavior). Dialogue

@@ -307,6 +307,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         clip_id: t.external ? null : t.clipId,
         scene_number: m?.scene ?? null,
         duration: Math.max(0, t.trimEnd - t.trimStart),
+        trim_start: t.trimStart,
         has_dialogue: Boolean(m?.dialogue),
         text: m?.dialogue ?? null,
       };

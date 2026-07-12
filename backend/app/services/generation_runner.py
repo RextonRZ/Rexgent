@@ -577,10 +577,12 @@ class GenerationRunner:
                 # this verdict, so what you hear is what ships
                 audio_policy = None
                 try:
-                    from app.services.audio_policy import bed_decision
-                    a_mute, a_vol = bed_decision(
-                        clip_url, bool((shot.dialogue or "").strip()))
-                    audio_policy = {"mute": a_mute, "volume": a_vol}
+                    from app.services.audio_policy import bed_decision, speech_onset
+                    has_dlg = bool((shot.dialogue or "").strip())
+                    a_mute, a_vol = bed_decision(clip_url, has_dlg)
+                    audio_policy = {"mute": a_mute, "volume": a_vol,
+                                    "onset": (speech_onset(clip_url)
+                                              if has_dlg else None)}
                 except Exception as ae:  # noqa: BLE001 — policy is best-effort
                     logger.warning(f"audio policy skipped for shot {shot.id}: {ae}")
                 tool_event(pid, "generate", "write_clip_db", "started", agent="Renderer")

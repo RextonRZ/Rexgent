@@ -191,3 +191,13 @@ def test_fitting_shots_restores_picture_sync():
     start = {p["audio_path"]: p["start"] for p in place_dialogue(rows, plan, gap=0.2)}
     assert start["long"] == 0.0
     assert start["reply"] == 10.0  # exactly its own shot
+
+
+def test_speech_onset_shifts_the_line_to_the_mouth():
+    # a chunk whose fake speech starts 1.4s in: the real TTS line lands there
+    from app.services.audio_timeline import dialogue_shot_offsets
+    plan = [{"scene_number": 1, "shots": [
+        {"duration": 5.0, "has_dialogue": True, "speech_onset": 1.4},
+        {"duration": 5.0, "has_dialogue": True, "speech_onset": None},
+    ]}]
+    assert dialogue_shot_offsets(plan) == {1: [1.4, 5.0]}

@@ -61,7 +61,8 @@ def build_cut_plan(entries: list[dict]) -> list[dict]:
     plan: list[dict] = []
     for e in entries:
         shot = {"duration": float(e.get("duration") or 0.0),
-                "has_dialogue": bool(e.get("has_dialogue"))}
+                "has_dialogue": bool(e.get("has_dialogue")),
+                "speech_onset": e.get("speech_onset")}
         if plan and plan[-1]["scene_number"] == e.get("scene_number"):
             plan[-1]["shots"].append(shot)
         else:
@@ -315,11 +316,18 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     eff = max(0.0, probed - tin)
                 else:  # probe failed — fall back to the storyboard estimate
                     eff = duration_by_clip.get(str(seg["clip"].id), 5) if seg["clip"] else 5
+                onset = None
+                if meta and meta["dialogue"] and isinstance(policy, dict):
+                    raw_onset = policy.get("onset")
+                    if raw_onset is not None:
+                        onset = min(max(0.0, float(raw_onset) - tin),
+                                    max(0.0, eff - 1.0))
                 cut_entries.append({
                     "scene_number": meta["scene"] if meta else None,
                     "duration": eff,
                     "has_dialogue": bool(meta and meta["dialogue"]),
                     "text": meta["dialogue"] if meta else None,
+                    "speech_onset": onset,
                 })
                 # appended LAST so stitch_inputs and cut_entries always align
                 # index-for-index (episode slicing depends on it)
