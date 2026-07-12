@@ -1,9 +1,18 @@
+import os
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+
+# make the backend root importable no matter how alembic is invoked: the
+# `alembic` console script (used in the Docker container) does NOT add the
+# CWD to sys.path the way `python -m alembic` does, so `import app` fails
+# without this. Points at backend/ (the parent of migrations/).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.database import Base
 from app.models import *  # noqa: F401,F403
 
