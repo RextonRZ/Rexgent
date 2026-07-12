@@ -283,10 +283,17 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   // ── live preview plan: captions + voices placed by the SAME math the
   // export uses, refreshed whenever the timeline changes ──
   const shotMeta = useMemo(() => {
-    const m: Record<string, { scene: number; dialogue: string | null }> = {};
+    const m: Record<
+      string,
+      { scene: number; dialogue: string | null; est: number }
+    > = {};
     scenes.forEach((s) =>
       s.shots.forEach((sh) => {
-        m[sh.id] = { scene: s.scene_number, dialogue: sh.dialogue };
+        m[sh.id] = {
+          scene: s.scene_number,
+          dialogue: sh.dialogue,
+          est: sh.estimated_duration_seconds || 5,
+        };
       })
     );
     return m;
@@ -303,11 +310,16 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     }
     const entries = timeline.map((t) => {
       const m = shotMeta[t.shotId];
+      // untrimmed clips use the shot's fitted duration, never the 5s
+      // placeholder the player holds before a clip's metadata loads
+      const dur = t.trimmed
+        ? Math.max(0, t.trimEnd - t.trimStart)
+        : Math.max(t.duration, m?.est ?? 0) || 5;
       return {
         clip_id: t.external ? null : t.clipId,
         scene_number: m?.scene ?? null,
-        duration: Math.max(0, t.trimEnd - t.trimStart),
-        trim_start: t.trimStart,
+        duration: dur,
+        trim_start: t.trimmed ? t.trimStart : 0,
         has_dialogue: Boolean(m?.dialogue),
         text: m?.dialogue ?? null,
       };
@@ -394,8 +406,15 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         jobId,
         clips: list.map((t) =>
           t.external
-            ? { url: t.url, trim_start: t.trimStart, trim_end: t.trimEnd }
-            : { clip_id: t.clipId, trim_start: t.trimStart, trim_end: t.trimEnd }
+            ? // trim values are sent ONLY when the user actually trimmed:
+              // trimEnd defaults to a 5s placeholder before a clip's metadata
+              // loads, and exporting that placeholder halved every 10s clip
+              { url: t.url,
+                trim_start: t.trimmed ? t.trimStart : 0,
+                trim_end: t.trimmed ? t.trimEnd : null }
+            : { clip_id: t.clipId,
+                trim_start: t.trimmed ? t.trimStart : 0,
+                trim_end: t.trimmed ? t.trimEnd : null }
         ),
         audioUrl: audio.url,
         audioVolume: audio.volume,
