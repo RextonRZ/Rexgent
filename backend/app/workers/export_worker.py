@@ -287,11 +287,20 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 with open(local, "wb") as fh:
                     fh.write(resp.content)
                 # the model's own music/ambience/SFX survive whenever the
-                # track carries no real words — the free VAD answers first,
-                # then Qwen ASR overrules its music-is-speech bias (measured
-                # 0.98+ VAD ratios on tracks that transcribe to zero words)
-                from app.services.audio_policy import bed_decision
-                mute, vol = bed_decision(local, has_dialogue)
+                # track carries no real words — the clip's STORED verdict wins
+                # (the preview showed the same one); compute only when missing
+                policy = getattr(seg["clip"], "audio_json", None) if seg["clip"] else None
+                if isinstance(policy, dict) and "mute" in policy:
+                    mute, vol = bool(policy.get("mute")), policy.get("volume")
+                else:
+                    from app.services.audio_policy import bed_decision
+                    mute, vol = bed_decision(local, has_dialogue)
+                    if seg["clip"] is not None:
+                        try:
+                            seg["clip"].audio_json = {"mute": mute, "volume": vol}
+                            db.commit()
+                        except Exception:  # noqa: BLE001
+                            db.rollback()
                 if vol is not None:
                     kept_beds += 1
                     logger.info("chunk %d: original soundtrack kept as bed", i)

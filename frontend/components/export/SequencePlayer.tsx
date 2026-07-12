@@ -36,6 +36,7 @@ export function SequencePlayer({
   onProgress,
   ratio = "9:16",
   segments,
+  chunkAudio,
 }: {
   items: TimelineItem[];
   index: number;
@@ -46,6 +47,9 @@ export function SequencePlayer({
   /** placed voice lines: the preview shows captions and plays the real TTS
    * audio at the exact times the export will use */
   segments?: PreviewSegment[];
+  /** the export's per-chunk audio verdicts, aligned with items: muted fake
+   * speech stays silent here too, kept beds play at their bed volume */
+  chunkAudio?: { mute: boolean; volume: number | null }[];
 }) {
   const frameClass =
     ratio === "16:9"
@@ -96,9 +100,18 @@ export function SequencePlayer({
     } else if (!voice.paused) {
       voice.pause();
     }
-    // duck the raw clip's own audio under the voice, like the real mix does
+    // the clip's own audio obeys the export's stored verdict: muted fake
+    // speech stays silent, a kept bed plays at bed volume — and either way
+    // it ducks under an active voice exactly like the real mix
     const v = ref.current;
-    if (v) v.volume = seg?.audio_url && isPlaying ? 0.25 : 1.0;
+    if (v) {
+      const policy = chunkAudio?.[safeIndex];
+      const base = policy?.mute ? 0 : policy?.volume ?? 1.0;
+      v.volume = Math.max(
+        0,
+        Math.min(1, seg?.audio_url && isPlaying ? base * 0.35 : base)
+      );
+    }
   };
 
   // Load the current clip whenever the index (or its url) changes, seeking to
@@ -110,6 +123,10 @@ export function SequencePlayer({
     const onMeta = () => {
       v.currentTime = current.trimStart || 0;
       onDuration?.(safeIndex, v.duration);
+      // apply the chunk's audio verdict before the first frame plays, so a
+      // muted fake-speech clip never blurts before timeupdate catches it
+      const policy = chunkAudio?.[safeIndex];
+      v.volume = policy?.mute ? 0 : Math.max(0, Math.min(1, policy?.volume ?? 1.0));
       if (playing) v.play().catch(() => {});
     };
     v.addEventListener("loadedmetadata", onMeta, { once: true });

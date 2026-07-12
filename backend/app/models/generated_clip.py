@@ -24,6 +24,9 @@ class GeneratedClip(Base):
     references_json = Column(JSON, nullable=True)
     seed = Column(Integer, nullable=True)
     status = Column(String(20), default="PENDING")
+    # bed_decision's verdict {mute, volume}: computed once, read by both the
+    # editor preview and the export worker so they can never disagree
+    audio_json = Column(JSON, nullable=True)
     retries = Column(Integer, default=0)
     # editor trim points — honored by EVERY later export, not just the one
     # where the user set them

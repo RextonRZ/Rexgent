@@ -572,6 +572,17 @@ class GenerationRunner:
                              confidence=guard["continuity_score"] / 100.0)
 
                 status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
+                # the clip's audio policy, decided ONCE (VAD + Qwen ASR) and
+                # stored — the editor preview and the export worker both read
+                # this verdict, so what you hear is what ships
+                audio_policy = None
+                try:
+                    from app.services.audio_policy import bed_decision
+                    a_mute, a_vol = bed_decision(
+                        clip_url, bool((shot.dialogue or "").strip()))
+                    audio_policy = {"mute": a_mute, "volume": a_vol}
+                except Exception as ae:  # noqa: BLE001 — policy is best-effort
+                    logger.warning(f"audio policy skipped for shot {shot.id}: {ae}")
                 tool_event(pid, "generate", "write_clip_db", "started", agent="Renderer")
                 clip = GeneratedClip(
                     job_id=job.id, shot_id=shot.id,
@@ -582,7 +593,7 @@ class GenerationRunner:
                     face_score=guard.get("face_score"), outfit_score=guard.get("outfit_score"),
                     background_score=guard.get("background_score"),
                     references_json=ref_provenance, seed=seed,
-                    status=status, retries=attempt)
+                    status=status, retries=attempt, audio_json=audio_policy)
                 self.db.add(clip)
                 job.completed_shots += 1
                 self.db.commit()

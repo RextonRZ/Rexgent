@@ -110,12 +110,33 @@ async def preview_plan(request: dict, db: Session = Depends(get_db)):
         if r.audio_url
     ]
     segments = place_dialogue(line_rows, scene_plan)
+
+    # per-chunk audio policy: the STORED verdict every export will also use
+    from app.models.generated_clip import GeneratedClip
+    clip_ids = [e.get("clip_id") for e in entries]
+    wanted = [uuid.UUID(str(c)) for c in clip_ids if c]
+    clip_by_id = ({str(c.id): c for c in
+                   db.query(GeneratedClip).filter(GeneratedClip.id.in_(wanted)).all()}
+                  if wanted else {})
+    chunks = []
+    for e in entries:
+        c = clip_by_id.get(str(e.get("clip_id") or ""))
+        pol = getattr(c, "audio_json", None) if c is not None else None
+        if isinstance(pol, dict) and "mute" in pol:
+            chunks.append({"mute": bool(pol.get("mute")), "volume": pol.get("volume")})
+        elif c is not None:
+            # no stored verdict yet — match the export's safe default so the
+            # preview never plays fake speech the render would mute
+            chunks.append({"mute": bool(e.get("has_dialogue")), "volume": None})
+        else:
+            chunks.append({"mute": False, "volume": None})  # imported media
+
     return {"segments": [
         {"start": s["start"], "duration": s.get("duration", 0.0),
          "text": s.get("text"), "character": s.get("character"),
          "audio_url": s.get("audio_path")}
         for s in segments
-    ]}
+    ], "chunks": chunks}
 
 
 @router.get("/{project_id}/download_all")

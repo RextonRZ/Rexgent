@@ -292,14 +292,19 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     return m;
   }, [scenes]);
   const [segments, setSegments] = useState<PreviewSegment[]>([]);
+  const [chunkAudio, setChunkAudio] = useState<
+    { mute: boolean; volume: number | null }[]
+  >([]);
   useEffect(() => {
     if (timeline.length === 0) {
       setSegments([]);
+      setChunkAudio([]);
       return;
     }
     const entries = timeline.map((t) => {
       const m = shotMeta[t.shotId];
       return {
+        clip_id: t.external ? null : t.clipId,
         scene_number: m?.scene ?? null,
         duration: Math.max(0, t.trimEnd - t.trimStart),
         has_dialogue: Boolean(m?.dialogue),
@@ -313,6 +318,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
           entries,
         });
         setSegments(data.segments ?? []);
+        setChunkAudio(data.chunks ?? []);
       } catch {
         // the preview plan is an enhancement, never a blocker
       }
@@ -528,6 +534,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
               onProgress={handleProgress}
               ratio={project?.video_ratio === "16:9" ? "16:9" : "9:16"}
               segments={segments}
+              chunkAudio={chunkAudio}
             />
           )}
         </div>
