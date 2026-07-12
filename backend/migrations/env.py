@@ -15,8 +15,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import Base
 from app.models import *  # noqa: F401,F403
+from app.config import get_settings
 
 config = context.config
+
+# the migrations connect to the SAME database the app does — read the live
+# DATABASE_URL (Docker points it at the `postgres` service host, not the
+# localhost baked into alembic.ini) instead of the static ini value
+config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
