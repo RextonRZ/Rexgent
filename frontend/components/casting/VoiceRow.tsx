@@ -127,10 +127,10 @@ export function VoiceRow({
 
   return (
     <div className="rounded-lg border hairline bg-background/40 p-2.5 space-y-2">
-      <div className="flex items-center gap-2 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
         <span className="text-muted-foreground">Voice</span>
         <span
-          className={`rounded px-1.5 py-0.5 ${cloned || designed ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}
+          className={`max-w-[10rem] truncate whitespace-nowrap rounded px-1.5 py-0.5 ${cloned || designed ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}
           title={designed ? "A bespoke voice designed from this character's age and personality" : undefined}
         >
           {currentLabel}
@@ -138,7 +138,7 @@ export function VoiceRow({
         {designed && (
           <button
             onClick={() => setMode("designed")}
-            className={`ml-auto rounded px-1.5 py-0.5 ${
+            className={`ml-auto whitespace-nowrap rounded px-1.5 py-0.5 ${
               mode === "designed" ? "bg-primary/20 text-primary" : "text-muted-foreground"
             }`}
           >
@@ -147,7 +147,7 @@ export function VoiceRow({
         )}
         <button
           onClick={() => setMode("preset")}
-          className={`${designed ? "" : "ml-auto "}rounded px-1.5 py-0.5 ${
+          className={`${designed ? "" : "ml-auto "}whitespace-nowrap rounded px-1.5 py-0.5 ${
             mode === "preset" ? "bg-primary/20 text-primary" : "text-muted-foreground"
           }`}
         >
@@ -155,7 +155,7 @@ export function VoiceRow({
         </button>
         <button
           onClick={() => setMode("clone")}
-          className={`rounded px-1.5 py-0.5 ${
+          className={`whitespace-nowrap rounded px-1.5 py-0.5 ${
             mode === "clone" ? "bg-primary/20 text-primary" : "text-muted-foreground"
           }`}
         >
@@ -164,21 +164,11 @@ export function VoiceRow({
         <button
           onClick={handlePreview}
           disabled={previewing || !voiceId}
-          className="rounded px-1.5 py-0.5 text-primary hover:bg-primary/15 disabled:opacity-40"
+          className="whitespace-nowrap rounded px-1.5 py-0.5 text-primary hover:bg-primary/15 disabled:opacity-40"
         >
           {previewing ? "…" : "▶ Preview"}
         </button>
       </div>
-
-      {previewUrl && (
-        <audio src={previewUrl} controls autoPlay className="w-full min-w-0 h-7" />
-      )}
-      {previewError && <p className="text-[10px] text-bad">{previewError}</p>}
-      {previewing && (
-        <p className="text-[10px] text-muted-foreground">
-          Synthesizing a sample line in this voice…
-        </p>
-      )}
 
       {mode === "designed" ? (
         <div className="rounded border border-primary/30 bg-primary/5 p-2 text-[11px] leading-snug">
@@ -274,6 +264,13 @@ export function VoiceRow({
         </div>
       )}
 
+      {previewing && (
+        <p className="text-[10px] text-muted-foreground">
+          Synthesizing a sample line in this voice…
+        </p>
+      )}
+      {previewError && <p className="text-[10px] text-bad">{previewError}</p>}
+      {previewUrl && <audio src={previewUrl} controls autoPlay className="w-full h-7" />}
       <SpendConfirm request={spend} onClose={() => setSpend(null)} />
     </div>
   );
