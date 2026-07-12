@@ -112,6 +112,16 @@ export default function CharactersPage({
                   detail: "about 3 frames on wan2.6-t2i, at $0.075 per image",
                   amount: 3 * 0.075,
                 },
+                ...(characters.length > 0 &&
+                characters.every((c) => castingByCharId[c.id]?.voice_id)
+                  ? [
+                      {
+                        label: "Voices",
+                        detail: "every character already has a voice, nothing to charge",
+                        amount: 0,
+                      },
+                    ]
+                  : []),
               ],
               options: (() => {
                 const voiceless = characters.filter(
