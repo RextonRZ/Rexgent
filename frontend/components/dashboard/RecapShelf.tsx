@@ -131,14 +131,10 @@ export function RecapShelf({
   const [inView, setInView] = useState(true);
   const [pageVisible, setPageVisible] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
-  // per-slide orientation, learned from the media itself: a vertical 9:16
-  // episode inside this 16:9 screen crops hard, so its window slides up to
-  // where the faces are; landscape media stays centered
-  const [portrait, setPortrait] = useState<Record<string, boolean>>({});
-  const markPortrait = (id: string, isPortrait: boolean) =>
-    setPortrait((m) => (m[id] === isPortrait ? m : { ...m, [id]: isPortrait }));
-  const focusFor = (id: string): string =>
-    portrait[id] === true ? "50% 12%" : portrait[id] === false ? "50% 50%" : "50% 30%";
+  // EP 1's framing sits lower than the rest, so only the first slide slides
+  // its crop window up to face height; every other slide keeps the house 30%
+  const focusForSlide = (slideIndex: number): string =>
+    slideIndex === 0 ? "50% 12%" : "50% 30%";
 
   // What the screen can play: real clips first; expired/absent clips fall
   // back to recent poster stills with a slow Ken Burns drift — never a dead
@@ -260,13 +256,7 @@ export function RecapShelf({
                 playsInline
                 autoPlay
                 preload="metadata"
-                onLoadedMetadata={(e) =>
-                  markPortrait(
-                    current.id,
-                    e.currentTarget.videoHeight > e.currentTarget.videoWidth
-                  )
-                }
-                style={{ objectPosition: focusFor(current.id) }}
+                style={{ objectPosition: focusForSlide(idx % slides.length) }}
                 className={cn(
                   "absolute inset-0 h-full w-full object-cover transition-opacity duration-500",
                   visible ? "opacity-100" : "opacity-0"
@@ -279,13 +269,7 @@ export function RecapShelf({
                 key={`${current.img ?? current.id}-${idx}`}
                 src={current.img ?? "/still12.jpg"}
                 alt=""
-                onLoad={(e) =>
-                  markPortrait(
-                    current.id,
-                    e.currentTarget.naturalHeight > e.currentTarget.naturalWidth
-                  )
-                }
-                style={{ objectPosition: focusFor(current.id) }}
+                style={{ objectPosition: focusForSlide(idx % slides.length) }}
                 className={cn(
                   "absolute inset-0 h-full w-full object-cover transition-opacity duration-500",
                   visible ? "opacity-100" : "opacity-0",
