@@ -177,3 +177,14 @@ def test_no_foreground_keeps_both_faces():
         prev_last_frame_url=None, model_cap=9)
     ident = {p["url"] for p in prov if p["role"] == "identity"}
     assert ident == {"rex_face", "mia_face"}
+
+
+def test_ots_and_pov_keep_location_plate():
+    """An over-the-shoulder frames its subject against REAL visible room —
+    rendering it without the location anchor let the model reinvent the set
+    (bg 0.30 vs 0.85+ on same-scene MS shots). OTS and POV now anchor the room."""
+    for st in ("OTS", "POV"):
+        stack = build_reference_stack(
+            characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+            prev_last_frame_url="prev", model_cap=9, shot_type=st)
+        assert "loc1" in [m["url"] for m in stack], st

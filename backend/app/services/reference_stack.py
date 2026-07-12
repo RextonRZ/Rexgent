@@ -7,6 +7,15 @@ from app.services.wardrobe_planner import map_variant_for_scene
 # artifact. Those shots lean on the last-frame chain for room continuity.
 WIDE_FRAMINGS = {"MS", "FS", "LS", "EWS", "WS"}
 
+# Framings that still SHOW the room even though they aren't wide: an
+# over-the-shoulder or POV frames a subject against real visible space, and
+# rendering one without the location plate lets the model reinvent the set
+# (measured: OTS shots scored background 0.30 while their MS neighbours in
+# the same scene scored 0.85+ — the character "teleported" to a window that
+# was never there). These get the location anchor too; WIDE_FRAMINGS stays
+# strict because it also picks the scene-anchor source frame.
+ROOM_FRAMINGS = WIDE_FRAMINGS | {"OTS", "POV"}
+
 
 def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
                                   prev_last_frame_url, model_cap, shot_type=None,
@@ -50,8 +59,8 @@ def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
         entries.append((prev_last_frame_url, "prev_frame", None))
     if scene_anchor_url:
         entries.append((scene_anchor_url, "scene_anchor", None))
-    # location plate only on wide framings (or when the shot type is unknown)
-    include_location = ((shot_type is None or str(shot_type).upper() in WIDE_FRAMINGS)
+    # location plate on any framing that shows the room (or when unknown)
+    include_location = ((shot_type is None or str(shot_type).upper() in ROOM_FRAMINGS)
                         and not suppress_location)
     loc = (bible.get("location_by_scene") or {}).get(scene_number)
     if loc and include_location:
