@@ -167,7 +167,7 @@ CREW_PIPELINE_GUIDE = {
         "budget_allocate (conditional: fits itself on the Storyboard page the moment the board lands, splitting the cap across shots and picking tiers; it appears in the crew graph only when it actually runs)",
         "synth_voices (conditional: first generation only, later runs reuse the synthesized lines)",
         "fit_durations (auto: sizes each speaking shot to its real dialogue audio)",
-        "prompt_craft (auto, per shot: writes the video prompt)",
+        "prompt_craft (auto, per shot: expands the beat into concrete physical action, aims a negative prompt at the wrong default interpretation, and asks the Neo4j world graph whether an active event overrides the location's usual crowd behavior)",
         "dispatch_video (auto, per shot: renders the clip)",
         "verify_face (auto, per shot: continuity scoring of face, outfit, background)",
         "write_clip_db (auto, per shot: saves the clip)",

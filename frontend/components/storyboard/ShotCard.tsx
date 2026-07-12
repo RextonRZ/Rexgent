@@ -6,7 +6,75 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ShotEditor } from "./ShotEditor";
 import { useDeleteShot } from "@/hooks/useStoryboard";
 import { explainFilmTerm, fullShotType } from "@/lib/filmTerms";
-import type { Shot } from "@/lib/types";
+import type { Shot, ShotPromptEngineering } from "@/lib/types";
+
+/** The beat expander's paper trail: what the model was actually told, what it
+ * was told to avoid, and which world-graph rule shaped the environment. */
+function PromptEngineering({ pe }: { pe: ShotPromptEngineering }) {
+  const [open, setOpen] = useState(false);
+  const env = pe.environment;
+  const overridden = env?.source && env.source !== "location default";
+  return (
+    <div className="rounded-lg border border-white/[0.07] bg-white/[0.02]">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-2.5 py-1.5 text-[10px] uppercase tracking-widest text-zinc-400 hover:text-zinc-200"
+      >
+        <span>prompt engineering</span>
+        <span className={`transition-transform duration-200 ${open ? "rotate-90" : ""}`}>
+          ▸
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-2 border-t border-white/[0.07] px-2.5 py-2 text-[11px] leading-relaxed">
+          <div>
+            <p className="text-[9px] uppercase tracking-widest text-zinc-500">
+              sent to the video model
+            </p>
+            <p className="text-zinc-300">{pe.prompt}</p>
+          </div>
+          {pe.negative_prompt && (
+            <div>
+              <p className="text-[9px] uppercase tracking-widest text-zinc-500">
+                negative prompt (what it must NOT render)
+              </p>
+              <p className="text-zinc-400">{pe.negative_prompt}</p>
+            </div>
+          )}
+          {env?.behavior && (
+            <div>
+              <p className="text-[9px] uppercase tracking-widest text-zinc-500">
+                environment (world graph)
+              </p>
+              <p className="text-zinc-300">
+                {overridden ? (
+                  <>
+                    The event{" "}
+                    <span className="font-medium text-primary">{env.source}</span>{" "}
+                    (priority {env.priority}) overrides the{" "}
+                    {(env.location ?? "location").replace(/_/g, " ")} default:{" "}
+                    {env.behavior}.
+                  </>
+                ) : (
+                  <>
+                    {(env.location ?? "location").replace(/_/g, " ")} default
+                    behavior: {env.behavior}.
+                  </>
+                )}
+                {env.suppressed && (
+                  <span className="text-zinc-500">
+                    {" "}
+                    Suppressed into the negative: {env.suppressed}.
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Meta({
   icon: Icon,
@@ -120,6 +188,9 @@ export function ShotCard({ shot }: { shot: Shot }) {
             </span>
           )}
         </div>
+
+        {/* the script to prompt transformation, once this shot has rendered */}
+        {shot.prompt_json?.prompt && <PromptEngineering pe={shot.prompt_json} />}
       </CardContent>
     </Card>
   );

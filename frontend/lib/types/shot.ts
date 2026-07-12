@@ -15,6 +15,22 @@ export interface Shot {
   notes: string | null;
   director_note: string | null;
   blocking_json?: ShotBlocking | null;
+  prompt_json?: ShotPromptEngineering | null;
+}
+
+/** The beat expander's paper trail, written at render time. */
+export interface ShotPromptEngineering {
+  action?: string | null;
+  prompt?: string | null;
+  negative_prompt?: string | null;
+  environment?: {
+    behavior?: string | null;
+    suppressed?: string | null;
+    source?: string | null;
+    priority?: number | null;
+    location?: string | null;
+    events?: string[] | null;
+  } | null;
 }
 
 /** Absolute per-shot geometry from the Director, 180-rule enforced. */
