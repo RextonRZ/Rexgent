@@ -131,6 +131,14 @@ export function RecapShelf({
   const [inView, setInView] = useState(true);
   const [pageVisible, setPageVisible] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
+  // per-slide orientation, learned from the media itself: a vertical 9:16
+  // episode inside this 16:9 screen crops hard, so its window slides up to
+  // where the faces are; landscape media stays centered
+  const [portrait, setPortrait] = useState<Record<string, boolean>>({});
+  const markPortrait = (id: string, isPortrait: boolean) =>
+    setPortrait((m) => (m[id] === isPortrait ? m : { ...m, [id]: isPortrait }));
+  const focusFor = (id: string): string =>
+    portrait[id] === true ? "50% 12%" : portrait[id] === false ? "50% 50%" : "50% 30%";
 
   // What the screen can play: real clips first; expired/absent clips fall
   // back to recent poster stills with a slow Ken Burns drift — never a dead
@@ -252,10 +260,15 @@ export function RecapShelf({
                 playsInline
                 autoPlay
                 preload="metadata"
+                onLoadedMetadata={(e) =>
+                  markPortrait(
+                    current.id,
+                    e.currentTarget.videoHeight > e.currentTarget.videoWidth
+                  )
+                }
+                style={{ objectPosition: focusFor(current.id) }}
                 className={cn(
-                  // portrait clips overflow this 16:9 frame; bias the crop
-                  // upward so faces sit in view instead of being centred
-                  "absolute inset-0 h-full w-full object-cover object-[50%_30%] transition-opacity duration-500",
+                  "absolute inset-0 h-full w-full object-cover transition-opacity duration-500",
                   visible ? "opacity-100" : "opacity-0"
                 )}
               />
@@ -266,10 +279,15 @@ export function RecapShelf({
                 key={`${current.img ?? current.id}-${idx}`}
                 src={current.img ?? "/still12.jpg"}
                 alt=""
+                onLoad={(e) =>
+                  markPortrait(
+                    current.id,
+                    e.currentTarget.naturalHeight > e.currentTarget.naturalWidth
+                  )
+                }
+                style={{ objectPosition: focusFor(current.id) }}
                 className={cn(
-                  // portrait clips overflow this 16:9 frame; bias the crop
-                  // upward so faces sit in view instead of being centred
-                  "absolute inset-0 h-full w-full object-cover object-[50%_30%] transition-opacity duration-500",
+                  "absolute inset-0 h-full w-full object-cover transition-opacity duration-500",
                   visible ? "opacity-100" : "opacity-0",
                   !reduced && !current.video &&
                     "animate-[ken-burns_8s_ease-out_forwards]"
