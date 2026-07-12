@@ -229,9 +229,17 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             except Exception:  # noqa: BLE001
                 pass
             for sd in shots:
-                in_frame = sd.get("characters_in_frame", []) or []
+                # resolve name variants the LLM invents ("KERRY (ON SCREEN)")
+                # back to real cast members, or identity references and the
+                # pre-generation check never find them
+                from app.services.guardrails import canonical_character
+                known_names = [c.get("name") for c in scene_chars if c.get("name")]
+                in_frame = list(dict.fromkeys(
+                    canonical_character(n, known_names)
+                    for n in (sd.get("characters_in_frame", []) or [])))
                 # foreground names must be a subset of who is actually in frame
-                foreground = [n for n in (sd.get("foreground_characters") or [])
+                foreground = [n for n in (canonical_character(x, known_names)
+                                          for x in (sd.get("foreground_characters") or []))
                               if n in in_frame]
                 shot = Shot(
                     scene_id=scene.id, number=sd.get("shot_number", 1),

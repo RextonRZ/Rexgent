@@ -197,3 +197,26 @@ class TestPreGenerationValidator:
     def test_empty_storyboard(self):
         v = PreGenerationValidator()
         assert v.validate([], [])["pass"] is False
+
+    def test_name_variant_with_stage_qualifier_still_matches(self):
+        # the storyboard writes "KERRY (ON SCREEN)" for a video-call framing;
+        # that is still KERRY and must not block generation
+        v = PreGenerationValidator()
+        result = v.validate(
+            characters=[{"name": "KERRY", "visual_description": "a lawyer in a grey suit"}],
+            shots=[{"characters_in_frame": ["KERRY (ON SCREEN)"],
+                    "estimated_duration_seconds": 5}],
+        )
+        assert result["pass"] is True
+
+
+class TestCanonicalCharacter:
+    def test_qualifier_resolves_to_cast_member(self):
+        from app.services.guardrails import canonical_character
+        assert canonical_character("KERRY (ON SCREEN)", ["KERRY", "LINDA"]) == "KERRY"
+        assert canonical_character("Linda (V.O.)", ["KERRY", "LINDA"]) == "LINDA"
+
+    def test_exact_and_unknown_names_pass_through(self):
+        from app.services.guardrails import canonical_character
+        assert canonical_character("KERRY", ["KERRY"]) == "KERRY"
+        assert canonical_character("THE STRANGER", ["KERRY"]) == "THE STRANGER"

@@ -195,6 +195,26 @@ class InputSanitizer:
         return result
 
 
+_NAME_QUALIFIER = re.compile(r"\s*\([^)]*\)\s*$")
+
+
+def canonical_character(name: str, known) -> str:
+    """'KERRY (ON SCREEN)' means KERRY. The storyboard LLM appends stage
+    qualifiers to names despite instructions, and every exact-match consumer
+    (validator, reference stacks, continuity) must resolve the variant back
+    to the cast member it refers to. Unknown names come back unchanged."""
+    n = (name or "").strip()
+    if not n:
+        return n
+    known_map = {str(k).strip().upper(): str(k) for k in known}
+    if n.upper() in known_map:
+        return known_map[n.upper()]
+    base = _NAME_QUALIFIER.sub("", n).strip()
+    if base and base.upper() in known_map:
+        return known_map[base.upper()]
+    return n
+
+
 class PreGenerationValidator:
     def validate(self, characters: list[dict], shots: list[dict]) -> dict:
         issues: list[str] = []
@@ -211,7 +231,7 @@ class PreGenerationValidator:
 
         char_map = {c["name"]: c for c in characters}
         for name in names_in_shots:
-            c = char_map.get(name)
+            c = char_map.get(canonical_character(name, char_map.keys()))
             if not c:
                 missing_visuals.append(f"{name}: not found in database")
             elif not c.get("video_prompt_fragment") and not c.get("visual_description"):
