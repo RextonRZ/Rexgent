@@ -73,6 +73,25 @@ def test_flattened_subject_string_unpacks_to_fields():
     }]
 
 
+def test_json_stringified_subject_unpacks():
+    # production drift: the subject arrives as a JSON object AS A STRING,
+    # where the quote between key and colon defeats the marker regex
+    from app.services.stage_map import normalize_subjects
+    import json
+    payload = json.dumps({"character": "CATHERINE", "frame_position": "FG",
+                          "screen_side": "left", "posture": "sitting",
+                          "eyeline": "at POLICE OFFICER"})
+    assert normalize_subjects([payload]) == [{
+        "character": "CATHERINE", "frame_position": "FG",
+        "screen_side": "left", "posture": "sitting",
+        "eyeline": "at POLICE OFFICER"}]
+    # and the same JSON trapped inside a dict's character value
+    assert normalize_subjects([{"character": payload}]) == [{
+        "character": "CATHERINE", "frame_position": "FG",
+        "screen_side": "left", "posture": "sitting",
+        "eyeline": "at POLICE OFFICER"}]
+
+
 def test_flattened_subject_with_posture_key():
     from app.services.stage_map import normalize_subjects
     subs = normalize_subjects([

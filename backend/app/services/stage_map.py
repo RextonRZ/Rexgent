@@ -22,10 +22,24 @@ _GEOMETRY_KEYS = ("frame_position", "screen_side", "facing", "posture", "eyeline
 
 def _parse_flat_subject(text: str) -> dict | None:
     """A worse drift than bare names: the WHOLE subject flattened into one
-    string, 'character_name: IM SOL, frame_position: FG, screen_side: left,
-    action: standing still, looking down' (the name sometimes leads bare).
-    Split on the known key markers, never on commas — values contain commas.
-    None when the string carries no key markers at all."""
+    string. Two shapes observed in production:
+    - 'character_name: IM SOL, frame_position: FG, screen_side: left, ...'
+      (split on known key markers, never commas — values contain commas)
+    - a JSON object AS a string, '{"character": "CATHERINE", ...}' — the
+      quote between key and colon defeats the marker regex, so try a real
+      JSON parse first.
+    None when neither shape applies."""
+    text = text.strip()
+    if text.startswith("{"):
+        try:
+            import json
+            obj = json.loads(text)
+            if isinstance(obj, dict):
+                out = {("character" if k == "character_name" else k): v
+                       for k, v in obj.items() if v}
+                return out or None
+        except (ValueError, TypeError):
+            pass
     marks = list(_FLAT_KEY_RE.finditer(text))
     if not marks:
         return None
