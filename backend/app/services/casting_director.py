@@ -178,7 +178,7 @@ class CastingDirector:
         self.plates = PlateGenerator(self.db)
         self.style_prompt = load_prompt("style_plate.txt")
 
-    async def cast_bible(self, project_id) -> dict:
+    async def cast_bible(self, project_id, design_voice: bool = True) -> dict:
         pid = str(project_id)
         emit("casting.started", {}, pid)
         script = (self.db.query(Script).filter(Script.project_id == project_id)
@@ -300,7 +300,10 @@ class CastingDirector:
                       total=len(characters)) as t:
             for idx_v, c in enumerate(characters):
                 emit("casting.voice.started", {"character": c.name}, pid)
-                assign_voice(c, idx_v, db=self.db, project_id=pid)
+                if design_voice:
+                    assign_voice(c, idx_v, db=self.db, project_id=pid)
+                else:  # the user unticked the paid design — free presets
+                    assign_voice(c, idx_v)
                 emit("casting.voice.completed", {"character": c.name}, pid)
             t["artifact"] = f"{len(characters)} voices"
 

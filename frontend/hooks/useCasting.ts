@@ -125,8 +125,10 @@ export function useGenerateCharacterPlates() {
 export function useRunCasting(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post(`/api/casting/${projectId}/run`);
+    mutationFn: async (opts?: { designVoice?: boolean }) => {
+      const { data } = await api.post(`/api/casting/${projectId}/run`, null, {
+        params: { design_voice: opts?.designVoice ?? true },
+      });
       return data;
     },
     onSuccess: () => {

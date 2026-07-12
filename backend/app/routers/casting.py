@@ -93,7 +93,8 @@ def approve_casting(project_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{project_id}/run")
-def run_casting(project_id: str, db: Session = Depends(get_db)):
+def run_casting(project_id: str, design_voice: bool = True,
+                db: Session = Depends(get_db)):
     if not db.query(Project).filter(Project.id == uuid.UUID(project_id)).first():
         raise HTTPException(status_code=404, detail="Project not found")
     # announce BEFORE dispatching: the worker takes seconds to pick the job
@@ -104,7 +105,7 @@ def run_casting(project_id: str, db: Session = Depends(get_db)):
          "agent": "Casting Director", "label": "Casting the production bible"},
          project_id)
     from app.workers.casting_worker import run_casting_job
-    run_casting_job.delay(project_id)
+    run_casting_job.delay(project_id, design_voice)
     return {"status": "started"}
 
 

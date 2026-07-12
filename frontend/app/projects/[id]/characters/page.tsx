@@ -98,12 +98,40 @@ export default function CharactersPage({
           onClick={() =>
             setSpend({
               title: "Cast the whole bible",
-              costLine: `This costs roughly $${(
-                (characters.length * 2 + 3) * 0.075
-              ).toFixed(2)} of your credit in image generation.`,
-              note: "One run renders the style frame, every location and every outfit plate. Anyone missing a look gets one written, and voices get assigned.",
+              costLine: "One run builds the full production bible. Every model it touches is priced below.",
+              note: "Estimates: a failed face check can add a retry plate.",
               confirmLabel: "Generate plates",
-              run: () => runCasting.mutate(),
+              breakdown: [
+                {
+                  label: "Identity and costume plates",
+                  detail: `${characters.length} character${characters.length === 1 ? "" : "s"} × 2 plates each on wan2.6-t2i and qwen-image-edit-max, at $0.075 per image`,
+                  amount: characters.length * 2 * 0.075,
+                },
+                {
+                  label: "Location plates and the style frame",
+                  detail: "about 3 frames on wan2.6-t2i, at $0.075 per image",
+                  amount: 3 * 0.075,
+                },
+              ],
+              options: (() => {
+                const voiceless = characters.filter(
+                  (c) => !castingByCharId[c.id]?.voice_id
+                ).length;
+                return voiceless > 0
+                  ? [
+                      {
+                        key: "designVoice",
+                        label: `Designed voices for ${voiceless} character${voiceless === 1 ? "" : "s"}`,
+                        priceLine: `$${(voiceless * 0.2).toFixed(2)}`,
+                        note: "qwen-voice-design writes each voice from the character's age and personality, spoken by qwen3-tts-vd. Untick for free preset voices.",
+                        defaultOn: true,
+                        amount: voiceless * 0.2,
+                      },
+                    ]
+                  : undefined;
+              })(),
+              run: (choices) =>
+                runCasting.mutate({ designVoice: choices?.designVoice ?? true }),
             })
           }
           disabled={runCasting.isPending}
