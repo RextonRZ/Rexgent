@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # we enrol a custom voice via qwen-voice-enrollment, then synthesize it through the
     # qwen3-tts-vc-realtime WebSocket. A voice_model containing "realtime" routes to that path.
     qwen_tts_designed_model: str = "qwen3-tts-flash"
+    # instruct variant: honors natural-language delivery directions
+    # ("whispering, tearful") — same timbres, near-identical price
+    qwen_tts_instruct_model: str = "qwen3-tts-instruct-flash"
     qwen_tts_preview_model: str = "qwen3-tts-flash"
     qwen_tts_cloned_model: str = "qwen3-tts-vc-realtime-2026-01-15"
     qwen_voice_enroll_model: str = "qwen-voice-enrollment"

@@ -424,9 +424,13 @@ class QwenClient:
     # DashScope's exact voice/TTS request shapes are uncertain, so these are
     # best-effort behind this interface: only this file changes if the real
     # API differs.
-    async def synthesize_speech(self, text: str, voice: str, model: str | None = None) -> bytes:
+    async def synthesize_speech(self, text: str, voice: str, model: str | None = None,
+                                instructions: str | None = None) -> bytes:
         """TTS synthesis. Preset voices use the OFFLINE SDK (qwen3-tts-flash); cloned
         voices route to the realtime vc WebSocket (any model containing 'realtime').
+        `instructions` (stage directions like "whispering, tearful") route preset
+        voices to the INSTRUCT model, which delivers the line accordingly —
+        cloned voices have no instruct support and ignore it.
         `voice` is a preset timbre name or an enrolled voice id. Returns WAV bytes."""
         s = get_settings()
         model = model or s.qwen_tts_designed_model
@@ -436,6 +440,30 @@ class QwenClient:
         api_key, base = self.api_key, self.video_base_url
 
         def _call() -> bytes:
+            if instructions:
+                # the instruct fields live in `input` NEXT TO text/voice, and
+                # optimize_instructions is the activator — the installed SDK
+                # drops both, so this goes over raw HTTP (verified live: a
+                # pause-heavy instruction stretched the read 1.7s -> 2.7s)
+                body = {"model": s.qwen_tts_instruct_model,
+                        "input": {"text": text, "voice": voice,
+                                  "instructions": instructions[:200],
+                                  "optimize_instructions": True},
+                        "parameters": {}}
+                r = httpx.post(
+                    base + "/services/aigc/multimodal-generation/generation",
+                    json=body, timeout=120.0,
+                    headers={"Authorization": f"Bearer {api_key}"})
+                j = r.json()
+                if r.status_code != 200:
+                    raise RuntimeError(f"instruct TTS {r.status_code}: {str(j.get('message'))[:200]}")
+                url = (j.get("output") or {}).get("audio", {}).get("url")
+                if url:
+                    return httpx.get(url, timeout=60.0).content
+                data = (j.get("output") or {}).get("audio", {}).get("data")
+                if data:
+                    return base64.b64decode(data)
+                raise RuntimeError("instruct TTS returned no audio")
             import dashscope
             from dashscope.audio.qwen_tts import SpeechSynthesizer
             dashscope.base_http_api_url = base  # international endpoint

@@ -43,6 +43,18 @@ class DialogueSynthesizer:
         def _want(line) -> bool:
             return only_characters is None or line.get("character") in only_characters
 
+        def _direction(line) -> str | None:
+            """The acting notes for this line: the parenthetical the writer
+            embedded ("(whispering, frantic)") plus any explicit direction
+            field — stripped from the SPOKEN text, but handed to the instruct
+            TTS so the delivery matches the writing."""
+            import re
+            bits = re.findall(r"\(([^)]+)\)", line.get("line") or "")
+            if line.get("direction"):
+                bits.append(str(line["direction"]))
+            joined = ", ".join(b.strip() for b in bits if b.strip())
+            return joined or None
+
         def _spoken(text) -> str:
             """Strip parenthetical stage directions: '(whispering, frantic)
             Mom, please' must be ACTED, not read aloud - and the direction
@@ -70,7 +82,8 @@ class DialogueSynthesizer:
                 # detection retry it.
                 try:
                     audio = await self.qwen.synthesize_speech(
-                        _spoken(line.get("line", "")), vid, voice.get("voice_model"))
+                        _spoken(line.get("line", "")), vid, voice.get("voice_model"),
+                        instructions=_direction(line))
                 except Exception as e:  # noqa: BLE001
                     logger.warning(
                         f"TTS failed for {name} (voice {vid}) s{scene['number']}l{li}: {e}")
