@@ -39,6 +39,7 @@ class ScenePromptCraft:
         foreground_characters: list | None = None,
         blocking: dict | None = None,
         lipsync: bool = False,
+        environment: dict | None = None,
     ) -> dict:
         # A location named after a character ("Bear's apartment") must not smuggle
         # the character-noun into the background — strip names from the setting text
@@ -137,9 +138,22 @@ class ScenePromptCraft:
             )
         else:
             dialogue_block = ""
+        environment_block = ""
+        if environment and environment.get("behavior"):
+            environment_block = (
+                "Environment reaction (resolved from the world graph, rule 19): "
+                f"the surroundings behave like this - {environment['behavior']}.\n"
+            )
+            if environment.get("suppressed"):
+                environment_block += (
+                    "Environment suppressed default (the WRONG prior, include its "
+                    f"wording in negative_prompt): {environment['suppressed']}.\n"
+                )
+            environment_block += "\n"
         user_content = (
             f"Shot data:\n{json.dumps(shot)}\n\n"
             f"{blocking_block}"
+            f"{environment_block}"
             f"{setting_block}"
             f"{continuity_block}"
             f"{foreground_block}"
@@ -169,4 +183,10 @@ class ScenePromptCraft:
             # secondary backstop to the coverage framing above — negatives
             # alone are unreliable, but they bias away from readable lips
             result["negative_prompt"] += ", clear front-facing talking mouth close-up"
+        if environment and environment.get("suppressed"):
+            # deterministic backstop: the overridden location default always
+            # lands in the negative, whether or not the model remembered it
+            sup = environment["suppressed"]
+            if sup.lower() not in (result.get("negative_prompt") or "").lower():
+                result["negative_prompt"] += ", " + sup
         return result

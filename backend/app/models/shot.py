@@ -29,6 +29,9 @@ class Shot(Base):
     # screen_side, facing, eyeline, action}], "reverse_angle": bool} — the
     # stage map enforces screen sides across the scene (180-degree rule)
     blocking_json = Column(JSONB, nullable=True)
+    # the crafted prompt engineering: {action, prompt, negative_prompt,
+    # environment {behavior, suppressed, source, priority}} written at render
+    prompt_json = Column(JSONB, nullable=True)
     notes = Column(Text, nullable=True)
     director_note = Column(Text, nullable=True)
 

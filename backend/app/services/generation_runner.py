@@ -350,12 +350,20 @@ class GenerationRunner:
                 next_action = ordered[i + 1].action if i < len(ordered) - 1 else None
                 scene_setting, state_changed = setting_for_shot(
                     set_json, scene.location, shot.number)
+                # world-graph pass: does an active EVENT override this
+                # location's default environmental behavior? (concert crowd
+                # stops cheering in the shot where the performer collapses)
+                from app.graph.environment_graph import resolve_environment
+                environment = resolve_environment(
+                    f"{scene.heading or ''} {scene.location or ''}",
+                    f"{shot.action or ''}. {shot.emotional_beat or ''}")
                 prev_last_frame = await r2._process_shot(
                     job2, shot, char_by_name, bible, scene.number, prev_last_frame,
                     scene_anchor_url=scene_anchor, scene_setting=scene_setting,
                     suppress_location=state_changed,
                     prev_action=prev_action, next_action=next_action,
-                    lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines))
+                    lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines),
+                    environment=environment)
                 # the first wide shot's closing frame anchors the room for the
                 # rest of the scene — a run of close-ups can't erase the set
                 if (scene_anchor is None and prev_last_frame
@@ -376,6 +384,7 @@ class GenerationRunner:
 
     async def _craft_prompt(self, shot, char_by_name, scene_setting=None,
                             prev_action=None, next_action=None, foreground=None,
+                            environment=None,
                             outfits=None, blocking=None, lipsync=False) -> str:
         in_frame = shot.characters_in_frame or []
         fg = set(foreground or [])
@@ -400,6 +409,7 @@ class GenerationRunner:
             foreground_characters=[n for n in in_frame if n in fg],
             blocking=blocking,
             lipsync=lipsync,
+            environment=environment,
         )
         return result
 
@@ -418,7 +428,7 @@ class GenerationRunner:
                             prev_last_frame_url, scene_anchor_url=None,
                             scene_setting=None, suppress_location=False,
                             prev_action=None, next_action=None,
-                            lipsync_line=None):
+                            lipsync_line=None, environment=None):
         pid = str(job.project_id)
         in_frame = shot.characters_in_frame or []
         foreground = [n for n in (getattr(shot, "foreground_characters", None) or [])
@@ -482,11 +492,16 @@ class GenerationRunner:
                     shot, char_by_name, scene_setting, prev_action, next_action,
                     foreground=foreground, outfits=outfits,
                     blocking=getattr(shot, "blocking_json", None),
-                    lipsync=bool(lip))
+                    lipsync=bool(lip), environment=environment)
                 prompt = crafted.get("prompt", "")
                 # the crafter has ALWAYS produced a negative prompt; until now
                 # it was dropped on the floor before dispatch
                 negative = (crafted.get("negative_prompt") or "").strip() or None
+                # persist the transformation so the UI can show beat -> prompt
+                # -> negative -> resolved environment (and why it won)
+                shot.prompt_json = {"action": shot.action, "prompt": prompt,
+                                    "negative_prompt": negative,
+                                    "environment": environment}
                 tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
                 used_tier = shot.quality_tier or "happyhorse"
                 if is_wan:
