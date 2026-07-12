@@ -141,9 +141,9 @@ export function ExportEditor({ projectId }: { projectId: string }) {
             url: clip.url,
             label: shotLabel[shot.id] || `Shot ${shot.number}`,
             score: clip.consistency_score,
-            duration: 5,
+            duration: clip.duration_seconds ?? 5,
             trimStart: 0,
-            trimEnd: 5,
+            trimEnd: clip.duration_seconds ?? 5,
             trimmed: false,
           });
         }
@@ -173,9 +173,9 @@ export function ExportEditor({ projectId }: { projectId: string }) {
               url: clip.url!,
               label: shotLabel[clip.shot_id] || "Earlier take",
               score: clip.consistency_score,
-              duration: 5,
+              duration: clip.duration_seconds ?? 5,
               trimStart: 0,
-              trimEnd: 5,
+              trimEnd: clip.duration_seconds ?? 5,
               trimmed: false,
             },
           ]
@@ -310,11 +310,11 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     }
     const entries = timeline.map((t) => {
       const m = shotMeta[t.shotId];
-      // untrimmed clips use the shot's fitted duration, never the 5s
-      // placeholder the player holds before a clip's metadata loads
+      // untrimmed clips use the clip's REAL stored duration (models render
+      // short of the request); the shot estimate is only a last resort
       const dur = t.trimmed
         ? Math.max(0, t.trimEnd - t.trimStart)
-        : Math.max(t.duration, m?.est ?? 0) || 5;
+        : t.duration || m?.est || 5;
       return {
         clip_id: t.external ? null : t.clipId,
         scene_number: m?.scene ?? null,
@@ -368,9 +368,9 @@ export function ExportEditor({ projectId }: { projectId: string }) {
             url: clip.url,
             label: shotLabel[shot.id] || `Shot ${shot.number}`,
             score: clip.consistency_score,
-            duration: 5,
+            duration: clip.duration_seconds ?? 5,
             trimStart: 0,
-            trimEnd: 5,
+            trimEnd: clip.duration_seconds ?? 5,
             trimmed: false,
           });
         }

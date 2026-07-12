@@ -30,5 +30,7 @@ class ClipResult(BaseModel):
     status: str
     retries: int = 0
     cost_usd: Optional[float] = None
+    # the clip's REAL probed duration (models render short of the request)
+    duration_seconds: Optional[float] = None
 
     model_config = {"from_attributes": True}

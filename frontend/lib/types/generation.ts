@@ -28,6 +28,8 @@ export interface GeneratedClip {
   references_json?: ClipReference[] | null;
   seed?: number | null;
   cost_usd?: number | null;
+  /** the clip's REAL probed length (models render short of the request) */
+  duration_seconds?: number | null;
   status: ClipStatus;
   retries: number;
   created_at: string;
