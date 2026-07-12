@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
+import api from "@/lib/api";
 import { useAutoRun, type AutoRunResult } from "@/hooks/useAgent";
 import { useProject } from "@/hooks/useProjects";
 import { GENRES } from "@/lib/genres";
@@ -148,6 +149,16 @@ export function AutoRunPanel({
                 if (v) {
                   setTouched(true);
                   setGenre(v);
+                  // persist immediately: the drama's stored genre must follow
+                  // this choice, or rewrites and later stages keep the old one
+                  api
+                    .patch(`/api/projects/${projectId}`, { genre: v })
+                    .then(() =>
+                      queryClient.invalidateQueries({
+                        queryKey: ["project", projectId],
+                      })
+                    )
+                    .catch(() => {});
                 }
               }}
             >

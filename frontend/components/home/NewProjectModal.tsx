@@ -176,6 +176,11 @@ export function NewProjectModal({
               />
             </div>
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            Episodes shape the writing, not the delivery: the script is split
+            into that many arcs and every episode except the last ends on a
+            cliffhanger, then everything renders and exports as one video.
+          </p>
 
           {/* budget projection for this drama */}
           <div className="rounded-lg border hairline bg-background/40 p-3 space-y-2.5">
