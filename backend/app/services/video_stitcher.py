@@ -247,3 +247,37 @@ class VideoStitcher:
         if proc.returncode != 0:
             raise RuntimeError(f"ffmpeg subtitle burn failed: {proc.stderr[-800:]}")
         return output_path
+
+    def pad_tail(self, video_path: str, output_path: str, seconds: float) -> str:
+        """Hold the last frame (and silence) for `seconds` more — so a final
+        voice line that outruns its shot finishes over a held picture instead
+        of being cut off with the video."""
+        vf = f"tpad=stop_mode=clone:stop_duration={seconds:.3f}"
+        cmd = ["ffmpeg", "-y", "-i", video_path, "-vf", vf]
+        if self._has_audio(video_path):
+            cmd += ["-af", f"apad=pad_dur={seconds:.3f}"]
+        cmd += ["-c:v", "libx264", "-crf", "20",
+                "-movflags", "+faststart", output_path]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(f"ffmpeg tail pad failed: {proc.stderr[-800:]}")
+        return output_path
+
+    def fade_tail(self, video_path: str, output_path: str, fade: float = 0.8) -> str:
+        """Fade picture and sound out together over the final `fade` seconds,
+        so the episode lands on an ending instead of stopping mid-frame."""
+        dur = self._duration(video_path)
+        if dur <= 0:
+            raise RuntimeError("cannot probe duration for the ending fade")
+        fade = min(fade, dur / 2)
+        st = max(0.0, dur - fade)
+        cmd = ["ffmpeg", "-y", "-i", video_path,
+               "-vf", f"fade=t=out:st={st:.3f}:d={fade:.3f}"]
+        if self._has_audio(video_path):
+            cmd += ["-af", f"afade=t=out:st={st:.3f}:d={fade:.3f}"]
+        cmd += ["-c:v", "libx264", "-crf", "20",
+                "-movflags", "+faststart", output_path]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(f"ffmpeg ending fade failed: {proc.stderr[-800:]}")
+        return output_path

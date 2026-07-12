@@ -22,6 +22,7 @@ import {
   useUploadMedia,
 } from "@/hooks/useExport";
 import api from "@/lib/api";
+import { LiveStageStrip } from "@/components/shared/LiveStageStrip";
 import type { GeneratedClip } from "@/lib/types";
 import { errText } from "@/lib/errText";
 
@@ -316,7 +317,11 @@ export function ExportEditor({ projectId }: { projectId: string }) {
     const list = items ?? timeline;
     if (!jobId || list.length === 0) return;
     setRendering(true);
-    setExportNotice(null);
+    // immediate feedback: a multi-episode render takes minutes, and silence
+    // reads as a hang
+    setExportNotice(
+      `Rendering ${list.length} clips. Live progress shows above; the download buttons appear here when the cut lands.`
+    );
     try {
       await render.mutateAsync({
         projectId,
@@ -394,6 +399,18 @@ export function ExportEditor({ projectId }: { projectId: string }) {
           </span>
         </div>
       )}
+      {/* live export progress: stitching, captions, mixing, uploading */}
+      <LiveStageStrip
+        projectId={projectId}
+        stage="export"
+        pending={rendering}
+        fallback={[
+          "Assembling the final cut",
+          "Stitching clips and placing voices",
+          "Burning captions into the picture",
+          "Long episodes take a few minutes",
+        ]}
+      />
       {/* top: preview (left) + shot library (right) */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">

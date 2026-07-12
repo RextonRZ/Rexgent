@@ -395,6 +395,23 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: dialogue prep skipped{label}: {e}")
 
+            # ── A held ending: when the final voice line outruns the footage,
+            # freeze the last frame long enough for it to finish (plus a beat)
+            # instead of cutting the speech off with the video ──
+            try:
+                vid_dur = VideoStitcher._duration(cut_local)
+                speech_end = max(
+                    (float(s["start"]) + float(s.get("duration") or 0.0)
+                     for s in dialogue_segments), default=0.0)
+                pad = max(0.0, speech_end + 0.4 - vid_dur) if vid_dur > 0 else 0.0
+                if pad > 0.05:
+                    padded = os.path.join(workdir, f"final_padded{suffix}.mp4")
+                    stitcher.pad_tail(cut_local, padded, pad)
+                    cut_local = padded
+                    logger.info("ending held %.2fs for the last line%s", pad, label)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Export: ending hold skipped{label}: {e}")
+
             # ── Captions: timed to the placed voice lines when they exist,
             # else to chunk durations. Burned in AND uploaded as sidecar .srt ──
             srt_url = None
@@ -439,6 +456,15 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     emit("audio.mix.completed", {}, project_id)
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: audio mix skipped{label}: {e}")
+
+            # ── The ending fade: picture and sound land together instead of
+            # stopping mid-frame ──
+            try:
+                faded = os.path.join(workdir, f"final_faded{suffix}.mp4")
+                stitcher.fade_tail(cut_local, faded)
+                cut_local = faded
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Export: ending fade skipped{label}: {e}")
 
             _stage(project_id, "update", f"Uploading the final cut{label}")
             with tool_run(project_id, "export", "render_mp4", "Editor") as t:
