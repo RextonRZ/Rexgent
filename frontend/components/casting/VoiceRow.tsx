@@ -127,19 +127,31 @@ export function VoiceRow({
 
   return (
     <div className="rounded-lg border hairline bg-background/40 p-2.5 space-y-2">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-        <span className="text-muted-foreground">Voice</span>
-        <span
-          className={`max-w-[10rem] truncate whitespace-nowrap rounded px-1.5 py-0.5 ${cloned || designed ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}
-          title={designed ? "A bespoke voice designed from this character's age and personality" : undefined}
-        >
-          {currentLabel}
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="text-muted-foreground">Voice</span>
+          <span
+            className={`truncate whitespace-nowrap rounded px-1.5 py-0.5 ${cloned || designed ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}
+            title={designed ? "A bespoke voice designed from this character's age and personality" : undefined}
+          >
+            {currentLabel}
+          </span>
         </span>
+        <button
+          onClick={handlePreview}
+          disabled={previewing || !voiceId}
+          className="shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-primary hover:bg-primary/15 disabled:opacity-40"
+        >
+          {previewing ? "…" : "▶ Preview"}
+        </button>
+      </div>
+
+      <div className="flex items-center gap-1 text-[11px]">
         {designed && (
           <button
             onClick={() => setMode("designed")}
-            className={`ml-auto whitespace-nowrap rounded px-1.5 py-0.5 ${
-              mode === "designed" ? "bg-primary/20 text-primary" : "text-muted-foreground"
+            className={`whitespace-nowrap rounded px-1.5 py-0.5 ${
+              mode === "designed" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             Designed
@@ -147,8 +159,8 @@ export function VoiceRow({
         )}
         <button
           onClick={() => setMode("preset")}
-          className={`${designed ? "" : "ml-auto "}whitespace-nowrap rounded px-1.5 py-0.5 ${
-            mode === "preset" ? "bg-primary/20 text-primary" : "text-muted-foreground"
+          className={`whitespace-nowrap rounded px-1.5 py-0.5 ${
+            mode === "preset" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
           }`}
         >
           Preset
@@ -156,17 +168,10 @@ export function VoiceRow({
         <button
           onClick={() => setMode("clone")}
           className={`whitespace-nowrap rounded px-1.5 py-0.5 ${
-            mode === "clone" ? "bg-primary/20 text-primary" : "text-muted-foreground"
+            mode === "clone" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
           }`}
         >
           Clone
-        </button>
-        <button
-          onClick={handlePreview}
-          disabled={previewing || !voiceId}
-          className="whitespace-nowrap rounded px-1.5 py-0.5 text-primary hover:bg-primary/15 disabled:opacity-40"
-        >
-          {previewing ? "…" : "▶ Preview"}
         </button>
       </div>
 
@@ -180,7 +185,8 @@ export function VoiceRow({
               "A bespoke voice built from this character's age, gender and personality. Hit Preview to hear it."}
           </p>
           <p className="mt-1 text-[10px] text-muted-foreground/70">
-            Picking a preset or cloning below replaces it.
+            Designed once for $0.20 when this character was cast. Previewing is
+            nearly free, and switching to a preset below costs nothing.
           </p>
         </div>
       ) : mode === "preset" ? (
