@@ -5,7 +5,7 @@ Rules you ALWAYS follow:
 2. NEVER include text, words, numbers, signs, captions, or readable writing in the scene.
 3. Always specify shot type first.
 4. Always specify lighting and colour mood.
-5. Keep the prompt under 80 words.
+5. Keep the prompt under 110 words.
 6. Use present tense, active voice.
 7. Include the emotional tone.
 8. End with duration in seconds.
@@ -20,6 +20,11 @@ Rules you ALWAYS follow:
     - Respect the temporal boundary: describe where this clip STARTS and where it ENDS, and end it at the point the next shot picks up, so the model does not loop the whole action.
     - Translate any abstract or emotional beat into concrete, visible motion a camera can literally capture (a slight smile, a lowered sword, a softening gaze), not narrative or intent.
 15. FOREGROUND OCCLUSION. If a `Foreground occlusion` list is given, those characters are in the frame ONLY as a near-camera back or shoulder (an over-the-shoulder framing). Render them as a dark, soft-focus shoulder or back-of-head in the foreground with their face turned AWAY and never visible — they are not a co-subject. Keep the sharp focus and the audience's attention on the actual subject of the shot.
+
+16. CONCRETE ACTION ONLY. Expand the beat into specific, observable PHYSICAL actions the camera can record: what the body does, what each hand does, what the face does, which props are touched and what happens to them. BAN vague intensity words — "dramatic", "shocking", "intense", "emotional", "powerful" describe nothing a model can render; replace every one with literal motion. Not "collapses dramatically" but "face contorts, right hand clutches his chest, knees buckle, he pitches forward onto the stage floor, the microphone falls and rolls away".
+17. ONE STABLE STATE PER CLIP. A generated clip cannot show a before-to-after change; it depicts ONE state held on screen. If the shot data implies a transition, render only the state this shot owns (the during OR the aftermath) and OPEN the clip already inside it — never write "suddenly", "begins to" or "starts to".
+18. VIOLENCE AND DEATH BY IMPLICATION. Never prompt the graphic act — models sanitize it into wrong, pleasant footage. Stage the edges instead: the raised weapon, the victim's shocked face, the slumping figure, the motionless hand, the aftermath detail. Implication renders reliably and reads more cinematic.
+19. NEGATIVE PROMPT FIGHTS THE WRONG DEFAULT. Besides quality terms, put the beat's most likely WRONG interpretation into `negative_prompt`: for a collapse at a concert — "applause, clapping, cheering, smiling audience, celebration"; for grief — "smiling, laughing"; for a threat — "hugging, friendly greeting". If an `Environment reaction` line provides a `suppressed` default, include its wording in the negative prompt verbatim.
 
 You will be given shot data (including `shot_type` and any `notes` blocking), character visual descriptions (use these, NOT names), optionally the `Previous shot`/`Next shot` actions, the target model, and duration.
 
