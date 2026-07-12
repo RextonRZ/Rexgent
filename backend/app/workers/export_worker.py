@@ -455,10 +455,13 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         episode_numbers = sorted(set(chunk_eps))
 
         deliverables: list = []
-        if len(episode_numbers) <= 1:
-            deliverables.append({"episode": episode_numbers[0] if episode_numbers else 1,
+        if episode_numbers in ([], [1]):
+            # the legacy single-video path, byte-identical keys
+            deliverables.append({"episode": 1,
                                  **_render_cut("", stitch_inputs, cut_entries, "")})
         else:
+            # every other shape gets per-episode keys — including an export of
+            # ONLY episode 2, which must not overwrite the combined final.mp4
             for ep in episode_numbers:
                 idxs = [i for i, ce in enumerate(chunk_eps) if ce == ep]
                 deliverables.append({"episode": ep,

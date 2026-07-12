@@ -63,6 +63,25 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   const scenes = useMemo(() => storyboard.data?.scenes ?? [], [storyboard.data]);
   const clips = useMemo(() => clipsQuery.data?.clips ?? [], [clipsQuery.data]);
 
+  // a multi-episode drama edits and exports ONE episode at a time
+  const episodesPresent = useMemo(
+    () =>
+      Array.from(new Set(scenes.map((s) => s.episode ?? 1))).sort(
+        (a, b) => a - b
+      ),
+    [scenes]
+  );
+  const [activeEp, setActiveEp] = useState<number | null>(null);
+  const currentEp = activeEp ?? episodesPresent[0] ?? 1;
+  const multiEpisode = episodesPresent.length > 1;
+  const epScenes = useMemo(
+    () =>
+      multiEpisode
+        ? scenes.filter((s) => (s.episode ?? 1) === currentEp)
+        : scenes,
+    [scenes, multiEpisode, currentEp]
+  );
+
   const clipsByShot = useMemo(() => buildClipsByShot(clips), [clips]);
   // takes whose shot no longer exists (storyboard regenerated) — still usable
   const orphanClips = useMemo(() => {
@@ -93,12 +112,20 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   const [editingClip, setEditingClip] = useState<GeneratedClip | null>(null);
   const initialized = useRef(false);
 
+  // switching the episode tab starts that episode's cut fresh
+  useEffect(() => {
+    if (!multiEpisode) return;
+    initialized.current = false;
+    setTimeline([]);
+    setSelected(0);
+  }, [currentEp, multiEpisode]);
+
   // AI default: pre-fill the timeline with every shot's clip, in order.
   useEffect(() => {
     if (initialized.current) return;
-    if (scenes.length === 0 || clips.length === 0) return;
+    if (epScenes.length === 0 || clips.length === 0) return;
     const items: TimelineItem[] = [];
-    for (const scene of scenes) {
+    for (const scene of epScenes) {
       for (const shot of scene.shots) {
         const clip = clipByShot[shot.id];
         if (clip?.url) {
@@ -120,7 +147,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
       setTimeline(items);
       initialized.current = true;
     }
-  }, [scenes, clips, clipByShot, shotLabel]);
+  }, [epScenes, clips, clipByShot, shotLabel]);
 
   const inTimeline = useMemo(
     () => new Set(timeline.map((t) => t.clipId)),
@@ -307,6 +334,27 @@ export function ExportEditor({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* a multi-episode drama cuts one episode at a time */}
+      {multiEpisode && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {episodesPresent.map((ep) => (
+            <button
+              key={ep}
+              onClick={() => setActiveEp(ep)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                currentEp === ep
+                  ? "bg-primary/20 text-primary"
+                  : "bg-white/[0.04] text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Episode {ep}
+            </button>
+          ))}
+          <span className="ml-2 text-[11px] text-muted-foreground">
+            Each tab cuts and exports its episode as its own video.
+          </span>
+        </div>
+      )}
       {/* top: preview (left) + shot library (right) */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -356,9 +404,13 @@ export function ExportEditor({ projectId }: { projectId: string }) {
       {/* export bar */}
       <div className="rounded-xl border hairline glass p-4 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="font-semibold">Export your cut</h2>
+          <h2 className="font-semibold">
+            {multiEpisode ? `Export episode ${currentEp}` : "Export your cut"}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Renders the {timeline.length} clips above, in this order, into one MP4.
+            {multiEpisode
+              ? `Renders episode ${currentEp}'s ${timeline.length} clips above into its own MP4.`
+              : `Renders the ${timeline.length} clips above, in this order, into one MP4.`}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -391,7 +443,11 @@ export function ExportEditor({ projectId }: { projectId: string }) {
             className="glow"
             size="lg"
           >
-            {rendering ? "Rendering…" : "🎬 Export final MP4"}
+            {rendering
+              ? "Rendering…"
+              : multiEpisode
+                ? `🎬 Export episode ${currentEp}`
+                : "🎬 Export final MP4"}
           </Button>
         </div>
       </div>

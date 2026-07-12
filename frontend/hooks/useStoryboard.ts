@@ -7,6 +7,7 @@ import type { Shot } from "@/lib/types";
 export interface SceneShots {
   id: string;
   scene_number: number;
+  episode?: number;
   heading: string | null;
   /** props every shot of this scene must render identically (set dresser) */
   set_items?: string[];

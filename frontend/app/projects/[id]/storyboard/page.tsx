@@ -67,6 +67,26 @@ export default function StoryboardPage({
       });
   }, [hasShots, budget, calculateBudget, params.id, refetch]);
 
+  // episode tabs on the story map (only when the drama has 2+ episodes)
+  const mapEpisodes = useMemo(
+    () => Array.from(new Set(scenes.map((s) => s.episode ?? 1))).sort((a, b) => a - b),
+    [scenes]
+  );
+  const [mapEp, setMapEp] = useState<number | null>(null);
+  const activeMapEp = mapEp ?? mapEpisodes[0] ?? 1;
+  const mapBoardScenes = useMemo(
+    () => (mapEpisodes.length > 1
+      ? scenes.filter((s) => (s.episode ?? 1) === activeMapEp)
+      : scenes),
+    [scenes, mapEpisodes, activeMapEp]
+  );
+  const mapGraphScenes = useMemo(() => {
+    const all = graph?.scenes || [];
+    if (mapEpisodes.length <= 1) return all;
+    const nums = new Set(mapBoardScenes.map((s) => s.scene_number));
+    return all.filter((s) => nums.has(s.number));
+  }, [graph, mapBoardScenes, mapEpisodes]);
+
   const [spend, setSpend] = useState<SpendRequest | null>(null);
   const handleGenerate = () =>
     setSpend({
@@ -187,11 +207,32 @@ export default function StoryboardPage({
 
         <TabsContent value="map">
           <div className="space-y-4">
+            {mapEpisodes.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {mapEpisodes.map((ep) => (
+                  <button
+                    key={ep}
+                    onClick={() => setMapEp(ep)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      activeMapEp === ep
+                        ? "bg-primary/20 text-primary"
+                        : "bg-white/[0.04] text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Episode {ep}
+                  </button>
+                ))}
+                <span className="ml-2 text-[11px] text-muted-foreground">
+                  The narrative memory spans the whole drama; the scene flow
+                  follows the selected episode.
+                </span>
+              </div>
+            )}
             <NarrativeGraphView projectId={params.id} />
             <SceneGraph
-              scenes={graph?.scenes || []}
+              scenes={mapGraphScenes}
               characters={graph?.characters || []}
-              boardScenes={scenes}
+              boardScenes={mapBoardScenes}
             />
           </div>
         </TabsContent>

@@ -98,6 +98,7 @@ export function ShotLibrary({
   onEdit: (clip: GeneratedClip) => void; // open the AI-edit modal for a take
 }) {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const multiEpisode = new Set(scenes.map((s) => s.episode ?? 1)).size > 1;
 
   return (
     <div className="rounded-xl border hairline bg-card h-full flex flex-col">
@@ -111,6 +112,7 @@ export function ShotLibrary({
         {scenes.map((scene) => (
           <div key={scene.scene_number} className="space-y-2">
             <p className="text-xs font-semibold text-primary/80">
+              {multiEpisode ? `EP ${scene.episode ?? 1} · ` : ""}
               Scene {scene.scene_number}
               {scene.heading ? ` · ${scene.heading}` : ""}
             </p>

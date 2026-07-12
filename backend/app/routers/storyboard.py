@@ -161,6 +161,15 @@ async def list_shots(project_id: str, db: Session = Depends(get_db)):
         return {"scenes": []}
 
     scenes = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
+    # which episode each scene belongs to (the structurer records it; a
+    # script from before episodes, or a one-episode drama, is all episode 1)
+    ep_by_scene: dict = {}
+    for sc in (script.structured_json or {}).get("scenes") or []:
+        if sc.get("scene_number") is not None:
+            try:
+                ep_by_scene[int(sc["scene_number"])] = int(sc.get("episode_number") or 1)
+            except (TypeError, ValueError):
+                pass
     result = []
     for scene in scenes:
         shots = db.query(Shot).filter(Shot.scene_id == scene.id).order_by(Shot.number).all()
@@ -168,6 +177,7 @@ async def list_shots(project_id: str, db: Session = Depends(get_db)):
         result.append({
             "id": str(scene.id),
             "scene_number": scene.number,
+            "episode": ep_by_scene.get(scene.number, 1),
             "heading": scene.heading,
             "set_items": set_json.get("set_items") or [],
             "state_changes": set_json.get("state_changes") or [],

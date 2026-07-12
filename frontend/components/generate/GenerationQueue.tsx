@@ -59,6 +59,8 @@ export function GenerationQueue({ projectId }: { projectId: string }) {
   const { data: latestJob } = useLatestJobLive(projectId);
   const { data: project } = useProject(projectId);
   const scenes = storyboard?.scenes ?? [];
+  const multiEpisode =
+    new Set(scenes.map((s) => s.episode ?? 1)).size > 1;
   // frame the tiles the way THIS drama renders — vertical unless 16:9 was picked
   const vertical = project?.video_ratio !== "16:9";
   const mediaBox = vertical ? "relative aspect-[9/16] bg-black" : "relative aspect-video bg-black";
@@ -236,6 +238,11 @@ const renderTile = (shot: Shot) => {
   const renderBlock = (block: SceneBlock, paired: boolean) => (
     <div key={block.scene.scene_number}>
       <div className="flex items-center gap-2 mb-3 text-sm">
+        {multiEpisode && (
+          <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
+            EP {block.scene.episode ?? 1}
+          </span>
+        )}
         <span className="font-semibold">Scene {block.scene.scene_number}</span>
         {block.scene.heading && (
           <span className="text-muted-foreground truncate">
