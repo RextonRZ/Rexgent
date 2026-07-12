@@ -184,6 +184,16 @@ class ScenePromptCraft:
         result["prompt"] = (
             f"{cleaned} Duration: {shot.get('estimated_duration_seconds', 5)} seconds."
         )
+        # the last gate: repair interpolation holes, wardrobe contradictions,
+        # replacement chars — and say so LOUDLY instead of shipping quietly
+        from app.services.guardrails import validate_and_repair_prompt
+        result["prompt"], repairs = validate_and_repair_prompt(
+            result["prompt"], shot.get("estimated_duration_seconds", 5))
+        if repairs:
+            import logging
+            logging.getLogger(__name__).warning(
+                "prompt repaired before dispatch: %s", "; ".join(repairs))
+            result["repairs"] = repairs
         result["negative_prompt"] = sanitizer.inject_negative_prompt(
             result.get("negative_prompt", "")
         )

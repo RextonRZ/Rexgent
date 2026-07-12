@@ -501,7 +501,8 @@ class GenerationRunner:
                 # -> negative -> resolved environment (and why it won)
                 shot.prompt_json = {"action": shot.action, "prompt": prompt,
                                     "negative_prompt": negative,
-                                    "environment": environment}
+                                    "environment": environment,
+                                    "repairs": crafted.get("repairs")}
                 tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
                 used_tier = shot.quality_tier or "happyhorse"
                 if is_wan:

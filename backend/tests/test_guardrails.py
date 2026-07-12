@@ -220,3 +220,36 @@ class TestCanonicalCharacter:
         from app.services.guardrails import canonical_character
         assert canonical_character("KERRY", ["KERRY"]) == "KERRY"
         assert canonical_character("THE STRANGER", ["KERRY"]) == "THE STRANGER"
+
+
+
+class TestPromptValidation:
+    def test_grammar_hole_from_stripped_name_closes(self):
+        from app.services.guardrails import repair_grammar_holes
+        assert repair_grammar_holes("framed photo of and Kerry on the nightstand") ==             "framed photo of Kerry on the nightstand"
+
+    def test_possessive_typo_is_stripped_with_the_name(self):
+        from app.services.guardrails import strip_character_names
+        out = strip_character_names("from behind Catherines face, she stands frozen",
+                                    ["CATHERINE"])
+        assert "Catherine" not in out and "Catherines" not in out
+
+    def test_wardrobe_contradiction_resolves_to_the_bible(self):
+        from app.services.guardrails import validate_and_repair_prompt
+        p, repairs = validate_and_repair_prompt(
+            "girl in black hoodie, jeans, sneakers, bare feet gripping the edge. "
+            "Duration: 5 seconds.")
+        assert "bare feet" not in p and "sneakers" in p and "feet gripping" in p
+        assert any("wardrobe" in r for r in repairs)
+
+    def test_missing_duration_is_restored_numeric(self):
+        from app.services.guardrails import validate_and_repair_prompt
+        p, repairs = validate_and_repair_prompt("A quiet room. Duration: seconds.", 5)
+        assert "Duration: 5 seconds" in p
+        assert any("duration" in r for r in repairs)
+
+    def test_clean_prompt_needs_no_repairs(self):
+        from app.services.guardrails import validate_and_repair_prompt
+        p, repairs = validate_and_repair_prompt(
+            "Medium shot, a woman by the window. Duration: 5 seconds.", 5)
+        assert repairs == []

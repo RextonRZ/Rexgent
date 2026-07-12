@@ -19,13 +19,30 @@ def strip_character_names(text: str, names) -> str:
     result = text
     # longest name first so "Bear Junior" is consumed before "Bear"
     for name in sorted((n for n in names if n and str(n).strip()), key=len, reverse=True):
-        # eat an optional trailing possessive ('s / ’s) with the name
-        result = re.sub(r"\b" + re.escape(str(name)) + r"(?:['’]s)?\b",
+        # eat an optional trailing possessive with the name — including the
+        # apostrophe-less typo the LLM writes ("Catherines face")
+        result = re.sub(r"\b" + re.escape(str(name)) + r"(?:['’]?s)?\b",
                         "", result, flags=re.IGNORECASE)
     result = re.sub(r"['’]s\b", "", result)        # any orphaned possessive
+    result = repair_grammar_holes(result)
+    return result.strip(" ,")
+
+
+def repair_grammar_holes(text: str) -> str:
+    """Close the wounds name-stripping leaves behind: 'photo of and Kerry'
+    reads as broken; 'photo of Kerry' is what was meant."""
+    result = text
+    # a preposition orphaned against a conjunction: "of and X" -> "of X"
+    result = re.sub(r"\b(of|with|to|for|from|between|beside|behind|near)\s+(?:and|or)\b",
+                    r"\1", result, flags=re.IGNORECASE)
+    # doubled conjunctions and conjunctions dangling into punctuation
+    result = re.sub(r"\b(and|or)\s+\1\b", r"\1", result, flags=re.IGNORECASE)
+    result = re.sub(r"\b(?:and|or)\s*([,.;])", r"\1", result, flags=re.IGNORECASE)
+    result = re.sub(r"^\s*(?:and|or)\b\s*", "", result, flags=re.IGNORECASE)
+    result = re.sub(r"\(\s*\)", "", result)        # empty interpolation slots
     result = re.sub(r"\s+([,.;])", r"\1", result)  # space before punctuation
     result = re.sub(r"\s{2,}", " ", result)
-    return result.strip(" ,")
+    return result
 
 
 class PromptSanitizer:
@@ -196,6 +213,46 @@ class InputSanitizer:
         if len(result) > max_length:
             result = result[:max_length]
         return result
+
+
+_FOOTWEAR = re.compile(r"\b(sneakers?|shoes?|boots?|heels|loafers|slippers|sandals)\b",
+                       re.IGNORECASE)
+_BAREFOOT = re.compile(r"\bbare\s*foot(ed)?\b|\bbare\s+feet\b", re.IGNORECASE)
+_NUMERIC_DURATION = re.compile(r"\b\d+\s*seconds?\b", re.IGNORECASE)
+# a duration whose digit the number-stripper ate: "Duration: seconds." or a
+# dangling "seconds." with no number in front of it
+_ORPHAN_DURATION = re.compile(
+    r"\bDuration:?\s*seconds\.?|(?<![0-9])(?<![0-9]\s)\bseconds\b\.?",
+    re.IGNORECASE)
+
+
+def validate_and_repair_prompt(prompt: str, duration=None) -> tuple[str, list[str]]:
+    """The last gate before a prompt reaches a video model: repair what can
+    be repaired and NAME every repair, so corruption is loud, never silent.
+    Checks: replacement characters, empty/broken interpolation holes, missing
+    numeric duration, and wardrobe self-contradictions (a prompt saying both
+    'sneakers' and 'bare feet' — the bible's wardrobe wins)."""
+    repairs: list[str] = []
+    p = prompt or ""
+    if "�" in p:
+        p = p.replace("�", " ")
+        repairs.append("removed replacement characters")
+    healed = repair_grammar_holes(p)
+    if healed != p:
+        repairs.append("closed broken interpolation holes")
+        p = healed
+    if _FOOTWEAR.search(p) and _BAREFOOT.search(p):
+        p = _BAREFOOT.sub("feet", p)
+        repairs.append("wardrobe contradiction: dropped the barefoot mention, the bible's footwear wins")
+    if duration is not None:
+        orphaned = _ORPHAN_DURATION.sub("", p)
+        if orphaned != p:
+            p = orphaned
+        if not _NUMERIC_DURATION.search(p):
+            p = p.rstrip().rstrip(",") + f" Duration: {int(duration)} seconds."
+            repairs.append("restored numeric duration")
+    p = re.sub(r"\s{2,}", " ", p).strip()
+    return p, repairs
 
 
 _NAME_QUALIFIER = re.compile(r"\s*\([^)]*\)\s*$")
