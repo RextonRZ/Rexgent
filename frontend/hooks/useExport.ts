@@ -89,7 +89,8 @@ export function useExportDownload(projectId: string) {
       const { data } = await api.get(`/api/export/${projectId}/download`);
       return data;
     },
-    enabled: false,
+    // fetch on mount so a finished export's download button survives a page
+    // refresh (404 while none exists is fine: retry off, data stays empty)
     retry: false,
   });
 }

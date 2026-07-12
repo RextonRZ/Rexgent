@@ -266,19 +266,25 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         audioDuck: audio.duck,
       });
       let landed = false;
-      for (let i = 0; i < 60; i++) {
+      // keep polling for up to 15 minutes: the old 3 minute window expired
+      // right before real episodes landed, leaving the button missing forever
+      for (let i = 0; i < 300; i++) {
         await new Promise((r) => setTimeout(r, 3000));
         const res = await download.refetch();
         if (res.data?.download_url || res.data?.url) {
           landed = true;
+          setExportNotice(null);
           break;
+        }
+        if (i === 60) {
+          setExportNotice(
+            "Still rendering — long episodes can take a few more minutes. Leave this page open; the download appears here when the cut lands."
+          );
         }
       }
       if (!landed) {
-        // 3 minutes without a file — the worker may still be rendering a long
-        // episode; say so instead of silently resetting the button
         setExportNotice(
-          "Still rendering — long episodes can take a few more minutes. Leave this page open; the download appears here when the cut lands."
+          "The render is taking unusually long. Check that the Celery worker is running, then refresh this page."
         );
       }
     } catch (err) {
