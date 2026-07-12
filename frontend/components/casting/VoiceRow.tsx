@@ -44,10 +44,21 @@ export function VoiceRow({
   const confirmClone = (file: File) =>
     setSpend({
       title: "Clone this voice",
-      costLine:
-        "Cloning enrolls your recording with the speech service, and every line spoken with a cloned voice bills at a higher rate than the presets.",
+      costLine: "Enrolling is free today. The cost lands later, per spoken line.",
       note: "The cloned voice then reads all of this character's dialogue.",
       confirmLabel: "Clone voice",
+      breakdown: [
+        {
+          label: "Voice enrollment",
+          detail: "qwen-voice-enrollment learns the timbre from your recording",
+          amount: 0,
+        },
+        {
+          label: "Speaking lines at export",
+          detail: "qwen3-tts-vc-realtime bills per character of dialogue, a higher rate than presets, typically cents per episode",
+          amount: 0,
+        },
+      ],
       run: () => cloneVoice.mutate({ characterId, file }),
     });
 

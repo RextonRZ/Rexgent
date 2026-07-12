@@ -118,10 +118,21 @@ export function FlagPanel({
               onClick={() =>
                 setSpend({
                   title: "Regenerate this take",
-                  costLine:
-                    "This re-renders the clip on real credit, about $0.55 for a 5s take and up to $1.50 for a long premium one.",
+                  costLine: "Prices below assume a 5 second take. A long premium take can reach $1.50.",
                   note: "Your note rewrites the prompt first, so the new take targets exactly what you flagged.",
                   confirmLabel: "Regenerate",
+                  breakdown: [
+                    {
+                      label: "Prompt rewrite",
+                      detail: "qwen-max turns your note into a targeted fix prompt",
+                      amount: 0.01,
+                    },
+                    {
+                      label: "Clip re-render",
+                      detail: "happyhorse-1.0-video-edit repaints the flagged take, about $0.55 for 5 seconds",
+                      amount: 0.55,
+                    },
+                  ],
                   run: handleRegen,
                 })
               }

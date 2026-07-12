@@ -203,13 +203,18 @@ export function CharacterCard({
                   onClick={() =>
                     setSpend({
                       title: `Generate plates for ${character.name}`,
-                      costLine: `This costs about $${(
-                        Math.max(casting?.variants.length ?? 0, 1) * 0.075
-                      ).toFixed(2)} of your credit, a little more if the face check needs a second try.`,
+                      costLine: "Prices below are estimates. A failed face check can add one retry plate.",
                       note: hasFace
                         ? "Every outfit renders on the locked face above."
                         : "No face is set, so a default face gets invented and locked.",
                       confirmLabel: "Generate",
+                      breakdown: [
+                        {
+                          label: "Costume plates",
+                          detail: `${Math.max(casting?.variants.length ?? 0, 1)} outfit plate${(casting?.variants.length ?? 0) > 1 ? "s" : ""} on qwen-image-edit-max, at $0.075 per image`,
+                          amount: Math.max(casting?.variants.length ?? 0, 1) * 0.075,
+                        },
+                      ],
                       options: casting?.voice_id
                         ? undefined
                         : [
@@ -217,8 +222,9 @@ export function CharacterCard({
                               key: "designVoice",
                               label: "Design a bespoke voice",
                               priceLine: "$0.20 once",
-                              note: "A voice written from this character's age and personality. Untick for a free preset voice instead.",
+                              note: "qwen-voice-design writes a voice from this character's age and personality. Untick for a free preset voice instead.",
                               defaultOn: true,
+                              amount: 0.2,
                             },
                           ],
                       run: (choices) =>

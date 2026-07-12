@@ -58,10 +58,16 @@ export function PlateCard({
     if (file && onSwapOutfit)
       setSpend({
         title: `Swap the ${label.replace(" (default)", "")} outfit`,
-        costLine:
-          "This costs about $0.09 of your credit, or up to $0.17 if the face check needs a second try.",
+        costLine: "A failed face check can add one retry, up to $0.17 in total.",
         note: "Only the clothing is taken from your photo. The person wearing it is ignored, and the plate keeps this character's own face.",
         confirmLabel: "Swap outfit",
+        breakdown: [
+          {
+            label: "Outfit transfer",
+            detail: "qwen-image-edit-max paints the clothing from your photo onto this character's locked face",
+            amount: 0.09,
+          },
+        ],
         run: () => onSwapOutfit(file),
       });
     e.target.value = "";
@@ -120,9 +126,15 @@ export function PlateCard({
                 onClick={() =>
                   setSpend({
                     title: `Regenerate the ${label.replace(" (default)", "")} plate`,
-                    costLine:
-                      "This costs about $0.08 of your credit, or up to $0.15 if the face check needs a second try.",
+                    costLine: "A failed face check can add one retry, up to $0.15 in total.",
                     confirmLabel: "Regenerate",
+                    breakdown: [
+                      {
+                        label: "Plate render",
+                        detail: "one image on wan2.6-t2i, or qwen-image-edit-max when a face is locked",
+                        amount: 0.08,
+                      },
+                    ],
                     run: onRegenerate,
                   })
                 }

@@ -91,10 +91,21 @@ export default function StoryboardPage({
   const handleGenerate = () =>
     setSpend({
       title: "Generate the storyboard",
-      costLine:
-        "Boarding costs a few cents of AI writing, and every new location gets a background plate at about $0.08 each.",
-      note: "Re-boarding replaces the current shots; locations that already have plates are not repainted.",
+      costLine: "Prices below are estimates. Re-boarding replaces the current shots.",
+      note: "Locations that already have plates are not repainted, so re-boarding usually costs less.",
       confirmLabel: "Generate storyboard",
+      breakdown: [
+        {
+          label: "Shot writing",
+          detail: "qwen-max directs the shots, qwen-plus and qwen-flash structure them, a few cents of tokens",
+          amount: 0.05,
+        },
+        {
+          label: "Location plates",
+          detail: "about 3 new locations at $0.08 each on wan2.6-t2i",
+          amount: 3 * 0.08,
+        },
+      ],
       run: () =>
         generateStoryboard.mutate(params.id, {
           onSuccess: () => {
