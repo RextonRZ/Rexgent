@@ -39,6 +39,12 @@ BEHAVIORS: dict[str, str] = {
     "office_routine": "colleagues type at their desks, phones ring quietly, someone carries coffee",
     "office_alarmed": "colleagues rise from their desks, heads turning, someone hurrying over",
     "room_still": "the room is quiet and still, nothing moves but curtains and dust in the light",
+    "rooftop_night": ("wind gusts across the rooftop, loose debris stirs, distant "
+                      "traffic hums, the city glitters far below"),
+    "crowd_below": ("a crowd gathered far below, faces upturned, murmuring and "
+                    "shouting, phones raised toward the figure above"),
+    "crowd_crisis": ("the crowd below gasps and cries out, pointing upward, phones "
+                     "raised, some screaming, some turning away unable to watch"),
 }
 
 LOCATION_DEFAULTS: dict[str, str] = {
@@ -51,7 +57,8 @@ LOCATION_DEFAULTS: dict[str, str] = {
     "home": "room_still",
     "school": "office_routine",
     "warehouse": "room_still",
-    "rooftop": "room_still",
+    # a rooftop is NOT a quiet bedroom: wind, city noise, open night air
+    "rooftop": "rooftop_night",
 }
 
 # event -> (behavior, priority). Higher priority wins over the location default
@@ -66,6 +73,10 @@ EVENT_OVERRIDES: dict[str, tuple[str, int]] = {
     "arrest": ("crowd_shock", 5),
     "public_confrontation": ("diners_stare", 5),
     "death_discovered": ("crowd_shock", 10),
+    # a crowd named in the beat is PRESENT — never the empty-location default
+    "crowd_gathered": ("crowd_below", 8),
+    # someone on a ledge/edge with onlookers: the crowd reacts to the crisis
+    "ledge_crisis": ("crowd_crisis", 15),
 }
 
 # which locations an event's override plausibly applies to; empty = any
@@ -73,6 +84,8 @@ EVENT_LOCATIONS: dict[str, set[str]] = {
     "performer_collapse": {"concert_hall"},
     "medical_emergency": {"hospital_room"},
     "public_collapse": {"street", "restaurant", "office", "school"},
+    "crowd_gathered": {"rooftop", "street", "concert_hall", "school"},
+    "ledge_crisis": {"rooftop", "street"},
 }
 
 _LOCATION_PATTERNS: list[tuple[str, str]] = [
@@ -84,12 +97,15 @@ _LOCATION_PATTERNS: list[tuple[str, str]] = [
     (r"police", "police_station"),
     (r"school|classroom|campus", "school"),
     (r"warehouse|factory", "warehouse"),
-    (r"rooftop|roof\b", "rooftop"),
+    (r"rooftop|roof\b|ledge|balcony|fire escape", "rooftop"),
     (r"home|house|apartment|bedroom|living room|kitchen", "home"),
 ]
 
 _EVENT_PATTERNS: list[tuple[str, str]] = [
-    (r"collaps|faint|passes out|clutch(es|ing) (his|her|their) chest|goes still|unconscious",
+    # PHYSICAL collapse only: "collapses on stage", "collapses to the floor".
+    # A beat text saying "emotional collapse" must NOT stage a medical event.
+    (r"collaps\w*\s+(on|to|onto|in)\b|faint|passes out"
+     r"|clutch(es|ing) (his|her|their) chest|goes still|unconscious",
      "performer_collapse"),
     (r"flatlin|cardiac|resuscitat|code blue", "medical_emergency"),
     (r"gun|shot|shoot|pistol|firearm", "gunshot"),
@@ -98,6 +114,10 @@ _EVENT_PATTERNS: list[tuple[str, str]] = [
     (r"arrest|handcuff|apprehend", "arrest"),
     (r"confront|accus|shout(s|ing) at|slams the table", "public_confrontation"),
     (r"dead body|corpse|lifeless|finds? (him|her|them) dead", "death_discovered"),
+    (r"crowd (gathers|gathered|chants?|chanting|watches|below)"
+     r"|onlookers|bystanders|spectators", "crowd_gathered"),
+    (r"\bledge\b|teeter|poised to fall|about to (jump|fall)"
+     r"|edge of the (roof|building)", "ledge_crisis"),
 ]
 
 

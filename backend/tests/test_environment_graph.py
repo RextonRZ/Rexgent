@@ -73,3 +73,30 @@ def test_event_location_gate():
     events = [e for e in detect_events("she flatlines, cardiac arrest")
               if (eg.EVENT_LOCATIONS.get(e) is None or "rooftop" in eg.EVENT_LOCATIONS[e])]
     assert "medical_emergency" not in events
+
+
+def test_ledge_and_crowd_beats_classify():
+    assert location_key("EXT. BUILDING LEDGE - NIGHT") == "rooftop"
+    evs = detect_events("Linda continues to teeter on the ledge, her body poised "
+                        "to fall. The crowd chants louder.")
+    assert "ledge_crisis" in evs and "crowd_gathered" in evs
+
+
+def test_emotional_collapse_is_not_a_medical_event():
+    # "overwhelmed by grief... emotional collapse" must not stage a collapse
+    assert detect_events("Catherine breaks down in tears, overwhelmed by grief. "
+                         "Emotional collapse.") == []
+    # a physical collapse still classifies
+    assert "performer_collapse" in detect_events("he collapses on stage, clutching his chest")
+
+
+def test_ledge_crisis_outranks_crowd_and_default(monkeypatch):
+    import app.graph.neo4j_client as nc
+    monkeypatch.setattr(nc, "Neo4jClient", FakeGraph)
+    monkeypatch.setattr(eg, "_seeded", True)
+    r = eg.resolve_environment(
+        "EXT. BUILDING LEDGE - NIGHT",
+        "she teeters on the ledge while the crowd chants louder")
+    assert r["source"] == "ledge_crisis" and r["priority"] == 15
+    assert "crowd below" in r["behavior"]
+    assert "wind" in r["suppressed"]  # the rooftop default, not a bedroom
