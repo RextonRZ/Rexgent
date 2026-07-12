@@ -16,6 +16,15 @@ export interface TimelineItem {
   external?: boolean; // imported media (not a generated clip)
 }
 
+/** A placed voice line from the export's own placement math. */
+export interface PreviewSegment {
+  start: number;
+  duration: number;
+  text?: string | null;
+  character?: string | null;
+  audio_url?: string | null;
+}
+
 /** Plays the timeline clips back-to-back, respecting each clip's trim.
  * The frame follows the drama's delivery format (vertical phone frame by
  * default; widescreen when the drama was created 16:9). */
@@ -26,6 +35,7 @@ export function SequencePlayer({
   onDuration,
   onProgress,
   ratio = "9:16",
+  segments,
 }: {
   items: TimelineItem[];
   index: number;
@@ -33,16 +43,63 @@ export function SequencePlayer({
   onDuration?: (index: number, seconds: number) => void;
   onProgress?: (index: number, currentTime: number) => void;
   ratio?: "9:16" | "16:9";
+  /** placed voice lines: the preview shows captions and plays the real TTS
+   * audio at the exact times the export will use */
+  segments?: PreviewSegment[];
 }) {
   const frameClass =
     ratio === "16:9"
       ? "relative aspect-video w-full overflow-hidden rounded-2xl border hairline bg-black"
       : "relative mx-auto aspect-[9/16] w-full max-w-[360px] overflow-hidden rounded-2xl border hairline bg-black";
   const ref = useRef<HTMLVideoElement>(null);
+  const voiceRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [activeSeg, setActiveSeg] = useState<PreviewSegment | null>(null);
 
   const safeIndex = Math.min(index, Math.max(0, items.length - 1));
   const current = items[safeIndex];
+
+  // global start (seconds) of each timeline item — the segment clock
+  const prefix: number[] = [];
+  {
+    let acc = 0;
+    for (const it of items) {
+      prefix.push(acc);
+      acc += Math.max(0, it.trimEnd - it.trimStart);
+    }
+  }
+
+  /** Keep caption + voice in sync with the global playhead. */
+  const syncSegments = (globalTime: number, isPlaying: boolean) => {
+    const seg =
+      segments?.find(
+        (s) =>
+          s.text &&
+          globalTime >= s.start &&
+          globalTime < s.start + Math.max(0.5, s.duration)
+      ) ?? null;
+    if (seg !== activeSeg) setActiveSeg(seg);
+
+    // the real TTS voice, scheduled at its placed time
+    if (!voiceRef.current) voiceRef.current = new Audio();
+    const voice = voiceRef.current;
+    if (seg?.audio_url && isPlaying) {
+      const offset = globalTime - seg.start;
+      if (!voice.src.includes(seg.audio_url)) {
+        voice.src = seg.audio_url;
+        voice.currentTime = Math.max(0, offset);
+        voice.play().catch(() => {});
+      } else if (Math.abs(voice.currentTime - offset) > 0.4) {
+        voice.currentTime = Math.max(0, offset);
+      }
+      if (voice.paused) voice.play().catch(() => {});
+    } else if (!voice.paused) {
+      voice.pause();
+    }
+    // duck the raw clip's own audio under the voice, like the real mix does
+    const v = ref.current;
+    if (v) v.volume = seg?.audio_url && isPlaying ? 0.25 : 1.0;
+  };
 
   // Load the current clip whenever the index (or its url) changes, seeking to
   // its in-point once metadata is ready.
@@ -65,13 +122,18 @@ export function SequencePlayer({
       onIndexChange(safeIndex + 1);
     } else {
       setPlaying(false);
+      voiceRef.current?.pause();
+      setActiveSeg(null);
     }
   };
 
   const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const t = e.currentTarget.currentTime;
     onProgress?.(safeIndex, t);
-    if (current && t >= current.trimEnd) handleEnded();
+    if (current) {
+      syncSegments(prefix[safeIndex] + (t - (current.trimStart || 0)), playing);
+      if (t >= current.trimEnd) handleEnded();
+    }
   };
 
   const togglePlay = () => {
@@ -79,6 +141,7 @@ export function SequencePlayer({
     if (!v) return;
     if (playing) {
       v.pause();
+      voiceRef.current?.pause();
       setPlaying(false);
     } else {
       v.play().catch(() => {});
@@ -131,6 +194,21 @@ export function SequencePlayer({
         <div className="absolute top-3 left-3 rounded-full bg-black/50 px-2.5 py-1 text-[11px] text-white/90 backdrop-blur-sm">
           Now: {current.label} · clip {safeIndex + 1}/{items.length}
         </div>
+
+        {/* live caption, styled like the burned one and timed identically */}
+        {activeSeg?.text && (
+          <div className="pointer-events-none absolute inset-x-4 bottom-[14%] text-center">
+            <span
+              className="inline-block text-[15px] font-bold leading-snug text-white"
+              style={{
+                textShadow:
+                  "-1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px 1.5px 0 #000",
+              }}
+            >
+              {activeSeg.text}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2">

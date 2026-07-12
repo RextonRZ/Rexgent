@@ -82,6 +82,42 @@ async def render_export(request: ExportRequest, db: Session = Depends(get_db)):
     return {"status": "rendering", "message": "Export job started"}
 
 
+@router.post("/preview_plan")
+async def preview_plan(request: dict, db: Session = Depends(get_db)):
+    """Dialogue segments for the editor's LIVE preview — computed by the very
+    same placement code the export uses (build_cut_plan + place_dialogue), so
+    the preview's captions and voices land exactly where the render will put
+    them. Pure math, no ffmpeg: milliseconds, not minutes.
+
+    Body: {project_id, entries: [{scene_number, duration, has_dialogue,
+    text?}] in timeline order}."""
+    project_id = request.get("project_id")
+    entries = request.get("entries") or []
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id required")
+    from app.workers.export_worker import build_cut_plan
+    from app.services.audio_timeline import place_dialogue
+    from app.models.line_audio import LineAudio
+    scene_plan = build_cut_plan(entries)
+    line_rows = [
+        {"scene_number": r.scene_number, "line_index": r.line_index,
+         "audio_path": r.audio_url, "duration": r.duration_seconds or 0.0,
+         "text": r.text, "character": r.character_name}
+        for r in db.query(LineAudio)
+        .filter(LineAudio.project_id == uuid.UUID(project_id))
+        .order_by(LineAudio.scene_number, LineAudio.line_index)
+        .all()
+        if r.audio_url
+    ]
+    segments = place_dialogue(line_rows, scene_plan)
+    return {"segments": [
+        {"start": s["start"], "duration": s.get("duration", 0.0),
+         "text": s.get("text"), "character": s.get("character"),
+         "audio_url": s.get("audio_path")}
+        for s in segments
+    ]}
+
+
 @router.get("/{project_id}/download_all")
 async def download_all(project_id: str, db: Session = Depends(get_db)):
     """One zip with every episode of the latest export (plus caption files)."""

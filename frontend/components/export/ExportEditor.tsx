@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { SequencePlayer, type TimelineItem } from "./SequencePlayer";
+import {
+  SequencePlayer,
+  type PreviewSegment,
+  type TimelineItem,
+} from "./SequencePlayer";
 import { ShotLibrary } from "./ShotLibrary";
 import {
   EditorTimeline,
@@ -276,6 +280,61 @@ export function ExportEditor({ projectId }: { projectId: string }) {
 
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
+  // ── live preview plan: captions + voices placed by the SAME math the
+  // export uses, refreshed whenever the timeline changes ──
+  const shotMeta = useMemo(() => {
+    const m: Record<string, { scene: number; dialogue: string | null }> = {};
+    scenes.forEach((s) =>
+      s.shots.forEach((sh) => {
+        m[sh.id] = { scene: s.scene_number, dialogue: sh.dialogue };
+      })
+    );
+    return m;
+  }, [scenes]);
+  const [segments, setSegments] = useState<PreviewSegment[]>([]);
+  useEffect(() => {
+    if (timeline.length === 0) {
+      setSegments([]);
+      return;
+    }
+    const entries = timeline.map((t) => {
+      const m = shotMeta[t.shotId];
+      return {
+        scene_number: m?.scene ?? null,
+        duration: Math.max(0, t.trimEnd - t.trimStart),
+        has_dialogue: Boolean(m?.dialogue),
+        text: m?.dialogue ?? null,
+      };
+    });
+    const h = setTimeout(async () => {
+      try {
+        const { data } = await api.post("/api/export/preview_plan", {
+          project_id: projectId,
+          entries,
+        });
+        setSegments(data.segments ?? []);
+      } catch {
+        // the preview plan is an enhancement, never a blocker
+      }
+    }, 400);
+    return () => clearTimeout(h);
+  }, [timeline, shotMeta, projectId]);
+
+  const totalSeconds = useMemo(
+    () => timeline.reduce((s, t) => s + Math.max(0, t.trimEnd - t.trimStart), 0),
+    [timeline]
+  );
+
+  // ── the true rendered file for the open episode, once an export exists ──
+  const downloadData = download.data;
+  const finalUrl = useMemo(() => {
+    const eps = downloadData?.report_json?.episodes;
+    if (multiEpisode && eps?.length)
+      return eps.find((e) => e.episode === currentEp)?.url ?? null;
+    return downloadData?.download_url || downloadData?.url || null;
+  }, [downloadData, multiEpisode, currentEp]);
+  const [showFinal, setShowFinal] = useState(false);
+
   // every shot's best take across the WHOLE drama, in story order — the
   // payload for "Export all episodes" regardless of which tab is open
   const buildAllItems = (): TimelineItem[] => {
@@ -413,15 +472,64 @@ export function ExportEditor({ projectId }: { projectId: string }) {
       />
       {/* top: preview (left) + shot library (right) */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <SequencePlayer
-            items={timeline}
-            index={selected}
-            onIndexChange={selectClip}
-            onDuration={handleDuration}
-            onProgress={handleProgress}
-            ratio={project?.video_ratio === "16:9" ? "16:9" : "9:16"}
-          />
+        <div className="lg:col-span-2 space-y-2">
+          {finalUrl && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setShowFinal(false)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  !showFinal
+                    ? "bg-primary/20 text-primary"
+                    : "bg-white/[0.04] text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Editor preview
+              </button>
+              <button
+                onClick={() => setShowFinal(true)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  showFinal
+                    ? "bg-primary/20 text-primary"
+                    : "bg-white/[0.04] text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Final render
+              </button>
+              <span className="ml-1 text-[11px] text-muted-foreground">
+                {showFinal
+                  ? "The exported file: burned captions, mixed audio, fades."
+                  : "Live preview with captions and voices; export follows this."}
+              </span>
+            </div>
+          )}
+          {showFinal && finalUrl ? (
+            <div
+              className={
+                project?.video_ratio === "16:9"
+                  ? "relative aspect-video w-full overflow-hidden rounded-2xl border hairline bg-black"
+                  : "relative mx-auto aspect-[9/16] w-full max-w-[360px] overflow-hidden rounded-2xl border hairline bg-black"
+              }
+            >
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video
+                key={finalUrl}
+                src={finalUrl}
+                controls
+                playsInline
+                className="h-full w-full"
+              />
+            </div>
+          ) : (
+            <SequencePlayer
+              items={timeline}
+              index={selected}
+              onIndexChange={selectClip}
+              onDuration={handleDuration}
+              onProgress={handleProgress}
+              ratio={project?.video_ratio === "16:9" ? "16:9" : "9:16"}
+              segments={segments}
+            />
+          )}
         </div>
         <ShotLibrary
           scenes={scenes}
@@ -456,6 +564,38 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         onDropAsset={onAddAsset}
         audioUploading={uploadAudio.isPending}
       />
+
+      {/* caption lane: every placed line at its real time, CapCut style */}
+      {segments.some((s) => s.text) && totalSeconds > 0 && (
+        <div className="rounded-xl border hairline bg-card p-3">
+          <p className="mb-1.5 text-[10px] uppercase tracking-widest text-zinc-400">
+            Captions · placed on the cut, exactly as they burn in
+          </p>
+          <div className="relative h-8 overflow-hidden rounded bg-white/[0.03]">
+            {segments
+              .filter((s) => s.text)
+              .map((s, i) => (
+                <span
+                  key={i}
+                  title={`${s.character ? s.character + ": " : ""}${s.text} · ${s.start.toFixed(1)}s`}
+                  className="absolute bottom-1 top-1 overflow-hidden whitespace-nowrap rounded bg-sky-500/20 px-1.5 text-[10px] leading-6 text-sky-200"
+                  style={{
+                    left: `${(s.start / totalSeconds) * 100}%`,
+                    width: `${Math.max(1.5, (s.duration / totalSeconds) * 100)}%`,
+                  }}
+                >
+                  {s.text}
+                </span>
+              ))}
+            <span
+              className="absolute bottom-0 top-0 w-px bg-primary"
+              style={{
+                left: `${Math.min(100, (playhead / totalSeconds) * 100)}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* export bar */}
       <div className="rounded-xl border hairline glass p-4 flex flex-wrap items-center justify-between gap-4">
