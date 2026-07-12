@@ -59,7 +59,8 @@ async def get_job_clips(job_id: str, db: Session = Depends(get_db)):
         item = ClipResult.model_validate(c)
         duration = duration_by_shot.get(c.shot_id, 5)
         item.cost_usd = video_cost(duration, c.model_used)
-        pol = c.audio_json if isinstance(c.audio_json, dict) else {}
+        pol = getattr(c, "audio_json", None)
+        pol = pol if isinstance(pol, dict) else {}
         item.duration_seconds = pol.get("duration") or duration
         results.append(item)
     return {"clips": results}
@@ -96,7 +97,8 @@ async def project_clips(project_id: str, db: Session = Depends(get_db)):
     for c in clips:
         item = ClipResult.model_validate(c)
         item.cost_usd = video_cost(duration_by_shot.get(c.shot_id, 5), c.model_used)
-        pol = c.audio_json if isinstance(c.audio_json, dict) else {}
+        pol = getattr(c, "audio_json", None)
+        pol = pol if isinstance(pol, dict) else {}
         item.duration_seconds = pol.get("duration") or duration_by_shot.get(c.shot_id, 5)
         results.append(item)
     return {"clips": results}
