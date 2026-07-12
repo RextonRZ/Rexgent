@@ -10,6 +10,15 @@ interface Episode {
   duration: string;
   videoSrc: string;
   posterSrc: string;
+  /** vertical crop focus for the 16:9 window over a 9:16 clip — faces sit in
+   * the upper part of vertical drama shots, so the default looks high */
+  focusY?: string;
+}
+
+const FOCUS_DEFAULT = "22%";
+
+function focusStyle(ep: Episode): React.CSSProperties {
+  return { objectPosition: `50% ${ep.focusY ?? FOCUS_DEFAULT}` };
 }
 
 // The five strongest EMBERWAKE shots: establish → mystery → horror → monster → payoff.
@@ -83,7 +92,7 @@ function Sprockets() {
 }
 
 /** Only the featured slot mounts this; fades in over the poster once playing. */
-function FeaturedVideo({ src }: { src: string }) {
+function FeaturedVideo({ src, style }: { src: string; style?: React.CSSProperties }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
 
@@ -106,6 +115,7 @@ function FeaturedVideo({ src }: { src: string }) {
       autoPlay
       preload="metadata"
       onPlaying={() => setReady(true)}
+      style={style}
       className={cn(
         "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
         ready ? "opacity-100" : "opacity-0"
@@ -148,10 +158,13 @@ function FilmFrame({
         <img
           src={ep.posterSrc}
           alt={`EP ${n} · ${ep.title}`}
+          style={focusStyle(ep)}
           className="aspect-video w-full object-cover"
           draggable={false}
         />
-        {playing && <FeaturedVideo key={ep.id} src={ep.videoSrc} />}
+        {playing && (
+          <FeaturedVideo key={ep.id} src={ep.videoSrc} style={focusStyle(ep)} />
+        )}
         {featured && (
           <>
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/70 to-transparent" />

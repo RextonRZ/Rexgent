@@ -99,7 +99,7 @@ function CellVideo({
       loop
       playsInline
       preload="metadata"
-      className="aspect-video w-full object-cover"
+      className="aspect-video w-full object-cover object-[50%_22%]"
     />
   );
 }
@@ -157,7 +157,7 @@ export function ShowreelGallery() {
               alt={shot.title}
               loading="lazy"
               draggable={false}
-              className="aspect-video w-full object-cover"
+              className="aspect-video w-full object-cover object-[50%_22%]"
             />
           )}
         </button>
