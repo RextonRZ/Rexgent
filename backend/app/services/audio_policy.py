@@ -61,41 +61,60 @@ def speech_ratio(video_path: str) -> float | None:
         return None
 
 
+def first_spoken_onset(sentences: list) -> float | None:
+    """First sentence that carries actual words -> its begin_time in seconds.
+    Empty-text sentences are music the recognizer half-heard; their
+    timestamps are noise. Pure function, testable."""
+    for s in sentences or []:
+        if not isinstance(s, dict):
+            continue
+        if str(s.get("text") or "").strip() and s.get("begin_time") is not None:
+            return round(float(s["begin_time"]) / 1000.0, 2)
+    return None
+
+
 def speech_onset(video_path: str) -> float | None:
     """When the clip's own (fake) speech STARTS, in seconds — the model's
     audio tracks its on-screen mouth, so placing the real TTS line at this
-    onset makes voice and mouth move together. None when unmeasurable or no
-    sustained voiced run exists."""
-    try:
-        import webrtcvad
-    except ImportError:
-        return None
+    onset makes voice and mouth move together. Measured with fun-asr
+    sentence timestamps: the VAD cannot do this job, its music bias flags
+    frame one on every scored clip (measured 0.03-0.06s across a whole
+    drama). None when no recognizable words occur."""
+    wav = tempfile.mktemp(suffix=".wav")
     try:
         proc = subprocess.run(
-            ["ffmpeg", "-i", video_path, "-vn", "-ac", "1",
-             "-ar", str(_SAMPLE_RATE), "-f", "s16le", "-acodec", "pcm_s16le",
-             "pipe:1"],
-            capture_output=True, timeout=120,
-        )
-        pcm = proc.stdout
-        if proc.returncode != 0 or len(pcm) < _FRAME_BYTES * 10:
+            ["ffmpeg", "-y", "-i", video_path, "-vn", "-ac", "1",
+             "-ar", str(_SAMPLE_RATE), wav],
+            capture_output=True, timeout=120)
+        if proc.returncode != 0 or not os.path.exists(wav):
             return None
-        vad = webrtcvad.Vad(2)
-        run_start, run_len = None, 0
-        need = 10  # 10 x 30ms = 0.3s of sustained voice = a real onset
-        for i, off in enumerate(range(0, len(pcm) - _FRAME_BYTES + 1, _FRAME_BYTES)):
-            if vad.is_speech(pcm[off:off + _FRAME_BYTES], _SAMPLE_RATE):
-                if run_start is None:
-                    run_start = i
-                run_len += 1
-                if run_len >= need:
-                    return round(run_start * _FRAME_MS / 1000.0, 2)
-            else:
-                run_start, run_len = None, 0
-        return None
+        from app.config import get_settings
+        settings = get_settings()
+        if not settings.qwen_api_key:
+            return None
+        import dashscope
+        from dashscope.audio.asr import Recognition
+        dashscope.api_key = settings.qwen_api_key
+        dashscope.base_websocket_api_url = (
+            "wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference")
+        rec = Recognition(model="fun-asr-realtime", format="wav",
+                          sample_rate=_SAMPLE_RATE, callback=None)
+        result = rec.call(wav)
+        if getattr(result, "status_code", 200) != 200:
+            raise RuntimeError(
+                f"{getattr(result, 'status_code', '?')}: {getattr(result, 'message', '')}")
+        sentences = result.get_sentence() or []
+        if isinstance(sentences, dict):
+            sentences = [sentences]
+        return first_spoken_onset(sentences)
     except Exception as e:  # noqa: BLE001 — measurement is best-effort
         logger.warning("speech_onset failed for %s: %s", video_path, e)
         return None
+    finally:
+        try:
+            os.unlink(wav)
+        except OSError:
+            pass
 
 
 def keep_clip_audio(has_dialogue: bool, ratio: float | None) -> bool:

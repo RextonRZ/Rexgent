@@ -57,3 +57,19 @@ def test_bed_decision_asr_failure_keeps_the_safe_mute(monkeypatch):
     monkeypatch.setattr(ap, "speech_ratio", lambda p: 0.99)
     monkeypatch.setattr(ap, "transcribed_words", lambda p: -1)
     assert bed_decision("x.mp4", has_dialogue=True) == (True, None)
+
+
+def test_first_spoken_onset_skips_wordless_sentences():
+    from app.services.audio_policy import first_spoken_onset
+    # the recognizer emits empty-text sentences for half-heard music; their
+    # timestamps are noise and must not become the onset
+    sents = [{"text": "", "begin_time": 0},
+             {"text": "  ", "begin_time": 500},
+             {"text": "I can't do this anymore.", "begin_time": 2170}]
+    assert first_spoken_onset(sents) == 2.17
+
+
+def test_first_spoken_onset_none_without_words():
+    from app.services.audio_policy import first_spoken_onset
+    assert first_spoken_onset([{"text": "", "begin_time": 0}]) is None
+    assert first_spoken_onset([]) is None
