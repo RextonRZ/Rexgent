@@ -69,12 +69,15 @@ export function VoiceRow({
     };
   }, []);
 
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
   const handlePreview = async () => {
     setPreviewing(true);
+    setPreviewError(null);
     try {
       setPreviewUrl(await previewVoice(characterId));
-    } catch {
-      /* no voice yet / preview failed — silently ignore */
+    } catch (e) {
+      setPreviewError(errText(e) || "Preview failed, try again in a moment.");
     } finally {
       setPreviewing(false);
     }
@@ -166,6 +169,16 @@ export function VoiceRow({
           {previewing ? "…" : "▶ Preview"}
         </button>
       </div>
+
+      {previewUrl && (
+        <audio src={previewUrl} controls autoPlay className="w-full min-w-0 h-7" />
+      )}
+      {previewError && <p className="text-[10px] text-bad">{previewError}</p>}
+      {previewing && (
+        <p className="text-[10px] text-muted-foreground">
+          Synthesizing a sample line in this voice…
+        </p>
+      )}
 
       {mode === "designed" ? (
         <div className="rounded border border-primary/30 bg-primary/5 p-2 text-[11px] leading-snug">
@@ -261,7 +274,6 @@ export function VoiceRow({
         </div>
       )}
 
-      {previewUrl && <audio src={previewUrl} controls autoPlay className="w-full h-7" />}
       <SpendConfirm request={spend} onClose={() => setSpend(null)} />
     </div>
   );
