@@ -8,7 +8,10 @@ contains (local WebRTC VAD, no API cost): a clean track survives as a bed
 under the real TTS voices; only genuinely speech-polluted tracks are muted.
 """
 import logging
+import os
+import re
 import subprocess
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +19,9 @@ logger = logging.getLogger(__name__)
 SPEECH_KEEP_THRESHOLD = 0.10
 # a kept dialogue-chunk bed plays UNDER the TTS voice, never against it
 BED_VOLUME = 0.45
+# an ASR transcript with up to this many words is a stray vocalization in the
+# score ("oh", "hey"), not a hallucinated dialogue line
+MAX_BED_WORDS = 2
 
 _SAMPLE_RATE = 16000
 _FRAME_MS = 30
@@ -64,3 +70,67 @@ def keep_clip_audio(has_dialogue: bool, ratio: float | None) -> bool:
     if ratio is None:
         return False  # can't verify -> the fake-speech risk wins
     return ratio <= SPEECH_KEEP_THRESHOLD
+
+
+def transcribed_words(video_path: str) -> int:
+    """How many real words Qwen ASR hears in the clip's soundtrack, or -1 when
+    the measurement itself failed (callers treat -1 as unverifiable). The VAD
+    upstream calls music 'speech' almost always (measured 0.98+ on real
+    HappyHorse scores); a transcript separates an actual hallucinated dialogue
+    line from a score with no words in it."""
+    wav = tempfile.mktemp(suffix=".wav")
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-y", "-i", video_path, "-vn", "-ac", "1",
+             "-ar", str(_SAMPLE_RATE), wav],
+            capture_output=True, timeout=120)
+        if proc.returncode != 0 or not os.path.exists(wav):
+            return -1
+        from app.config import get_settings
+        settings = get_settings()
+        if not settings.qwen_api_key:
+            return -1
+        import dashscope
+        dashscope.base_http_api_url = settings.qwen_video_base_url
+        resp = dashscope.MultiModalConversation.call(
+            model="qwen3-asr-flash",
+            api_key=settings.qwen_api_key,
+            messages=[{"role": "user",
+                       "content": [{"audio": "file://" + wav.replace("\\", "/")}]}],
+            result_format="message")
+        if getattr(resp, "status_code", 200) != 200:
+            raise RuntimeError(
+                f"{getattr(resp, 'status_code', '?')}: {getattr(resp, 'message', '')}")
+        content = resp.output.choices[0].message.content
+        text = " ".join(
+            part.get("text", "") for part in (content if isinstance(content, list) else [])
+            if isinstance(part, dict))
+        words = [w for w in re.split(r"\s+", text.strip())
+                 if any(ch.isalnum() for ch in w)]
+        return len(words)
+    except Exception as e:  # noqa: BLE001 — measurement is best-effort
+        logger.warning("ASR word check failed for %s: %s", video_path, e)
+        return -1
+    finally:
+        try:
+            os.unlink(wav)
+        except OSError:
+            pass
+
+
+def bed_decision(video_path: str, has_dialogue: bool) -> tuple[bool, float | None]:
+    """(mute, volume) for one cut chunk. Non-dialogue chunks keep their full
+    original audio. Dialogue chunks keep a quiet bed under the TTS voice when
+    the track carries no real words: the free VAD answers first, and when it
+    cries speech (its music bias) the ASR transcript gets the final say."""
+    if not has_dialogue:
+        return False, None
+    ratio = speech_ratio(video_path)
+    if keep_clip_audio(True, ratio):
+        return False, BED_VOLUME
+    words = transcribed_words(video_path)
+    if 0 <= words <= MAX_BED_WORDS:
+        logger.info("bed kept: ASR heard %d word(s) despite VAD ratio %.2f",
+                    words, ratio or -1.0)
+        return False, BED_VOLUME
+    return True, None

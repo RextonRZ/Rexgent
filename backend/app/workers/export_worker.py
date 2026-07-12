@@ -262,20 +262,14 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 with open(local, "wb") as fh:
                     fh.write(resp.content)
                 # the model's own music/ambience/SFX survive whenever the
-                # track is measurably free of fake speech — only polluted
-                # dialogue chunks get muted (audio_policy decides)
-                from app.services.audio_policy import (BED_VOLUME, keep_clip_audio,
-                                                       speech_ratio)
-                mute, vol = False, None
-                if has_dialogue:
-                    ratio = speech_ratio(local)
-                    if keep_clip_audio(True, ratio):
-                        vol = BED_VOLUME
-                        kept_beds += 1
-                        logger.info("chunk %d: original soundtrack kept as bed "
-                                    "(speech ratio %.2f)", i, ratio or 0.0)
-                    else:
-                        mute = True
+                # track carries no real words — the free VAD answers first,
+                # then Qwen ASR overrules its music-is-speech bias (measured
+                # 0.98+ VAD ratios on tracks that transcribe to zero words)
+                from app.services.audio_policy import bed_decision
+                mute, vol = bed_decision(local, has_dialogue)
+                if vol is not None:
+                    kept_beds += 1
+                    logger.info("chunk %d: original soundtrack kept as bed", i)
                 stitch_inputs.append({"path": local, "in": seg["in"], "out": seg["out"],
                                       "mute": mute, "volume": vol})
                 # what this chunk really contributes to the final timeline
