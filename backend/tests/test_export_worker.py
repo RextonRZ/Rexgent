@@ -13,8 +13,8 @@ def test_cut_plan_groups_consecutive_scene_chunks():
     plan = build_cut_plan(entries)
     assert [p["scene_number"] for p in plan] == [1, 2]
     assert plan[0]["shots"] == [
-        {"duration": 5.0, "has_dialogue": False},
-        {"duration": 10.0, "has_dialogue": True},
+        {"duration": 5.0, "has_dialogue": False, "speech_onset": None},
+        {"duration": 10.0, "has_dialogue": True, "speech_onset": None},
     ]
 
 
