@@ -15,7 +15,7 @@ Underneath the pipeline sit the two systems this README is really about: a **lay
 1. Create a drama: premise + genre + episode count + format (9:16 vertical or 16:9 widescreen) + a **spend cap** — a live panel projects the tokens and dollars this drama will cost before anything runs
 2. Flip **Full Auto** and watch the agent: write → judge (8 axes incl. hook strength) → revise with the judge's own critique → extract characters → storyboard
 3. The **beat sheet** shows the ladder: logline → scene beats, with the 3-second hook and per-episode cliffhangers tagged
-4. Casting builds the **production bible**: identity plates, per-outfit costume plates, location plates, one style plate, a voice per character
+4. Casting builds the **production bible**: identity plates, per-outfit costume plates, location plates, one style plate — and a **voice designed for each character** from their age, gender and personality (a 17-year-old bully stops sharing a preset with a mid-40s mother), with free presets as fallback and 10-second cloning as an upgrade
 5. The **set dresser** pins each scene's props — and tracks state ("from shot 3: the vase lies shattered")
 6. The **storyboard carries camera-executable geometry**: every shot's blocking (who stands where, facing whom, in what posture) renders as an interactive top-down camera plan, and the 180° rule is enforced deterministically — not requested politely
 7. Budget allocation **fits the plan to the cap**: hook shots protected on Wan 2.7, supporting shots downgraded to HappyHorse, the least important deferred — and when the cap is too small, the agent names the exact cap that fits and offers a one-click raise
@@ -120,7 +120,8 @@ A concert hall's default is a cheering crowd. But when the shot's action contain
 
 Rexgent's audio pipeline is **audio-first**: dialogue is synthesized and measured *before* video renders, and the pictures are fitted to the sound.
 
-- **Shot durations follow the lines**: every speaking shot is sized to the real length of its synthesized audio, so two-person exchanges never talk over each other. Stage directions like "(whispering, frantic)" are stripped before TTS — they're *acted*, not read aloud
+- **Voices are cast, not picked from a menu.** `qwen-voice-design` writes a bespoke voice from each character's sheet — age, gender, personality — and `qwen3-tts-vd` speaks every line with it. Presets remain the free fallback (and keep per-line delivery directions via `qwen3-tts-instruct-flash`, which turns stage directions like "(whispering, frantic)" into acted delivery); cloning from a 10-second sample rides `qwen3-tts-vc-realtime`. The casting page shows the exact design each voice was built from
+- **Shot durations follow the lines**: every speaking shot is sized to the real length of its synthesized audio, so two-person exchanges never talk over each other. Stage directions are stripped from the spoken text — they're *acted*, not read aloud
 - **The k-th line convention**: scene line k belongs to the scene's k-th speaking shot — one convention shared by placement, lip-sync and export, so mouth and overlay can't disagree. A global no-overlap sweep guards collisions
 - **Keep the model's own soundtrack — intelligently.** A generated clip's audio is one mixed track: music + ambience + sometimes hallucinated speech. A local VAD answers first (free); when it cries "speech" — it scores real film scores 0.98+ "voiced", a known music bias — **qwen3-asr-flash gets the final say**: a track that transcribes to ≤2 words is music and survives as a bed under the voices; real fake dialogue gets muted. The verdict is computed **once per clip and stored**, so the editor preview and the export can never disagree
 - **The voice enters when the mouth moves.** `fun-asr-realtime` sentence timestamps locate when each clip's fake speech actually starts; the real TTS line is placed at *chunk start + onset* instead of at the hard cut — measured live: "I can't do this anymore" enters at 2.17s, exactly where the character's mouth starts
@@ -164,6 +165,7 @@ The track's core constraint, treated as an engineering problem:
 | **Context compression** | Non-creative agents receive a scene digest, not the full script JSON |
 | **Adaptive allocation** | `TokenOptimizer` scores every shot's narrative importance, protects the hook on Wan 2.7, and **fits the plan to the user's spend cap**: downgrade least-important Wan shots to HappyHorse, then defer what still doesn't fit |
 | **Honest shortfalls** | An undersized cap doesn't silently amputate scenes: the allocator computes the smallest cap that renders the full plan and the UI offers a one-click "Set budget to $N" |
+| **Priced consent** | Every paid button opens an **itemized receipt** naming each model, its unit price and a live total before anything runs — "Start generation" prices the Producer's *actual fitted plan* on click (premium × N on Wan 2.7, standard × M on HappyHorse, deferred at $0.00), and optional spends like a designed voice are tickable line items |
 | **Zero-token world knowledge** | Environment events are keyword-detected and resolved by a Cypher query — the world graph costs no LLM tokens at all |
 | **Cached verdicts** | Per-clip audio policies (VAD + ASR) and speech onsets are measured once and stored — never re-billed at preview or export time |
 | **Re-render economy** | Deterministic seeds + resume-skip: fixing one bad shot costs one shot |
@@ -413,7 +415,7 @@ Rexgent/
 │   │   └── websocket/          # Socket.IO events (Redis emitter)
 │   ├── prompts/                # 17 prompt templates
 │   ├── migrations/             # Alembic (21 revisions)
-│   └── tests/                  # 461 unit tests
+│   └── tests/                  # 472 unit tests
 ├── frontend/                   # Next.js 14 + TypeScript + Tailwind
 │   └── app/projects/[id]/      # Script → Characters → Storyboard → Generate → Export
 ├── docker-compose.yml          # api + worker + frontend + postgres + redis + neo4j
@@ -439,11 +441,12 @@ Rexgent/
 - **Hallucination as an engineering problem** — nine named failure modes, nine named defenses, and the receipts visible on every shot card
 - **Budget fitting, not budget reporting** — hook protection, tier downgrades, deferrals, and a computed "this cap fits" recommendation
 - **Audio-first cutting with audio-visual alignment** — dialogue synthesized and measured BEFORE video renders, and each voice enters the moment its on-screen mouth starts moving (ASR sentence timestamps)
+- **Voices designed per character** — qwen-voice-design writes each voice from the character's age and personality, qwen3-tts-vd speaks it, and the casting page shows the design; presets and 10-second cloning remain as free fallback and upgrade
 - **Two Neo4j graphs** — narrative memory the Director reads back before staging, and a priority-weighted environment-reaction graph where events override location defaults as pure data
 - **Preview = export by construction** — one placement algorithm, one stored audio verdict per clip, and a final-render toggle to audit the shipped file
 - **Multi-episode delivery** — cliffhanger-structured writing to per-episode cuts and a season zip
 - **Glass-box orchestration** — a live two-level crew graph (stages → tools), per-clip provenance and prompt-engineering panels, and a Usage & Analytics page with per-model receipts
-- **461 unit tests**, CI against Postgres, 21 migrations, graceful degradation on every external dependency
+- **472 unit tests**, CI against Postgres, 21 migrations, graceful degradation on every external dependency
 
 ---
 
