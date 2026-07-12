@@ -362,7 +362,14 @@ export function ExportEditor({ projectId }: { projectId: string }) {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {result?.download_url || result?.url ? (
+          {(result?.report_json?.episodes?.length ?? 0) > 1 ? (
+            // a multi-episode drama delivers one video per episode
+            result!.report_json!.episodes!.map((ep) => (
+              <a key={ep.episode} href={ep.url} target="_blank" rel="noreferrer">
+                <Button variant="outline">⬇ Episode {ep.episode}</Button>
+              </a>
+            ))
+          ) : result?.download_url || result?.url ? (
             <a
               href={result.download_url || result.url || "#"}
               target="_blank"
@@ -371,7 +378,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
               <Button variant="outline">⬇ Download MP4</Button>
             </a>
           ) : null}
-          {result?.caption_url ? (
+          {result?.caption_url && (result?.report_json?.episodes?.length ?? 0) <= 1 ? (
             <a href={result.caption_url} target="_blank" rel="noreferrer">
               <Button variant="ghost" size="sm">
                 .srt

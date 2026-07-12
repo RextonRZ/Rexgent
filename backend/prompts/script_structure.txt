@@ -16,6 +16,7 @@ Parse the following screenplay into this exact JSON schema:
     {
       "scene_number": 1,
       "act_number": 1,
+      "episode_number": 1,
       "heading": "INT. LOCATION - DAY",
       "location": "string",
       "time_of_day": "DAY|NIGHT|DAWN|DUSK|CONTINUOUS",
@@ -42,3 +43,5 @@ Heading rules:
 Return ONLY the JSON. No explanation, no markdown fences.
 
 SCREENPLAY TEXT:
+
+episode_number: which episode the scene belongs to, read from the screenplay's EPISODE headings (EPISODE 1, EP 2, PART TWO...). A script without episode headings is one episode: every scene gets episode_number 1. Scene numbering stays GLOBAL and continuous across episodes, never restarting at each episode.

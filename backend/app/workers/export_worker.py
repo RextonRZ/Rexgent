@@ -133,6 +133,22 @@ def _ensure_voice_lines(db, project_id: str) -> None:
         logger.warning(f"Export: dialogue synth skipped: {e}")
 
 
+def assign_episodes(cut_entries: list, episode_by_scene: dict) -> list[int]:
+    """Which episode each cut chunk belongs to. Scene-less chunks (imported
+    media) ride the episode currently playing; anything unknown is episode 1,
+    so a single-episode drama always resolves to one deliverable."""
+    out: list[int] = []
+    last: int | None = None
+    for e in cut_entries:
+        scene = e.get("scene_number")
+        ep = episode_by_scene.get(scene) if scene is not None else None
+        if ep is None:
+            ep = last or 1
+        out.append(int(ep))
+        last = int(ep)
+    return out
+
+
 @celery_app.task(bind=True, name="run_export")
 def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                audio: dict | None = None):
@@ -270,8 +286,6 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 if vol is not None:
                     kept_beds += 1
                     logger.info("chunk %d: original soundtrack kept as bed", i)
-                stitch_inputs.append({"path": local, "in": seg["in"], "out": seg["out"],
-                                      "mute": mute, "volume": vol})
                 # what this chunk really contributes to the final timeline
                 probed = VideoStitcher._duration(local)
                 tin = float(seg["in"] or 0.0)
@@ -289,6 +303,10 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     "has_dialogue": bool(meta and meta["dialogue"]),
                     "text": meta["dialogue"] if meta else None,
                 })
+                # appended LAST so stitch_inputs and cut_entries always align
+                # index-for-index (episode slicing depends on it)
+                stitch_inputs.append({"path": local, "in": seg["in"], "out": seg["out"],
+                                      "mute": mute, "volume": vol})
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: could not download {seg['url']}: {e}")
 
@@ -301,16 +319,10 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         from app.models.project import Project
         project = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
         ratio = (getattr(project, "video_ratio", None) or "9:16")
-
         stitcher = VideoStitcher()
-        final_local = os.path.join(workdir, "final.mp4")
         if kept_beds:
             _stage(project_id, "update",
                    f"Keeping {kept_beds} original soundtrack(s) as the ambient bed")
-        _stage(project_id, "update", f"Stitching {len(stitch_inputs)} clip(s)")
-        with tool_run(project_id, "export", "stitch_clips", "Editor") as t:
-            stitcher.stitch(stitch_inputs, final_local, ratio=ratio)
-            t["artifact"] = f"{len(stitch_inputs)} clips"
 
         # ── User-chosen music: downloaded on its OWN so a dialogue-prep hiccup
         # can never silently drop the track the user set ──
@@ -327,20 +339,15 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 bgm_local = None
                 logger.warning(f"Export: music download failed: {e}")
 
-        # ── Dialogue placement: each line aligned to the shot that speaks it.
-        # The timeline comes from the ACTUAL cut (probed chunk durations, in
-        # stitch order) — never from the storyboard, which still lists shots
-        # that were deferred, failed, trimmed, or preceded by imported media. ──
-        dialogue_segments: list = []
+        # ── Voice lines: ensured and downloaded ONCE; every cut places from
+        # the same pool (placement is scene-keyed, so a line can only land in
+        # the cut that contains its scene) ──
+        line_rows: list = []
         try:
-            # Make sure voice lines exist before we try to place them.
             tool_event(project_id, "export", "synth_voices", "started", agent="Audio Mixer")
             _ensure_voice_lines(db, project_id)
             tool_event(project_id, "export", "synth_voices", "succeeded", agent="Audio Mixer",
                        artifact="voices match casting")
-
-            scene_plan = build_cut_plan(cut_entries)
-            line_rows = []
             for row in db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(project_id)).all():
                 if not row.audio_url:
                     continue
@@ -355,84 +362,133 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                                       "text": row.text, "character_name": row.character_name})
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"Export: could not download line audio {row.audio_url}: {e}")
-            with tool_run(project_id, "export", "assemble_timeline", "Editor") as t:
-                dialogue_segments = build_dialogue_segments(line_rows, scene_plan)
-                t["artifact"] = f"{len(dialogue_segments)} lines placed"
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"Export: dialogue prep skipped: {e}")
+            logger.warning(f"Export: voice prep skipped: {e}")
 
-        # ── Captions: timed to the placed voice lines when they exist, else to
-        # shot durations. Burned into the picture (short dramas are watched
-        # muted-first) AND uploaded as a sidecar .srt.
-        srt_url = None
+        def _render_cut(suffix: str, inputs: list, entries: list, label: str) -> dict:
+            """Stitch, place dialogue, burn captions, mix, upload ONE
+            deliverable. An empty suffix keeps the legacy single-video keys so
+            a one-episode drama exports byte-identically to before."""
+            cut_local = os.path.join(workdir, f"final{suffix}.mp4")
+            _stage(project_id, "update", f"Stitching {len(inputs)} clip(s){label}")
+            with tool_run(project_id, "export", "stitch_clips", "Editor") as t:
+                stitcher.stitch(inputs, cut_local, ratio=ratio)
+                t["artifact"] = f"{len(inputs)} clips{label}"
+
+            # ── Dialogue placement: each line aligned to the shot that speaks
+            # it, on THIS cut's real probed chunk durations ──
+            dialogue_segments: list = []
+            try:
+                scene_plan = build_cut_plan(entries)
+                with tool_run(project_id, "export", "assemble_timeline", "Editor") as t:
+                    dialogue_segments = build_dialogue_segments(line_rows, scene_plan)
+                    t["artifact"] = f"{len(dialogue_segments)} lines placed{label}"
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Export: dialogue prep skipped{label}: {e}")
+
+            # ── Captions: timed to the placed voice lines when they exist,
+            # else to chunk durations. Burned in AND uploaded as sidecar .srt ──
+            srt_url = None
+            try:
+                spoken = [s for s in dialogue_segments if s.get("text")]
+                cut_captions = [{"dialogue": e.get("text"), "duration": e["duration"]}
+                                for e in entries]
+                srt = (caption_gen.generate_srt_from_segments(spoken) if spoken
+                       else caption_gen.generate_srt(cut_captions))
+                if srt.strip():
+                    srt_path = os.path.join(workdir, f"captions{suffix}.srt")
+                    with open(srt_path, "w", encoding="utf-8") as f:
+                        f.write(srt)
+                    srt_key = oss.get_project_path(project_id, "exports", f"captions{suffix}.srt")
+                    srt_url = oss.upload_file(srt_path, srt_key)
+                    burned = os.path.join(workdir, f"final_subbed{suffix}.mp4")
+                    _stage(project_id, "update", f"Burning captions into the picture{label}")
+                    with tool_run(project_id, "export", "burn_captions", "Editor") as t:
+                        stitcher.burn_subtitles(cut_local, srt_path, burned)
+                        t["artifact"] = f"captions burned + .srt{label}"
+                    cut_local = burned
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Export: subtitle burn skipped{label}: {e}")
+
+            # ── Mix: dialogue track + optional BGM bed ducking under speech ──
+            try:
+                from app.websocket.emitter import emit
+                if dialogue_segments or bgm_local:
+                    emit("audio.mix.started", {}, project_id)
+                    mixed = os.path.join(workdir, f"final_audio{suffix}.mp4")
+                    with tool_run(project_id, "export", "mix_audio", "Audio Mixer") as t:
+                        stitcher.mix_tracks(
+                            cut_local, dialogue_segments, bgm_local, mixed,
+                            bgm_volume=float(audio.get("volume", 1.0)) if audio else 1.0,
+                            duck=bool(audio.get("duck", True)) if audio else True,
+                            bgm_fade_in=float(audio.get("fade_in", 0.0)) if audio else 0.0,
+                            bgm_fade_out=float(audio.get("fade_out", 0.0)) if audio else 0.0,
+                        )
+                        t["artifact"] = (f"{len(dialogue_segments)} voices"
+                                         + (" + music" if bgm_local else ""))
+                    cut_local = mixed
+                    emit("audio.mix.completed", {}, project_id)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Export: audio mix skipped{label}: {e}")
+
+            _stage(project_id, "update", f"Uploading the final cut{label}")
+            with tool_run(project_id, "export", "render_mp4", "Editor") as t:
+                final_key = oss.get_project_path(project_id, "exports", f"final{suffix}.mp4")
+                url = oss.upload_file(cut_local, final_key)
+                t["artifact"] = f"1 mp4{label}"
+            return {"url": url, "caption_url": srt_url,
+                    "duration_seconds": round(sum(e["duration"] for e in entries), 2)}
+
+        # ── Episode boundaries: the structurer records each scene's episode.
+        # One episode keeps the legacy final.mp4; N episodes deliver N videos ──
+        episode_by_scene: dict = {}
         try:
-            spoken = [s for s in dialogue_segments if s.get("text")]
-            # fallback captions (no voice lines) time by the CUT's real chunk
-            # durations, so they stay on-picture like the voices would
-            cut_captions = [{"dialogue": e.get("text"), "duration": e["duration"]}
-                            for e in cut_entries]
-            srt = (caption_gen.generate_srt_from_segments(spoken) if spoken
-                   else caption_gen.generate_srt(cut_captions))
-            if srt.strip():
-                srt_path = os.path.join(workdir, "captions.srt")
-                with open(srt_path, "w", encoding="utf-8") as f:
-                    f.write(srt)
-                srt_key = oss.get_project_path(project_id, "exports", "captions.srt")
-                srt_url = oss.upload_file(srt_path, srt_key)
-                burned = os.path.join(workdir, "final_subbed.mp4")
-                _stage(project_id, "update", "Burning captions into the picture")
-                with tool_run(project_id, "export", "burn_captions", "Editor") as t:
-                    stitcher.burn_subtitles(final_local, srt_path, burned)
-                    t["artifact"] = "captions burned + .srt"
-                final_local = burned
+            from app.models.script import Script
+            script = (db.query(Script).filter(Script.project_id == uuid.UUID(project_id))
+                      .order_by(Script.created_at.desc()).first())
+            for sc in (((script.structured_json or {}).get("scenes") or []) if script else []):
+                if sc.get("scene_number") is not None:
+                    episode_by_scene[int(sc["scene_number"])] = int(sc.get("episode_number") or 1)
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"Export: subtitle burn skipped: {e}")
+            logger.warning(f"Export: episode mapping unavailable: {e}")
+        chunk_eps = assign_episodes(cut_entries, episode_by_scene)
+        episode_numbers = sorted(set(chunk_eps))
 
-        # ── Mix: dialogue track + optional BGM bed ducking under speech ──
-        try:
-            from app.websocket.emitter import emit
-            if dialogue_segments or bgm_local:
-                emit("audio.mix.started", {}, project_id)
-                mixed = os.path.join(workdir, "final_audio.mp4")
-                with tool_run(project_id, "export", "mix_audio", "Audio Mixer") as t:
-                    stitcher.mix_tracks(
-                        final_local, dialogue_segments, bgm_local, mixed,
-                        bgm_volume=float(audio.get("volume", 1.0)) if audio else 1.0,
-                        duck=bool(audio.get("duck", True)) if audio else True,
-                        bgm_fade_in=float(audio.get("fade_in", 0.0)) if audio else 0.0,
-                        bgm_fade_out=float(audio.get("fade_out", 0.0)) if audio else 0.0,
-                    )
-                    t["artifact"] = (f"{len(dialogue_segments)} voices"
-                                     + (" + music" if bgm_local else ""))
-                final_local = mixed
-                emit("audio.mix.completed", {}, project_id)
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"Export: audio mix skipped: {e}")
+        deliverables: list = []
+        if len(episode_numbers) <= 1:
+            deliverables.append({"episode": episode_numbers[0] if episode_numbers else 1,
+                                 **_render_cut("", stitch_inputs, cut_entries, "")})
+        else:
+            for ep in episode_numbers:
+                idxs = [i for i, ce in enumerate(chunk_eps) if ce == ep]
+                deliverables.append({"episode": ep,
+                                     **_render_cut(f"_ep{ep}",
+                                                   [stitch_inputs[i] for i in idxs],
+                                                   [cut_entries[i] for i in idxs],
+                                                   f" (episode {ep})")})
+            report["episodes"] = deliverables
 
-        _stage(project_id, "update", "Uploading the final cut")
-        with tool_run(project_id, "export", "render_mp4", "Editor") as t:
-            final_key = oss.get_project_path(project_id, "exports", "final.mp4")
-            final_url = oss.upload_file(final_local, final_key)
-            t["artifact"] = "1 mp4"
-
+        primary = deliverables[0]
         with tool_run(project_id, "export", "write_export_db", "Editor") as t:
             export = FinalExport(
                 project_id=uuid.UUID(project_id),
-                url=final_url,
+                url=primary["url"],
                 duration_seconds=report["total_duration_seconds"],
-                caption_url=srt_url,
+                caption_url=primary["caption_url"],
                 report_json=report,
             )
             db.add(export)
             db.commit()
-            t["artifact"] = "1 export row"
+            t["artifact"] = f"{len(deliverables)} export deliverable(s)"
         try:
             from app.websocket.emitter import emit
-            emit("export.completed", {"url": final_url,
+            emit("export.completed", {"url": primary["url"],
                  "duration": report["total_duration_seconds"]}, project_id)
         except Exception:  # noqa: BLE001
             pass
-        _stage(project_id, "completed", "Final cut ready")
+        _stage(project_id, "completed",
+               "Final cut ready" if len(deliverables) == 1
+               else f"{len(deliverables)} episode cuts ready")
     except Exception as e:  # noqa: BLE001
         logger.error(f"Export failed: {e}")
         _stage(project_id, "failed", "Export failed")

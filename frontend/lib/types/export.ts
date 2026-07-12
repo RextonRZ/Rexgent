@@ -26,4 +26,13 @@ export interface ProductionReport {
   consistency_pass_rate: number;
   total_retries: number;
   wall_clock_minutes: number;
+  /** present only when the drama has 2+ episodes: one deliverable per episode */
+  episodes?: EpisodeDeliverable[];
+}
+
+export interface EpisodeDeliverable {
+  episode: number;
+  url: string;
+  caption_url: string | null;
+  duration_seconds: number;
 }
