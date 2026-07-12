@@ -38,7 +38,10 @@ class PromptSanitizer:
     MANDATORY_NEGATIVE = (
         "text, words, letters, numbers, subtitles, watermark, logo, title card, "
         "signs, writing, captions, credits, UI, HUD, overlay, readable text, font, "
-        "typography, printed, handwritten, digital display, screen text, label"
+        "typography, printed, handwritten, digital display, screen text, label, "
+        # multi-reference renders face-bleed: the same person must never be
+        # painted onto two bodies in one frame
+        "duplicate person, cloned face, identical twins, same face on two people"
     )
 
     SCENE_LABEL_PATTERN = re.compile(
