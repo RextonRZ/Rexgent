@@ -29,7 +29,7 @@ export function useRenderExport() {
         clip_id?: string;
         url?: string;
         trim_start: number;
-        trim_end: number;
+        trim_end: number | null; // null = to the end of the clip
       }[];
       audioUrl?: string | null;
       audioVolume?: number;
