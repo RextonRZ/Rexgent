@@ -43,6 +43,15 @@ class DialogueSynthesizer:
         def _want(line) -> bool:
             return only_characters is None or line.get("character") in only_characters
 
+        def _spoken(text) -> str:
+            """Strip parenthetical stage directions: '(whispering, frantic)
+            Mom, please' must be ACTED, not read aloud - and the direction
+            leaks into captions too, since they render this same text."""
+            import re
+            cleaned = re.sub(r"\([^)]*\)", " ", text or "")
+            cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+            return cleaned or (text or "")
+
         total = sum(1 for s in scenes for line in (s.get("dialogue_json") or []) if _want(line))
         idx, rows = 0, []
         for scene in scenes:
@@ -61,7 +70,7 @@ class DialogueSynthesizer:
                 # detection retry it.
                 try:
                     audio = await self.qwen.synthesize_speech(
-                        line.get("line", ""), vid, voice.get("voice_model"))
+                        _spoken(line.get("line", "")), vid, voice.get("voice_model"))
                 except Exception as e:  # noqa: BLE001
                     logger.warning(
                         f"TTS failed for {name} (voice {vid}) s{scene['number']}l{li}: {e}")
@@ -71,7 +80,7 @@ class DialogueSynthesizer:
                 key = self.oss.get_project_path(pid, "audio", f"s{scene['number']}_l{li}.wav")
                 url = self.oss.upload_bytes(audio, key, content_type="audio/wav")
                 rows.append({"project_id": project_id, "scene_number": scene["number"], "line_index": li,
-                             "character_name": name, "text": line.get("line", ""), "voice_id": vid,
+                             "character_name": name, "text": _spoken(line.get("line", "")), "voice_id": vid,
                              "audio_url": url, "duration_seconds": probe_duration(audio)})
                 if getattr(self, "db", None) is not None:
                     from app.services.cost_ledger import record_tts

@@ -161,10 +161,18 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
 
         _stage(project_id, "started", "Assembling the final cut")
 
+        # Clips across ALL of the project's jobs: a resume run re-renders only
+        # the rejected shots, so scoping to job.id would export a 3-shot cut
+        # of a 12-shot drama (the auto-export did exactly that in production)
+        project_job_ids = [
+            j.id for j in db.query(GenerationJob)
+            .filter(GenerationJob.project_id == job.project_id).all()
+        ]
         by_id = {
             str(c.id): c
             for c in db.query(GeneratedClip)
-            .filter(GeneratedClip.job_id == job.id, GeneratedClip.url.isnot(None))
+            .filter(GeneratedClip.job_id.in_(project_job_ids),
+                    GeneratedClip.url.isnot(None))
             .all()
         }
         # Ordered segments to stitch: each is {url, in, out, clip?}. A segment is
@@ -180,10 +188,11 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     c = by_id[str(cid)]
                     resolved.append({"url": c.url, "in": entry.get("in"), "out": entry.get("out"), "clip": c})
         else:
-            # AI default: best clip per shot, in shot order, untrimmed.
+            # AI default: best clip per shot across every job, in shot order.
             rows = (
                 db.query(GeneratedClip)
-                .filter(GeneratedClip.job_id == job.id, GeneratedClip.url.isnot(None))
+                .filter(GeneratedClip.job_id.in_(project_job_ids),
+                        GeneratedClip.url.isnot(None))
                 .join(Shot, GeneratedClip.shot_id == Shot.id)
                 .order_by(Shot.number)
                 .all()

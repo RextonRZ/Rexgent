@@ -21,6 +21,7 @@ import {
   useUploadAudio,
   useUploadMedia,
 } from "@/hooks/useExport";
+import api from "@/lib/api";
 import type { GeneratedClip } from "@/lib/types";
 import { errText } from "@/lib/errText";
 
@@ -274,15 +275,53 @@ export function ExportEditor({ projectId }: { projectId: string }) {
 
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
-  const handleExport = async () => {
-    if (!jobId || timeline.length === 0) return;
+  // every shot's best take across the WHOLE drama, in story order — the
+  // payload for "Export all episodes" regardless of which tab is open
+  const buildAllItems = (): TimelineItem[] => {
+    const items: TimelineItem[] = [];
+    for (const scene of scenes) {
+      for (const shot of scene.shots) {
+        const clip = clipByShot[shot.id];
+        if (clip?.url) {
+          items.push({
+            clipId: clip.id,
+            shotId: shot.id,
+            url: clip.url,
+            label: shotLabel[shot.id] || `Shot ${shot.number}`,
+            score: clip.consistency_score,
+            duration: 5,
+            trimStart: 0,
+            trimEnd: 5,
+            trimmed: false,
+          });
+        }
+      }
+    }
+    return items;
+  };
+
+  const downloadAllZip = async () => {
+    const res = await api.get(`/api/export/${projectId}/download_all`, {
+      responseType: "blob",
+    });
+    const url = URL.createObjectURL(res.data as Blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "episodes.zip";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExport = async (items?: TimelineItem[]) => {
+    const list = items ?? timeline;
+    if (!jobId || list.length === 0) return;
     setRendering(true);
     setExportNotice(null);
     try {
       await render.mutateAsync({
         projectId,
         jobId,
-        clips: timeline.map((t) =>
+        clips: list.map((t) =>
           t.external
             ? { url: t.url, trim_start: t.trimStart, trim_end: t.trimEnd }
             : { clip_id: t.clipId, trim_start: t.trimStart, trim_end: t.trimEnd }
@@ -437,8 +476,23 @@ export function ExportEditor({ projectId }: { projectId: string }) {
               </Button>
             </a>
           ) : null}
+          {(result?.report_json?.episodes?.length ?? 0) > 1 ? (
+            <Button variant="ghost" size="sm" onClick={downloadAllZip}>
+              ⬇ All (.zip)
+            </Button>
+          ) : null}
+          {multiEpisode && (
+            <Button
+              variant="outline"
+              onClick={() => handleExport(buildAllItems())}
+              disabled={rendering}
+              title="Renders every episode in one run, each as its own video"
+            >
+              Export all episodes
+            </Button>
+          )}
           <Button
-            onClick={handleExport}
+            onClick={() => handleExport()}
             disabled={rendering || timeline.length === 0}
             className="glow"
             size="lg"

@@ -82,6 +82,47 @@ async def render_export(request: ExportRequest, db: Session = Depends(get_db)):
     return {"status": "rendering", "message": "Export job started"}
 
 
+@router.get("/{project_id}/download_all")
+async def download_all(project_id: str, db: Session = Depends(get_db)):
+    """One zip with every episode of the latest export (plus caption files)."""
+    export = (
+        db.query(FinalExport)
+        .filter(FinalExport.project_id == uuid.UUID(project_id))
+        .order_by(FinalExport.created_at.desc())
+        .first()
+    )
+    if not export:
+        raise HTTPException(status_code=404, detail="No export found")
+    episodes = (export.report_json or {}).get("episodes") or []
+    files = [{"name": f"episode_{d['episode']}.mp4", "url": d.get("url")}
+             for d in episodes if d.get("url")]
+    for d in episodes:
+        if d.get("caption_url"):
+            files.append({"name": f"episode_{d['episode']}.srt", "url": d["caption_url"]})
+    if not files and export.url:
+        files = [{"name": "final.mp4", "url": export.url}]
+        if export.caption_url:
+            files.append({"name": "captions.srt", "url": export.caption_url})
+    if not files:
+        raise HTTPException(status_code=404, detail="Nothing downloadable yet")
+
+    import io as _io
+    import zipfile
+    import httpx as _httpx
+    buf = _io.BytesIO()
+    async with _httpx.AsyncClient() as http:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+            for f in files:
+                r = await http.get(f["url"], timeout=300.0)
+                r.raise_for_status()
+                z.writestr(f["name"], r.content)
+    buf.seek(0)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        buf, media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="episodes.zip"'})
+
+
 @router.get("/{project_id}/download")
 async def get_download(project_id: str, db: Session = Depends(get_db)):
     export = (
