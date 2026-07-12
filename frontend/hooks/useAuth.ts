@@ -30,7 +30,12 @@ export function useLogin() {
       const { data } = await api.post<AuthResponse>("/api/auth/login", body);
       return data;
     },
-    onSuccess: (data) => setAuth(data.access_token, data.user),
+    onSuccess: (data) => {
+      // a fresh login re-arms the "connect your key" prompt for this session
+      if (typeof window !== "undefined")
+        sessionStorage.removeItem("byok-prompt-dismissed");
+      setAuth(data.access_token, data.user);
+    },
   });
 }
 
@@ -41,7 +46,11 @@ export function useRegister() {
       const { data } = await api.post<AuthResponse>("/api/auth/register", body);
       return data;
     },
-    onSuccess: (data) => setAuth(data.access_token, data.user),
+    onSuccess: (data) => {
+      if (typeof window !== "undefined")
+        sessionStorage.removeItem("byok-prompt-dismissed");
+      setAuth(data.access_token, data.user);
+    },
   });
 }
 

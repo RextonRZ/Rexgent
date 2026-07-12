@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
+import { ApiKeyGateModal } from "./ApiKeyGateModal";
 
 /**
  * Wrap protected pages. Waits for the persisted store to hydrate on the
@@ -30,5 +31,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <ApiKeyGateModal />
+    </>
+  );
 }
