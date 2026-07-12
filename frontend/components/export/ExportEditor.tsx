@@ -563,39 +563,8 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         onAudioFile={handleAudioFile}
         onDropAsset={onAddAsset}
         audioUploading={uploadAudio.isPending}
+        segments={segments}
       />
-
-      {/* caption lane: every placed line at its real time, CapCut style */}
-      {segments.some((s) => s.text) && totalSeconds > 0 && (
-        <div className="rounded-xl border hairline bg-card p-3">
-          <p className="mb-1.5 text-[10px] uppercase tracking-widest text-zinc-400">
-            Captions · placed on the cut, exactly as they burn in
-          </p>
-          <div className="relative h-8 overflow-hidden rounded bg-white/[0.03]">
-            {segments
-              .filter((s) => s.text)
-              .map((s, i) => (
-                <span
-                  key={i}
-                  title={`${s.character ? s.character + ": " : ""}${s.text} · ${s.start.toFixed(1)}s`}
-                  className="absolute bottom-1 top-1 overflow-hidden whitespace-nowrap rounded bg-sky-500/20 px-1.5 text-[10px] leading-6 text-sky-200"
-                  style={{
-                    left: `${(s.start / totalSeconds) * 100}%`,
-                    width: `${Math.max(1.5, (s.duration / totalSeconds) * 100)}%`,
-                  }}
-                >
-                  {s.text}
-                </span>
-              ))}
-            <span
-              className="absolute bottom-0 top-0 w-px bg-primary"
-              style={{
-                left: `${Math.min(100, (playhead / totalSeconds) * 100)}%`,
-              }}
-            />
-          </div>
-        </div>
-      )}
 
       {/* export bar */}
       <div className="rounded-xl border hairline glass p-4 flex flex-wrap items-center justify-between gap-4">
@@ -683,20 +652,14 @@ export function ExportEditor({ projectId }: { projectId: string }) {
                 : "over budget"}
             </span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          {/* costs live on the Storyboard budget card; repeating them here
+              was noise — the report keeps what only the cut can tell you */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
             <Stat
               label="Duration"
               value={`${result.report_json.total_duration_seconds ?? "—"}s`}
             />
             <Stat label="Clips" value={String(result.report_json.total_clips ?? 0)} />
-            <Stat
-              label="Video cost"
-              value={`$${(result.report_json.video_cost_usd ?? 0).toFixed(2)}`}
-            />
-            <Stat
-              label="Grand total"
-              value={`$${(result.report_json.grand_total_cost ?? 0).toFixed(2)} / $${result.report_json.budget_usd ?? "—"}`}
-            />
           </div>
         </div>
       ) : null}

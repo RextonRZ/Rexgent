@@ -220,9 +220,13 @@ class VideoStitcher:
             import shutil
             shutil.copyfile(video_path, output_path)
             return output_path
+        # NO -shortest here: model clips' audio runs ~0.3s short of their video,
+        # so a 9-chunk concat's audio ends seconds early and -shortest chopped
+        # the picture with it (measured 22.0s out of a 25s cut). The padded
+        # video is the master track; audio ending early is just silence.
         cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", ";".join(filters),
                "-map", "0:v", "-map", final_audio, "-c:v", "copy", "-c:a", "aac",
-               "-shortest", "-movflags", "+faststart", output_path]
+               "-movflags", "+faststart", output_path]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(f"ffmpeg mix failed: {proc.stderr[-800:]}")

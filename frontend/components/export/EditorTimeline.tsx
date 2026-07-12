@@ -225,6 +225,7 @@ export function EditorTimeline({
   onAudioFile,
   onDropAsset,
   audioUploading,
+  segments,
 }: {
   items: TimelineItem[];
   selectedIndex: number;
@@ -238,6 +239,14 @@ export function EditorTimeline({
   onAudioFile: (file: File) => void;
   onDropAsset: (asset: MediaAsset) => void;
   audioUploading: boolean;
+  /** placed voice lines (export math) — drawn as a caption track under the
+   * clips so each line visibly belongs to the clip it plays over */
+  segments?: {
+    start: number;
+    duration: number;
+    text?: string | null;
+    character?: string | null;
+  }[];
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -373,6 +382,31 @@ export function EditorTimeline({
                 </div>
               </SortableContext>
             </DndContext>
+
+            {/* caption lane: every placed line at its exact second, under the
+                clip it plays over — trims and reorders reflow it live */}
+            {(segments?.some((s) => s.text) ?? false) && (
+              <div
+                className="relative mt-1 h-7 rounded-md bg-sky-500/[0.06]"
+                style={{ width: trackWidth, minWidth: "100%" }}
+              >
+                {segments!
+                  .filter((s) => s.text)
+                  .map((s, i) => (
+                    <span
+                      key={i}
+                      title={`${s.character ? s.character + ": " : ""}${s.text} · ${s.start.toFixed(1)}s`}
+                      className="absolute bottom-0.5 top-0.5 overflow-hidden whitespace-nowrap rounded bg-sky-500/25 px-1.5 text-[10px] leading-6 text-sky-100 ring-1 ring-sky-400/30"
+                      style={{
+                        left: s.start * pxPerSec,
+                        width: Math.max(14, s.duration * pxPerSec),
+                      }}
+                    >
+                      {s.text}
+                    </span>
+                  ))}
+              </div>
+            )}
 
             {/* audio lane */}
             <div className="mt-1" style={{ width: trackWidth, minWidth: "100%" }}>
