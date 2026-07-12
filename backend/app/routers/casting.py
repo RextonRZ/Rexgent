@@ -13,6 +13,7 @@ from app.services.plate_generator import (PlateGenerator, character_plate_prompt
 from app.services.oss_manager import OSSManager
 from app.services.face_embedder import FaceEmbedder
 from app.services.qwen_client import QwenClient
+from app.services.casting_director import voice_design_prompt
 from app.config import get_settings
 
 from app.deps import get_current_user
@@ -69,6 +70,7 @@ def get_bible(project_id: str, db: Session = Depends(get_db)):
         "auto_approve_casting": (project.auto_approve_casting if project else False),
         "characters": [{"id": str(c.id), "name": c.name,
             "voice_id": c.voice_id, "voice_source": c.voice_source,
+            "voice_design": (voice_design_prompt(c) if c.voice_source == "designed" else None),
             "variants": [{"id": str(v.id), "label": v.label, "outfit_description": v.outfit_description,
                           "plate_image_url": v.plate_image_url, "is_default": v.is_default,
                           "plate_status": v.plate_status}
@@ -414,7 +416,7 @@ async def preview_voice(character_id: str, text: str = "Hello, this is my voice.
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c or not c.voice_id:
         raise HTTPException(status_code=404, detail="No voice to preview")
-    # cloned voices must preview through their realtime model; presets use flash.
-    model = c.voice_model if c.voice_source == "cloned" else None
+    # cloned and designed voices preview through their own model; presets use flash.
+    model = c.voice_model if c.voice_source in ("cloned", "designed") else None
     audio = await QwenClient(get_settings()).preview_voice(text, c.voice_id, model)
     return Response(content=audio, media_type="audio/wav")

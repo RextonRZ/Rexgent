@@ -21,14 +21,19 @@ export function VoiceRow({
   characterId,
   voiceId,
   voiceSource,
+  voiceDesign,
 }: {
   characterId: string;
   voiceId?: string | null;
   voiceSource?: string | null;
+  /** the written description casting gave the voice designer (designed voices only) */
+  voiceDesign?: string | null;
 }) {
   const cloned = voiceSource === "cloned";
   const designed = voiceSource === "designed";
-  const [mode, setMode] = useState<"preset" | "clone">(cloned ? "clone" : "preset");
+  const [mode, setMode] = useState<"designed" | "preset" | "clone">(
+    cloned ? "clone" : designed ? "designed" : "preset"
+  );
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -127,9 +132,19 @@ export function VoiceRow({
         >
           {currentLabel}
         </span>
+        {designed && (
+          <button
+            onClick={() => setMode("designed")}
+            className={`ml-auto rounded px-1.5 py-0.5 ${
+              mode === "designed" ? "bg-primary/20 text-primary" : "text-muted-foreground"
+            }`}
+          >
+            Designed
+          </button>
+        )}
         <button
           onClick={() => setMode("preset")}
-          className={`ml-auto rounded px-1.5 py-0.5 ${
+          className={`${designed ? "" : "ml-auto "}rounded px-1.5 py-0.5 ${
             mode === "preset" ? "bg-primary/20 text-primary" : "text-muted-foreground"
           }`}
         >
@@ -152,9 +167,22 @@ export function VoiceRow({
         </button>
       </div>
 
-      {mode === "preset" ? (
+      {mode === "designed" ? (
+        <div className="rounded border border-primary/30 bg-primary/5 p-2 text-[11px] leading-snug">
+          <p className="font-medium text-primary/90">
+            Casting designed this voice for the character
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            {voiceDesign ||
+              "A bespoke voice built from this character's age, gender and personality. Hit Preview to hear it."}
+          </p>
+          <p className="mt-1 text-[10px] text-muted-foreground/70">
+            Picking a preset or cloning below replaces it.
+          </p>
+        </div>
+      ) : mode === "preset" ? (
         <select
-          value={cloned ? "" : voiceId ?? ""}
+          value={cloned || designed ? "" : voiceId ?? ""}
           onChange={(e) => e.target.value && setPreset.mutate({ characterId, voice: e.target.value })}
           disabled={setPreset.isPending}
           className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px]"

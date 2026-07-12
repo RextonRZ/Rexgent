@@ -15,6 +15,7 @@ export interface CastingCharacter {
   name: string;
   voice_id: string | null;
   voice_source: string | null;
+  voice_design: string | null;
   variants: CostumeVariant[];
 }
 

@@ -266,6 +266,7 @@ export function CharacterCard({
                 characterId={character.id}
                 voiceId={casting.voice_id}
                 voiceSource={casting.voice_source}
+                voiceDesign={casting.voice_design}
               />
             </Section>
           </>
