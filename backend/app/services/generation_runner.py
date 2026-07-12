@@ -305,9 +305,7 @@ class GenerationRunner:
             # within the scene: a scene change is a clean cut, so the first
             # shot has no "previous" to continue from.
             already_good = getattr(self, "_approved_shot_ids", set())
-            active = [s for s in shots
-                      if (s.quality_tier or "") != "deferred"
-                      and s.id not in already_good]
+            ordered = [s for s in shots if (s.quality_tier or "") != "deferred"]
 
             # lip-sync inputs: the scene's synthesized lines (audio-first, so
             # they exist before rendering) + which shots speak, in order. The
@@ -329,11 +327,27 @@ class GenerationRunner:
                             "character_name": r.character_name,
                             "duration": r.duration_seconds}
                            for r in line_rows if r.audio_url]
-            for i, shot in enumerate(active):
+            for i, shot in enumerate(ordered):
                 if self._cancelled:
                     break
-                prev_action = active[i - 1].action if i > 0 else None
-                next_action = active[i + 1].action if i < len(active) - 1 else None
+                if shot.id in already_good:
+                    # resume: this shot keeps its approved clip, but its stored
+                    # poster IS its last frame — seed the chain with it so the
+                    # NEXT shot can still anchor a wan continuation (and lip-sync)
+                    # to the real previous picture instead of getting nothing
+                    seed = (db2.query(GeneratedClip.poster_url)
+                            .filter(GeneratedClip.shot_id == shot.id,
+                                    GeneratedClip.poster_url.isnot(None))
+                            .order_by(GeneratedClip.created_at.desc())
+                            .first())
+                    if seed and seed[0]:
+                        prev_last_frame = seed[0]
+                        if (scene_anchor is None
+                                and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
+                            scene_anchor = prev_last_frame
+                    continue
+                prev_action = ordered[i - 1].action if i > 0 else None
+                next_action = ordered[i + 1].action if i < len(ordered) - 1 else None
                 scene_setting, state_changed = setting_for_shot(
                     set_json, scene.location, shot.number)
                 prev_last_frame = await r2._process_shot(

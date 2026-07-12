@@ -52,15 +52,22 @@ def extract_frame_at(clip_url: str, timestamp: float) -> bytes | None:
 
 
 def extract_last_frame(clip_url: str) -> bytes | None:
-    """Return the final frame of a clip as JPEG bytes (or None on failure)."""
+    """Return the final frame of a clip as JPEG bytes (or None on failure).
+
+    Model-generated mp4s report a container duration slightly PAST their last
+    packet, so seeking `-sseof -0.1` lands beyond the final frame and ffmpeg
+    writes nothing (verified against real Wan/HappyHorse clips). Decode the
+    last second instead and let `-update 1` keep overwriting until the true
+    final frame; `-pix_fmt yuvj420p` keeps the mjpeg encoder happy for any
+    input pixel format."""
     out = tempfile.mktemp(suffix=".jpg")
     cmd = [
-        "ffmpeg", "-y", "-sseof", "-0.1", "-i", clip_url,
-        "-vframes", "1", "-q:v", "2", out,
+        "ffmpeg", "-y", "-sseof", "-1", "-i", clip_url,
+        "-update", "1", "-pix_fmt", "yuvj420p", "-q:v", "2", out,
     ]
     try:
-        subprocess.run(cmd, capture_output=True, timeout=20)
-        if os.path.exists(out):
+        subprocess.run(cmd, capture_output=True, timeout=30)
+        if os.path.exists(out) and os.path.getsize(out) > 0:
             with open(out, "rb") as f:
                 data = f.read()
             os.unlink(out)
