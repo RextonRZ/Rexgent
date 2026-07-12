@@ -638,32 +638,6 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         </p>
       )}
 
-      {result?.report_json ? (
-        <div className="rounded-xl border hairline bg-card p-4 text-sm">
-          <div className="flex items-center justify-between mb-2">
-            <p className="font-medium">Production report</p>
-            <span
-              className={`text-xs ${
-                result.report_json.within_budget ? "text-ok" : "text-bad"
-              }`}
-            >
-              {result.report_json.within_budget
-                ? "✓ within budget"
-                : "over budget"}
-            </span>
-          </div>
-          {/* costs live on the Storyboard budget card; repeating them here
-              was noise — the report keeps what only the cut can tell you */}
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <Stat
-              label="Duration"
-              value={`${result.report_json.total_duration_seconds ?? "—"}s`}
-            />
-            <Stat label="Clips" value={String(result.report_json.total_clips ?? 0)} />
-          </div>
-        </div>
-      ) : null}
-
       <ClipEditModal
         clip={editingClip}
         projectId={projectId}
@@ -674,11 +648,3 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-background/40 p-2.5">
-      <p className="text-muted-foreground">{label}</p>
-      <p className="text-foreground font-medium mt-0.5">{value}</p>
-    </div>
-  );
-}
