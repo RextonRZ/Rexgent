@@ -352,7 +352,7 @@ async def synth_dialogue_op(db: Session, project_id: str,
     changed = False
     for i, c in enumerate(chars):
         if not c.voice_id:
-            assign_voice(c, i)
+            assign_voice(c, i, db=db, project_id=str(project_id))
             changed = True
     if changed:
         db.commit()

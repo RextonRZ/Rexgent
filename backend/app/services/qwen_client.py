@@ -439,8 +439,10 @@ class QwenClient:
 
         api_key, base = self.api_key, self.video_base_url
 
+        use_instruct = bool(instructions) and model == s.qwen_tts_designed_model
+
         def _call() -> bytes:
-            if instructions:
+            if use_instruct:
                 # the instruct fields live in `input` NEXT TO text/voice, and
                 # optimize_instructions is the activator — the installed SDK
                 # drops both, so this goes over raw HTTP (verified live: a

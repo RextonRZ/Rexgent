@@ -106,7 +106,9 @@ const ROSTER: {
     icon: AudioWaveform,
     tint: "text-sky-300/60",
     models: [
-      { name: "qwen3-tts-flash", role: "Preset voices", match: ["qwen3-tts-flash"] },
+      { name: "qwen3-tts-vd", role: "Designed voices — bespoke timbre per character", match: ["qwen3-tts-vd-2026-01-26"] },
+      { name: "qwen-voice-design", role: "Voice design — casting writes each voice from age and personality", match: ["qwen-voice-design"] },
+      { name: "qwen3-tts-flash", role: "Preset voices — fallback when design is unavailable", match: ["qwen3-tts-flash"] },
       { name: "qwen3-tts-vc-realtime", role: "Cloned voices", match: ["qwen3-tts-vc-realtime"] },
       { name: "qwen-voice-enrollment", role: "Clone enrollment" },
     ],

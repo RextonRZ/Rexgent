@@ -27,6 +27,7 @@ export function VoiceRow({
   voiceSource?: string | null;
 }) {
   const cloned = voiceSource === "cloned";
+  const designed = voiceSource === "designed";
   const [mode, setMode] = useState<"preset" | "clone">(cloned ? "clone" : "preset");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -110,6 +111,8 @@ export function VoiceRow({
 
   const currentLabel = cloned
     ? "Cloned voice"
+    : designed
+    ? "Designed voice"
     : voiceId
     ? `Preset: ${voiceId}`
     : "No voice set";
@@ -118,7 +121,10 @@ export function VoiceRow({
     <div className="rounded-lg border hairline bg-background/40 p-2.5 space-y-2">
       <div className="flex items-center gap-2 text-[11px]">
         <span className="text-muted-foreground">Voice</span>
-        <span className={`rounded px-1.5 py-0.5 ${cloned ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}>
+        <span
+          className={`rounded px-1.5 py-0.5 ${cloned || designed ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}
+          title={designed ? "A bespoke voice designed from this character's age and personality" : undefined}
+        >
           {currentLabel}
         </span>
         <button

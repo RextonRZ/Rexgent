@@ -204,7 +204,7 @@ flowchart TB
         LLM[qwen-max · qwen-plus · qwen-flash]
         VID[wan2.7 t2v/i2v + driving_audio · happyhorse-1.1 t2v/i2v/r2v]
         IMG[wan2.6-t2i · qwen-image-edit-max]
-        VL[qwen3-vl-plus] & TTS[qwen3-tts · voice cloning]
+        VL[qwen3-vl-plus] & TTS[qwen3-tts-vd · voice design · cloning]
         ASR[qwen3-asr-flash · fun-asr-realtime]
     end
     TOOLS -- "task-routed: max writes,<br/>plus judges, flash structures" --> LLM
@@ -221,7 +221,7 @@ flowchart TB
 
 ---
 
-## Qwen Cloud Integration — 15 models, routed by task
+## Qwen Cloud Integration — 17 models, routed by task
 
 | Component | Qwen Model | Purpose |
 |-----------|-----------|---------|
@@ -234,7 +234,8 @@ flowchart TB
 | Bible plates | wan2.6-t2i + qwen-image-edit-max | Costume plates edited FROM the face so identity carries |
 | Continuity vision check | qwen3-vl-plus | Outfit + background scoring per clip |
 | Reference photo analysis | qwen-vl-max | Reads uploaded photos for casting + outfit swap |
-| Dialogue | qwen3-tts-flash + voice enrollment + vc-realtime | Preset voices per character, or clone from a sample (realtime WS) |
+| Voice casting | qwen-voice-design + qwen3-tts-vd | Casting **writes a bespoke voice** from each character's age and personality — a 17-year-old bully and a mid-40s mother stop sharing the same six presets |
+| Dialogue | qwen3-tts-vd (designed) with qwen3-tts-flash + instruct-flash fallback, voice enrollment + vc-realtime cloning | Every line in the character's own designed voice; presets honor per-line delivery instructions via instruct-flash; or clone from a sample (realtime WS) |
 | Soundtrack triage | qwen3-asr-flash | Transcribes clip audio: wordless = music worth keeping, words = fake speech to mute |
 | Audio-visual alignment | fun-asr-realtime | Sentence timestamps locate when the on-screen mouth starts — the voice is placed there |
 
@@ -348,7 +349,7 @@ flowchart LR
         DB[("PostgreSQL 16<br/>pgvector")]
         N4[("Neo4j 5")]
     end
-    DS["Qwen Cloud<br/>DashScope intl — 15 models"]
+    DS["Qwen Cloud<br/>DashScope intl — 17 models"]
     OSS2[("Alibaba OSS<br/>plates · clips · voices · final_ep{n}.mp4")]
 
     U --> FE2

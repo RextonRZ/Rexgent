@@ -100,6 +100,7 @@ class DialogueSynthesizer:
                     vm = (voice.get("voice_model") or "").lower()
                     record_tts(self.db, project_id, len(line.get("line", "")),
                                model=("qwen3-tts-vc-realtime" if "realtime" in vm
+                                      else vm if "tts-vd" in vm
                                       else "qwen3-tts-flash"))
                 emit("audio.tts.completed", {"scene_number": scene["number"], "line_index": li,
                                              "index": idx, "total": total}, pid)

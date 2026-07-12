@@ -340,7 +340,7 @@ async def generate_character_plates(character_id: str, db: Session = Depends(get
     tool_event(project_id, "characters", "generate_plates", "succeeded",
                agent="Casting", artifact=f"{len(variants)} plates on {c.name}")
     if not c.voice_id:
-        assign_voice(c, 0)
+        assign_voice(c, 0, db=db, project_id=str(c.project_id))
     db.commit()
     emit("stage:progress", {"stage": "casting", "status": "completed",
          "agent": "Casting Director",

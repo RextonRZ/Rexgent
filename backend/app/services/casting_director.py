@@ -1,3 +1,4 @@
+import logging
 import re
 from sqlalchemy.orm import Session
 from app.models.script import Script, Scene
@@ -12,6 +13,8 @@ from app.services.plate_generator import (PlateGenerator, character_plate_prompt
                                           char_plate_negative)
 from app.services.prompt_loader import load_prompt
 from app.services.guardrails import strip_character_names
+
+logger = logging.getLogger(__name__)
 from app.websocket.emitter import emit
 from app.websocket.tool_events import tool_event, tool_run
 
@@ -94,11 +97,73 @@ async def ensure_location_plates(db: Session, project_id) -> int:
     return len(missing)
 
 
-def assign_voice(char, index: int = 0) -> None:
-    """Assign a preset TTS voice (qwen3-tts-flash timbre), matched to the
-    character's gender and rotated by index so each gets a distinct one.
-    No API call — presets are just names."""
+def voice_design_prompt(char) -> str:
+    """The character sheet, folded into a voice description: age, gender,
+    personality and role shape a bespoke timbre instead of a rotated preset."""
+    bits = []
+    age = getattr(char, "estimated_age", None)
+    gender = getattr(char, "gender", None)
+    lead = "A"
+    if age and gender:
+        lead = f"A {gender} around {age} years old,"
+    elif gender:
+        lead = f"A {gender},"
+    elif age:
+        lead = f"A person around {age} years old,"
+    bits.append(lead)
+    persona = (getattr(char, "personality_summary", None) or "").strip()
+    if persona:
+        bits.append(f"personality: {persona[:400]}.")
+    bits.append("Natural conversational voice for a drama, emotionally expressive, "
+                "clear diction, speaks English.")
+    return " ".join(bits)[:2000]
+
+
+def design_voice(char, db=None, project_id=None) -> bool:
+    """qwen-voice-design: create a voice matched to THIS character. Returns
+    True when the designed voice is assigned; False falls back to presets."""
+    import re as _re
+    import httpx
+    from app.config import get_settings
+    s = get_settings()
+    if not s.qwen_api_key:
+        return False
+    name = _re.sub(r"[^a-z0-9]", "", str(getattr(char, "name", "voice")).lower())[:10] or "voice"
+    try:
+        r = httpx.post(
+            s.qwen_video_base_url + "/services/audio/tts/customization",
+            json={"model": s.qwen_voice_design_model,
+                  "input": {"action": "create",
+                            "target_model": s.qwen_tts_vd_model,
+                            "preferred_name": name,
+                            "voice_prompt": voice_design_prompt(char),
+                            "preview_text": "This is how I sound."},
+                  "parameters": {"sample_rate": 24000, "response_format": "wav"}},
+            headers={"Authorization": f"Bearer {s.qwen_api_key}"}, timeout=120.0)
+        voice = (r.json().get("output") or {}).get("voice") if r.status_code == 200 else None
+        if not voice:
+            raise RuntimeError(f"{r.status_code}: {r.text[:150]}")
+        char.voice_id = voice
+        char.voice_model = s.qwen_tts_vd_model
+        char.voice_source = "designed"
+        if db is not None and project_id is not None:
+            from app.services.cost_ledger import record
+            record(db, project_id, "tts", "casting", "voice", 1, 0.2,
+                   model=s.qwen_voice_design_model)
+        return True
+    except Exception as e:  # noqa: BLE001 — casting must never block on a voice
+        logger.warning("voice design failed for %s: %s", getattr(char, "name", "?"), e)
+        return False
+
+
+def assign_voice(char, index: int = 0, db=None, project_id=None) -> None:
+    """Give the character a voice: DESIGN one from their character sheet
+    (age/gender/personality matched); fall back to a gender-matched preset
+    rotated by index when the design service is unavailable."""
     if char.voice_id:
+        return
+    # designing spends real money — only when a db is here to ledger it
+    if db is not None and design_voice(char, db=db, project_id=project_id):
         return
     from app.config import get_settings
     char.voice_id = default_voice(getattr(char, "gender", None), index)
@@ -235,7 +300,7 @@ class CastingDirector:
                       total=len(characters)) as t:
             for idx_v, c in enumerate(characters):
                 emit("casting.voice.started", {"character": c.name}, pid)
-                assign_voice(c, idx_v)
+                assign_voice(c, idx_v, db=self.db, project_id=pid)
                 emit("casting.voice.completed", {"character": c.name}, pid)
             t["artifact"] = f"{len(characters)} voices"
 

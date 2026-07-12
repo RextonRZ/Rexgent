@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     # instruct variant: honors natural-language delivery directions
     # ("whispering, tearful") — same timbres, near-identical price
     qwen_tts_instruct_model: str = "qwen3-tts-instruct-flash"
+    # voice design: a bespoke timbre from a text description ($0.2/voice),
+    # synthesized with the vd snapshot model
+    qwen_voice_design_model: str = "qwen-voice-design"
+    qwen_tts_vd_model: str = "qwen3-tts-vd-2026-01-26"
     qwen_tts_preview_model: str = "qwen3-tts-flash"
     qwen_tts_cloned_model: str = "qwen3-tts-vc-realtime-2026-01-15"
     qwen_voice_enroll_model: str = "qwen-voice-enrollment"
