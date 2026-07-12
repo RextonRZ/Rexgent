@@ -147,3 +147,22 @@ def test_extra_lines_fall_back_back_to_back():
     starts = {s["audio_path"]: s["start"] for s in segs}
     assert starts["one"] == 0.0
     assert starts["two"] == 2.2  # 0 + 2.0 + 0.2 gap
+
+
+def test_recast_detection_sees_through_stage_qualifiers():
+    """CATHERINE (V.O.) lines synthesized with a preset must be flagged stale
+    when CATHERINE's current voice is a designed one."""
+    from types import SimpleNamespace
+    from app.workers.export_worker import characters_needing_resynthesis
+    rows = [
+        SimpleNamespace(character_name="CATHERINE (V.O.)", voice_id="Cherry",
+                        scene_number=1, line_index=1),
+        SimpleNamespace(character_name="LINDA", voice_id="qwen-tts-vd-linda",
+                        scene_number=1, line_index=0),
+    ]
+    current = {"CATHERINE": "qwen-tts-vd-catherine", "LINDA": "qwen-tts-vd-linda"}
+    redo = characters_needing_resynthesis(
+        rows, current, {"CATHERINE (V.O.)", "LINDA"},
+        {(1, 0, "LINDA"), (1, 1, "CATHERINE (V.O.)")})
+    assert "CATHERINE (V.O.)" in redo   # raw name, so the line filter matches
+    assert "LINDA" not in redo

@@ -66,6 +66,50 @@ def dialogue_shot_mouths(scene_plan: list[dict]) -> dict[int, list]:
     return mouths
 
 
+def paced_text(text: str, level: int) -> str:
+    """Rewrite a line with `level` written pauses (ellipses) at even word
+    boundaries: 'I can't do this anymore.' -> 'I... can't do this... anymore.'
+    TTS honors the punctuation, so the take comes back naturally longer —
+    a slower PERFORMANCE, where atempo past ~25% only makes a slurred one.
+    Captions keep the original text; only the audio is re-performed."""
+    words = [w for w in (text or "").split() if w]
+    if level <= 0 or len(words) < 2:
+        return text
+    n = min(level, len(words) - 1)
+    marks = set()
+    for k in range(1, n + 1):
+        m = round(k * len(words) / (n + 1))
+        marks.add(min(max(m, 1), len(words) - 1))
+    out = []
+    for i, w in enumerate(words, start=1):
+        if i in marks and not w.endswith(("...", "…")):
+            w = w.rstrip(".,;:") + "..."
+        out.append(w)
+    return " ".join(out)
+
+
+def pacing_retakes(line_rows: list[dict], scene_plan: list[dict]) -> list[tuple]:
+    """Lines whose voice is SO much shorter than the on-screen mouth that the
+    tempo clamp cannot bridge the gap — the mouth would keep moving after the
+    line ends. Pairs lines to shots exactly like place_dialogue (k-th line ↔
+    k-th speaking shot). Returns [(line_row, mouth_duration)]."""
+    mouths = dialogue_shot_mouths(scene_plan)
+    by_scene: dict = {}
+    for r in sorted(line_rows, key=lambda x: (x["scene_number"], x["line_index"])):
+        by_scene.setdefault(r["scene_number"], []).append(r)
+    out = []
+    for n, lines in by_scene.items():
+        scene_mouths = mouths.get(n, [])
+        for i, ln in enumerate(lines):
+            mouth = scene_mouths[i] if i < len(scene_mouths) else None
+            dur = float(ln.get("duration") or ln.get("duration_seconds") or 0.0)
+            if not mouth or float(mouth) <= 0.5 or dur <= 0:
+                continue
+            if dur / float(mouth) < TEMPO_MIN - 0.02:
+                out.append((ln, float(mouth)))
+    return out
+
+
 def line_tempo(line_duration: float, mouth_duration) -> float | None:
     """atempo factor that plays the line across the mouth's real speaking
     span. tempo < 1 stretches, > 1 compresses; clamped to stay natural, and

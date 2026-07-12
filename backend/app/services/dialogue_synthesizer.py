@@ -72,7 +72,12 @@ class DialogueSynthesizer:
                     continue
                 idx += 1
                 name = line.get("character")
-                voice = voice_by_name.get(name) or {}
+                # "CATHERINE (V.O.)" must speak with CATHERINE's voice — stage
+                # qualifiers resolve to the cast member, same as everywhere else
+                from app.services.guardrails import canonical_character
+                voice = (voice_by_name.get(name)
+                         or voice_by_name.get(canonical_character(name or "", voice_by_name))
+                         or {})
                 vid = voice.get("voice_id") or "Cherry"  # preset fallback for unknown speakers
                 emit("audio.tts.started", {"scene_number": scene["number"], "line_index": li,
                                            "index": idx, "total": total}, pid)

@@ -221,3 +221,39 @@ def test_placement_paces_the_line_across_the_mouth():
     assert segs[0]["start"] == 2.17
     assert segs[0]["tempo"] == 0.75
     assert abs(segs[0]["duration"] - 2.0 / 0.75) < 0.01
+
+
+def test_paced_text_inserts_pauses_at_word_boundaries():
+    from app.services.audio_timeline import paced_text
+    assert paced_text("I can't do this anymore.", 0) == "I can't do this anymore."
+    one = paced_text("I can't do this anymore.", 1)
+    assert one.count("...") == 1 and one.replace("...", "").replace("  ", " ")
+    three = paced_text("I can't do this anymore.", 3)
+    assert three.count("...") == 3
+    # a one-word line cannot be paced
+    assert paced_text("No.", 3) == "No."
+    # level beyond word boundaries caps instead of crashing
+    assert paced_text("Stop it.", 5).count("...") == 1
+
+
+def test_pacing_retakes_targets_only_unbridgeable_gaps():
+    from app.services.audio_timeline import pacing_retakes
+    plan = [{"scene_number": 1, "shots": [
+        {"duration": 5.0, "has_dialogue": True, "mouth_dur": 3.0},
+        {"duration": 5.0, "has_dialogue": True, "mouth_dur": 2.0},
+        {"duration": 5.0, "has_dialogue": True, "mouth_dur": None},
+    ]}]
+    rows = [
+        # 1.6s voice vs 3.0s mouth: 0.53 < clamp -> retake
+        {"scene_number": 1, "line_index": 0, "duration_seconds": 1.6, "text": "a"},
+        # 1.8s vs 2.0s: 0.9, clamp bridges it -> untouched
+        {"scene_number": 1, "line_index": 1, "duration_seconds": 1.8, "text": "b"},
+        # unmeasured mouth -> untouched
+        {"scene_number": 1, "line_index": 2, "duration_seconds": 1.0, "text": "c"},
+        # line from a scene not in this cut -> untouched
+        {"scene_number": 9, "line_index": 0, "duration_seconds": 0.5, "text": "d"},
+    ]
+    targets = pacing_retakes(rows, plan)
+    assert len(targets) == 1
+    ln, mouth = targets[0]
+    assert ln["line_index"] == 0 and mouth == 3.0

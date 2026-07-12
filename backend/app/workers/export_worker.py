@@ -80,12 +80,16 @@ def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers,
     individual line slots that a flaky TTS call skipped (script_line_keys:
     {(scene_number, line_index, character)}). Pure function so the recast
     rules are testable."""
-    stale = {
-        r.character_name for r in rows
-        if r.character_name in current_voice_by_name
-        and current_voice_by_name[r.character_name]
-        and r.voice_id != current_voice_by_name[r.character_name]
-    }
+    from app.services.guardrails import canonical_character
+    stale = set()
+    for r in rows:
+        # "CATHERINE (V.O.)" rows are judged against CATHERINE's current
+        # voice — a stage qualifier must not exempt a line from recasting
+        cur = (current_voice_by_name.get(r.character_name)
+               or current_voice_by_name.get(
+                   canonical_character(r.character_name or "", current_voice_by_name)))
+        if cur and r.voice_id != cur:
+            stale.add(r.character_name)
     have = {r.character_name for r in rows}
     missing = {s for s in script_speakers if s not in have}
     if script_line_keys:
@@ -133,6 +137,70 @@ def _ensure_voice_lines(db, project_id: str) -> None:
             asyncio.run(synth_dialogue_op(db, project_id, only_characters=redo))
     except Exception as e:  # noqa: BLE001
         logger.warning(f"Export: dialogue synth skipped: {e}")
+
+
+def _retime_rushed_lines(db, project_id: str, line_rows: list, scene_plan: list,
+                         workdir: str) -> None:
+    """Pacing retakes: a designed voice can speak a short line far faster than
+    the rendered mouth moves, and atempo may only slow it ~25% before it
+    slurs. Any line still shorter than its mouth at the clamp is RE-PERFORMED
+    with written pauses (ellipses at phrase boundaries), escalating one pause
+    at a time until the take fits — a slower performance instead of a
+    stretched one. Captions keep the original text; the retimed audio and
+    duration persist to LineAudio so preview and every later export agree."""
+    from app.services.audio_timeline import pacing_retakes, paced_text, TEMPO_MIN
+    targets = pacing_retakes(line_rows, scene_plan)
+    if not targets:
+        return
+    import asyncio
+    from app.config import get_settings
+    from app.models.character import Character
+    from app.services.dialogue_synthesizer import probe_duration
+    from app.services.guardrails import canonical_character
+    from app.services.oss_manager import OSSManager
+    from app.services.qwen_client import QwenClient
+    settings = get_settings()
+    qwen, oss = QwenClient(settings), OSSManager(settings)
+    chars = db.query(Character).filter(Character.project_id == uuid.UUID(project_id)).all()
+    by_name = {canonical_character(c.name): c for c in chars if c.voice_id}
+    for ln, mouth in targets:
+        c = by_name.get(canonical_character(ln.get("character_name") or ""))
+        if not c:
+            continue
+        best = None  # (duration, audio_bytes, level)
+        for level in (1, 2, 3, 4):
+            text = paced_text(ln.get("text") or "", level)
+            try:
+                audio = asyncio.run(qwen.synthesize_speech(text, c.voice_id, c.voice_model))
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Export: pacing retake synth failed: {e}")
+                break
+            dur = probe_duration(audio)
+            if best is None or dur > best[0]:
+                best = (dur, audio, level)
+            if mouth and dur / mouth >= TEMPO_MIN:
+                break
+        # only adopt a retake that actually got closer to the mouth
+        if not best or best[0] <= float(ln.get("duration_seconds") or 0.0):
+            continue
+        dur, audio, level = best
+        key = oss.get_project_path(project_id, "audio",
+                                   f"s{ln['scene_number']}_l{ln['line_index']}_paced.wav")
+        url = oss.upload_bytes(audio, key, content_type="audio/wav")
+        row = (db.query(LineAudio)
+               .filter(LineAudio.project_id == uuid.UUID(project_id),
+                       LineAudio.scene_number == ln["scene_number"],
+                       LineAudio.line_index == ln["line_index"]).first())
+        if row is not None:
+            row.audio_url, row.duration_seconds = url, dur
+            db.commit()
+        lp = os.path.join(workdir, f"line_{ln['scene_number']}_{ln['line_index']}_paced.wav")
+        with open(lp, "wb") as fh:
+            fh.write(audio)
+        ln["audio_local"], ln["duration_seconds"] = lp, dur
+        logger.info(
+            f"Export: pacing retake s{ln['scene_number']}l{ln['line_index']} "
+            f"({level} pause(s)): {dur:.2f}s toward mouth {mouth:.2f}s")
 
 
 def assign_episodes(cut_entries: list, episode_by_scene: dict) -> list[int]:
@@ -414,6 +482,11 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             dialogue_segments: list = []
             try:
                 scene_plan = build_cut_plan(entries)
+                # a line the clamp can't slow enough gets a paused re-performance
+                try:
+                    _retime_rushed_lines(db, project_id, line_rows, scene_plan, workdir)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"Export: pacing retakes skipped{label}: {e}")
                 with tool_run(project_id, "export", "assemble_timeline", "Editor") as t:
                     dialogue_segments = build_dialogue_segments(line_rows, scene_plan)
                     t["artifact"] = f"{len(dialogue_segments)} lines placed{label}"
