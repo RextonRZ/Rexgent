@@ -61,11 +61,22 @@ async def generate_script_op(
               "Rewriting with the judge's notes" if notes else "Writing your screenplay")
     with track_project(project_id, db):
         clean_premise = InputSanitizer().sanitize(premise, max_length=300)
+        # writers'-room development before the script — first write only, not
+        # a judge-note revision (the story is already shaped by then)
+        development = ""
+        if not (notes or "").strip():
+            from app.services.story_developer import StoryDeveloper
+            with tool_run(project_id, "script", "develop_story", "Screenwriter") as t:
+                treatment = await StoryDeveloper().develop(
+                    premise=clean_premise, genre=genre, tone=tone,
+                    episode_count=episode_count, language=language)
+                development = StoryDeveloper.as_brief(treatment)
+                t["artifact"] = StoryDeveloper.headline(treatment)
         with tool_run(project_id, "script", "llm_write", "Screenwriter") as t:
             raw_text = await ScriptGenerator().generate(
                 genre=genre, premise=clean_premise, tone=tone,
                 episode_count=episode_count, target_length=target_length, language=language,
-                notes=notes, model=model or "qwen-max",
+                notes=notes, model=model or "qwen-max", development=development,
             )
             t["artifact"] = "1 draft"
         _progress(project_id, "script", "update", "Screenwriter", "Structuring scenes and beats")

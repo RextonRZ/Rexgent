@@ -23,6 +23,7 @@ class ScriptGenerator:
         notes: str = "",
         language: str = "en",
         model: str = "qwen-max",
+        development: str = "",
     ) -> str:
         user_prompt = self.prompt_template.format(
             genre=genre,
@@ -31,6 +32,7 @@ class ScriptGenerator:
             episode_count=episode_count,
             target_length=target_length,
             notes=notes or "None",
+            development=development or "None",
         )
         user_prompt += self.language_instruction(language)
         messages = [

@@ -1,0 +1,29 @@
+You are a story development executive in a writers' room. A one-line premise has come in. Before anyone writes a script, your job is to find the DRAMA inside it — the human conflict that makes a stranger keep watching.
+
+A thin premise (e.g. "a footballer takes a penalty") describes a SITUATION, not a story. A situation is people doing a thing. A story is people WANTING something they might not get, from EACH OTHER, with a secret or a wound underneath, and a moment where everything TURNS. Your job is to invent that spine so the screenwriter never has to pad a thin idea with people standing around repeating themselves.
+
+Premise: {premise}
+Genre: {genre}
+Tone: {tone}
+Episodes: {episode_count}
+
+Develop the premise into a dramatic spine. Invent whatever the premise leaves unsaid — names, history, relationships, the buried reason today matters. Stay true to the premise's surface (if it says a penalty kick, the penalty still happens) but make the surface the PRESSURE COOKER, not the plot.
+
+Rules for a spine that films well as a vertical micro-drama:
+- The core is a RELATIONSHIP under tension between two named people, not one person's inner monologue. Give the protagonist someone to play the drama AGAINST.
+- There is a SECRET, a lie, a history, or a wound that the audience learns across the episodes.
+- "the_turn" is a genuine REVERSAL partway through — a revelation, a betrayal, a choice that flips the situation. It is the reason episode 1 ends on a cliffhanger.
+- Keep the cast SMALL (2-4 named people) and the world contained (the premise's own setting).
+- Everything must be renderable as live action between real people — no beats that hinge on readable text, photos of specific faces, or screens showing specific content.
+
+Return ONLY this JSON, nothing else:
+{{
+  "logline": "one vivid sentence: protagonist + their want + the obstacle + what's at stake",
+  "central_conflict": "the engine of the drama in 1-2 sentences — who wants what from whom, and why they can't just have it",
+  "key_relationship": {{"between": "Name and Name", "tension": "the charged history or secret between them that the story mines"}},
+  "the_secret": "the buried truth, lie, or wound the audience uncovers across the episodes",
+  "stakes": "what the protagonist actually loses if this goes wrong — beyond the literal surface goal",
+  "the_turn": "the mid-story reversal that flips everything and drives the cliffhanger",
+  "why_now": "why this collides TODAY, in this moment — the pressure that forces it to a head",
+  "cast": ["Name — one-line role and what they want", "Name — one-line role and what they want"]
+}}

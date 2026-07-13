@@ -17,6 +17,7 @@ STRUCTURED = "qwen-flash"
 
 TASK_MODELS: dict[str, str] = {
     # creative writing — the large model earns its cost here
+    "develop": CREATIVE,  # premise -> dramatic spine, before the script
     "script": CREATIVE,
     "storyboard": CREATIVE,
     # judgment / analysis — mid tier

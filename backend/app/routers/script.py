@@ -114,8 +114,20 @@ async def generate_script(
                    if (request.notes or "").strip() else "Writing your screenplay")}, pid)
     generator = ScriptGenerator()
     from app.websocket.tool_events import tool_run
+    from app.services.story_developer import StoryDeveloper
     try:
         with track_project(request.project_id, db):
+            # develop the premise into a dramatic spine BEFORE writing — but
+            # only on a first write, never on a judge-note revision (we already
+            # have a shaped story then)
+            development = ""
+            if not (request.notes or "").strip():
+                with tool_run(pid, "script", "develop_story", "Screenwriter") as tb:
+                    treatment = await StoryDeveloper().develop(
+                        premise=clean_premise, genre=request.genre, tone=request.tone,
+                        episode_count=request.episode_count, language=request.language)
+                    development = StoryDeveloper.as_brief(treatment)
+                    tb["artifact"] = StoryDeveloper.headline(treatment)
             with tool_run(pid, "script", "llm_write", "Screenwriter") as tb:
                 raw_text = await generator.generate(
                     genre=request.genre,
@@ -126,6 +138,7 @@ async def generate_script(
                     notes=request.notes or "",
                     language=request.language,
                     model=request.model,
+                    development=development,
                 )
                 tb["artifact"] = "1 draft"
 

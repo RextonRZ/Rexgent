@@ -70,6 +70,7 @@ export const STAGE_AGENT_ICONS: Record<StageKey, LucideIcon> = {
 
 export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
   script: [
+    { key: "develop_story", icon: Wand2, kind: "llm" },
     { key: "llm_write", icon: Sparkles, kind: "llm" },
     { key: "structure_scenes", icon: ListTree, kind: "llm" },
     { key: "write_script_db", icon: Database, kind: "db" },
