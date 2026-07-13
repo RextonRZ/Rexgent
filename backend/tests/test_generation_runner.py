@@ -749,3 +749,61 @@ async def test_repair_disabled_ships_first_clip(monkeypatch):
     assert result[2] == 0.5                       # one render only
 
 
+@pytest.mark.asyncio
+async def test_repair_primary_bill_uses_first_render_tier(monkeypatch):
+    # The primary booking must bill the FIRST render's tier even when a repair
+    # of a DIFFERENT tier wins. Assert the model/tier arg to record_video.
+    runner = make_runner()
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    monkeypatch.setattr(gr.get_settings(), "repair_enabled", True, raising=False)
+    scores = iter([
+        {"continuity_score": 40, "overall_pass": False, "face_score": 0.3,
+         "outfit_score": 0.8, "background_score": 0.8},   # first render (wan) fails
+        {"continuity_score": 80, "overall_pass": True, "face_score": 0.8,
+         "outfit_score": 0.8, "background_score": 0.8},    # repair passes
+    ])
+    runner.continuity.validate = AsyncMock(side_effect=lambda **k: next(scores))
+
+    async def fake_repair(step, **k):
+        return ("http://x/repair.mp4", "happyhorse")      # a DIFFERENT tier than the first render
+    monkeypatch.setattr(runner, "_run_repair_step", fake_repair)
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    billed = []
+    monkeypatch.setattr(gr, "record_video",
+                        lambda db, pid, secs, tier, **k: (billed.append(tier), 0.5)[1])
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    # same-cast, same-framing, frame anchor present -> continue_hold -> first render on wan
+    await runner._process_shot(
+        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe", prev_in_frame=["Yuki"], prev_shot_type="CU")
+    assert "wan" in billed          # primary booking used first_tier (wan), NOT the winning repair tier
+    assert "happyhorse" in billed   # the repair render was billed too
+
+
+@pytest.mark.asyncio
+async def test_repair_all_steps_fail_ships_first_and_bills_once(monkeypatch):
+    # repair_enabled on, but every repair strategy yields nothing: the shot ships
+    # the best (== first) clip flagged, and ONLY the primary booking bills.
+    runner = make_runner()
+    monkeypatch.setattr(gr.get_settings(), "repair_enabled", True, raising=False)
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 40, "overall_pass": False, "face_score": 0.3,
+        "outfit_score": 0.8, "background_score": 0.8})
+
+    async def fake_repair(step, **k):
+        return (None, None)                                # every repair yields nothing
+    monkeypatch.setattr(runner, "_run_repair_step", fake_repair)
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    calls = {"n": 0}
+    monkeypatch.setattr(gr, "record_video",
+                        lambda *a, **k: (calls.update(n=calls["n"] + 1), 0.5)[1])
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    result = await runner._process_shot(
+        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe", prev_in_frame=["Yuki"], prev_shot_type="CU")
+    added = runner.db.add.call_args[0][0]
+    assert added.status == "NEEDS_REVIEW"    # ships the best/first clip, flagged
+    assert calls["n"] == 1                    # only the primary booking billed
+    assert result[2] == 0.5
+
+

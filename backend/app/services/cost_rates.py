@@ -9,9 +9,10 @@ RATES = {
 
 
 def video_cost(seconds: float, model: str) -> float:
-    # wan_r2v is a Wan mode (reference-to-video) — it bills at the Wan rate,
-    # not happyhorse
-    rate = (RATES["video_wan_per_sec"] if model in ("wan", "wan_r2v")
+    # wan_r2v (reference-to-video) and videoedit (wan2.7-videoedit, the repair
+    # ladder's patch pass) are both Wan modes — they bill at the Wan rate, not
+    # the cheaper happyhorse rate
+    rate = (RATES["video_wan_per_sec"] if model in ("wan", "wan_r2v", "videoedit")
             else RATES["video_hh_per_sec"])
     return round(seconds * rate, 4)
 

@@ -764,7 +764,8 @@ class GenerationRunner:
                         if not r_url:
                             continue
                         r_amt = record_video(self.db, str(job.project_id),
-                                             shot.estimated_duration_seconds, r_tier)
+                                             shot.estimated_duration_seconds, r_tier,
+                                             ref_id=str(shot.id))
                         job.actual_cost += r_amt
                         spent_usd += r_amt
                         r_guard = await self.continuity.validate(

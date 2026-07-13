@@ -6,6 +6,10 @@ default to 0 and the structure is already in place.
 
 from app.services.cost_rates import video_cost
 
+# every Wan-family tier (i2v continuation, r2v identity, videoedit repair) bills
+# at the Wan rate and is reported together — happyhorse is everything else
+WAN_TIERS = {"wan", "wan_r2v", "videoedit"}
+
 
 def build_report(
     project_id: str,
@@ -19,8 +23,8 @@ def build_report(
     budget: float = 40.0,
     other_costs_usd: float = 0.0,  # images + TTS, straight from the ledger
 ) -> dict:
-    wan_clips = [c for c in clips if c.model_used == "wan"]
-    hh_clips = [c for c in clips if c.model_used != "wan"]
+    wan_clips = [c for c in clips if c.model_used in WAN_TIERS]
+    hh_clips = [c for c in clips if c.model_used not in WAN_TIERS]
     wan_seconds = sum(duration_by_clip.get(str(c.id), 0) for c in wan_clips)
     hh_seconds = sum(duration_by_clip.get(str(c.id), 0) for c in hh_clips)
     total_seconds = wan_seconds + hh_seconds
