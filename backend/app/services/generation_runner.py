@@ -277,6 +277,7 @@ class GenerationRunner:
         SessionLocal = get_session_factory()
         db2 = SessionLocal()
         prev_last_frame = incoming_last_frame
+        prev_clip = None
         try:
             # A scene-local runner sharing the stateless services but bound to db2,
             # so concurrent scenes never share a SQLAlchemy Session.
@@ -342,6 +343,9 @@ class GenerationRunner:
                             .first())
                     if seed and seed[0]:
                         prev_last_frame = seed[0]
+                        # a resumed shot has no fresh clip URL to continue
+                        # from — do not let a stale clip carry over
+                        prev_clip = None
                         if (scene_anchor is None
                                 and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
                             scene_anchor = prev_last_frame
@@ -358,13 +362,15 @@ class GenerationRunner:
                 environment = resolve_environment(
                     f"{scene.heading or ''} {scene.location or ''}",
                     f"{shot.action or ''}. {shot.emotional_beat or ''}")
-                prev_last_frame = await r2._process_shot(
+                prev_last_frame, prev_clip = await r2._process_shot(
                     job2, shot, char_by_name, bible, scene.number, prev_last_frame,
                     scene_anchor_url=scene_anchor, scene_setting=scene_setting,
                     suppress_location=state_changed,
                     prev_action=prev_action, next_action=next_action,
                     lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines),
-                    environment=environment, prev_in_frame=prev_in_frame)
+                    environment=environment, prev_in_frame=prev_in_frame,
+                    prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
+                    prev_clip_url=prev_clip)
                 # the first wide shot's closing frame anchors the room for the
                 # rest of the scene — a run of close-ups can't erase the set
                 if (scene_anchor is None and prev_last_frame
@@ -427,12 +433,58 @@ class GenerationRunner:
             logger.warning(f"last-frame extract failed for shot {shot.id}: {e}")
             return None
 
+    async def _dispatch_by_role(self, *, role, prompt, duration, seed, ratio,
+                                negative, ref_stack, frame_anchor, prev_clip_url,
+                                lip):
+        """Route a shot to a model by its identity role. Never-blocking: every
+        path degrades to happyhorse r2v so a model surprise can't fail the shot.
+        Returns (used_tier, task_id)."""
+        from app.services.continuation_media import hold_media, r2v_media
+
+        async def _happyhorse():
+            return await self.qwen.generate_video_happyhorse(
+                prompt=prompt, duration=duration,
+                mode="r2v" if ref_stack else "t2v",
+                reference_media=ref_stack or None,
+                seed=seed, ratio=ratio, negative_prompt=negative)
+
+        if role in ("anchor", "entrance", "continue_reangle"):
+            # anchor establishes (no frame); entrance/reangle continue the scene
+            # AND lock references via first_frame + reference_image (joint control)
+            ff = frame_anchor if role in ("entrance", "continue_reangle") else None
+            media = r2v_media(ref_stack, first_frame_url=ff)
+            if media:
+                try:
+                    return ("wan_r2v", await self.qwen.generate_video_wan_r2v(
+                        prompt=prompt, duration=duration, reference_media=media,
+                        seed=seed, ratio=ratio, negative_prompt=negative))
+                except Exception as e:  # noqa: BLE001 — chain to happyhorse
+                    logger.warning("r2v dispatch failed for role %s (%s) — "
+                                   "falling back to happyhorse r2v", role, e)
+            return ("happyhorse", await _happyhorse())
+
+        # continue_hold
+        media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor,
+                           audio_url=(lip or {}).get("audio_url"), talking=bool(lip))
+        if media:
+            try:
+                task = await self.qwen.generate_video_wan(
+                    prompt=prompt, duration=duration, reference_media=media,
+                    seed=seed, ratio=ratio, negative_prompt=negative)
+                if any(m.get("type") == "driving_audio" for m in media):
+                    logger.info("continue-hold shot lip-synced to its line")
+                return ("wan", task)
+            except Exception as e:  # noqa: BLE001 — chain to happyhorse
+                logger.warning("wan continuation failed (%s) — happyhorse", e)
+        return ("happyhorse", await _happyhorse())
+
     async def _process_shot(self, job, shot, char_by_name, bible, scene_number,
                             prev_last_frame_url, scene_anchor_url=None,
                             scene_setting=None, suppress_location=False,
                             prev_action=None, next_action=None,
                             lipsync_line=None, environment=None,
-                            prev_in_frame=None):
+                            prev_in_frame=None, prev_shot_type=None,
+                            prev_clip_url=None):
         pid = str(job.project_id)
         # shots boarded before name normalization store raw variants ("Eirik"
         # for "Eirik Halden") — resolve against the cast HERE or the bible
@@ -454,22 +506,44 @@ class GenerationRunner:
         # which carries the full bible stack. wan keeps its real strengths:
         # lip-sync, and continuing a face already established in the last frame.
         frame_anchor_pre = prev_last_frame_url or scene_anchor_url
-        if is_wan:
-            newcomers = []
-            if prev_in_frame is not None:
-                prev_set = {canonical_character(n, bible["characters"])
-                            for n in (prev_in_frame or [])}
-                newcomers = [n for n in in_frame
-                             if n not in prev_set and n not in foreground
-                             and any(v.get("plate_image_url")
-                                     for v in (bible["characters"].get(n) or {}).get("variants", []))]
-            if newcomers or not frame_anchor_pre:
+        settings_v2 = getattr(get_settings(), "identity_routing_v2", False)
+        # Compute newcomers for EVERY tier, not just wan: under the v2 flag the
+        # role block below runs for every shot, so a face-locked newcomer
+        # entering on a non-wan shot must still be detected as an entrance.
+        newcomers = []
+        if prev_in_frame is not None:
+            prev_set = {canonical_character(n, bible["characters"])
+                        for n in (prev_in_frame or [])}
+            newcomers = [n for n in in_frame
+                         if n not in prev_set and n not in foreground
+                         and any(v.get("plate_image_url")
+                                 for v in (bible["characters"].get(n) or {}).get("variants", []))]
+        if is_wan and (newcomers or not frame_anchor_pre):
+            # only the LEGACY path demotes to happyhorse here; under v2 this same
+            # shot routes to wan_r2v, so the "rendering there" claim would be false
+            if not settings_v2:
                 logger.info("shot %s needs a face reference (newcomers=%s, "
                             "no-frame=%s) — happyhorse r2v holds identity better "
                             "than wan, rendering there with the bible stack",
                             shot.id, newcomers, not frame_anchor_pre)
-                is_wan = False
+            is_wan = False
+        role = None
+        if settings_v2:
+            from app.services.shot_roles import classify_shot_role, angle_changed
+            has_locked_newcomer = bool(newcomers)
+            role = classify_shot_role(
+                has_frame_anchor=bool(frame_anchor_pre),
+                has_locked_newcomer=has_locked_newcomer,
+                is_angle_change=angle_changed(
+                    prev_shot_type, shot.shot_type,
+                    bool((getattr(shot, "blocking_json", None) or {}).get("reverse_angle"))))
+            # continue_hold is the only role that stays on wan i2v
+            is_wan = role == "continue_hold"
         model_cap = 5 if is_wan else 9
+        if settings_v2 and role in ("anchor", "entrance", "continue_reangle"):
+            # r2v takes <=5 media total; entrance/reangle also spend one slot on
+            # first_frame, so leave room for it and the identity plates
+            model_cap = 4 if role in ("entrance", "continue_reangle") else 5
         # this scene's wardrobe, per character — fed into the PROMPT, not just
         # the reference stack, so an updated costume actually renders
         from app.services.wardrobe_planner import map_variant_for_scene
@@ -504,23 +578,24 @@ class GenerationRunner:
                 # shot is framed openly talking, every other spoken line gets
                 # mouth-hiding coverage — the crafter needs to know which
                 from app.services.lipsync import lipsync_media, speaker_matches
-                frame_anchor = (prev_last_frame_url or scene_anchor_url) if is_wan else None
-                lip = None
-                if is_wan:
-                    lip = (lipsync_line
-                           # a poll-time lip failure must degrade on the
-                           # retry, not repeat itself
-                           if (attempt == 0
-                               and get_settings().lipsync_enabled
-                               and frame_anchor
-                               and lipsync_line
-                               and lipsync_line.get("audio_url")
-                               # an over-long driving track risks a wan-side
-                               # rejection; unknown duration is treated as unsafe
-                               and (lipsync_line.get("duration") or 0) > 0
-                               and lipsync_line["duration"] <= shot.estimated_duration_seconds
-                               and speaker_matches(lipsync_line, in_frame, foreground))
-                           else None)
+                frame_anchor = frame_anchor_pre if (is_wan or settings_v2) else None
+                lip_eligible = (
+                    # a poll-time lip failure must degrade on the retry, not
+                    # repeat itself — so only attempt 0 is lip-eligible
+                    attempt == 0
+                    and get_settings().lipsync_enabled
+                    and frame_anchor
+                    and lipsync_line
+                    and lipsync_line.get("audio_url")
+                    # an over-long driving track risks a wan-side rejection;
+                    # unknown duration (0/None) is treated as unsafe
+                    and (lipsync_line.get("duration") or 0) > 0
+                    and lipsync_line["duration"] <= shot.estimated_duration_seconds
+                    and speaker_matches(lipsync_line, in_frame, foreground))
+                if settings_v2:
+                    lip = lipsync_line if (lip_eligible and role == "continue_hold") else None
+                else:
+                    lip = lipsync_line if (is_wan and lip_eligible) else None
                 tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
                            index=job.completed_shots + 1, total=job.total_shots)
                 crafted = await self._craft_prompt(
@@ -544,7 +619,13 @@ class GenerationRunner:
                 used_tier = ("happyhorse"
                              if (shot.quality_tier == "wan" and not is_wan)
                              else (shot.quality_tier or "happyhorse"))
-                if is_wan:
+                if settings_v2:
+                    used_tier, task_id = await self._dispatch_by_role(
+                        role=role, prompt=prompt, duration=shot.estimated_duration_seconds,
+                        seed=seed, ratio=ratio, negative=negative,
+                        ref_stack=ref_stack or None, frame_anchor=frame_anchor,
+                        prev_clip_url=prev_clip_url, lip=lip)
+                elif is_wan:
                     # wan2.7-i2v does NOT take identity references — its media
                     # schema is first_frame / last_frame / driving_audio /
                     # first_clip only. Give wan its REAL jobs: continue the
@@ -682,7 +763,7 @@ class GenerationRunner:
                         self.db.commit()
                     except Exception as e:  # noqa: BLE001
                         logger.warning(f"poster persist skipped: {e}")
-                return frame_url
+                return (frame_url, clip_url)
             except Exception as e:  # HARD failure only -> at most one retry
                 logger.error(f"Shot {shot.id} attempt {attempt} hard-failed: {e}")
                 if attempt < MAX_RETRIES:
@@ -700,5 +781,5 @@ class GenerationRunner:
                         status="NEEDS_REVIEW", retries=attempt))
                     job.completed_shots += 1
                     self.db.commit()
-                    return None
-        return None
+                    return (None, None)
+        return (None, None)

@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     # pinned to the snapshot the DashScope docs use for driving_audio.
     qwen_wan_i2v_model: str = "wan2.7-i2v-2026-04-25"
     qwen_wan_t2v_model: str = "wan2.7-t2v"
+    # Identity-role routing (Anchor/Continue-Hold/Continue-Reangle/Entrance).
+    # OFF by default: when false, generation_runner keeps today's exact routing.
+    # Flip on per-deploy once the measurement harness (Phase 3) validates it.
+    identity_routing_v2: bool = False
+    # wan2.7-videoedit — used by the Phase 2 repair ladder (costume/face repair).
+    # VERIFY-IN-CONSOLE: only the bare id was seen; a dated snapshot may exist.
+    qwen_wan_videoedit_model: str = "wan2.7-videoedit"
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

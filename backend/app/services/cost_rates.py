@@ -9,7 +9,10 @@ RATES = {
 
 
 def video_cost(seconds: float, model: str) -> float:
-    rate = RATES["video_wan_per_sec"] if model == "wan" else RATES["video_hh_per_sec"]
+    # wan_r2v is a Wan mode (reference-to-video) — it bills at the Wan rate,
+    # not happyhorse
+    rate = (RATES["video_wan_per_sec"] if model in ("wan", "wan_r2v")
+            else RATES["video_hh_per_sec"])
     return round(seconds * rate, 4)
 
 

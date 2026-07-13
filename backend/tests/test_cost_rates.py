@@ -6,6 +6,12 @@ def test_video_cost():
     assert round(video_cost(5, "happyhorse"), 3) == 0.54
 
 
+def test_wan_r2v_bills_at_wan_rate():
+    # wan_r2v is a Wan mode — it must bill at the Wan per-second rate, not the
+    # cheaper happyhorse rate
+    assert video_cost(5, "wan_r2v") == video_cost(5, "wan") == 0.75
+
+
 def test_image_and_tts_and_llm():
     assert image_cost(2) == 0.15
     assert tts_cost(10000) == 0.13

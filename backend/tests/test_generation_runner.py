@@ -5,6 +5,12 @@ import app.services.generation_runner as gr
 from app.services.generation_runner import GenerationRunner
 
 
+def _make_dispatch_runner():
+    runner = GenerationRunner.__new__(GenerationRunner)
+    runner.qwen = MagicMock()
+    return runner
+
+
 @pytest.fixture(autouse=True)
 def _no_ws(monkeypatch):
     """Keep tests isolated from Redis/WebSocket, OSS re-hosting, and the cost ledger."""
@@ -429,5 +435,231 @@ async def test_wan_keeps_the_shot_when_cast_continues(monkeypatch):
         prev_last_frame_url="http://prev/frame.png",
         prev_in_frame=["Yuki"])
     runner.qwen.generate_video_wan.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_v2_anchor_shot_dispatches_r2v_with_ref_stack():
+    # No frame anchor -> ANCHOR role -> wan2.7-r2v with the reference stack.
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
+    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
+    tier, task = await runner._dispatch_by_role(
+        role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "face.png"}],
+        frame_anchor="prev.png", prev_clip_url=None, lip=None)
+    assert tier == "wan_r2v"
+    runner.qwen.generate_video_wan_r2v.assert_awaited_once()
+    # anchor gets NO first_frame (establishing), just the plates
+    media = runner.qwen.generate_video_wan_r2v.await_args.kwargs["reference_media"]
+    assert media == [{"type": "reference_image", "url": "face.png"}]
+
+
+@pytest.mark.asyncio
+async def test_v2_entrance_shot_adds_first_frame_to_r2v(monkeypatch):
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
+    tier, task = await runner._dispatch_by_role(
+        role="entrance", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "newface.png"}],
+        frame_anchor="prev.png", prev_clip_url=None, lip=None)
+    assert tier == "wan_r2v"
+    media = runner.qwen.generate_video_wan_r2v.await_args.kwargs["reference_media"]
+    assert media[0] == {"type": "first_frame", "url": "prev.png"}
+    assert {"type": "reference_image", "url": "newface.png"} in media
+
+
+@pytest.mark.asyncio
+async def test_v2_continue_hold_talking_dispatches_wan_lipsync(monkeypatch):
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "x.png"}],
+        frame_anchor="prev.png", prev_clip_url="clip.mp4",
+        lip={"audio_url": "a.wav", "duration": 2.0})
+    assert tier == "wan"
+    media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
+    assert media == [{"type": "first_frame", "url": "prev.png"},
+                     {"type": "driving_audio", "url": "a.wav"}]
+
+
+@pytest.mark.asyncio
+async def test_v2_continue_hold_silent_uses_first_clip(monkeypatch):
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4", lip=None)
+    media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
+    assert media == [{"type": "first_clip", "url": "clip.mp4"}]
+
+
+@pytest.mark.asyncio
+async def test_v2_r2v_failure_falls_back_to_happyhorse(monkeypatch):
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(side_effect=RuntimeError("boom"))
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
+    tier, task = await runner._dispatch_by_role(
+        role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "f.png"}],
+        frame_anchor=None, prev_clip_url=None, lip=None)
+    assert tier == "happyhorse"
+    runner.qwen.generate_video_happyhorse.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_v2_anchor_with_no_refs_falls_back_to_happyhorse():
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
+    tier, task = await runner._dispatch_by_role(
+        role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor=None, prev_clip_url=None, lip=None)
+    assert tier == "happyhorse"
+    runner.qwen.generate_video_wan_r2v.assert_not_awaited()
+    # no refs -> happyhorse runs in t2v mode
+    assert runner.qwen.generate_video_happyhorse.await_args.kwargs["mode"] == "t2v"
+
+
+@pytest.mark.asyncio
+async def test_v2_continue_hold_with_no_media_falls_back_to_happyhorse():
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor=None, prev_clip_url=None, lip=None)
+    assert tier == "happyhorse"
+    runner.qwen.generate_video_wan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_v2_continue_hold_wan_failure_falls_back_to_happyhorse():
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan = AsyncMock(side_effect=RuntimeError("boom"))
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4", lip=None)
+    assert tier == "happyhorse"
+    runner.qwen.generate_video_happyhorse.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_v2_reangle_adds_first_frame_to_r2v():
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_reangle", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "face.png"}],
+        frame_anchor="prev.png", prev_clip_url=None, lip=None)
+    assert tier == "wan_r2v"
+    media = runner.qwen.generate_video_wan_r2v.await_args.kwargs["reference_media"]
+    assert media[0] == {"type": "first_frame", "url": "prev.png"}
+
+
+# --- identity_routing_v2 wired into _process_shot ---
+
+@pytest.mark.asyncio
+async def test_v2_process_shot_routes_continue_hold_when_flag_on(monkeypatch):
+    """Flag ON: a same-cast, same-framing shot that HAS a frame anchor to
+    continue from classifies as continue_hold and dispatches through
+    _dispatch_by_role onto wan i2v continuation — never wan r2v."""
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    shot = make_shot()  # CU, characters_in_frame=["Yuki"]
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe", prev_in_frame=["Yuki"],
+        prev_shot_type="CU")
+
+    runner.qwen.generate_video_wan.assert_awaited_once()
+    runner.qwen.generate_video_wan_r2v.assert_not_awaited()
+    added = runner.db.add.call_args[0][0]
+    assert added.model_used == "wan"
+
+
+@pytest.mark.asyncio
+async def test_v2_entrance_on_nonwan_tier_routes_to_r2v(monkeypatch):
+    """Flag ON: a face-locked NEWCOMER entering on a NON-wan (happyhorse) shot
+    classifies as entrance and must render on wan r2v with a face reference —
+    NOT wan i2v continuation, which carries no reference for the new face.
+    Regression: newcomers must be computed for every tier, not just wan."""
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    shot = make_shot()
+    shot.quality_tier = "happyhorse"           # NON-wan planned tier
+    shot.characters_in_frame = ["Jonas", "Yuki"]  # Jonas is NEW this shot
+    bible = {"characters": {
+        "Yuki": {"variants": [{"plate_image_url": "y", "scene_numbers": [1], "is_default": True}]},
+        "Jonas": {"variants": [{"plate_image_url": "j", "scene_numbers": [1], "is_default": True}]},
+    }, "location_by_scene": {1: "loc"}, "style_plate": "style"}
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, bible, 1,
+        prev_last_frame_url="prevframe",   # frame anchor present
+        prev_in_frame=["Yuki"],             # only Yuki was here before
+        prev_shot_type="CU")                # same framing -> no angle change
+
+    # entrance -> wan r2v with the newcomer's plate; NOT wan i2v continuation
+    runner.qwen.generate_video_wan_r2v.assert_awaited_once()
+    runner.qwen.generate_video_wan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_v2_process_shot_anchor_routes_to_r2v(monkeypatch):
+    """Flag ON: NO frame anchor to continue from -> role anchor -> establishing
+    render on wan r2v with the plate stack, never wan i2v continuation."""
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    shot = make_shot()  # CU, characters_in_frame=["Yuki"] (Yuki has a plate)
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url=None, scene_anchor_url=None,  # NO frame anchor
+        prev_in_frame=None, prev_shot_type=None)
+
+    runner.qwen.generate_video_wan_r2v.assert_awaited_once()
+    runner.qwen.generate_video_wan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_v2_process_shot_reangle_routes_to_r2v(monkeypatch):
+    """Flag ON: same cast (no newcomer) with a frame anchor, but a DIFFERENT
+    framing from the previous shot -> role continue_reangle -> wan r2v with
+    first_frame + plates, never wan i2v continuation (which copies the frame)."""
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    shot = make_shot()  # shot_type == "CU"
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe",   # frame anchor present
+        prev_in_frame=["Yuki"],             # same cast, no newcomer
+        prev_shot_type="MS")                # MS -> CU: an angle change
+
+    runner.qwen.generate_video_wan_r2v.assert_awaited_once()
+    runner.qwen.generate_video_wan.assert_not_awaited()
 
 
