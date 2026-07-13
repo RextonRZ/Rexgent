@@ -338,7 +338,10 @@ async def generate_character_plates(character_id: str, design_voice: bool = True
                 c.video_prompt_fragment, v.outfit_description),
             base_image_url=c.reference_image_url, prompt_extend=False,
             match_vector=c.face_vector if c.reference_image_url else None)
-        v.plate_image_url, v.face_vector, v.plate_status = url, vector, "ai_generated"
+        v.plate_image_url, v.face_vector = url, vector
+        # a rejected reference (content filter) must not masquerade as a lock
+        v.plate_status = ("ref_rejected" if pg.last_face_preserved is False
+                          else "ai_generated")
         # seed identity from the default plate only when no face exists yet
         if v.is_default and not c.reference_image_url:
             c.reference_image_url, c.face_vector, c.plate_status = url, vector, "ai_generated"

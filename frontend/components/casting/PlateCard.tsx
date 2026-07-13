@@ -9,12 +9,17 @@ const STATUS_LABEL: Record<string, string> = {
   ai_generated: "AI generated",
   ai_pending: "Pending",
   user_override: "User override",
+  // the uploaded reference was rejected by the image service's content
+  // filter (commonly a recognizable public figure), so this face is
+  // invented, not the photo — use an original, non famous photo instead
+  ref_rejected: "Reference blocked",
 };
 
 const STATUS_COLOR: Record<string, string> = {
   ai_generated: "bg-ok/15 text-ok",
   ai_pending: "bg-warn/15 text-warn",
   user_override: "bg-secondary text-muted-foreground",
+  ref_rejected: "bg-bad/15 text-bad",
 };
 
 export interface PlateCardProps {

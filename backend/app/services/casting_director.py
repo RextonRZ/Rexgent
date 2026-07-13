@@ -282,11 +282,22 @@ class CastingDirector:
                 if vector:
                     faces_locked += 1
                 is_default = (i == 0)
+                # the reference photo was REJECTED by the edit model's content
+                # inspection (e.g. a recognizable public figure): say so on the
+                # plate instead of quietly showing an invented stranger
+                status = ("ref_rejected"
+                          if self.plates.last_face_preserved is False
+                          else "ai_generated")
+                if status == "ref_rejected":
+                    emit("casting.plate.warning",
+                         {"kind": "character", "key": f"{c.name}:{v['label']}",
+                          "reason": "reference photo rejected by the image "
+                                    "service's content filter"}, pid)
                 self.db.add(CostumeVariant(character_id=c.id, label=v["label"],
                                            outfit_description=v.get("outfit_description"),
                                            plate_image_url=url, face_vector=vector,
                                            scene_numbers=v.get("scene_numbers") or [],
-                                           is_default=is_default, plate_status="ai_generated"))
+                                           is_default=is_default, plate_status=status))
                 # Seed the identity from the default plate ONLY if the user hasn't set a
                 # face reference — never clobber an uploaded face.
                 if is_default and not c.reference_image_url:

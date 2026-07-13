@@ -74,6 +74,7 @@ async def test_character_plate_edits_face_when_reference_given():
     gen.qwen.edit_image.assert_awaited_once()
     assert gen.qwen.edit_image.call_args.args[1] == "https://oss/face.png"
     gen.qwen.generate_image.assert_not_called()
+    assert gen.last_face_preserved is True  # the shipped face IS the reference
 
 
 @pytest.mark.asyncio
@@ -94,6 +95,8 @@ async def test_character_plate_falls_back_to_text_when_edit_fails():
         prompt="same person, navy uniform", base_image_url="https://oss/face.png")
     assert url == "https://oss/x.png"
     gen.qwen.generate_image.assert_awaited_once()  # fell back
+    # the silent stranger is no longer silent: callers badge the plate
+    assert gen.last_face_preserved is False
 
 
 @pytest.mark.asyncio
@@ -189,3 +192,22 @@ def test_eyewear_banned_unless_the_character_asks_for_it():
     assert char_plate_negative("always wears round glasses", "") == CHAR_PLATE_NEGATIVE
     # outfit-level eyewear (e.g. sunglasses from an outfit swap) also lifts the ban
     assert char_plate_negative("", "", "black suit with aviator sunglasses") == CHAR_PLATE_NEGATIVE
+
+
+@pytest.mark.asyncio
+async def test_face_reference_preflight_classifies_verdicts():
+    """The upload-time probe: DataInspectionFailed (public figure) reads as
+    rejected, a successful edit as ok, and any other failure as unknown so a
+    flaky probe never blocks an upload."""
+    from app.services.qwen_client import QwenClient
+    client = QwenClient.__new__(QwenClient)
+
+    client.edit_image = AsyncMock(side_effect=RuntimeError(
+        'DashScope image-edit 400: {"code":"DataInspectionFailed"}'))
+    assert await client.check_face_reference("https://oss/haaland.jpg") == "rejected"
+
+    client.edit_image = AsyncMock(return_value="https://img/probe.png")
+    assert await client.check_face_reference("https://oss/me.jpg") == "ok"
+
+    client.edit_image = AsyncMock(side_effect=RuntimeError("timeout"))
+    assert await client.check_face_reference("https://oss/me.jpg") == "unknown"

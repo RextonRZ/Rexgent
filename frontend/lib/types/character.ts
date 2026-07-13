@@ -15,6 +15,9 @@ export interface Character {
   visual_description: string | null;
   video_prompt_fragment: string | null;
   face_keywords: string[] | null;
+  /** "ref_rejected" = the uploaded photo was refused by the image service's
+   *  content filter (recognizable public figures are blocked) */
+  plate_status: string | null;
   created_at: string;
 }
 

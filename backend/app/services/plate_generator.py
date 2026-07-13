@@ -105,6 +105,10 @@ class PlateGenerator:
         self.oss = OSSManager(s)
         self.embedder = FaceEmbedder()
         self.db = db
+        # after each generate_and_store_plate with a reference: True when the
+        # face edit actually ran, False when every attempt fell back to
+        # text-to-image (reference rejected), None when no reference was given
+        self.last_face_preserved: bool | None = None
 
     @staticmethod
     def _fetch_bytes(url: str) -> bytes:
@@ -172,6 +176,15 @@ class PlateGenerator:
             logger.info("plate identity match %.2f below %.2f for %s/%s (attempt %d) — %s",
                         sim, IDENTITY_MATCH_SIM, kind, key, attempt + 1,
                         "retrying" if attempt + 1 < attempts else "keeping the closest attempt")
+        # Surface the silent failure mode: a reference existed but every render
+        # fell back to text-to-image (the edit model rejected the photo, e.g.
+        # DataInspectionFailed on a recognizable public figure) — the shipped
+        # face is NOT the uploaded one. Callers read this right after the call
+        # to badge the plate instead of quietly showing a stranger.
+        self.last_face_preserved = (
+            any(m == "qwen-image-edit-max" for m in models_used)
+            if base_image_url else None
+        )
         # Unique filename per generation so a regenerated plate gets a NEW url — an
         # overwritten deterministic key returns the same url and the browser would
         # keep showing the cached (old) image.

@@ -184,6 +184,14 @@ export function CharacterCard({
           <p className="text-[11px] text-muted-foreground">
             The identity anchor — outfits below are built on this exact face.
           </p>
+          {character.plate_status === "ref_rejected" && (
+            <p className="rounded-md border border-bad/30 bg-bad/10 p-2 text-[11px] leading-snug text-bad">
+              This photo was refused by the image service&apos;s content
+              filter, which blocks recognizable public figures. Casting would
+              invent a different face. Upload an original photo of a non
+              famous person instead, and no money is spent until it passes.
+            </p>
+          )}
           <FaceUpload characterId={character.id} hasReference={hasFace} />
           <AppearanceGenerator
             characterId={character.id}

@@ -424,6 +424,27 @@ class QwenClient:
             raise RuntimeError(f"Image edit returned no URL: {output}")
         return url
 
+    async def check_face_reference(self, image_url: str) -> str:
+        """Preflight a face reference against the edit model's content
+        inspection AT UPLOAD TIME — before any casting money. DashScope
+        rejects recognizable public figures (deep-synthesis rules) with an
+        instant, unbilled DataInspectionFailed; catching it here warns the
+        user the moment they pick the photo instead of after a full cast run
+        quietly ships an invented stranger. A photo that passes costs one
+        small edit (the probe render), which the caller ledgers.
+
+        Returns "rejected" | "ok" | "unknown" (probe errored — don't block)."""
+        try:
+            await self.edit_image(
+                "same person, neutral studio headshot, plain background",
+                image_url, prompt_extend=False)
+            return "ok"
+        except Exception as e:  # noqa: BLE001
+            if "DataInspectionFailed" in str(e):
+                return "rejected"
+            logger.warning(f"face reference preflight inconclusive: {e}")
+            return "unknown"
+
     # ── Voice design / enrollment / TTS synthesis ───────────────────
     # DashScope's exact voice/TTS request shapes are uncertain, so these are
     # best-effort behind this interface: only this file changes if the real

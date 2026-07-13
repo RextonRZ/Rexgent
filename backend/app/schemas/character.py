@@ -30,6 +30,9 @@ class CharacterResponse(BaseModel):
     visual_description: Optional[str] = None
     video_prompt_fragment: Optional[str] = None
     face_keywords: Optional[list[str]] = None
+    # "ref_rejected" = the uploaded photo was refused by the image service's
+    # content filter (recognizable public figure) — warn before casting money
+    plate_status: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

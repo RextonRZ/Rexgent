@@ -189,6 +189,27 @@ async def upload_face(
     character.face_embedding = description              # Qwen-VL text description
     character.face_keywords = description.get("embedding_keywords", [])
     character.visual_description = description.get("face_description", "")
+
+    # Preflight the photo against the edit model's content inspection NOW,
+    # not during a paid cast run: DashScope refuses recognizable public
+    # figures, and without this check the plates quietly ship an invented
+    # stranger. Rejection is instant and unbilled; a passing photo costs one
+    # small probe edit, ledgered below.
+    from app.services.qwen_client import QwenClient
+    from app.websocket.tool_events import tool_run
+    with track_project(character.project_id, db):
+        with tool_run(character.project_id, "characters", "face_lock", "Casting") as tb2:
+            verdict = await QwenClient(get_settings()).check_face_reference(image_url)
+            tb2["artifact"] = f"reference check: {verdict}"
+    if verdict == "rejected":
+        character.plate_status = "ref_rejected"
+    else:
+        if character.plate_status == "ref_rejected":
+            character.plate_status = "ai_pending"  # a good photo clears the flag
+        if verdict == "ok":
+            from app.services.cost_ledger import record_image
+            record_image(db, str(character.project_id), 1, stage="casting",
+                         model=get_settings().qwen_image_edit_model)
     db.commit()
     db.refresh(character)
 
