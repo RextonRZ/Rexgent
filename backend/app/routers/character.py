@@ -186,9 +186,14 @@ async def upload_face(
 
     character.reference_image_url = image_url
     character.face_vector = result["vector"]            # real ArcFace vector (or None)
-    character.face_embedding = description              # Qwen-VL text description
-    character.face_keywords = description.get("embedding_keywords", [])
-    character.visual_description = description.get("face_description", "")
+    # The VL description is best-effort (it can be refused by the same content
+    # inspection as the edit model). An EMPTY result must not clobber the
+    # character's existing look — a blank visual_description blocks generation
+    # at preflight ("N character(s) missing visual descriptions").
+    if description.get("face_description"):
+        character.face_embedding = description          # Qwen-VL text description
+        character.face_keywords = description.get("embedding_keywords", [])
+        character.visual_description = description["face_description"]
 
     # Preflight the photo against the edit model's content inspection NOW,
     # not during a paid cast run: DashScope refuses recognizable public
