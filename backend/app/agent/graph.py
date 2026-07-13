@@ -141,8 +141,11 @@ def build_pipeline_graph(db=None):
         _emit_node(state, "storyboard")
         if db is None:
             return state
+        # target_length is seconds PER EPISODE; boarding budgets the whole drama
         state["shots"] = await pipeline_ops.generate_storyboard_op(
-            db, state["script_id"], target_length=state.get("target_length", 30)
+            db, state["script_id"],
+            target_length=(int(state.get("target_length") or 30)
+                           * max(1, int(state.get("episode_count") or 1))),
         )
         return state
 

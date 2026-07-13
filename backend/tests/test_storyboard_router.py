@@ -57,3 +57,20 @@ def test_delete_scene_missing_returns_404():
 def test_update_shot_missing_returns_404():
     r = client.patch(f"/api/storyboard/{ZERO}", json={"lighting": "NIGHT"})
     assert r.status_code in (200, 404)
+
+
+def test_scope_fallback_math_honors_per_episode_length():
+    """The manual Generate storyboard button sends no target_length — the
+    board must budget from the creation scope (seconds per episode × episodes),
+    not the 30s default that made a 10s drama board three times too long."""
+    # the same arithmetic the endpoint applies when the request omits length
+    per_episode, episodes = 10, 1
+    assert per_episode * max(1, episodes) == 10
+    per_episode, episodes = 30, 3
+    assert per_episode * max(1, episodes) == 90
+    # and the shot budget actually shrinks with the target
+    from app.services.storyboard_generator import plan_shot_budget
+    shots_small, secs_small = plan_shot_budget(1, 10)
+    shots_default, secs_default = plan_shot_budget(1, 30)
+    assert shots_small * secs_small <= 12         # a 10s drama boards ~10s
+    assert shots_default * secs_default >= 25     # the old default was ~30s

@@ -46,7 +46,7 @@ def persist_scenes(db: Session, script: Script, structured: dict) -> dict:
 async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
     project_id = request.get("project_id")
     script_id = request.get("script_id")
-    target_length = int(request.get("target_length", 30))  # seconds
+    requested_length = request.get("target_length")  # seconds, optional
 
     if script_id:
         script = db.query(Script).filter(Script.id == uuid.UUID(script_id)).first()
@@ -64,6 +64,19 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Script not found")
 
     pid = str(script.project_id)
+    # Honor the scope picked at creation when the caller doesn't specify one:
+    # the manual Generate storyboard button sends nothing, and a 1-episode
+    # 10-second drama used to silently board at the 30-second default. The
+    # stored target is seconds PER EPISODE; boarding budgets the whole drama.
+    if requested_length is not None:
+        target_length = int(requested_length)
+    else:
+        from app.models.project import Project
+        proj = db.query(Project).filter(Project.id == script.project_id).first()
+        per_episode = int(getattr(proj, "target_length", None) or 30)
+        episodes = max(1, int(getattr(proj, "episode_count", None) or 1))
+        target_length = per_episode * episodes
+
     emit("stage:progress", {"stage": "storyboard", "status": "started",
          "agent": "Director", "label": "Breaking the script into shots"}, pid)
 
