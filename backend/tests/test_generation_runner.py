@@ -351,3 +351,24 @@ def test_load_bible_shapes_characters_and_locations():
     assert bible["characters"]["Mia"]["variants"][0]["face_vector"] == [0.1, 0.2]
     assert bible["location_by_scene"][1] == "loc"
     assert bible["style_plate"] == "style"
+
+
+@pytest.mark.asyncio
+async def test_craft_prompt_resolves_bare_first_names_to_cast():
+    """Shots boarded before name normalization store 'EIRIK' for 'Eirik
+    Halden' — the crafted prompt must still carry his visual fragment, not
+    silently drop him from character_visuals."""
+    runner = make_runner()
+    shot = SimpleNamespace(
+        shot_type="MS", camera_movement="static", action="walks to the spot",
+        lighting=None, colour_mood=None, emotional_beat=None, dialogue=None,
+        estimated_duration_seconds=5, characters_in_frame=["EIRIK"],
+        quality_tier="happyhorse",
+    )
+    char = SimpleNamespace(name="Eirik Halden",
+                           video_prompt_fragment="tall athlete, long blonde hair",
+                           visual_description="tall athlete")
+    await runner._craft_prompt(shot, {"Eirik Halden": char})
+    visuals = runner.prompt_crafter.craft.await_args.kwargs["character_visuals"]
+    assert "Eirik Halden" in visuals
+    assert visuals["Eirik Halden"]["video_prompt_fragment"] == "tall athlete, long blonde hair"

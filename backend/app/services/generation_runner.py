@@ -386,7 +386,9 @@ class GenerationRunner:
                             prev_action=None, next_action=None, foreground=None,
                             environment=None,
                             outfits=None, blocking=None, lipsync=False) -> str:
-        in_frame = shot.characters_in_frame or []
+        from app.services.guardrails import canonical_character
+        in_frame = [canonical_character(n, char_by_name)
+                    for n in (shot.characters_in_frame or [])]
         fg = set(foreground or [])
         shot_chars = [char_by_name[n] for n in in_frame if n in char_by_name]
         character_visuals = {
@@ -430,9 +432,15 @@ class GenerationRunner:
                             prev_action=None, next_action=None,
                             lipsync_line=None, environment=None):
         pid = str(job.project_id)
-        in_frame = shot.characters_in_frame or []
-        foreground = [n for n in (getattr(shot, "foreground_characters", None) or [])
-                      if n in in_frame]
+        # shots boarded before name normalization store raw variants ("Eirik"
+        # for "Eirik Halden") — resolve against the cast HERE or the bible
+        # lookups (outfits, identity refs, continuity) silently miss them
+        from app.services.guardrails import canonical_character
+        in_frame = [canonical_character(n, bible["characters"])
+                    for n in (shot.characters_in_frame or [])]
+        foreground = [canonical_character(n, bible["characters"])
+                      for n in (getattr(shot, "foreground_characters", None) or [])]
+        foreground = [n for n in foreground if n in in_frame]
         is_wan = shot.quality_tier == "wan"
         model_cap = 5 if is_wan else 9
         # this scene's wardrobe, per character — fed into the PROMPT, not just
