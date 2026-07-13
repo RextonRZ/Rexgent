@@ -97,6 +97,14 @@ async def ensure_location_plates(db: Session, project_id) -> int:
     return len(missing)
 
 
+def resolve_outfit(scene_outfit: str | None, default_clothing: str | None) -> str:
+    """Clothing ownership: the wardrobe's per-scene outfit wins; when a scene
+    has none, fall back to the character's default clothing (appearance's
+    clothing_keywords). The appearance FRAGMENT no longer carries clothing, so
+    without this fallback an unwardrobed scene renders the character naked."""
+    return (scene_outfit or "").strip() or (default_clothing or "").strip()
+
+
 def voice_design_prompt(char) -> str:
     """The character sheet, folded into a voice description: age, gender,
     personality and role shape a bespoke timbre instead of a rotated preset."""
@@ -205,6 +213,11 @@ class CastingDirector:
                 tool_event(pid, "characters", "profile_cast", "started",
                            agent="Casting", total=len(needing_look))
             looks_written = 0
+            # the appearance fragment now carries ONLY permanent traits (no
+            # clothing), so a scene with no wardrobe outfit would render the
+            # character with no clothes — clothing_keywords is their DEFAULT
+            # outfit, used to backfill any empty wardrobe slot below
+            default_clothing: dict = {}
             for c in needing_look:
                 try:
                     from app.services.appearance_generator import AppearanceGenerator
@@ -215,6 +228,9 @@ class CastingDirector:
                         physical_desc=c.physical_description or "")
                     c.visual_description = (c.visual_description or "").strip() or look.get("full_description", "")
                     c.video_prompt_fragment = (c.video_prompt_fragment or "").strip() or look.get("video_prompt_fragment", "")
+                    clothes = ", ".join(look.get("clothing_keywords") or [])
+                    if clothes.strip():
+                        default_clothing[c.name] = clothes.strip()
                     looks_written += 1
                 except Exception as e:  # noqa: BLE001
                     import logging
@@ -266,7 +282,9 @@ class CastingDirector:
                 emit("casting.plate.started", {"kind": "character", "key": f"{c.name}:{v['label']}", "index": idx, "total": total}, pid)
                 tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
                            index=idx, total=total)
-                outfit = v.get("outfit_description", "")
+                # wardrobe outfit wins; when a scene has none, fall back to the
+                # character's default clothing so they're never rendered naked
+                outfit = resolve_outfit(v.get("outfit_description"), default_clothing.get(c.name))
                 # identity plate: waist-up, plain background, no style-tag scene drift
                 subject = subject_descriptor(c.gender, c.estimated_age,
                                              c.physical_description or c.visual_description)
@@ -294,7 +312,9 @@ class CastingDirector:
                           "reason": "reference photo rejected by the image "
                                     "service's content filter"}, pid)
                 self.db.add(CostumeVariant(character_id=c.id, label=v["label"],
-                                           outfit_description=v.get("outfit_description"),
+                                           # persist the backfilled outfit so the
+                                           # render's per-scene lookup gets clothing too
+                                           outfit_description=outfit or None,
                                            plate_image_url=url, face_vector=vector,
                                            scene_numbers=v.get("scene_numbers") or [],
                                            is_default=is_default, plate_status=status))

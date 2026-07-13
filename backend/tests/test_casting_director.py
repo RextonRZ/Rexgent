@@ -147,3 +147,19 @@ async def test_ensure_location_plates_noop_when_covered(monkeypatch):
     assert made == 0
     fake_plates.generate_and_store_plate.assert_not_awaited()
     assert db.added == []
+
+
+def test_resolve_outfit_wardrobe_wins_clothing_backfills():
+    """Clothing ownership: the scene's wardrobe outfit wins; an empty scene
+    outfit falls back to the character's default clothing (appearance's
+    clothing_keywords) so a shot never renders them naked now that the
+    appearance fragment carries no clothing."""
+    from app.services.casting_director import resolve_outfit
+    # wardrobe present -> wardrobe wins
+    assert resolve_outfit("black hoodie, sneakers", "grey tee") == "black hoodie, sneakers"
+    # wardrobe empty -> default clothing backfills (KERRY's empty-outfit case)
+    assert resolve_outfit("", "school uniform") == "school uniform"
+    assert resolve_outfit(None, "school uniform") == "school uniform"
+    assert resolve_outfit("   ", "school uniform") == "school uniform"
+    # neither -> empty (the prompt simply omits an outfit line)
+    assert resolve_outfit(None, None) == ""

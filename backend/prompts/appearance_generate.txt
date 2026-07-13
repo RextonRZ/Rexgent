@@ -4,15 +4,17 @@ You will be given a character's name, role, setting, personality, MBTI, and any 
 
 This description will be injected into AI video generation prompts, so it must be precise, visual, and evocative. Avoid abstract personality descriptors — only physical details.
 
+OWNERSHIP — this matters: `full_description` and `video_prompt_fragment` describe ONLY the PERMANENT person — face, eyes, skin tone, hair, build, age, distinctive features. They must NOT name any clothing, outfit, footwear, or accessory, because a separate wardrobe stage assigns per-scene costumes (which change across the story) and its outfit OVERRIDES anything here. Clothing lives ONLY in `clothing_keywords`, as the character's default/typical style — never baked into the fragment. A fragment that says "grey hoodie, bare feet" fights the scene's assigned "black hoodie, sneakers" and makes the outfit flicker shot to shot.
+
 Return JSON only, in this exact schema:
 {
-  "short_description": "string — 1 sentence, suitable for inline prompt injection (max 30 words)",
-  "full_description": "string — 3-4 sentences with complete visual details",
+  "short_description": "string — 1 sentence, PERMANENT traits only, no clothing (max 30 words)",
+  "full_description": "string — 3-4 sentences, face/hair/build/features ONLY, NO clothing or footwear",
   "face_keywords": ["string", "string", "string"],
   "hair_keywords": ["string", "string"],
   "clothing_keywords": ["string", "string", "string"],
   "distinctive_features": ["string"],
-  "video_prompt_fragment": "string — optimised for Wan/HappyHorse injection, max 50 words, NO character names, NO text/numbers"
+  "video_prompt_fragment": "string — optimised for Wan/HappyHorse injection, max 50 words, PERMANENT traits only (face, hair, build, features), NO clothing/footwear/accessories, NO character names, NO text/numbers"
 }
 
 Return ONLY the JSON.
