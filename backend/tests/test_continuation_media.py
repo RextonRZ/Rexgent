@@ -21,7 +21,7 @@ def test_silent_hold_falls_back_to_first_frame():
     assert m == [{"type": "first_frame", "url": "f.png"}]
 
 
-def test_talking_without_audio_or_frame_falls_back_to_continuation():
+def test_talking_without_audio_falls_back_to_continuation():
     # can't lip-sync without both frame and audio -> plain continuation
     m = hold_media(first_clip_url="clip.mp4", first_frame_url="f.png",
                    audio_url=None, talking=True)
@@ -48,3 +48,17 @@ def test_r2v_media_prepends_first_frame_for_joint_control():
 
 def test_r2v_media_empty_returns_none():
     assert r2v_media(None, first_frame_url=None) is None
+
+
+def test_r2v_media_lone_first_frame_returns_none():
+    # no reference images -> not an r2v job, even with a first_frame
+    assert r2v_media([], first_frame_url="p.png") is None
+
+
+def test_r2v_media_dedupes_first_frame_from_stack():
+    # the prev frame is already in the stack as a reference_image; don't send it twice
+    stack = [{"type": "reference_image", "url": "prev.png"},
+             {"type": "reference_image", "url": "face.png"}]
+    assert r2v_media(stack, first_frame_url="prev.png") == [
+        {"type": "first_frame", "url": "prev.png"},
+        {"type": "reference_image", "url": "face.png"}]

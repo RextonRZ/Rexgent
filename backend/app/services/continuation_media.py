@@ -28,9 +28,12 @@ def hold_media(*, first_clip_url=None, first_frame_url=None, audio_url=None,
 def r2v_media(ref_stack, *, first_frame_url=None):
     """wan2.7-r2v media: the reference_image plate stack, optionally led by a
     first_frame for joint control (Entrance / Reangle continue the scene while
-    the plates lock identity+costume). Returns None when there are no refs."""
-    stack = list(ref_stack or [])
-    if not stack and not first_frame_url:
+    the plates lock identity+costume). r2v is defined by its references, so this
+    returns None when there are no reference images left (a lone first_frame is
+    an i2v continuation, not an r2v job). If the first_frame URL already appears
+    in the stack (the prev_frame reference), it is not sent twice."""
+    stack = [e for e in (ref_stack or []) if e.get("url") != first_frame_url]
+    if not stack:
         return None
     if first_frame_url:
         return [{"type": "first_frame", "url": first_frame_url}] + stack
