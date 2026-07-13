@@ -51,13 +51,9 @@ def main(project_id: str) -> None:
 
 
 def _open_session():
-    """Open a DB session using whatever factory the codebase exposes."""
-    try:
-        from app.database import SessionLocal
-        return SessionLocal()
-    except Exception:
-        from app.database import get_session_factory
-        return get_session_factory()()
+    """Open a DB session (the codebase exposes a session factory)."""
+    from app.database import get_session_factory
+    return get_session_factory()()
 
 
 if __name__ == "__main__":
