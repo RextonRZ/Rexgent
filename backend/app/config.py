@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     # EXTRA renders per shot so cost can't explode.
     repair_enabled: bool = False
     repair_max_renders: int = 2
+    # Multi-shot conversation beats: render a run of dialogue shots as ONE wan2.7
+    # multi-shot clip (angles locked to the same faces), sliced back per shot at
+    # export. OFF by default. max_shots bounds a beat; max_duration caps the merged
+    # clip to wan's 2-15s range.
+    multishot_enabled: bool = False
+    multishot_max_shots: int = 3
+    multishot_max_duration: int = 15
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

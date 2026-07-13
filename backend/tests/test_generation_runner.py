@@ -807,3 +807,77 @@ async def test_repair_all_steps_fail_ships_first_and_bills_once(monkeypatch):
     assert result[2] == 0.5
 
 
+@pytest.mark.asyncio
+async def test_multishot_beat_renders_once_and_writes_a_clip_per_shot(monkeypatch):
+    # flag ON: a 2-shot dialogue beat renders ONE wan clip and writes TWO clip
+    # rows sharing that url with contiguous trims; cost booked once.
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 80, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr("app.services.video_stitcher.VideoStitcher._duration",
+                        staticmethod(lambda p: 10.0))
+    billed = []
+    monkeypatch.setattr(gr, "record_video", lambda db, pid, secs, tier, **k: (billed.append(tier), 0.5)[1])
+    monkeypatch.setattr(gr.get_settings(), "multishot_enabled", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=2)
+    s1 = make_shot(); s1.number = 1; s1.characters_in_frame = ["Yuki"]; s1.dialogue = "YUKI: hi"
+    s2 = make_shot(); s2.id = "shot2"; s2.number = 2; s2.characters_in_frame = ["Yuki"]; s2.dialogue = "YUKI: bye"
+    frame, clip, spent = await runner._process_beat(
+        [s1, s2], job, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url=None, scene_anchor_url=None, prev_shot_type=None)
+    assert (runner.qwen.generate_video_wan.await_count
+            + runner.qwen.generate_video_wan_r2v.await_count
+            + runner.qwen.generate_video_happyhorse.await_count) == 1
+    assert len(billed) == 1
+    clips = [c.args[0] for c in runner.db.add.call_args_list]
+    assert len(clips) == 2
+    assert clips[0].url == clips[1].url
+    assert clips[0].trim_start == 0.0 and clips[1].trim_end == 10.0
+    assert clips[0].trim_end == clips[1].trim_start
+    assert clips[0].shot_id == "shot1" and clips[1].shot_id == "shot2"
+
+
+@pytest.mark.asyncio
+async def test_multishot_beat_dispatch_failure_returns_none(monkeypatch):
+    # dispatch (generate_video_wan) blows up: _process_beat returns the
+    # sentinel (None, None, 0.0) and writes NO clip, so the caller falls back
+    # to per-shot rendering without losing the beat.
+    runner = make_runner()
+    runner.qwen.generate_video_wan = AsyncMock(side_effect=RuntimeError("dispatch down"))
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 80, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "multishot_enabled", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=2)
+    s1 = make_shot(); s1.number = 1
+    s2 = make_shot(); s2.id = "shot2"; s2.number = 2
+    result = await runner._process_beat(
+        [s1, s2], job, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url=None, scene_anchor_url=None, prev_shot_type=None)
+    assert result == (None, None, 0.0)
+    runner.db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_multishot_beat_post_dispatch_failure_is_caught(monkeypatch):
+    # dispatch SUCCEEDS but a later step (poll) raises: _process_beat must
+    # catch it and return clip=None instead of propagating — the _run_scene
+    # fallback depends on this never-raising contract.
+    runner = make_runner()
+    runner.qwen.poll_video_task = AsyncMock(side_effect=RuntimeError("boom"))
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 80, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "multishot_enabled", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=2)
+    s1 = make_shot(); s1.number = 1
+    s2 = make_shot(); s2.id = "shot2"; s2.number = 2
+    result = await runner._process_beat(
+        [s1, s2], job, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url=None, scene_anchor_url=None, prev_shot_type=None)
+    assert result[1] is None   # clip is None; did NOT raise
+
