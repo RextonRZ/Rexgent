@@ -11,12 +11,14 @@ Roles:
 
 
 def classify_shot_role(*, has_frame_anchor: bool, has_locked_newcomer: bool,
-                       angle_changed: bool) -> str:
+                       is_angle_change: bool) -> str:
+    """Pick a shot's identity role. Precedence: no anchor -> anchor; else a locked
+    newcomer -> entrance; else an angle change -> continue_reangle; else continue_hold."""
     if not has_frame_anchor:
         return "anchor"
     if has_locked_newcomer:
         return "entrance"
-    if angle_changed:
+    if is_angle_change:
         return "continue_reangle"
     return "continue_hold"
 

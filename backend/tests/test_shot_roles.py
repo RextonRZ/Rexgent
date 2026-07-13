@@ -3,27 +3,32 @@ from app.services.shot_roles import classify_shot_role, angle_changed
 
 def test_no_frame_anchor_is_anchor():
     assert classify_shot_role(
-        has_frame_anchor=False, has_locked_newcomer=False, angle_changed=False) == "anchor"
+        has_frame_anchor=False, has_locked_newcomer=False, is_angle_change=False) == "anchor"
 
 
 def test_locked_newcomer_is_entrance():
     assert classify_shot_role(
-        has_frame_anchor=True, has_locked_newcomer=True, angle_changed=False) == "entrance"
+        has_frame_anchor=True, has_locked_newcomer=True, is_angle_change=False) == "entrance"
 
 
 def test_angle_change_is_reangle():
     assert classify_shot_role(
-        has_frame_anchor=True, has_locked_newcomer=False, angle_changed=True) == "continue_reangle"
+        has_frame_anchor=True, has_locked_newcomer=False, is_angle_change=True) == "continue_reangle"
 
 
 def test_default_is_continue_hold():
     assert classify_shot_role(
-        has_frame_anchor=True, has_locked_newcomer=False, angle_changed=False) == "continue_hold"
+        has_frame_anchor=True, has_locked_newcomer=False, is_angle_change=False) == "continue_hold"
 
 
 def test_newcomer_wins_over_angle_change():
     assert classify_shot_role(
-        has_frame_anchor=True, has_locked_newcomer=True, angle_changed=True) == "entrance"
+        has_frame_anchor=True, has_locked_newcomer=True, is_angle_change=True) == "entrance"
+
+
+def test_no_anchor_wins_over_everything():
+    assert classify_shot_role(
+        has_frame_anchor=False, has_locked_newcomer=True, is_angle_change=True) == "anchor"
 
 
 def test_reverse_angle_flag_is_an_angle_change():
