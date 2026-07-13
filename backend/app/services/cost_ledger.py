@@ -78,8 +78,9 @@ def aggregate(db, project_id, budget=None) -> dict:
 
 
 # tier keys -> the ledger's readable model names (usage analytics groups on these).
-# wan_r2v is a Wan mode, so it groups under the same "wan2.7" label as wan i2v.
-VIDEO_MODEL_NAMES = {"wan": "wan2.7", "wan_r2v": "wan2.7",
+# wan_r2v and videoedit are Wan modes, so they group under the same "wan2.7"
+# label as wan i2v.
+VIDEO_MODEL_NAMES = {"wan": "wan2.7", "wan_r2v": "wan2.7", "videoedit": "wan2.7",
                      "happyhorse": "happyhorse-1.1"}
 
 

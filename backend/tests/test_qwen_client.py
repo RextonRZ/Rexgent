@@ -342,3 +342,26 @@ def test_enroll_default_name_when_blank():
     import re
     name = re.sub(r"[^a-z0-9]", "", ("###").lower())[:10] or "voice"
     assert name == "voice"
+
+
+@pytest.mark.asyncio
+async def test_videoedit_sends_video_plus_reference_images(monkeypatch):
+    # wan2.7-videoedit: source clip as type "video" + the plate(s) to paint in
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    client = QwenClient(get_settings())
+    captured = {}
+
+    async def fake_dispatch(model, input_obj, parameters):
+        captured["model"] = model
+        captured["media"] = input_obj.get("media")
+        return "task-edit"
+
+    monkeypatch.setattr(client, "_dispatch_video", AsyncMock(side_effect=fake_dispatch))
+    await client.generate_video_videoedit(
+        prompt="replace her top with the reference outfit",
+        source_video_url="https://oss/clip.mp4",
+        reference_media=[{"type": "reference_image", "url": "outfit.png"}])
+    assert captured["model"] == get_settings().qwen_wan_videoedit_model
+    assert captured["media"][0] == {"type": "video", "url": "https://oss/clip.mp4"}
+    assert {"type": "reference_image", "url": "outfit.png"} in captured["media"]

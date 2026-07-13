@@ -298,6 +298,30 @@ class QwenClient:
             params["ratio"] = ratio
         return await self._dispatch_video(chosen, input_obj, params)
 
+    async def generate_video_videoedit(
+        self,
+        prompt: str,
+        source_video_url: str,
+        reference_media: list[dict] | None = None,
+        duration: int = 5,
+        seed: int | None = None,
+        negative_prompt: str | None = None,
+    ) -> str:
+        """wan2.7-videoedit: edit an existing clip guided by reference images —
+        e.g. paint a character's assigned outfit (or face plate) onto the shot.
+        Media is the source clip as type "video" plus up to 4 reference_image
+        plates. Used by the Phase 2 repair ladder."""
+        s = get_settings()
+        input_obj: dict = {"prompt": prompt,
+                           "media": [{"type": "video", "url": source_video_url}]
+                           + list(reference_media or [])[:4]}
+        if negative_prompt:
+            input_obj["negative_prompt"] = negative_prompt[:500]
+        params: dict = {"resolution": "1080P", "duration": duration}
+        if seed is not None:
+            params["seed"] = seed
+        return await self._dispatch_video(s.qwen_wan_videoedit_model, input_obj, params)
+
     @staticmethod
     def _extract_video_url(output: dict) -> str | None:
         # DashScope returns the URL in one of a few shapes depending on model.
