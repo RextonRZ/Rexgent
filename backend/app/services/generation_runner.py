@@ -328,62 +328,158 @@ class GenerationRunner:
                             "character_name": r.character_name,
                             "duration": r.duration_seconds}
                            for r in line_rows if r.audio_url]
-            for i, shot in enumerate(ordered):
-                if self._cancelled:
-                    break
-                if shot.id in already_good:
-                    # resume: this shot keeps its approved clip, but its stored
-                    # poster IS its last frame — seed the chain with it so the
-                    # NEXT shot can still anchor a wan continuation (and lip-sync)
-                    # to the real previous picture instead of getting nothing
-                    seed = (db2.query(GeneratedClip.poster_url)
-                            .filter(GeneratedClip.shot_id == shot.id,
-                                    GeneratedClip.poster_url.isnot(None))
-                            .order_by(GeneratedClip.created_at.desc())
-                            .first())
-                    if seed and seed[0]:
-                        prev_last_frame = seed[0]
-                        # a resumed shot has no fresh clip URL to continue
-                        # from — do not let a stale clip carry over
-                        prev_clip = None
+            if not getattr(get_settings(), "multishot_enabled", False):
+                for i, shot in enumerate(ordered):
+                    if self._cancelled:
+                        break
+                    if shot.id in already_good:
+                        # resume: this shot keeps its approved clip, but its stored
+                        # poster IS its last frame — seed the chain with it so the
+                        # NEXT shot can still anchor a wan continuation (and lip-sync)
+                        # to the real previous picture instead of getting nothing
+                        seed = (db2.query(GeneratedClip.poster_url)
+                                .filter(GeneratedClip.shot_id == shot.id,
+                                        GeneratedClip.poster_url.isnot(None))
+                                .order_by(GeneratedClip.created_at.desc())
+                                .first())
+                        if seed and seed[0]:
+                            prev_last_frame = seed[0]
+                            # a resumed shot has no fresh clip URL to continue
+                            # from — do not let a stale clip carry over
+                            prev_clip = None
+                            if (scene_anchor is None
+                                    and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
+                                scene_anchor = prev_last_frame
+                        continue
+                    prev_action = ordered[i - 1].action if i > 0 else None
+                    next_action = ordered[i + 1].action if i < len(ordered) - 1 else None
+                    prev_in_frame = (ordered[i - 1].characters_in_frame or []) if i > 0 else []
+                    scene_setting, state_changed = setting_for_shot(
+                        set_json, scene.location, shot.number)
+                    # world-graph pass: does an active EVENT override this
+                    # location's default environmental behavior? (concert crowd
+                    # stops cheering in the shot where the performer collapses)
+                    from app.graph.environment_graph import resolve_environment
+                    environment = resolve_environment(
+                        f"{scene.heading or ''} {scene.location or ''}",
+                        f"{shot.action or ''}. {shot.emotional_beat or ''}")
+                    prev_last_frame, prev_clip, shot_spent = await r2._process_shot(
+                        job2, shot, char_by_name, bible, scene.number, prev_last_frame,
+                        scene_anchor_url=scene_anchor, scene_setting=scene_setting,
+                        suppress_location=state_changed,
+                        prev_action=prev_action, next_action=next_action,
+                        lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines),
+                        environment=environment, prev_in_frame=prev_in_frame,
+                        prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
+                        prev_clip_url=prev_clip)
+                    # the first wide shot's closing frame anchors the room for the
+                    # rest of the scene — a run of close-ups can't erase the set
+                    if (scene_anchor is None and prev_last_frame
+                            and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
+                        scene_anchor = prev_last_frame
+                    async with self._cost_lock:
+                        self._spent += shot_spent
+                        if self._spent >= self.budget_ceiling:
+                            self._cancelled = True
+                        emit("cost:updated", {
+                            "current_cost": round(self._spent, 2),
+                            "budget_remaining": round(self.budget_ceiling - self._spent, 2),
+                        }, pid)
+            else:
+                # Multishot ON: group the scene's shots into beats — a run of
+                # dialogue shots involving <=2 people renders as ONE wan
+                # multi-shot clip instead of one render per shot. Everything
+                # else (and any beat whose dispatch fails) stays a singleton,
+                # rendered through the exact same _process_shot call as the
+                # flag-off path above.
+                async def _render_singleton(i, shot):
+                    nonlocal prev_last_frame, prev_clip, scene_anchor
+                    if shot.id in already_good:
+                        # resume: this shot keeps its approved clip, but its stored
+                        # poster IS its last frame — seed the chain with it so the
+                        # NEXT shot can still anchor a wan continuation (and lip-sync)
+                        # to the real previous picture instead of getting nothing
+                        seed = (db2.query(GeneratedClip.poster_url)
+                                .filter(GeneratedClip.shot_id == shot.id,
+                                        GeneratedClip.poster_url.isnot(None))
+                                .order_by(GeneratedClip.created_at.desc())
+                                .first())
+                        if seed and seed[0]:
+                            prev_last_frame = seed[0]
+                            # a resumed shot has no fresh clip URL to continue
+                            # from — do not let a stale clip carry over
+                            prev_clip = None
+                            if (scene_anchor is None
+                                    and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
+                                scene_anchor = prev_last_frame
+                        return
+                    prev_action = ordered[i - 1].action if i > 0 else None
+                    next_action = ordered[i + 1].action if i < len(ordered) - 1 else None
+                    prev_in_frame = (ordered[i - 1].characters_in_frame or []) if i > 0 else []
+                    scene_setting, state_changed = setting_for_shot(
+                        set_json, scene.location, shot.number)
+                    from app.graph.environment_graph import resolve_environment
+                    environment = resolve_environment(
+                        f"{scene.heading or ''} {scene.location or ''}",
+                        f"{shot.action or ''}. {shot.emotional_beat or ''}")
+                    prev_last_frame, prev_clip, shot_spent = await r2._process_shot(
+                        job2, shot, char_by_name, bible, scene.number, prev_last_frame,
+                        scene_anchor_url=scene_anchor, scene_setting=scene_setting,
+                        suppress_location=state_changed,
+                        prev_action=prev_action, next_action=next_action,
+                        lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines),
+                        environment=environment, prev_in_frame=prev_in_frame,
+                        prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
+                        prev_clip_url=prev_clip)
+                    if (scene_anchor is None and prev_last_frame
+                            and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
+                        scene_anchor = prev_last_frame
+                    async with self._cost_lock:
+                        self._spent += shot_spent
+                        if self._spent >= self.budget_ceiling:
+                            self._cancelled = True
+                        emit("cost:updated", {
+                            "current_cost": round(self._spent, 2),
+                            "budget_remaining": round(self.budget_ceiling - self._spent, 2),
+                        }, pid)
+
+                from app.services.multishot import group_beats
+                beats = group_beats(ordered, get_settings().multishot_max_shots)
+                idx = 0
+                for unit in beats:
+                    if self._cancelled:
+                        break
+                    if len(unit) == 1:
+                        await _render_singleton(idx, unit[0])
+                        idx += 1
+                        continue
+                    prev_shot_type_before = ordered[idx - 1].shot_type if idx > 0 else None
+                    new_frame, new_clip, shot_spent = await r2._process_beat(
+                        unit, job2, char_by_name, bible, scene.number, prev_last_frame,
+                        scene_anchor_url=scene_anchor, prev_shot_type=prev_shot_type_before)
+                    if new_frame is None and new_clip is None and shot_spent == 0.0:
+                        # dispatch failed: fall back to per-shot rendering so
+                        # the beat is never lost
+                        for j, beat_shot in enumerate(unit):
+                            if self._cancelled:
+                                break
+                            await _render_singleton(idx + j, beat_shot)
+                    else:
+                        prev_last_frame = new_frame
+                        prev_clip = new_clip
+                        last_shot = unit[-1]
                         if (scene_anchor is None
-                                and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
+                                and str(last_shot.shot_type or "").upper() in WIDE_FRAMINGS):
                             scene_anchor = prev_last_frame
-                    continue
-                prev_action = ordered[i - 1].action if i > 0 else None
-                next_action = ordered[i + 1].action if i < len(ordered) - 1 else None
-                prev_in_frame = (ordered[i - 1].characters_in_frame or []) if i > 0 else []
-                scene_setting, state_changed = setting_for_shot(
-                    set_json, scene.location, shot.number)
-                # world-graph pass: does an active EVENT override this
-                # location's default environmental behavior? (concert crowd
-                # stops cheering in the shot where the performer collapses)
-                from app.graph.environment_graph import resolve_environment
-                environment = resolve_environment(
-                    f"{scene.heading or ''} {scene.location or ''}",
-                    f"{shot.action or ''}. {shot.emotional_beat or ''}")
-                prev_last_frame, prev_clip, shot_spent = await r2._process_shot(
-                    job2, shot, char_by_name, bible, scene.number, prev_last_frame,
-                    scene_anchor_url=scene_anchor, scene_setting=scene_setting,
-                    suppress_location=state_changed,
-                    prev_action=prev_action, next_action=next_action,
-                    lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines),
-                    environment=environment, prev_in_frame=prev_in_frame,
-                    prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
-                    prev_clip_url=prev_clip)
-                # the first wide shot's closing frame anchors the room for the
-                # rest of the scene — a run of close-ups can't erase the set
-                if (scene_anchor is None and prev_last_frame
-                        and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
-                    scene_anchor = prev_last_frame
-                async with self._cost_lock:
-                    self._spent += shot_spent
-                    if self._spent >= self.budget_ceiling:
-                        self._cancelled = True
-                    emit("cost:updated", {
-                        "current_cost": round(self._spent, 2),
-                        "budget_remaining": round(self.budget_ceiling - self._spent, 2),
-                    }, pid)
+                        async with self._cost_lock:
+                            self._spent += shot_spent
+                            if self._spent >= self.budget_ceiling:
+                                self._cancelled = True
+                            emit("cost:updated", {
+                                "current_cost": round(self._spent, 2),
+                                "budget_remaining": round(self.budget_ceiling - self._spent, 2),
+                            }, pid)
+                    idx += len(unit)
         finally:
             db2.close()
         return prev_last_frame
@@ -520,6 +616,60 @@ class GenerationRunner:
         except Exception as e:  # noqa: BLE001 — repair is best-effort
             logger.warning("repair step %s failed for shot %s: %s", step, shot.id, e)
             return (None, None)
+
+    async def _process_beat(self, beat, job, char_by_name, bible, scene_number,
+                            prev_last_frame_url, scene_anchor_url=None,
+                            prev_shot_type=None):
+        """Render a conversation beat as ONE wan multi-shot clip, then write a
+        clip row per shot sharing that url with proportional trims. Returns
+        (last_frame_url, clip_url, spent_usd). On dispatch failure returns
+        (None, None, 0.0) so the caller can fall back to per-shot rendering."""
+        from app.services.multishot import multishot_prompt, slice_ranges
+        from app.services.video_stitcher import VideoStitcher
+        pid = str(job.project_id)
+        spent_usd = 0.0
+        in_frame = []
+        for s in beat:
+            for nm in (s.characters_in_frame or []):
+                if nm not in in_frame:
+                    in_frame.append(nm)
+        durations = [s.estimated_duration_seconds for s in beat]
+        want = min(sum(durations), get_settings().multishot_max_duration)
+        prompt = multishot_prompt(beat)
+        ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
+        seed = stable_seed(pid, beat[0].id)
+        frame_anchor = prev_last_frame_url or scene_anchor_url
+        media = [{"type": "first_frame", "url": frame_anchor}] if frame_anchor else None
+        try:
+            task_id = await self.qwen.generate_video_wan(
+                prompt=prompt, duration=want, reference_media=media,
+                seed=seed, ratio=ratio)
+        except Exception as e:  # noqa: BLE001 — degrade to per-shot rendering
+            logger.warning("multishot beat dispatch failed (%s) — falling back", e)
+            return None, None, 0.0
+        used_tier = "wan"
+        clip_url = await self.qwen.poll_video_task(task_id)
+        clip_url = await asyncio.to_thread(persist_clip_url, pid, f"beat_{beat[0].id}", clip_url)
+        real_dur = VideoStitcher._duration(clip_url) or want
+        guard = await self.continuity.validate(
+            clip_url=clip_url, duration=real_dur, characters_in_frame=in_frame,
+            bible=bible, scene_number=scene_number, foreground_characters=[])
+        status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
+        amt = record_video(self.db, pid, real_dur, used_tier)
+        job.actual_cost += amt
+        spent_usd += amt
+        ranges = slice_ranges(durations, real_dur)
+        for s, (t0, t1) in zip(beat, ranges):
+            self.db.add(GeneratedClip(
+                job_id=job.id, shot_id=s.id, model_used=used_tier, prompt=prompt,
+                url=clip_url, consistency_score=guard["continuity_score"],
+                face_score=guard.get("face_score"), outfit_score=guard.get("outfit_score"),
+                background_score=guard.get("background_score"),
+                seed=seed, status=status, trim_start=t0, trim_end=t1))
+            job.completed_shots += 1
+        self.db.commit()
+        frame_url = self._store_last_frame(pid, beat[-1], clip_url)
+        return frame_url, clip_url, spent_usd
 
     async def _process_shot(self, job, shot, char_by_name, bible, scene_number,
                             prev_last_frame_url, scene_anchor_url=None,
