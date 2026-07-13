@@ -1,7 +1,47 @@
 from types import SimpleNamespace
 from app.workers.export_worker import (
     build_cut_plan, build_dialogue_segments, characters_needing_resynthesis,
+    voice_captions_incomplete,
 )
+
+
+def test_voice_captions_incomplete_when_a_line_was_dropped():
+    # 4 dialogue shots on screen, only 2 voiced (2 TTS drops) -> captions must
+    # NOT follow the shrunken voice set; fall back to shot dialogue.
+    entries = [
+        {"scene_number": 1, "text": "A", "duration": 5.0},
+        {"scene_number": 2, "text": "B", "duration": 5.0},
+        {"scene_number": 3, "text": "C", "duration": 5.0},
+        {"scene_number": 4, "text": "D", "duration": 5.0},
+    ]
+    spoken = [{"text": "A"}, {"text": "B"}]
+    assert voice_captions_incomplete(spoken, entries) is True
+
+
+def test_voice_captions_complete_when_every_shot_is_voiced():
+    entries = [
+        {"scene_number": 1, "text": "A", "duration": 5.0},
+        {"scene_number": 2, "text": "B", "duration": 5.0},
+    ]
+    spoken = [{"text": "A"}, {"text": "B"}]
+    assert voice_captions_incomplete(spoken, entries) is False
+
+
+def test_voice_captions_complete_when_a_shot_folds_two_lines():
+    # one dialogue shot carrying two voiced lines is NOT incomplete
+    entries = [{"scene_number": 1, "text": "A B", "duration": 8.0}]
+    spoken = [{"text": "A"}, {"text": "B"}]
+    assert voice_captions_incomplete(spoken, entries) is False
+
+
+def test_voice_captions_ignore_silent_shots():
+    # scenery shots (no dialogue) don't count toward the coverage requirement
+    entries = [
+        {"scene_number": 1, "text": "", "duration": 5.0},
+        {"scene_number": 1, "text": "A", "duration": 5.0},
+    ]
+    spoken = [{"text": "A"}]
+    assert voice_captions_incomplete(spoken, entries) is False
 
 
 def test_cut_plan_groups_consecutive_scene_chunks():

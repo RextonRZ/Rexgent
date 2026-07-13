@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from app.services.qwen_client import QwenClient
 from app.services.oss_manager import OSSManager
@@ -5,6 +6,12 @@ from app.config import get_settings
 from app.websocket.emitter import emit
 
 logger = logging.getLogger(__name__)
+
+# A single flaky TTS call must not silently drop a line for the whole export:
+# on the deployed box (the user's own key, under load) a transient error would
+# lose that line's voice AND its caption forever, since captions follow the
+# placed voices. Retry each line a few times before giving up.
+TTS_LINE_ATTEMPTS = 3
 
 
 def probe_duration(audio_bytes: bytes) -> float:
@@ -82,18 +89,26 @@ class DialogueSynthesizer:
                 emit("audio.tts.started", {"scene_number": scene["number"], "line_index": li,
                                            "index": idx, "total": total}, pid)
                 # One flaky line (the cloned-voice websocket especially) must
-                # not sink the whole batch: keep every line that succeeded,
-                # skip the failure, and let the next export's missing-line
-                # detection retry it.
-                try:
-                    audio = await self.qwen.synthesize_speech(
-                        _spoken(line.get("line", "")), vid, voice.get("voice_model"),
-                        instructions=_direction(line))
-                except Exception as e:  # noqa: BLE001
+                # not sink the whole batch: retry the line a few times, keep
+                # every line that succeeded, skip a line that fails every
+                # attempt, and let the export's missing-line detection retry it.
+                audio, last_err = None, None
+                for attempt in range(TTS_LINE_ATTEMPTS):
+                    try:
+                        audio = await self.qwen.synthesize_speech(
+                            _spoken(line.get("line", "")), vid, voice.get("voice_model"),
+                            instructions=_direction(line))
+                        break
+                    except Exception as e:  # noqa: BLE001
+                        last_err = e
+                        if attempt < TTS_LINE_ATTEMPTS - 1:
+                            await asyncio.sleep(0.6 * (attempt + 1))
+                if audio is None:
                     logger.warning(
-                        f"TTS failed for {name} (voice {vid}) s{scene['number']}l{li}: {e}")
+                        f"TTS failed for {name} (voice {vid}) s{scene['number']}l{li} "
+                        f"after {TTS_LINE_ATTEMPTS} attempts: {last_err}")
                     emit("audio.tts.failed", {"scene_number": scene["number"], "line_index": li,
-                                              "character": name, "error": str(e)[:200]}, pid)
+                                              "character": name, "error": str(last_err)[:200]}, pid)
                     continue
                 key = self.oss.get_project_path(pid, "audio", f"s{scene['number']}_l{li}.wav")
                 url = self.oss.upload_bytes(audio, key, content_type="audio/wav")

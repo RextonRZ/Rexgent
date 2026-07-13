@@ -71,6 +71,16 @@ def build_cut_plan(entries: list[dict]) -> list[dict]:
     return plan
 
 
+def voice_captions_incomplete(spoken: list, entries: list) -> bool:
+    """True when the placed voice lines cover FEWER dialogue lines than the cut
+    actually shows on screen — a dropped TTS call left part of the conversation
+    unvoiced. Captions follow the voices, so without this the subtitles would
+    silently shrink to match the missing audio; instead we fall back to the
+    shots' own dialogue so every spoken line is still captioned."""
+    dialogue_shots = sum(1 for e in entries if (e.get("text") or "").strip())
+    return len([s for s in spoken if s.get("text")]) < dialogue_shots
+
+
 def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers,
                                    script_line_keys=None) -> set:
     """Names whose dialogue audio no longer matches casting: their lines were
@@ -115,8 +125,13 @@ def _ensure_voice_lines(db, project_id: str) -> None:
         pid = uuid.UUID(project_id)
         rows = db.query(LineAudio).filter(LineAudio.project_id == pid).all()
         if not rows:
+            # First export (manual flow never synthesized before): do the full
+            # synth, then FALL THROUGH to the missing-line recheck below. A line
+            # whose TTS failed every retry during this synth would otherwise be
+            # dropped with no second pass until a LATER export — the drama ships
+            # with half its conversation silent and uncaptioned.
             asyncio.run(synth_dialogue_op(db, project_id))
-            return
+            rows = db.query(LineAudio).filter(LineAudio.project_id == pid).all()
 
         chars = db.query(Character).filter(Character.project_id == pid).all()
         current = {c.name: c.voice_id for c in chars if c.voice_id}
@@ -468,6 +483,12 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         except Exception as e:  # noqa: BLE001
             logger.warning(f"Export: voice prep skipped: {e}")
 
+        # A dialogue drop shows up here as fewer voiced lines than the cut speaks
+        # — surface it so a half-silent export is diagnosable from the log alone.
+        dialogue_shot_count = sum(1 for e in cut_entries if (e.get("text") or "").strip())
+        logger.info("Export dialogue: %d voiced line(s) for %d dialogue shot(s) in the cut",
+                    len(line_rows), dialogue_shot_count)
+
         def _render_cut(suffix: str, inputs: list, entries: list, label: str) -> dict:
             """Stitch, place dialogue, burn captions, mix, upload ONE
             deliverable. An empty suffix keeps the legacy single-video keys so
@@ -518,7 +539,17 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 spoken = [s for s in dialogue_segments if s.get("text")]
                 cut_captions = [{"dialogue": e.get("text"), "duration": e["duration"]}
                                 for e in entries]
-                srt = (caption_gen.generate_srt_from_segments(spoken) if spoken
+                # Voice-timed captions are best WHEN COMPLETE; if a TTS drop left
+                # fewer voices than the cut speaks, fall back to the shots' own
+                # dialogue so the captions still cover the whole conversation.
+                use_voice = bool(spoken) and not voice_captions_incomplete(spoken, entries)
+                if spoken and not use_voice:
+                    logger.warning(
+                        "captions: only %d voiced line(s) for %d dialogue shot(s)%s "
+                        "— captioning from shot dialogue so none are missing",
+                        len(spoken),
+                        sum(1 for e in entries if (e.get("text") or "").strip()), label)
+                srt = (caption_gen.generate_srt_from_segments(spoken) if use_voice
                        else caption_gen.generate_srt(cut_captions))
                 if srt.strip():
                     srt_path = os.path.join(workdir, f"captions{suffix}.srt")
