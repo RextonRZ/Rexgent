@@ -585,3 +585,35 @@ async def test_v2_process_shot_routes_continue_hold_when_flag_on(monkeypatch):
     assert added.model_used == "wan"
 
 
+@pytest.mark.asyncio
+async def test_v2_entrance_on_nonwan_tier_routes_to_r2v(monkeypatch):
+    """Flag ON: a face-locked NEWCOMER entering on a NON-wan (happyhorse) shot
+    classifies as entrance and must render on wan r2v with a face reference —
+    NOT wan i2v continuation, which carries no reference for the new face.
+    Regression: newcomers must be computed for every tier, not just wan."""
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    shot = make_shot()
+    shot.quality_tier = "happyhorse"           # NON-wan planned tier
+    shot.characters_in_frame = ["Jonas", "Yuki"]  # Jonas is NEW this shot
+    bible = {"characters": {
+        "Yuki": {"variants": [{"plate_image_url": "y", "scene_numbers": [1], "is_default": True}]},
+        "Jonas": {"variants": [{"plate_image_url": "j", "scene_numbers": [1], "is_default": True}]},
+    }, "location_by_scene": {1: "loc"}, "style_plate": "style"}
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, bible, 1,
+        prev_last_frame_url="prevframe",   # frame anchor present
+        prev_in_frame=["Yuki"],             # only Yuki was here before
+        prev_shot_type="CU")                # same framing -> no angle change
+
+    # entrance -> wan r2v with the newcomer's plate; NOT wan i2v continuation
+    runner.qwen.generate_video_wan_r2v.assert_awaited_once()
+    runner.qwen.generate_video_wan.assert_not_awaited()
+
+

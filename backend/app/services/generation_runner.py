@@ -506,21 +506,23 @@ class GenerationRunner:
         # which carries the full bible stack. wan keeps its real strengths:
         # lip-sync, and continuing a face already established in the last frame.
         frame_anchor_pre = prev_last_frame_url or scene_anchor_url
+        # Compute newcomers for EVERY tier, not just wan: under the v2 flag the
+        # role block below runs for every shot, so a face-locked newcomer
+        # entering on a non-wan shot must still be detected as an entrance.
         newcomers = []
-        if is_wan:
-            if prev_in_frame is not None:
-                prev_set = {canonical_character(n, bible["characters"])
-                            for n in (prev_in_frame or [])}
-                newcomers = [n for n in in_frame
-                             if n not in prev_set and n not in foreground
-                             and any(v.get("plate_image_url")
-                                     for v in (bible["characters"].get(n) or {}).get("variants", []))]
-            if newcomers or not frame_anchor_pre:
-                logger.info("shot %s needs a face reference (newcomers=%s, "
-                            "no-frame=%s) — happyhorse r2v holds identity better "
-                            "than wan, rendering there with the bible stack",
-                            shot.id, newcomers, not frame_anchor_pre)
-                is_wan = False
+        if prev_in_frame is not None:
+            prev_set = {canonical_character(n, bible["characters"])
+                        for n in (prev_in_frame or [])}
+            newcomers = [n for n in in_frame
+                         if n not in prev_set and n not in foreground
+                         and any(v.get("plate_image_url")
+                                 for v in (bible["characters"].get(n) or {}).get("variants", []))]
+        if is_wan and (newcomers or not frame_anchor_pre):
+            logger.info("shot %s needs a face reference (newcomers=%s, "
+                        "no-frame=%s) — happyhorse r2v holds identity better "
+                        "than wan, rendering there with the bible stack",
+                        shot.id, newcomers, not frame_anchor_pre)
+            is_wan = False
         settings_v2 = getattr(get_settings(), "identity_routing_v2", False)
         role = None
         if settings_v2:
