@@ -838,3 +838,46 @@ async def test_multishot_beat_renders_once_and_writes_a_clip_per_shot(monkeypatc
     assert clips[0].trim_end == clips[1].trim_start
     assert clips[0].shot_id == "shot1" and clips[1].shot_id == "shot2"
 
+
+@pytest.mark.asyncio
+async def test_multishot_beat_dispatch_failure_returns_none(monkeypatch):
+    # dispatch (generate_video_wan) blows up: _process_beat returns the
+    # sentinel (None, None, 0.0) and writes NO clip, so the caller falls back
+    # to per-shot rendering without losing the beat.
+    runner = make_runner()
+    runner.qwen.generate_video_wan = AsyncMock(side_effect=RuntimeError("dispatch down"))
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 80, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "multishot_enabled", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=2)
+    s1 = make_shot(); s1.number = 1
+    s2 = make_shot(); s2.id = "shot2"; s2.number = 2
+    result = await runner._process_beat(
+        [s1, s2], job, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url=None, scene_anchor_url=None, prev_shot_type=None)
+    assert result == (None, None, 0.0)
+    runner.db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_multishot_beat_post_dispatch_failure_is_caught(monkeypatch):
+    # dispatch SUCCEEDS but a later step (poll) raises: _process_beat must
+    # catch it and return clip=None instead of propagating — the _run_scene
+    # fallback depends on this never-raising contract.
+    runner = make_runner()
+    runner.qwen.poll_video_task = AsyncMock(side_effect=RuntimeError("boom"))
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 80, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "multishot_enabled", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=2)
+    s1 = make_shot(); s1.number = 1
+    s2 = make_shot(); s2.id = "shot2"; s2.number = 2
+    result = await runner._process_beat(
+        [s1, s2], job, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url=None, scene_anchor_url=None, prev_shot_type=None)
+    assert result[1] is None   # clip is None; did NOT raise
+

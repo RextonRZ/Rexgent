@@ -457,9 +457,20 @@ class GenerationRunner:
                     new_frame, new_clip, shot_spent = await r2._process_beat(
                         unit, job2, char_by_name, bible, scene.number, prev_last_frame,
                         scene_anchor_url=scene_anchor, prev_shot_type=prev_shot_type_before)
-                    if new_frame is None and new_clip is None and shot_spent == 0.0:
-                        # dispatch failed: fall back to per-shot rendering so
-                        # the beat is never lost
+                    # book whatever the beat actually spent — full on success,
+                    # 0.0 or partial on a post-dispatch failure — so a partial
+                    # spend is never lost to the fallback
+                    async with self._cost_lock:
+                        self._spent += shot_spent
+                        if self._spent >= self.budget_ceiling:
+                            self._cancelled = True
+                        emit("cost:updated", {
+                            "current_cost": round(self._spent, 2),
+                            "budget_remaining": round(self.budget_ceiling - self._spent, 2),
+                        }, pid)
+                    if new_clip is None:
+                        # dispatch OR post-dispatch failed: fall back to per-shot
+                        # rendering so the beat is never lost
                         for j, beat_shot in enumerate(unit):
                             if self._cancelled:
                                 break
@@ -471,14 +482,6 @@ class GenerationRunner:
                         if (scene_anchor is None
                                 and str(last_shot.shot_type or "").upper() in WIDE_FRAMINGS):
                             scene_anchor = prev_last_frame
-                        async with self._cost_lock:
-                            self._spent += shot_spent
-                            if self._spent >= self.budget_ceiling:
-                                self._cancelled = True
-                            emit("cost:updated", {
-                                "current_cost": round(self._spent, 2),
-                                "budget_remaining": round(self.budget_ceiling - self._spent, 2),
-                            }, pid)
                     idx += len(unit)
         finally:
             db2.close()
@@ -626,13 +629,17 @@ class GenerationRunner:
         (None, None, 0.0) so the caller can fall back to per-shot rendering."""
         from app.services.multishot import multishot_prompt, slice_ranges
         from app.services.video_stitcher import VideoStitcher
+        from app.services.guardrails import canonical_character
         pid = str(job.project_id)
         spent_usd = 0.0
+        # resolve raw name variants ("Eirik" -> "Eirik Halden") before dedup, or
+        # the continuity check mis-scores the beat exactly like _process_shot's
         in_frame = []
         for s in beat:
             for nm in (s.characters_in_frame or []):
-                if nm not in in_frame:
-                    in_frame.append(nm)
+                cn = canonical_character(nm, bible["characters"])
+                if cn not in in_frame:
+                    in_frame.append(cn)
         durations = [s.estimated_duration_seconds for s in beat]
         want = min(sum(durations), get_settings().multishot_max_duration)
         prompt = multishot_prompt(beat)
@@ -647,29 +654,51 @@ class GenerationRunner:
         except Exception as e:  # noqa: BLE001 — degrade to per-shot rendering
             logger.warning("multishot beat dispatch failed (%s) — falling back", e)
             return None, None, 0.0
-        used_tier = "wan"
-        clip_url = await self.qwen.poll_video_task(task_id)
-        clip_url = await asyncio.to_thread(persist_clip_url, pid, f"beat_{beat[0].id}", clip_url)
-        real_dur = VideoStitcher._duration(clip_url) or want
-        guard = await self.continuity.validate(
-            clip_url=clip_url, duration=real_dur, characters_in_frame=in_frame,
-            bible=bible, scene_number=scene_number, foreground_characters=[])
-        status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
-        amt = record_video(self.db, pid, real_dur, used_tier)
-        job.actual_cost += amt
-        spent_usd += amt
-        ranges = slice_ranges(durations, real_dur)
-        for s, (t0, t1) in zip(beat, ranges):
-            self.db.add(GeneratedClip(
-                job_id=job.id, shot_id=s.id, model_used=used_tier, prompt=prompt,
-                url=clip_url, consistency_score=guard["continuity_score"],
-                face_score=guard.get("face_score"), outfit_score=guard.get("outfit_score"),
-                background_score=guard.get("background_score"),
-                seed=seed, status=status, trim_start=t0, trim_end=t1))
-            job.completed_shots += 1
-        self.db.commit()
-        frame_url = self._store_last_frame(pid, beat[-1], clip_url)
-        return frame_url, clip_url, spent_usd
+        # Post-dispatch pipeline is fully guarded: a poll/probe/validate/write
+        # failure returns (None, None, spent_usd) so the caller falls back to
+        # per-shot rendering instead of crashing the whole scene.
+        try:
+            used_tier = "wan"
+            clip_url = await self.qwen.poll_video_task(task_id)
+            clip_url = await asyncio.to_thread(persist_clip_url, pid, f"beat_{beat[0].id}", clip_url)
+            real_dur = VideoStitcher._duration(clip_url) or want
+            guard = await self.continuity.validate(
+                clip_url=clip_url, duration=real_dur, characters_in_frame=in_frame,
+                bible=bible, scene_number=scene_number, foreground_characters=[])
+            status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
+            amt = record_video(self.db, pid, real_dur, used_tier)
+            job.actual_cost += amt
+            spent_usd += amt
+            # the beat's closing frame doubles as EVERY beat clip's poster — a
+            # resume run seeds the frame chain from an approved shot's poster,
+            # so without it a shot after a beat loses continuity on resume
+            frame_url = self._store_last_frame(pid, beat[-1], clip_url)
+            ranges = slice_ranges(durations, real_dur)
+            for s, (t0, t1) in zip(beat, ranges):
+                self.db.add(GeneratedClip(
+                    job_id=job.id, shot_id=s.id, model_used=used_tier, prompt=prompt,
+                    url=clip_url, consistency_score=guard["continuity_score"],
+                    face_score=guard.get("face_score"), outfit_score=guard.get("outfit_score"),
+                    background_score=guard.get("background_score"),
+                    seed=seed, status=status, trim_start=t0, trim_end=t1,
+                    poster_url=frame_url))
+                job.completed_shots += 1
+            # the first non-empty poster names the drama's card (mirror _process_shot)
+            if frame_url:
+                try:
+                    from app.models.project import Project
+                    project = (self.db.query(Project)
+                               .filter(Project.id == job.project_id).first())
+                    if project and not project.poster_url:
+                        project.poster_url = frame_url
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"beat poster persist skipped: {e}")
+            self.db.commit()
+            return frame_url, clip_url, spent_usd
+        except Exception as e:  # noqa: BLE001 — never raise; caller falls back
+            logger.warning("multishot beat post-dispatch failed (%s) — "
+                           "falling back to per-shot", e)
+            return None, None, spent_usd
 
     async def _process_shot(self, job, shot, char_by_name, bible, scene_number,
                             prev_last_frame_url, scene_anchor_url=None,
