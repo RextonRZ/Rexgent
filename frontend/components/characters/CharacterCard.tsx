@@ -140,11 +140,9 @@ export function CharacterCard({
           </div>
         </div>
 
-        {/* one-line bio */}
+        {/* bio: two lines with a toggle for the full text */}
         {character.personality_summary && (
-          <p className="text-xs text-muted-foreground line-clamp-1">
-            {character.personality_summary}
-          </p>
+          <Expandable text={character.personality_summary} />
         )}
 
         <Section title="Profile">
