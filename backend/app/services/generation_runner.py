@@ -444,11 +444,12 @@ class GenerationRunner:
                       for n in (getattr(shot, "foreground_characters", None) or [])]
         foreground = [n for n in foreground if n in in_frame]
         is_wan = shot.quality_tier == "wan"
-        # wan can only continue faces from the previous frame — it takes NO
-        # identity references. A shot that INTRODUCES a face-locked character
-        # (absent from the previous shot) is a job wan cannot do: the new face
-        # would be invented from text. Route those to happyhorse r2v, which
-        # carries the bible plates.
+        # wan2.7-i2v can only continue faces from the previous frame — it
+        # takes NO identity references. A shot that INTRODUCES a face-locked
+        # character (absent from the previous shot) needs the plates in the
+        # payload: route it to wan2.7-r2v (up to 5 references, still premium),
+        # with happyhorse r2v as the fallback.
+        wan_needs_refs = False
         if is_wan and prev_in_frame is not None:
             prev_set = {canonical_character(n, bible["characters"])
                         for n in (prev_in_frame or [])}
@@ -457,10 +458,11 @@ class GenerationRunner:
                          and any(v.get("plate_image_url")
                                  for v in (bible["characters"].get(n) or {}).get("variants", []))]
             if newcomers:
-                logger.info("shot %s introduces %s with locked identities — wan "
-                            "cannot carry a new face, rendering on happyhorse r2v",
+                logger.info("shot %s introduces %s with locked identities — "
+                            "frame continuation cannot carry a new face, "
+                            "rendering on wan r2v with the bible stack",
                             shot.id, newcomers)
-                is_wan = False
+                wan_needs_refs = True
         model_cap = 5 if is_wan else 9
         # this scene's wardrobe, per character — fed into the PROMPT, not just
         # the reference stack, so an updated costume actually renders
@@ -531,10 +533,7 @@ class GenerationRunner:
                                     "environment": environment,
                                     "repairs": crafted.get("repairs")}
                 tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
-                # is_wan may have been demoted above (newcomer with a locked
-                # face) — record the tier that actually renders, not the plan's
-                used_tier = ("wan" if is_wan else "happyhorse") if shot.quality_tier == "wan" \
-                    else (shot.quality_tier or "happyhorse")
+                used_tier = shot.quality_tier or "happyhorse"
                 if is_wan:
                     # wan2.7-i2v does NOT take identity references — its media
                     # schema is first_frame / last_frame / driving_audio /
@@ -545,7 +544,7 @@ class GenerationRunner:
                     # failure falls down the chain: lip-sync -> plain
                     # first-frame -> happyhorse r2v. Never blocks the shot.
                     task_id = None
-                    if lip:
+                    if lip and not wan_needs_refs:
                         try:
                             task_id = await self.qwen.generate_video_wan(
                                 prompt=prompt, duration=shot.estimated_duration_seconds,
@@ -555,7 +554,7 @@ class GenerationRunner:
                         except Exception as le:  # noqa: BLE001 — never blocks
                             logger.warning("lip-sync dispatch failed for shot %s (%s) — "
                                            "falling back to plain first-frame", shot.id, le)
-                    if task_id is None and frame_anchor:
+                    if task_id is None and frame_anchor and not wan_needs_refs:
                         try:
                             task_id = await self.qwen.generate_video_wan(
                                 prompt=prompt, duration=shot.estimated_duration_seconds,
@@ -564,11 +563,19 @@ class GenerationRunner:
                         except Exception as we:  # noqa: BLE001 — chain to happyhorse
                             logger.warning("wan first-frame failed for shot %s (%s) — "
                                            "falling back to happyhorse r2v", shot.id, we)
+                    if task_id is None and ref_stack:
+                        # newcomers with locked faces, or no frame to continue
+                        # from: wan r2v carries the bible plates at premium
+                        try:
+                            task_id = await self.qwen.generate_video_wan_r2v(
+                                prompt=prompt, duration=shot.estimated_duration_seconds,
+                                reference_media=ref_stack,
+                                seed=seed, ratio=ratio, negative_prompt=negative)
+                            logger.info("shot %s: wan r2v with %d references", shot.id, len(ref_stack))
+                        except Exception as re_:  # noqa: BLE001 — chain to happyhorse
+                            logger.warning("wan r2v failed for shot %s (%s) — "
+                                           "falling back to happyhorse r2v", shot.id, re_)
                     if task_id is None:
-                        if not frame_anchor:
-                            logger.info("shot %s: wan has no frame to continue from — "
-                                        "rendering on happyhorse r2v with the bible stack",
-                                        shot.id)
                         used_tier = "happyhorse"
                         task_id = await self.qwen.generate_video_happyhorse(
                             prompt=prompt, duration=shot.estimated_duration_seconds,

@@ -23,6 +23,7 @@ def make_runner():
     runner.qwen = MagicMock()
     runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task1")
     runner.qwen.generate_video_wan = AsyncMock(return_value="task1")
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task1")
     runner.qwen.poll_video_task = AsyncMock(return_value="http://x/clip.mp4")
     runner.prompt_crafter = MagicMock()
     runner.prompt_crafter.craft = AsyncMock(return_value={"prompt": "base prompt"})
@@ -226,7 +227,9 @@ async def test_lipsync_dispatch_failure_falls_back_to_plain_first_frame(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_wan_shot_without_frame_anchor_renders_on_happyhorse(monkeypatch):
+async def test_wan_shot_without_frame_anchor_renders_on_wan_r2v(monkeypatch):
+    """No frame to continue from: the shot stays PREMIUM on wan2.7-r2v with
+    the bible plates (it used to demote to happyhorse before wan r2v existed)."""
     runner = make_runner()
     runner.continuity.validate = _continuity_pass()
     monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
@@ -241,14 +244,13 @@ async def test_wan_shot_without_frame_anchor_renders_on_happyhorse(monkeypatch):
     job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
     await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
                                None, lipsync_line=LINE)
-    # no frame to continue from: wan never dispatches, happyhorse r2v renders
     assert runner.qwen.generate_video_wan.await_count == 0
-    assert runner.qwen.generate_video_happyhorse.await_count == 1
-    assert runner.qwen.generate_video_happyhorse.await_args.kwargs["mode"] == "r2v"
+    assert runner.qwen.generate_video_wan_r2v.await_count == 1
+    assert runner.qwen.generate_video_happyhorse.await_count == 0
     # the tier that ACTUALLY rendered — clip row and cost ledger agree
     added = runner.db.add.call_args[0][0]
-    assert added.model_used == "happyhorse"
-    assert seen["tier"] == "happyhorse"
+    assert added.model_used == "wan"
+    assert seen["tier"] == "wan"
 
 
 @pytest.mark.asyncio
@@ -375,10 +377,11 @@ async def test_craft_prompt_resolves_bare_first_names_to_cast():
 
 
 @pytest.mark.asyncio
-async def test_wan_demotes_when_a_face_locked_newcomer_enters(monkeypatch):
-    """wan takes NO identity references — a shot that INTRODUCES a face-locked
-    character can only invent their face from text (the blond stranger in the
-    goal). Such shots must render on happyhorse r2v with the bible plates."""
+async def test_wan_newcomer_routes_to_wan_r2v_with_plates(monkeypatch):
+    """wan i2v takes NO identity references — a shot that INTRODUCES a
+    face-locked character can only invent their face from text (the blond
+    stranger in the goal). Such shots render on wan2.7-r2v, which carries the
+    bible plates at premium quality."""
     runner = make_runner()
     runner.continuity.validate = AsyncMock(return_value={
         "continuity_score": 80, "overall_pass": True,
@@ -399,10 +402,10 @@ async def test_wan_demotes_when_a_face_locked_newcomer_enters(monkeypatch):
         prev_last_frame_url="http://prev/frame.png",   # wan WOULD have run
         prev_in_frame=["Yuki"])                         # ...but Jonas is new
     runner.qwen.generate_video_wan.assert_not_called()
-    runner.qwen.generate_video_happyhorse.assert_awaited_once()
-    kwargs = runner.qwen.generate_video_happyhorse.await_args.kwargs
-    assert kwargs["mode"] == "r2v"                      # identity plates ride along
+    runner.qwen.generate_video_wan_r2v.assert_awaited_once()
+    kwargs = runner.qwen.generate_video_wan_r2v.await_args.kwargs
     assert any("j" == m.get("url") for m in kwargs["reference_media"])
+    runner.qwen.generate_video_happyhorse.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -423,3 +426,29 @@ async def test_wan_keeps_the_shot_when_cast_continues(monkeypatch):
         prev_last_frame_url="http://prev/frame.png",
         prev_in_frame=["Yuki"])
     runner.qwen.generate_video_wan.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_wan_r2v_failure_falls_back_to_happyhorse(monkeypatch):
+    """The chain never blocks a shot: wan r2v rejected -> happyhorse r2v."""
+    runner = make_runner()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(side_effect=RuntimeError("400"))
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 80, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0,
+                          completed_shots=0, total_shots=1)
+    shot = make_shot()
+    shot.quality_tier = "wan"
+    shot.characters_in_frame = ["Jonas", "Yuki"]
+    bible = {"characters": {
+        "Yuki": {"variants": [{"plate_image_url": "y", "scene_numbers": [1], "is_default": True}]},
+        "Jonas": {"variants": [{"plate_image_url": "j", "scene_numbers": [1], "is_default": True}]},
+    }, "location_by_scene": {1: "loc"}, "style_plate": "style"}
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, bible, 1,
+        prev_last_frame_url="http://prev/frame.png", prev_in_frame=["Yuki"])
+    runner.qwen.generate_video_happyhorse.assert_awaited_once()
+    assert runner.qwen.generate_video_happyhorse.await_args.kwargs["mode"] == "r2v"

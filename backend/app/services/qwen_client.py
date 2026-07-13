@@ -222,6 +222,31 @@ class QwenClient:
             params["ratio"] = ratio
         return await self._dispatch_video(chosen, input_obj, params)
 
+    async def generate_video_wan_r2v(
+        self,
+        prompt: str,
+        duration: int = 5,
+        reference_media: list[dict] | None = None,
+        seed: int | None = None,
+        ratio: str | None = None,
+        negative_prompt: str | None = None,
+    ) -> str:
+        """wan2.7-r2v: the one Wan that takes identity references (up to 5
+        mixed image/video inputs) — premium quality WITH the bible's face
+        plates, for shots the frame-continuation Wan cannot do."""
+        s = get_settings()
+        input_obj: dict = {"prompt": prompt}
+        if negative_prompt:
+            input_obj["negative_prompt"] = negative_prompt[:500]
+        if reference_media:
+            input_obj["media"] = reference_media[:5]
+        params: dict = {"resolution": "1080P", "duration": duration}
+        if seed is not None:
+            params["seed"] = seed
+        if ratio:
+            params["ratio"] = ratio
+        return await self._dispatch_video(s.qwen_wan_r2v_model, input_obj, params)
+
     async def generate_video_happyhorse(
         self,
         prompt: str,

@@ -3,6 +3,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     qwen_api_key: str = ""
+    # Wan's reference-to-video snapshot: unlike wan2.7-t2v/i2v it accepts up
+    # to 5 reference images, so premium shots that INTRODUCE a face-locked
+    # character can stay premium instead of demoting to happyhorse
+    qwen_wan_r2v_model: str = "wan2.7-r2v-2026-06-12"
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.
