@@ -438,9 +438,10 @@ async def test_wan_keeps_the_shot_when_cast_continues(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_v2_anchor_shot_dispatches_r2v_with_ref_stack():
-    # No frame anchor -> ANCHOR role -> wan2.7-r2v with the reference stack.
+async def test_v2_anchor_shot_dispatches_r2v_with_ref_stack(monkeypatch):
+    # anchor_ref_model="wan" -> ANCHOR role -> wan2.7-r2v with the reference stack.
     runner = _make_dispatch_runner()
+    monkeypatch.setattr(gr.get_settings(), "anchor_ref_model", "wan", raising=False)
     runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
     runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
     tier, task = await runner._dispatch_by_role(
@@ -457,6 +458,7 @@ async def test_v2_anchor_shot_dispatches_r2v_with_ref_stack():
 @pytest.mark.asyncio
 async def test_v2_entrance_shot_adds_first_frame_to_r2v(monkeypatch):
     runner = _make_dispatch_runner()
+    monkeypatch.setattr(gr.get_settings(), "anchor_ref_model", "wan", raising=False)
     runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
     tier, task = await runner._dispatch_by_role(
         role="entrance", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
@@ -497,6 +499,7 @@ async def test_v2_continue_hold_silent_uses_first_clip(monkeypatch):
 @pytest.mark.asyncio
 async def test_v2_r2v_failure_falls_back_to_happyhorse(monkeypatch):
     runner = _make_dispatch_runner()
+    monkeypatch.setattr(gr.get_settings(), "anchor_ref_model", "wan", raising=False)
     runner.qwen.generate_video_wan_r2v = AsyncMock(side_effect=RuntimeError("boom"))
     runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
     tier, task = await runner._dispatch_by_role(
@@ -546,8 +549,9 @@ async def test_v2_continue_hold_wan_failure_falls_back_to_happyhorse():
 
 
 @pytest.mark.asyncio
-async def test_v2_reangle_adds_first_frame_to_r2v():
+async def test_v2_reangle_adds_first_frame_to_r2v(monkeypatch):
     runner = _make_dispatch_runner()
+    monkeypatch.setattr(gr.get_settings(), "anchor_ref_model", "wan", raising=False)
     runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
     tier, task = await runner._dispatch_by_role(
         role="continue_reangle", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
@@ -556,6 +560,25 @@ async def test_v2_reangle_adds_first_frame_to_r2v():
     assert tier == "wan_r2v"
     media = runner.qwen.generate_video_wan_r2v.await_args.kwargs["reference_media"]
     assert media[0] == {"type": "first_frame", "url": "prev.png"}
+
+
+@pytest.mark.asyncio
+async def test_v2_anchor_defaults_to_happyhorse_r2v():
+    # Default anchor_ref_model="happyhorse": identity shots render on happyhorse
+    # r2v (measured to hold faces better than wan r2v), never wan r2v.
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
+    tier, task = await runner._dispatch_by_role(
+        role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "face.png"}],
+        frame_anchor=None, prev_clip_url=None, lip=None)
+    assert tier == "happyhorse"
+    runner.qwen.generate_video_wan_r2v.assert_not_awaited()
+    # happyhorse renders in r2v mode with the plate stack
+    assert runner.qwen.generate_video_happyhorse.await_args.kwargs["mode"] == "r2v"
+    media = runner.qwen.generate_video_happyhorse.await_args.kwargs["reference_media"]
+    assert media == [{"type": "reference_image", "url": "face.png"}]
 
 
 # --- identity_routing_v2 wired into _process_shot ---
@@ -597,6 +620,7 @@ async def test_v2_entrance_on_nonwan_tier_routes_to_r2v(monkeypatch):
         "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
     monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
     monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    monkeypatch.setattr(gr.get_settings(), "anchor_ref_model", "wan", raising=False)
     job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
     shot = make_shot()
     shot.quality_tier = "happyhorse"           # NON-wan planned tier
@@ -627,6 +651,7 @@ async def test_v2_process_shot_anchor_routes_to_r2v(monkeypatch):
         "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
     monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
     monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    monkeypatch.setattr(gr.get_settings(), "anchor_ref_model", "wan", raising=False)
     job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
     shot = make_shot()  # CU, characters_in_frame=["Yuki"] (Yuki has a plate)
 
@@ -650,6 +675,7 @@ async def test_v2_process_shot_reangle_routes_to_r2v(monkeypatch):
         "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
     monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
     monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    monkeypatch.setattr(gr.get_settings(), "anchor_ref_model", "wan", raising=False)
     job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
     shot = make_shot()  # shot_type == "CU"
 

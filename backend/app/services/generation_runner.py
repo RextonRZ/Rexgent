@@ -449,18 +449,25 @@ class GenerationRunner:
                 seed=seed, ratio=ratio, negative_prompt=negative)
 
         if role in ("anchor", "entrance", "continue_reangle"):
-            # anchor establishes (no frame); entrance/reangle continue the scene
-            # AND lock references via first_frame + reference_image (joint control)
-            ff = frame_anchor if role in ("entrance", "continue_reangle") else None
-            media = r2v_media(ref_stack, first_frame_url=ff)
-            if media:
-                try:
-                    return ("wan_r2v", await self.qwen.generate_video_wan_r2v(
-                        prompt=prompt, duration=duration, reference_media=media,
-                        seed=seed, ratio=ratio, negative_prompt=negative))
-                except Exception as e:  # noqa: BLE001 — chain to happyhorse
-                    logger.warning("r2v dispatch failed for role %s (%s) — "
-                                   "falling back to happyhorse r2v", role, e)
+            # Identity shots go to the reference model. happyhorse r2v is the SAFE
+            # DEFAULT (reference-native, measured to hold faces better than wan r2v);
+            # anchor_ref_model="wan" opts into wan2.7-r2v. Phase 3's harness picks
+            # the winner from real scores. Either path degrades to happyhorse.
+            if getattr(get_settings(), "anchor_ref_model", "happyhorse") == "wan":
+                # wan r2v carries scene continuity via a TYPED first_frame on
+                # entrance/reangle; anchor is establishing (no frame)
+                ff = frame_anchor if role in ("entrance", "continue_reangle") else None
+                media = r2v_media(ref_stack, first_frame_url=ff)
+                if media:
+                    try:
+                        return ("wan_r2v", await self.qwen.generate_video_wan_r2v(
+                            prompt=prompt, duration=duration, reference_media=media,
+                            seed=seed, ratio=ratio, negative_prompt=negative))
+                    except Exception as e:  # noqa: BLE001 — chain to happyhorse
+                        logger.warning("wan r2v dispatch failed for role %s (%s) — "
+                                       "falling back to happyhorse r2v", role, e)
+            # happyhorse r2v: the previous frame already rides in the reference
+            # stack as a reference_image, so no separate first_frame is needed
             return ("happyhorse", await _happyhorse())
 
         # continue_hold

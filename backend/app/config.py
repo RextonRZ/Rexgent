@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # wan2.7-videoedit — used by the Phase 2 repair ladder (costume/face repair).
     # VERIFY-IN-CONSOLE: only the bare id was seen; a dated snapshot may exist.
     qwen_wan_videoedit_model: str = "wan2.7-videoedit"
+    # Which reference model renders identity anchors/entrances/reangles under
+    # identity_routing_v2. "happyhorse" (reference-native, measured to hold faces
+    # better than wan r2v) is the SAFE DEFAULT; "wan" opts into wan2.7-r2v. Phase 3's
+    # measurement harness sets this from real scores instead of a guess.
+    anchor_ref_model: str = "happyhorse"
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.
