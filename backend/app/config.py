@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # better than wan r2v) is the SAFE DEFAULT; "wan" opts into wan2.7-r2v. Phase 3's
     # measurement harness sets this from real scores instead of a guess.
     anchor_ref_model: str = "happyhorse"
+    # Verify-and-repair ladder: on a continuity fail, re-render/repair instead of
+    # shipping the flagged clip. OFF by default. repair_max_renders bounds the
+    # EXTRA renders per shot so cost can't explode.
+    repair_enabled: bool = False
+    repair_max_renders: int = 2
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.
