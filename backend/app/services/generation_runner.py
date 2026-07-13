@@ -626,7 +626,13 @@ class GenerationRunner:
         """Render a conversation beat as ONE wan multi-shot clip, then write a
         clip row per shot sharing that url with proportional trims. Returns
         (last_frame_url, clip_url, spent_usd). On dispatch failure returns
-        (None, None, 0.0) so the caller can fall back to per-shot rendering."""
+        (None, None, 0.0) so the caller can fall back to per-shot rendering.
+
+        SCOPED LIMITATION: a beat is dispatched via plain wan continuation and
+        does NOT apply the identity-routing newcomer->r2v demotion, so a beat
+        that OPENS on a face-locked newcomer with no established frame renders
+        identity-blind. Acceptable today because multishot is opt-in and best
+        used for continuation beats, not character introductions."""
         from app.services.multishot import multishot_prompt, slice_ranges
         from app.services.video_stitcher import VideoStitcher
         from app.services.guardrails import canonical_character
@@ -695,7 +701,16 @@ class GenerationRunner:
                     logger.warning(f"beat poster persist skipped: {e}")
             self.db.commit()
             return frame_url, clip_url, spent_usd
-        except Exception as e:  # noqa: BLE001 — never raise; caller falls back
+        except Exception as e:  # noqa: BLE001 — never crash the scene; fall back to per-shot
+            # roll back FIRST: a flush/commit failure (autoflush on the Project
+            # query, or db.commit()) leaves the session inactive, and the
+            # fallback's next _process_shot query would raise
+            # PendingRollbackError — the exact crash the fallback exists to
+            # prevent. Guard the rollback so a rollback error can't escape either.
+            try:
+                self.db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
             logger.warning("multishot beat post-dispatch failed (%s) — "
                            "falling back to per-shot", e)
             return None, None, spent_usd
