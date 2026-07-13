@@ -465,7 +465,7 @@ class GenerationRunner:
                 task = await self.qwen.generate_video_wan(
                     prompt=prompt, duration=duration, reference_media=media,
                     seed=seed, ratio=ratio, negative_prompt=negative)
-                if lip:
+                if any(m.get("type") == "driving_audio" for m in media):
                     logger.info("continue-hold shot lip-synced to its line")
                 return ("wan", task)
             except Exception as e:  # noqa: BLE001 — chain to happyhorse

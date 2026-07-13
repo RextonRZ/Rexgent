@@ -5,8 +5,7 @@ import app.services.generation_runner as gr
 from app.services.generation_runner import GenerationRunner
 
 
-def _make_runner_with_bible():
-    from app.services.generation_runner import GenerationRunner
+def _make_dispatch_runner():
     runner = GenerationRunner.__new__(GenerationRunner)
     runner.qwen = MagicMock()
     return runner
@@ -439,11 +438,9 @@ async def test_wan_keeps_the_shot_when_cast_continues(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_v2_anchor_shot_dispatches_r2v_with_ref_stack(monkeypatch):
+async def test_v2_anchor_shot_dispatches_r2v_with_ref_stack():
     # No frame anchor -> ANCHOR role -> wan2.7-r2v with the reference stack.
-    from app.config import get_settings
-    monkeypatch.setattr(get_settings(), "identity_routing_v2", True, raising=False)
-    runner = _make_runner_with_bible()
+    runner = _make_dispatch_runner()
     runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
     runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
     tier, task = await runner._dispatch_by_role(
@@ -459,7 +456,7 @@ async def test_v2_anchor_shot_dispatches_r2v_with_ref_stack(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_v2_entrance_shot_adds_first_frame_to_r2v(monkeypatch):
-    runner = _make_runner_with_bible()
+    runner = _make_dispatch_runner()
     runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
     tier, task = await runner._dispatch_by_role(
         role="entrance", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
@@ -473,7 +470,7 @@ async def test_v2_entrance_shot_adds_first_frame_to_r2v(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_v2_continue_hold_talking_dispatches_wan_lipsync(monkeypatch):
-    runner = _make_runner_with_bible()
+    runner = _make_dispatch_runner()
     runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
     tier, task = await runner._dispatch_by_role(
         role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
@@ -488,7 +485,7 @@ async def test_v2_continue_hold_talking_dispatches_wan_lipsync(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_v2_continue_hold_silent_uses_first_clip(monkeypatch):
-    runner = _make_runner_with_bible()
+    runner = _make_dispatch_runner()
     runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
     tier, task = await runner._dispatch_by_role(
         role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
@@ -499,7 +496,7 @@ async def test_v2_continue_hold_silent_uses_first_clip(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_v2_r2v_failure_falls_back_to_happyhorse(monkeypatch):
-    runner = _make_runner_with_bible()
+    runner = _make_dispatch_runner()
     runner.qwen.generate_video_wan_r2v = AsyncMock(side_effect=RuntimeError("boom"))
     runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
     tier, task = await runner._dispatch_by_role(
@@ -508,5 +505,56 @@ async def test_v2_r2v_failure_falls_back_to_happyhorse(monkeypatch):
         frame_anchor=None, prev_clip_url=None, lip=None)
     assert tier == "happyhorse"
     runner.qwen.generate_video_happyhorse.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_v2_anchor_with_no_refs_falls_back_to_happyhorse():
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
+    tier, task = await runner._dispatch_by_role(
+        role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor=None, prev_clip_url=None, lip=None)
+    assert tier == "happyhorse"
+    runner.qwen.generate_video_wan_r2v.assert_not_awaited()
+    # no refs -> happyhorse runs in t2v mode
+    assert runner.qwen.generate_video_happyhorse.await_args.kwargs["mode"] == "t2v"
+
+
+@pytest.mark.asyncio
+async def test_v2_continue_hold_with_no_media_falls_back_to_happyhorse():
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor=None, prev_clip_url=None, lip=None)
+    assert tier == "happyhorse"
+    runner.qwen.generate_video_wan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_v2_continue_hold_wan_failure_falls_back_to_happyhorse():
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan = AsyncMock(side_effect=RuntimeError("boom"))
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4", lip=None)
+    assert tier == "happyhorse"
+    runner.qwen.generate_video_happyhorse.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_v2_reangle_adds_first_frame_to_r2v():
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_reangle", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "face.png"}],
+        frame_anchor="prev.png", prev_clip_url=None, lip=None)
+    assert tier == "wan_r2v"
+    media = runner.qwen.generate_video_wan_r2v.await_args.kwargs["reference_media"]
+    assert media[0] == {"type": "first_frame", "url": "prev.png"}
 
 
