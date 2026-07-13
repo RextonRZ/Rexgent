@@ -7,6 +7,13 @@ class Settings(BaseSettings):
     # to 5 reference images, so premium shots that INTRODUCE a face-locked
     # character can stay premium instead of demoting to happyhorse
     qwen_wan_r2v_model: str = "wan2.7-r2v-2026-06-12"
+    # Wan image-to-video snapshot. The DATED snapshot is what supports the
+    # first_frame + driving_audio lip-sync feature; the bare "wan2.7-i2v" alias
+    # resolves to an older i2v that IGNORES driving_audio, so a lip-sync shot
+    # rendered on it comes back with a moving-but-unsynced mouth. Keep this
+    # pinned to the snapshot the DashScope docs use for driving_audio.
+    qwen_wan_i2v_model: str = "wan2.7-i2v-2026-04-25"
+    qwen_wan_t2v_model: str = "wan2.7-t2v"
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

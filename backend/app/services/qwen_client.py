@@ -204,8 +204,14 @@ class QwenClient:
         ratio: str | None = None,
         negative_prompt: str | None = None,
     ) -> str:
-        # wan2.7-t2v (text) or wan2.7-i2v (image-to-video when a reference image exists)
-        chosen = model or ("wan2.7-i2v" if (reference_media or reference_image_url) else "wan2.7-t2v")
+        # wan2.7-i2v (image-to-video / lip-sync when a reference image or media
+        # exists) or wan2.7-t2v (text). The i2v model MUST be the dated snapshot
+        # — only it honors driving_audio, so lip-sync silently no-ops on the
+        # bare alias. Both come from config so a new snapshot is a one-line change.
+        s = get_settings()
+        chosen = model or (s.qwen_wan_i2v_model
+                           if (reference_media or reference_image_url)
+                           else s.qwen_wan_t2v_model)
         input_obj: dict = {"prompt": prompt}
         if negative_prompt:
             input_obj["negative_prompt"] = negative_prompt[:500]

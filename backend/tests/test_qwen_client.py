@@ -140,6 +140,48 @@ async def test_happyhorse_accepts_reference_list(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_wan_lipsync_uses_dated_i2v_snapshot(monkeypatch):
+    # driving_audio lip-sync ONLY works on the dated i2v snapshot; the bare
+    # "wan2.7-i2v" alias ignores the audio, so a lip-sync shot MUST dispatch on
+    # the configured snapshot with the first_frame + driving_audio media intact.
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    client = QwenClient(get_settings())
+    captured = {}
+
+    async def fake_dispatch(model, input_obj, parameters):
+        captured["model"] = model
+        captured["media"] = input_obj.get("media")
+        return "task-lip"
+
+    monkeypatch.setattr(client, "_dispatch_video", AsyncMock(side_effect=fake_dispatch))
+    await client.generate_video_wan(
+        prompt="she speaks", duration=5,
+        reference_media=[{"type": "first_frame", "url": "frame.png"},
+                         {"type": "driving_audio", "url": "line.wav"}],
+    )
+    assert captured["model"] == get_settings().qwen_wan_i2v_model
+    assert captured["model"] == "wan2.7-i2v-2026-04-25"
+    assert {"type": "driving_audio", "url": "line.wav"} in captured["media"]
+
+
+@pytest.mark.asyncio
+async def test_wan_text_only_uses_t2v_model(monkeypatch):
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    client = QwenClient(get_settings())
+    captured = {}
+
+    async def fake_dispatch(model, input_obj, parameters):
+        captured["model"] = model
+        return "task-t2v"
+
+    monkeypatch.setattr(client, "_dispatch_video", AsyncMock(side_effect=fake_dispatch))
+    await client.generate_video_wan(prompt="a wide establishing shot", duration=5)
+    assert captured["model"] == get_settings().qwen_wan_t2v_model
+
+
+@pytest.mark.asyncio
 async def test_happyhorse_v2v_sends_source_as_video_media(monkeypatch):
     # the regen loop edits an existing clip: DashScope's video-edit model only
     # accepts media type "video" or "reference_image" — "reference_video" 500s.
