@@ -253,3 +253,26 @@ class TestPromptValidation:
         p, repairs = validate_and_repair_prompt(
             "Medium shot, a woman by the window. Duration: 5 seconds.", 5)
         assert repairs == []
+
+
+def test_canonical_character_resolves_unique_first_name():
+    """Shots often write just 'EIRIK' for 'Eirik Halden' — the validator saw
+    'not found in database' and blocked generation, and the reference stack
+    lost the identity plates. A unique first name resolves to its cast member."""
+    from app.services.guardrails import canonical_character
+    known = ["Eirik Halden", "Jonas", "THE STRANGER", "COACH"]
+    assert canonical_character("EIRIK", known) == "Eirik Halden"
+    assert canonical_character("Eirik", known) == "Eirik Halden"
+    # qualifier plus first name resolves too
+    assert canonical_character("EIRIK (V.O.)", known) == "Eirik Halden"
+    # exact names still win over first-name logic
+    assert canonical_character("Jonas", known) == "Jonas"
+    # unknown names come back unchanged
+    assert canonical_character("RANDOM GUY", known) == "RANDOM GUY"
+
+
+def test_canonical_character_refuses_ambiguous_first_name():
+    from app.services.guardrails import canonical_character
+    known = ["Mia Chen", "Mia Wong"]
+    # two cast members share the first name: do NOT guess
+    assert canonical_character("MIA", known) == "MIA"

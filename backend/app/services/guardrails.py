@@ -259,10 +259,13 @@ _NAME_QUALIFIER = re.compile(r"\s*\([^)]*\)\s*$")
 
 
 def canonical_character(name: str, known) -> str:
-    """'KERRY (ON SCREEN)' means KERRY. The storyboard LLM appends stage
-    qualifiers to names despite instructions, and every exact-match consumer
-    (validator, reference stacks, continuity) must resolve the variant back
-    to the cast member it refers to. Unknown names come back unchanged."""
+    """'KERRY (ON SCREEN)' means KERRY, and 'EIRIK' means 'Eirik Halden'.
+    The storyboard LLM appends stage qualifiers and drops surnames despite
+    instructions, and every exact-match consumer (validator, reference
+    stacks, continuity) must resolve the variant back to the cast member it
+    refers to. A bare first name resolves only when it is UNAMBIGUOUS — two
+    cast members sharing it leave the name unchanged rather than guess.
+    Unknown names come back unchanged."""
     n = (name or "").strip()
     if not n:
         return n
@@ -272,6 +275,14 @@ def canonical_character(name: str, known) -> str:
     base = _NAME_QUALIFIER.sub("", n).strip()
     if base and base.upper() in known_map:
         return known_map[base.upper()]
+    # unique first-name match: shots often write just 'EIRIK' for
+    # 'Eirik Halden' — resolve when exactly one cast member's first
+    # token is that name (qualifier-stripped variant included)
+    probe = (base or n).upper()
+    firsts = [full for key, full in known_map.items()
+              if key.split() and key.split()[0] == probe]
+    if len(firsts) == 1:
+        return firsts[0]
     return n
 
 
