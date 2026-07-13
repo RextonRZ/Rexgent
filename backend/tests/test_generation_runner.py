@@ -706,3 +706,46 @@ async def test_process_shot_returns_actual_spend(monkeypatch):
     assert result[2] == 0.54
 
 
+@pytest.mark.asyncio
+async def test_repair_reseeds_a_soft_fail_and_keeps_better(monkeypatch):
+    # repair_enabled: a first render that fails continuity triggers a reseed;
+    # the better-scoring re-render is kept (APPROVED), and BOTH renders are billed.
+    runner = make_runner()
+    scores = iter([
+        {"continuity_score": 40, "overall_pass": False, "face_score": 0.3,
+         "outfit_score": 0.8, "background_score": 0.8},   # first render fails
+        {"continuity_score": 78, "overall_pass": True, "face_score": 0.8,
+         "outfit_score": 0.8, "background_score": 0.8},    # reseed passes
+    ])
+    runner.continuity.validate = AsyncMock(side_effect=lambda **k: next(scores))
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.5)
+    monkeypatch.setattr(gr.get_settings(), "repair_enabled", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    result = await runner._process_shot(
+        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe", prev_in_frame=["Yuki"], prev_shot_type="CU")
+    added = runner.db.add.call_args[0][0]
+    assert added.status == "APPROVED"            # kept the better re-render
+    assert added.consistency_score == 78
+    assert result[2] == 1.0                      # first render + reseed both billed (0.5 x 2)
+
+
+@pytest.mark.asyncio
+async def test_repair_disabled_ships_first_clip(monkeypatch):
+    # repair OFF (default): a soft fail ships flagged, no re-render, one bill.
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 40, "overall_pass": False, "face_score": 0.3,
+        "outfit_score": 0.8, "background_score": 0.8})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.5)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    result = await runner._process_shot(
+        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe", prev_in_frame=["Yuki"], prev_shot_type="CU")
+    added = runner.db.add.call_args[0][0]
+    assert added.status == "NEEDS_REVIEW"
+    assert result[2] == 0.5                       # one render only
+
+

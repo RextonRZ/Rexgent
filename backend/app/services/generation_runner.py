@@ -17,6 +17,7 @@ from app.services.set_dresser import setting_for_shot
 from app.services.clip_store import persist_clip_url
 from app.services.frame_sampler import extract_last_frame
 from app.services.cost_ledger import record_video
+from app.services.continuity_repair import repair_steps
 from app.websocket.emitter import emit
 from app.websocket.tool_events import tool_event, tool_run
 from app.agents.reporter import report_agent
@@ -483,6 +484,43 @@ class GenerationRunner:
                 logger.warning("wan continuation failed (%s) — happyhorse", e)
         return ("happyhorse", await _happyhorse())
 
+    async def _run_repair_step(self, step, *, project_id, shot, prompt, negative,
+                               ratio, seed, ref_stack, frame_anchor, prev_clip_url,
+                               role, source_clip_url):
+        """Execute ONE repair strategy, returning (clip_url, used_tier) or
+        (None, None). Never raises — a failed repair just yields nothing."""
+        try:
+            if step == "reseed":
+                used_tier, task_id = await self._dispatch_by_role(
+                    role=role, prompt=prompt, duration=shot.estimated_duration_seconds,
+                    seed=(seed or 0) + 7, ratio=ratio, negative=negative,
+                    ref_stack=ref_stack or None, frame_anchor=frame_anchor,
+                    prev_clip_url=prev_clip_url, lip=None)
+            elif step == "reanchor":
+                used_tier, task_id = await self._dispatch_by_role(
+                    role="anchor", prompt=prompt, duration=shot.estimated_duration_seconds,
+                    seed=(seed or 0) + 11, ratio=ratio, negative=negative,
+                    ref_stack=ref_stack or None, frame_anchor=None,
+                    prev_clip_url=None, lip=None)
+            elif step == "videoedit":
+                media = (ref_stack or [])[:2]        # identity/costume plates
+                if not media:
+                    return (None, None)
+                task_id = await self.qwen.generate_video_videoedit(
+                    prompt=prompt, source_video_url=source_clip_url,
+                    reference_media=media, duration=shot.estimated_duration_seconds,
+                    seed=(seed or 0) + 13, negative_prompt=negative)
+                used_tier = "videoedit"
+            else:
+                return (None, None)
+            clip_url = await self.qwen.poll_video_task(task_id)
+            clip_url = await asyncio.to_thread(
+                persist_clip_url, project_id, f"repair_{shot.id}", clip_url)
+            return (clip_url, used_tier)
+        except Exception as e:  # noqa: BLE001 — repair is best-effort
+            logger.warning("repair step %s failed for shot %s: %s", step, shot.id, e)
+            return (None, None)
+
     async def _process_shot(self, job, shot, char_by_name, bible, scene_number,
                             prev_last_frame_url, scene_anchor_url=None,
                             scene_setting=None, suppress_location=False,
@@ -676,6 +714,10 @@ class GenerationRunner:
                         prompt=prompt, duration=shot.estimated_duration_seconds,
                         mode="r2v" if ref_stack else "t2v", reference_media=ref_stack or None,
                         seed=seed, ratio=ratio, negative_prompt=negative)
+                # snapshot the FIRST render's tier before any repair pass can
+                # overwrite used_tier — the primary booking below always bills
+                # this one render exactly once, no matter what the ladder does
+                first_tier = used_tier
                 clip_url = await self.qwen.poll_video_task(task_id)
                 # DashScope URLs are signed and expire (~24h) — keep our own copy
                 clip_url = await asyncio.to_thread(
@@ -699,6 +741,44 @@ class GenerationRunner:
                              confidence=guard["continuity_score"] / 100.0)
 
                 status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
+                # Bounded, budget-gated repair ladder: a soft continuity fail gets
+                # a shot at reseed/reanchor/videoedit (cheapest first), keeping
+                # whichever render scores best. OFF by default — a settings object
+                # that doesn't define these (some tests substitute a bare
+                # SimpleNamespace for an unrelated flag) is treated as repair-off,
+                # not a crash, matching identity_routing_v2's getattr convention.
+                if (getattr(get_settings(), "repair_enabled", False)
+                        and not guard["overall_pass"]):
+                    best_url, best_guard, best_tier = clip_url, guard, used_tier
+                    renders_left = getattr(get_settings(), "repair_max_renders", 2)
+                    for step in repair_steps(guard, role or "anchor", renders_left):
+                        if renders_left <= 0 or getattr(self, "_cancelled", False):
+                            break
+                        renders_left -= 1
+                        r_url, r_tier = await self._run_repair_step(
+                            step, project_id=str(job.project_id), shot=shot,
+                            prompt=prompt, negative=negative, ratio=ratio, seed=seed,
+                            ref_stack=ref_stack, frame_anchor=frame_anchor,
+                            prev_clip_url=prev_clip_url, role=role or "anchor",
+                            source_clip_url=best_url)
+                        if not r_url:
+                            continue
+                        r_amt = record_video(self.db, str(job.project_id),
+                                             shot.estimated_duration_seconds, r_tier)
+                        job.actual_cost += r_amt
+                        spent_usd += r_amt
+                        r_guard = await self.continuity.validate(
+                            clip_url=r_url, duration=shot.estimated_duration_seconds,
+                            characters_in_frame=in_frame, bible=bible,
+                            scene_number=scene_number, foreground_characters=foreground)
+                        if r_guard["continuity_score"] > best_guard["continuity_score"]:
+                            best_url, best_guard, best_tier = r_url, r_guard, r_tier
+                        if r_guard["overall_pass"]:
+                            break
+                    clip_url, guard, used_tier = best_url, best_guard, best_tier
+                    status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
+                    logger.info("repair for shot %s: best continuity %s (%s)",
+                                shot.id, guard["continuity_score"], status)
                 # the clip's audio policy, decided ONCE (VAD + Qwen ASR) and
                 # stored — the editor preview and the export worker both read
                 # this verdict, so what you hear is what ships
@@ -741,8 +821,10 @@ class GenerationRunner:
                 if attempt > 0:
                     tool_event(pid, "generate", "self_correct", "succeeded",
                                agent="Renderer", artifact="recovered on retry")
+                # the primary booking always bills the FIRST render exactly once —
+                # the ladder above already billed any repair renders separately
                 amt = record_video(self.db, str(job.project_id), shot.estimated_duration_seconds,
-                                   used_tier, ref_id=str(clip.id))
+                                   first_tier, ref_id=str(clip.id))
                 job.actual_cost += amt
                 spent_usd += amt
                 if status == "NEEDS_REVIEW":
