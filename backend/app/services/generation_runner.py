@@ -348,6 +348,7 @@ class GenerationRunner:
                     continue
                 prev_action = ordered[i - 1].action if i > 0 else None
                 next_action = ordered[i + 1].action if i < len(ordered) - 1 else None
+                prev_in_frame = (ordered[i - 1].characters_in_frame or []) if i > 0 else []
                 scene_setting, state_changed = setting_for_shot(
                     set_json, scene.location, shot.number)
                 # world-graph pass: does an active EVENT override this
@@ -363,7 +364,7 @@ class GenerationRunner:
                     suppress_location=state_changed,
                     prev_action=prev_action, next_action=next_action,
                     lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines),
-                    environment=environment)
+                    environment=environment, prev_in_frame=prev_in_frame)
                 # the first wide shot's closing frame anchors the room for the
                 # rest of the scene — a run of close-ups can't erase the set
                 if (scene_anchor is None and prev_last_frame
@@ -430,7 +431,8 @@ class GenerationRunner:
                             prev_last_frame_url, scene_anchor_url=None,
                             scene_setting=None, suppress_location=False,
                             prev_action=None, next_action=None,
-                            lipsync_line=None, environment=None):
+                            lipsync_line=None, environment=None,
+                            prev_in_frame=None):
         pid = str(job.project_id)
         # shots boarded before name normalization store raw variants ("Eirik"
         # for "Eirik Halden") — resolve against the cast HERE or the bible
@@ -442,6 +444,23 @@ class GenerationRunner:
                       for n in (getattr(shot, "foreground_characters", None) or [])]
         foreground = [n for n in foreground if n in in_frame]
         is_wan = shot.quality_tier == "wan"
+        # wan can only continue faces from the previous frame — it takes NO
+        # identity references. A shot that INTRODUCES a face-locked character
+        # (absent from the previous shot) is a job wan cannot do: the new face
+        # would be invented from text. Route those to happyhorse r2v, which
+        # carries the bible plates.
+        if is_wan and prev_in_frame is not None:
+            prev_set = {canonical_character(n, bible["characters"])
+                        for n in (prev_in_frame or [])}
+            newcomers = [n for n in in_frame
+                         if n not in prev_set and n not in foreground
+                         and any(v.get("plate_image_url")
+                                 for v in (bible["characters"].get(n) or {}).get("variants", []))]
+            if newcomers:
+                logger.info("shot %s introduces %s with locked identities — wan "
+                            "cannot carry a new face, rendering on happyhorse r2v",
+                            shot.id, newcomers)
+                is_wan = False
         model_cap = 5 if is_wan else 9
         # this scene's wardrobe, per character — fed into the PROMPT, not just
         # the reference stack, so an updated costume actually renders
@@ -512,7 +531,10 @@ class GenerationRunner:
                                     "environment": environment,
                                     "repairs": crafted.get("repairs")}
                 tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
-                used_tier = shot.quality_tier or "happyhorse"
+                # is_wan may have been demoted above (newcomer with a locked
+                # face) — record the tier that actually renders, not the plan's
+                used_tier = ("wan" if is_wan else "happyhorse") if shot.quality_tier == "wan" \
+                    else (shot.quality_tier or "happyhorse")
                 if is_wan:
                     # wan2.7-i2v does NOT take identity references — its media
                     # schema is first_frame / last_frame / driving_audio /

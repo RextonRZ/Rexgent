@@ -372,3 +372,54 @@ async def test_craft_prompt_resolves_bare_first_names_to_cast():
     visuals = runner.prompt_crafter.craft.await_args.kwargs["character_visuals"]
     assert "Eirik Halden" in visuals
     assert visuals["Eirik Halden"]["video_prompt_fragment"] == "tall athlete, long blonde hair"
+
+
+@pytest.mark.asyncio
+async def test_wan_demotes_when_a_face_locked_newcomer_enters(monkeypatch):
+    """wan takes NO identity references — a shot that INTRODUCES a face-locked
+    character can only invent their face from text (the blond stranger in the
+    goal). Such shots must render on happyhorse r2v with the bible plates."""
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 80, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0,
+                          completed_shots=0, total_shots=1)
+    shot = make_shot()
+    shot.quality_tier = "wan"
+    shot.characters_in_frame = ["Jonas", "Yuki"]  # Jonas is NEW this shot
+    bible = {"characters": {
+        "Yuki": {"variants": [{"plate_image_url": "y", "scene_numbers": [1], "is_default": True}]},
+        "Jonas": {"variants": [{"plate_image_url": "j", "scene_numbers": [1], "is_default": True}]},
+    }, "location_by_scene": {1: "loc"}, "style_plate": "style"}
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, bible, 1,
+        prev_last_frame_url="http://prev/frame.png",   # wan WOULD have run
+        prev_in_frame=["Yuki"])                         # ...but Jonas is new
+    runner.qwen.generate_video_wan.assert_not_called()
+    runner.qwen.generate_video_happyhorse.assert_awaited_once()
+    kwargs = runner.qwen.generate_video_happyhorse.await_args.kwargs
+    assert kwargs["mode"] == "r2v"                      # identity plates ride along
+    assert any("j" == m.get("url") for m in kwargs["reference_media"])
+
+
+@pytest.mark.asyncio
+async def test_wan_keeps_the_shot_when_cast_continues(monkeypatch):
+    """No newcomers: wan continues the scene from the previous frame as designed."""
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 80, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0,
+                          completed_shots=0, total_shots=1)
+    shot = make_shot()
+    shot.quality_tier = "wan"
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="http://prev/frame.png",
+        prev_in_frame=["Yuki"])
+    runner.qwen.generate_video_wan.assert_awaited_once()
