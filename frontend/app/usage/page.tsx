@@ -83,7 +83,7 @@ const ROSTER: {
     icon: Film,
     tint: "text-fuchsia-300/60",
     models: [
-      { name: "wan2.7-t2v / i2v", role: "Premium tier — the shots that matter", match: ["wan2.7"] },
+      { name: "wan2.7-t2v / i2v / r2v", role: "Premium tier — the shots that matter most", match: ["wan2.7"] },
       { name: "happyhorse-1.1-t2v / i2v / r2v", role: "Economy tier — supporting shots", match: ["happyhorse-1.1"] },
       { name: "happyhorse-1.0-video-edit", role: "Fix a take — the regen loop", match: ["happyhorse-1.0-video-edit"] },
     ],

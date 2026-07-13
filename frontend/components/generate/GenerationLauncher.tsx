@@ -39,7 +39,7 @@ export function GenerationLauncher({ projectId }: { projectId: string }) {
     if (wanCount > 0)
       breakdown.push({
         label: `Premium shots × ${wanCount}`,
-        detail: "Wan 2.7 at 1080P, the hook and the shots that matter most",
+        detail: "Wan 2.7 at 1080P (t2v / i2v / r2v), the hook and the shots that matter most",
         amount: tierCost(["wan"]),
       });
     if (hhCount > 0)

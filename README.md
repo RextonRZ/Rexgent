@@ -204,7 +204,7 @@ flowchart TB
 
     subgraph QWEN[Qwen Cloud / DashScope intl]
         LLM[qwen-max · qwen-plus · qwen-flash]
-        VID[wan2.7 t2v/i2v + driving_audio · happyhorse-1.1 t2v/i2v/r2v]
+        VID[wan2.7 t2v/i2v/r2v + driving_audio · happyhorse-1.1 t2v/i2v/r2v]
         IMG[wan2.6-t2i · qwen-image-edit-max]
         VL[qwen3-vl-plus] & TTS[qwen3-tts-vd · voice design · cloning]
         ASR[qwen3-asr-flash · fun-asr-realtime]
@@ -230,7 +230,7 @@ flowchart TB
 | Script + storyboard writing | Qwen-Max | The only creative-writing tier |
 | Judging, plot gaps, endings, prompt craft | Qwen-Plus | Analysis at a third of the cost |
 | Structuring, extraction, wardrobe, set dressing, titles | Qwen-Flash | Deterministic JSON work, ~15x cheaper output |
-| Hero + hook shots, lip-sync | Wan 2.7 (t2v/i2v + driving_audio) | Premium 1080P, native 9:16/16:9, seeded, mouth driven by the line's own TTS |
+| Hero + hook shots, lip-sync | Wan 2.7 (t2v/i2v/r2v + driving_audio) | Premium 1080P, native 9:16/16:9, seeded, mouth driven by the line's own TTS — and **r2v carries the identity plates** so a character's first appearance stays premium *and* face-locked |
 | Supporting shots | HappyHorse 1.1 (t2v/i2v/r2v) | Reference-to-video with up to 9 reference images |
 | Clip surgery (regen loop) | HappyHorse 1.0 video-edit | Video-to-video fixes from user flags |
 | Bible plates | wan2.6-t2i + qwen-image-edit-max | Costume plates edited FROM the face so identity carries |
