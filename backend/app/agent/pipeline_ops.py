@@ -241,6 +241,11 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 foreground = [n for n in (canonical_character(x, known_names)
                                           for x in (sd.get("foreground_characters") or []))
                               if n in in_frame]
+                # blocking subjects carry names too — the camera plan and the
+                # prompt's blocking rows must show the same cast the shot lists
+                for subj in (sd.get("subjects") or []):
+                    if isinstance(subj, dict) and subj.get("character"):
+                        subj["character"] = canonical_character(subj["character"], known_names)
                 shot = Shot(
                     scene_id=scene.id, number=sd.get("shot_number", 1),
                     shot_type=sd.get("shot_type"), camera_movement=sd.get("camera_movement"),

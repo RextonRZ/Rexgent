@@ -58,7 +58,11 @@ class PromptSanitizer:
         "typography, printed, handwritten, digital display, screen text, label, "
         # multi-reference renders face-bleed: the same person must never be
         # painted onto two bodies in one frame
-        "duplicate person, cloned face, identical twins, same face on two people"
+        "duplicate person, cloned face, identical twins, same face on two people, "
+        # a character the prompt lists but does not ANCHOR sometimes gets an
+        # invented arrival — rising out of the ground, popping in on a zoom
+        "person materializing out of thin air, character emerging from the "
+        "ground, person suddenly appearing mid-shot, extra person entering frame"
     )
 
     SCENE_LABEL_PATTERN = re.compile(

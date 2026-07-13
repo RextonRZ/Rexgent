@@ -270,3 +270,37 @@ async def test_blocking_posture_reaches_the_prompt():
         ], "reverse_angle": False})
     user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "LINDA: MG, sitting, screen-right, facing away-from-camera" in user_msg
+
+
+@pytest.mark.asyncio
+async def test_presence_rule_anchors_listed_characters():
+    """Characters the prompt lists must exist from frame one — without this
+    the model invents arrivals (a person rising out of the ground, popping in
+    as the framing tightens)."""
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(
+        shot={"shot_type": "MS", "action": "stands at the spot"},
+        character_visuals={"EIRIK": {"video_prompt_fragment": "tall athlete"}},
+        target_model="happyhorse")
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Presence (rule 20)" in user_msg
+    assert "ALREADY in the frame" in user_msg
+
+
+@pytest.mark.asyncio
+async def test_no_presence_rule_without_characters():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(shot={"shot_type": "WS", "action": "empty stadium"},
+                        character_visuals={}, target_model="happyhorse")
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Presence (rule 20)" not in user_msg

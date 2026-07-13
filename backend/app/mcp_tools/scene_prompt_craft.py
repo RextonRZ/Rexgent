@@ -111,6 +111,16 @@ class ScenePromptCraft:
             f"do NOT make them a co-subject): {json.dumps(list(foreground_characters), ensure_ascii=False)}\n\n"
             if foreground_characters else ""
         )
+        # every listed character exists from frame one: without this, the video
+        # model sometimes invents an ARRIVAL — a person rising out of the
+        # ground, or popping into existence as the framing tightens
+        presence_block = (
+            "Presence (rule 20): every listed character is ALREADY in the frame "
+            "at the very first frame, fully placed per the blocking. No one "
+            "enters, appears, materializes or emerges during the shot unless "
+            "the action explicitly describes an entrance.\n\n"
+            if character_visuals else ""
+        )
         # Per-shot dialogue treatment, two modes. A shot whose mouth will be
         # DRIVEN by its own line (wan driving_audio) is framed openly talking;
         # every other spoken line hides the mouth (coverage) so an unsynced
@@ -156,6 +166,7 @@ class ScenePromptCraft:
         user_content = (
             f"Shot data:\n{json.dumps(shot)}\n\n"
             f"{blocking_block}"
+            f"{presence_block}"
             f"{environment_block}"
             f"{setting_block}"
             f"{continuity_block}"
