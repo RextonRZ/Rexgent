@@ -558,3 +558,30 @@ async def test_v2_reangle_adds_first_frame_to_r2v():
     assert media[0] == {"type": "first_frame", "url": "prev.png"}
 
 
+# --- identity_routing_v2 wired into _process_shot ---
+
+@pytest.mark.asyncio
+async def test_v2_process_shot_routes_continue_hold_when_flag_on(monkeypatch):
+    """Flag ON: a same-cast, same-framing shot that HAS a frame anchor to
+    continue from classifies as continue_hold and dispatches through
+    _dispatch_by_role onto wan i2v continuation — never wan r2v."""
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    shot = make_shot()  # CU, characters_in_frame=["Yuki"]
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe", prev_in_frame=["Yuki"],
+        prev_shot_type="CU")
+
+    runner.qwen.generate_video_wan.assert_awaited_once()
+    runner.qwen.generate_video_wan_r2v.assert_not_awaited()
+    added = runner.db.add.call_args[0][0]
+    assert added.model_used == "wan"
+
+
