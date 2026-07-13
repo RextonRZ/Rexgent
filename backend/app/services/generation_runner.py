@@ -506,6 +506,7 @@ class GenerationRunner:
         # which carries the full bible stack. wan keeps its real strengths:
         # lip-sync, and continuing a face already established in the last frame.
         frame_anchor_pre = prev_last_frame_url or scene_anchor_url
+        settings_v2 = getattr(get_settings(), "identity_routing_v2", False)
         # Compute newcomers for EVERY tier, not just wan: under the v2 flag the
         # role block below runs for every shot, so a face-locked newcomer
         # entering on a non-wan shot must still be detected as an entrance.
@@ -518,16 +519,18 @@ class GenerationRunner:
                          and any(v.get("plate_image_url")
                                  for v in (bible["characters"].get(n) or {}).get("variants", []))]
         if is_wan and (newcomers or not frame_anchor_pre):
-            logger.info("shot %s needs a face reference (newcomers=%s, "
-                        "no-frame=%s) — happyhorse r2v holds identity better "
-                        "than wan, rendering there with the bible stack",
-                        shot.id, newcomers, not frame_anchor_pre)
+            # only the LEGACY path demotes to happyhorse here; under v2 this same
+            # shot routes to wan_r2v, so the "rendering there" claim would be false
+            if not settings_v2:
+                logger.info("shot %s needs a face reference (newcomers=%s, "
+                            "no-frame=%s) — happyhorse r2v holds identity better "
+                            "than wan, rendering there with the bible stack",
+                            shot.id, newcomers, not frame_anchor_pre)
             is_wan = False
-        settings_v2 = getattr(get_settings(), "identity_routing_v2", False)
         role = None
         if settings_v2:
             from app.services.shot_roles import classify_shot_role, angle_changed
-            has_locked_newcomer = bool(newcomers) if prev_in_frame is not None else False
+            has_locked_newcomer = bool(newcomers)
             role = classify_shot_role(
                 has_frame_anchor=bool(frame_anchor_pre),
                 has_locked_newcomer=has_locked_newcomer,
@@ -537,6 +540,10 @@ class GenerationRunner:
             # continue_hold is the only role that stays on wan i2v
             is_wan = role == "continue_hold"
         model_cap = 5 if is_wan else 9
+        if settings_v2 and role in ("anchor", "entrance", "continue_reangle"):
+            # r2v takes <=5 media total; entrance/reangle also spend one slot on
+            # first_frame, so leave room for it and the identity plates
+            model_cap = 4 if role in ("entrance", "continue_reangle") else 5
         # this scene's wardrobe, per character — fed into the PROMPT, not just
         # the reference stack, so an updated costume actually renders
         from app.services.wardrobe_planner import map_variant_for_scene
@@ -573,11 +580,15 @@ class GenerationRunner:
                 from app.services.lipsync import lipsync_media, speaker_matches
                 frame_anchor = frame_anchor_pre if (is_wan or settings_v2) else None
                 lip_eligible = (
+                    # a poll-time lip failure must degrade on the retry, not
+                    # repeat itself — so only attempt 0 is lip-eligible
                     attempt == 0
                     and get_settings().lipsync_enabled
                     and frame_anchor
                     and lipsync_line
                     and lipsync_line.get("audio_url")
+                    # an over-long driving track risks a wan-side rejection;
+                    # unknown duration (0/None) is treated as unsafe
                     and (lipsync_line.get("duration") or 0) > 0
                     and lipsync_line["duration"] <= shot.estimated_duration_seconds
                     and speaker_matches(lipsync_line, in_frame, foreground))

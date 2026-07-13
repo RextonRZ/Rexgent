@@ -77,8 +77,10 @@ def aggregate(db, project_id, budget=None) -> dict:
                     "tokens_by_stage": llm_tokens_by_stage}}
 
 
-# tier keys -> the ledger's readable model names (usage analytics groups on these)
-VIDEO_MODEL_NAMES = {"wan": "wan2.7", "happyhorse": "happyhorse-1.1"}
+# tier keys -> the ledger's readable model names (usage analytics groups on these).
+# wan_r2v is a Wan mode, so it groups under the same "wan2.7" label as wan i2v.
+VIDEO_MODEL_NAMES = {"wan": "wan2.7", "wan_r2v": "wan2.7",
+                     "happyhorse": "happyhorse-1.1"}
 
 
 def record_video(db, project_id, seconds, model, ref_id=None, model_name=None):

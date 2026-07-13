@@ -58,3 +58,13 @@ def test_record_video_computes_amount():
         amt = cost_ledger.record_video(db, "p1", seconds=5, model="wan", ref_id="clip1")
     assert amt == 0.75
     db.add.assert_called_once()
+
+
+def test_record_video_wan_r2v_bills_and_labels_as_wan():
+    db = MagicMock()
+    with patch("app.services.cost_ledger.emit"):
+        amt = cost_ledger.record_video(db, "p1", seconds=5, model="wan_r2v", ref_id="clip1")
+    # bills at the wan rate, and groups under the wan2.7 analytics label
+    assert amt == 0.75
+    ev = db.add.call_args[0][0]
+    assert ev.model == "wan2.7"

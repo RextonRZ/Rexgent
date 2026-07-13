@@ -617,3 +617,49 @@ async def test_v2_entrance_on_nonwan_tier_routes_to_r2v(monkeypatch):
     runner.qwen.generate_video_wan.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_v2_process_shot_anchor_routes_to_r2v(monkeypatch):
+    """Flag ON: NO frame anchor to continue from -> role anchor -> establishing
+    render on wan r2v with the plate stack, never wan i2v continuation."""
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    shot = make_shot()  # CU, characters_in_frame=["Yuki"] (Yuki has a plate)
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url=None, scene_anchor_url=None,  # NO frame anchor
+        prev_in_frame=None, prev_shot_type=None)
+
+    runner.qwen.generate_video_wan_r2v.assert_awaited_once()
+    runner.qwen.generate_video_wan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_v2_process_shot_reangle_routes_to_r2v(monkeypatch):
+    """Flag ON: same cast (no newcomer) with a frame anchor, but a DIFFERENT
+    framing from the previous shot -> role continue_reangle -> wan r2v with
+    first_frame + plates, never wan i2v continuation (which copies the frame)."""
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    shot = make_shot()  # shot_type == "CU"
+
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe",   # frame anchor present
+        prev_in_frame=["Yuki"],             # same cast, no newcomer
+        prev_shot_type="MS")                # MS -> CU: an angle change
+
+    runner.qwen.generate_video_wan_r2v.assert_awaited_once()
+    runner.qwen.generate_video_wan.assert_not_awaited()
+
+
