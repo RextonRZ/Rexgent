@@ -2,6 +2,9 @@
 dependency). Tests exercise route logic, not auth — so a signed-in user is
 faked for each test. Applied per-test (autouse) because some tests set and
 then pop their own override, which would strip a module-level one."""
+import importlib
+import os
+import sys
 import uuid
 from types import SimpleNamespace
 
@@ -9,6 +12,9 @@ import pytest
 
 from app.main import app
 from app.deps import get_current_user
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+sys.modules.setdefault("backend_scripts_measure", importlib.import_module("measure_anchor_model"))
 
 
 @pytest.fixture(autouse=True)
