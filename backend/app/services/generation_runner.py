@@ -427,6 +427,51 @@ class GenerationRunner:
             logger.warning(f"last-frame extract failed for shot {shot.id}: {e}")
             return None
 
+    async def _dispatch_by_role(self, *, role, prompt, duration, seed, ratio,
+                                negative, ref_stack, frame_anchor, prev_clip_url,
+                                lip):
+        """Route a shot to a model by its identity role. Never-blocking: every
+        path degrades to happyhorse r2v so a model surprise can't fail the shot.
+        Returns (used_tier, task_id)."""
+        from app.services.continuation_media import hold_media, r2v_media
+
+        async def _happyhorse():
+            return await self.qwen.generate_video_happyhorse(
+                prompt=prompt, duration=duration,
+                mode="r2v" if ref_stack else "t2v",
+                reference_media=ref_stack or None,
+                seed=seed, ratio=ratio, negative_prompt=negative)
+
+        if role in ("anchor", "entrance", "continue_reangle"):
+            # anchor establishes (no frame); entrance/reangle continue the scene
+            # AND lock references via first_frame + reference_image (joint control)
+            ff = frame_anchor if role in ("entrance", "continue_reangle") else None
+            media = r2v_media(ref_stack, first_frame_url=ff)
+            if media:
+                try:
+                    return ("wan_r2v", await self.qwen.generate_video_wan_r2v(
+                        prompt=prompt, duration=duration, reference_media=media,
+                        seed=seed, ratio=ratio, negative_prompt=negative))
+                except Exception as e:  # noqa: BLE001 — chain to happyhorse
+                    logger.warning("r2v dispatch failed for role %s (%s) — "
+                                   "falling back to happyhorse r2v", role, e)
+            return ("happyhorse", await _happyhorse())
+
+        # continue_hold
+        media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor,
+                           audio_url=(lip or {}).get("audio_url"), talking=bool(lip))
+        if media:
+            try:
+                task = await self.qwen.generate_video_wan(
+                    prompt=prompt, duration=duration, reference_media=media,
+                    seed=seed, ratio=ratio, negative_prompt=negative)
+                if lip:
+                    logger.info("continue-hold shot lip-synced to its line")
+                return ("wan", task)
+            except Exception as e:  # noqa: BLE001 — chain to happyhorse
+                logger.warning("wan continuation failed (%s) — happyhorse", e)
+        return ("happyhorse", await _happyhorse())
+
     async def _process_shot(self, job, shot, char_by_name, bible, scene_number,
                             prev_last_frame_url, scene_anchor_url=None,
                             scene_setting=None, suppress_location=False,

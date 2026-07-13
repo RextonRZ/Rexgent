@@ -5,6 +5,13 @@ import app.services.generation_runner as gr
 from app.services.generation_runner import GenerationRunner
 
 
+def _make_runner_with_bible():
+    from app.services.generation_runner import GenerationRunner
+    runner = GenerationRunner.__new__(GenerationRunner)
+    runner.qwen = MagicMock()
+    return runner
+
+
 @pytest.fixture(autouse=True)
 def _no_ws(monkeypatch):
     """Keep tests isolated from Redis/WebSocket, OSS re-hosting, and the cost ledger."""
@@ -429,5 +436,77 @@ async def test_wan_keeps_the_shot_when_cast_continues(monkeypatch):
         prev_last_frame_url="http://prev/frame.png",
         prev_in_frame=["Yuki"])
     runner.qwen.generate_video_wan.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_v2_anchor_shot_dispatches_r2v_with_ref_stack(monkeypatch):
+    # No frame anchor -> ANCHOR role -> wan2.7-r2v with the reference stack.
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "identity_routing_v2", True, raising=False)
+    runner = _make_runner_with_bible()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
+    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
+    tier, task = await runner._dispatch_by_role(
+        role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "face.png"}],
+        frame_anchor="prev.png", prev_clip_url=None, lip=None)
+    assert tier == "wan_r2v"
+    runner.qwen.generate_video_wan_r2v.assert_awaited_once()
+    # anchor gets NO first_frame (establishing), just the plates
+    media = runner.qwen.generate_video_wan_r2v.await_args.kwargs["reference_media"]
+    assert media == [{"type": "reference_image", "url": "face.png"}]
+
+
+@pytest.mark.asyncio
+async def test_v2_entrance_shot_adds_first_frame_to_r2v(monkeypatch):
+    runner = _make_runner_with_bible()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="task-r2v")
+    tier, task = await runner._dispatch_by_role(
+        role="entrance", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "newface.png"}],
+        frame_anchor="prev.png", prev_clip_url=None, lip=None)
+    assert tier == "wan_r2v"
+    media = runner.qwen.generate_video_wan_r2v.await_args.kwargs["reference_media"]
+    assert media[0] == {"type": "first_frame", "url": "prev.png"}
+    assert {"type": "reference_image", "url": "newface.png"} in media
+
+
+@pytest.mark.asyncio
+async def test_v2_continue_hold_talking_dispatches_wan_lipsync(monkeypatch):
+    runner = _make_runner_with_bible()
+    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "x.png"}],
+        frame_anchor="prev.png", prev_clip_url="clip.mp4",
+        lip={"audio_url": "a.wav", "duration": 2.0})
+    assert tier == "wan"
+    media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
+    assert media == [{"type": "first_frame", "url": "prev.png"},
+                     {"type": "driving_audio", "url": "a.wav"}]
+
+
+@pytest.mark.asyncio
+async def test_v2_continue_hold_silent_uses_first_clip(monkeypatch):
+    runner = _make_runner_with_bible()
+    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4", lip=None)
+    media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
+    assert media == [{"type": "first_clip", "url": "clip.mp4"}]
+
+
+@pytest.mark.asyncio
+async def test_v2_r2v_failure_falls_back_to_happyhorse(monkeypatch):
+    runner = _make_runner_with_bible()
+    runner.qwen.generate_video_wan_r2v = AsyncMock(side_effect=RuntimeError("boom"))
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
+    tier, task = await runner._dispatch_by_role(
+        role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+        ref_stack=[{"type": "reference_image", "url": "f.png"}],
+        frame_anchor=None, prev_clip_url=None, lip=None)
+    assert tier == "happyhorse"
+    runner.qwen.generate_video_happyhorse.assert_awaited_once()
 
 
