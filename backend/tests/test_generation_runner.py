@@ -689,3 +689,20 @@ async def test_v2_process_shot_reangle_routes_to_r2v(monkeypatch):
     runner.qwen.generate_video_wan.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_process_shot_returns_actual_spend(monkeypatch):
+    # _process_shot returns (frame_url, clip_url, spent); spent is the real
+    # billed cost from record_video, so the caller can count it accurately.
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.54)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    result = await runner._process_shot(
+        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe", prev_in_frame=["Yuki"], prev_shot_type="CU")
+    assert result[2] == 0.54
+
+

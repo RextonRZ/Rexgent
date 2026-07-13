@@ -269,7 +269,6 @@ class GenerationRunner:
 
     async def _run_scene(self, scene, bible, incoming_last_frame=None):
         from app.database import get_session_factory
-        from app.services.cost_rates import video_cost
         from app.models.generation_job import GenerationJob
         from app.models.shot import Shot
         import asyncio  # noqa: F401
@@ -362,7 +361,7 @@ class GenerationRunner:
                 environment = resolve_environment(
                     f"{scene.heading or ''} {scene.location or ''}",
                     f"{shot.action or ''}. {shot.emotional_beat or ''}")
-                prev_last_frame, prev_clip = await r2._process_shot(
+                prev_last_frame, prev_clip, shot_spent = await r2._process_shot(
                     job2, shot, char_by_name, bible, scene.number, prev_last_frame,
                     scene_anchor_url=scene_anchor, scene_setting=scene_setting,
                     suppress_location=state_changed,
@@ -376,9 +375,8 @@ class GenerationRunner:
                 if (scene_anchor is None and prev_last_frame
                         and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
                     scene_anchor = prev_last_frame
-                amt = video_cost(shot.estimated_duration_seconds, shot.quality_tier or "happyhorse")
                 async with self._cost_lock:
-                    self._spent += amt
+                    self._spent += shot_spent
                     if self._spent >= self.budget_ceiling:
                         self._cancelled = True
                     emit("cost:updated", {
@@ -492,6 +490,7 @@ class GenerationRunner:
                             lipsync_line=None, environment=None,
                             prev_in_frame=None, prev_shot_type=None,
                             prev_clip_url=None):
+        spent_usd = 0.0
         pid = str(job.project_id)
         # shots boarded before name normalization store raw variants ("Eirik"
         # for "Eirik Halden") — resolve against the cast HERE or the bible
@@ -745,6 +744,7 @@ class GenerationRunner:
                 amt = record_video(self.db, str(job.project_id), shot.estimated_duration_seconds,
                                    used_tier, ref_id=str(clip.id))
                 job.actual_cost += amt
+                spent_usd += amt
                 if status == "NEEDS_REVIEW":
                     emit("continuity.flagged", {"shot_id": str(shot.id),
                          "continuity_score": guard["continuity_score"]}, pid)
@@ -770,7 +770,7 @@ class GenerationRunner:
                         self.db.commit()
                     except Exception as e:  # noqa: BLE001
                         logger.warning(f"poster persist skipped: {e}")
-                return (frame_url, clip_url)
+                return (frame_url, clip_url, spent_usd)
             except Exception as e:  # HARD failure only -> at most one retry
                 logger.error(f"Shot {shot.id} attempt {attempt} hard-failed: {e}")
                 if attempt < MAX_RETRIES:
@@ -788,5 +788,5 @@ class GenerationRunner:
                         status="NEEDS_REVIEW", retries=attempt))
                     job.completed_shots += 1
                     self.db.commit()
-                    return (None, None)
-        return (None, None)
+                    return (None, None, spent_usd)
+        return (None, None, spent_usd)
