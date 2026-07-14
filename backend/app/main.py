@@ -14,6 +14,7 @@ from app.routers.agent import router as agent_router
 from app.routers.analytics import router as analytics_router
 from app.routers.auth import router as auth_router
 from app.routers.casting import router as casting_router
+from app.routers.assets import router as assets_router
 from app.routers.api_keys import router as api_keys_router
 
 app = FastAPI(title="Rexgent", version="1.0.0", description="AI Drama Production Pipeline")
@@ -57,6 +58,7 @@ app.include_router(export_router)
 app.include_router(agent_router)
 app.include_router(analytics_router)
 app.include_router(casting_router)
+app.include_router(assets_router)
 
 
 @app.get("/health")
