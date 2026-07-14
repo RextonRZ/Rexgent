@@ -183,6 +183,39 @@ def test_patch_sets_poster_url():
     assert project.poster_url == "https://oss/poster.jpg"
 
 
+def test_patch_persists_scope_and_budget():
+    project = _project(USER_ID)
+    db = FakeDB([project])
+    _override(db)
+    try:
+        r = client.patch(
+            f"/api/projects/{project.id}",
+            json={"episode_count": 3, "target_length": 45, "credit_budget": 12},
+        )
+    finally:
+        _clear()
+    assert r.status_code == 200
+    assert project.episode_count == 3
+    assert project.target_length == 45
+    assert project.credit_budget == 12
+
+
+def test_patch_clamps_scope_floors():
+    project = _project(USER_ID)
+    db = FakeDB([project])
+    _override(db)
+    try:
+        r = client.patch(
+            f"/api/projects/{project.id}",
+            json={"episode_count": 0, "target_length": 3},
+        )
+    finally:
+        _clear()
+    assert r.status_code == 200
+    assert project.episode_count == 1     # floored
+    assert project.target_length == 10    # floored
+
+
 def test_patch_rejects_non_owner():
     project = _project(uuid.uuid4())
     db = FakeDB([project])

@@ -28,6 +28,8 @@ class ProjectUpdate(BaseModel):
     poster_url: Optional[str] = None
     credit_budget: Optional[float] = None  # raise the spend cap mid-flight
     video_ratio: Optional[str] = None      # "9:16" | "16:9"
+    episode_count: Optional[int] = None
+    target_length: Optional[int] = None   # seconds per episode
 
 
 class PosterFromClipRequest(BaseModel):

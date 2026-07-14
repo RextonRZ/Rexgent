@@ -356,6 +356,10 @@ async def update_project(
         changes["credit_budget"] = max(1.0, float(changes["credit_budget"]))
     if "video_ratio" in changes and changes["video_ratio"] not in ("9:16", "16:9"):
         changes.pop("video_ratio")  # ignore anything but the two valid formats
+    if "episode_count" in changes and changes["episode_count"] is not None:
+        changes["episode_count"] = max(1, int(changes["episode_count"]))
+    if "target_length" in changes and changes["target_length"] is not None:
+        changes["target_length"] = max(10, int(changes["target_length"]))
     for field, value in changes.items():
         setattr(project, field, value)
     db.commit()
