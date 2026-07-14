@@ -22,7 +22,8 @@ def _no_ws(monkeypatch):
     # to their code defaults so a developer's .env (e.g. IDENTITY_ROUTING_V2=true)
     # can't flip a legacy-path test. Tests that need a flag on monkeypatch it True.
     for _flag in ("identity_routing_v2", "repair_enabled", "multishot_enabled",
-                  "anchor_lipsync_enabled", "happyhorse_native_talk"):
+                  "anchor_lipsync_enabled", "happyhorse_native_talk",
+                  "wan_on_same_cast", "image_ref_labels"):
         monkeypatch.setattr(gr.get_settings(), _flag, False, raising=False)
 
 

@@ -491,7 +491,7 @@ class GenerationRunner:
                             prev_action=None, next_action=None, foreground=None,
                             environment=None,
                             outfits=None, blocking=None, lipsync=False,
-                            native_talk=False, image_legend="") -> str:
+                            native_talk=False, speaker="", image_legend="") -> str:
         from app.services.guardrails import canonical_character
         in_frame = [canonical_character(n, char_by_name)
                     for n in (shot.characters_in_frame or [])]
@@ -518,6 +518,7 @@ class GenerationRunner:
             blocking=blocking,
             lipsync=lipsync,
             native_talk=native_talk,
+            speaker=speaker,
             image_legend=image_legend,
             environment=environment,
         )
@@ -901,16 +902,24 @@ class GenerationRunner:
                 # shot gets. An anchor/entrance/reangle shot renders its own first
                 # frame, so it needs NO frame_anchor. OFF by default; role exists
                 # only under v2. Reused by the upgrade block after render+score.
-                # HappyHorse native lip-sync: on an identity shot that speaks, let
-                # HappyHorse say the line itself (mouth synced to its own speech)
-                # instead of hiding the mouth. Replaces the wan two-pass on these
-                # shots. OFF by default -> byte-identical. Export already mutes the
-                # model voice and overlays the real TTS.
+                # HappyHorse native lip-sync: the model speaks the line ITSELF (no
+                # driving_audio), so it works on MULTI-person shots too — we NAME
+                # the speaker in the prompt so the right mouth moves and the others
+                # stay closed. Eligibility drops the single-visible-speaker rule
+                # (line_eligible) and only needs the speaker to be IN FRAME.
+                # OFF by default -> byte-identical. Export mutes the model's own
+                # voice and overlays the real TTS.
+                native_speaker = str((lipsync_line or {}).get("character_name") or "").strip()
                 native_talk = (
                     getattr(get_settings(), "happyhorse_native_talk", False)
                     and settings_v2
                     and role in ("anchor", "entrance", "continue_reangle")
-                    and line_eligible)
+                    and attempt == 0
+                    and get_settings().lipsync_enabled
+                    and lipsync_line
+                    and lipsync_line.get("audio_url")
+                    and bool(native_speaker)
+                    and native_speaker.upper() in {str(c).strip().upper() for c in in_frame})
                 anchor_lip = (
                     getattr(get_settings(), "anchor_lipsync_enabled", False)
                     and settings_v2
@@ -924,6 +933,7 @@ class GenerationRunner:
                     foreground=foreground, outfits=outfits,
                     blocking=getattr(shot, "blocking_json", None),
                     lipsync=bool(lip) or anchor_lip, native_talk=native_talk,
+                    speaker=(native_speaker if native_talk else ""),
                     image_legend=image_legend, environment=environment)
                 prompt = crafted.get("prompt", "")
                 # the crafter has ALWAYS produced a negative prompt; until now
