@@ -195,6 +195,13 @@ class ScenePromptCraft:
             f"Duration: {shot.get('estimated_duration_seconds', 5)}s\n"
             f"Style bible: {json.dumps(style_bible or {})}"
         )
+        if getattr(get_settings(), "cinematic_prompt", False):
+            user_content += (
+                "\n\nCINEMATIC: Express the given camera_movement as ONE subtle, continuous "
+                "camera move with intent and speed (e.g. a slow push-in tightening on the face). "
+                "Give the subject CONCRETE motion with amplitude and speed. Name the shot's "
+                "diegetic SOUND tied to the action and place (footsteps on wet gravel, a car door "
+                "thunking shut, rain on glass, distant traffic). Do NOT invent music or extra voices.\n")
         messages = [
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user_content},
