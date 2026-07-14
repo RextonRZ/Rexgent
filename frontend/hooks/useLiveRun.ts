@@ -159,6 +159,11 @@ export const useLiveRunStore = create<LiveRunState>(() => ({
 
 const TRAIL_CAP = 30;
 
+// Tools that run as fast background pre-fits (the budget allocator fits the plan
+// the moment the storyboard lands). They stay visible in the crew graph but never
+// spin a chat bubble — a lingering "budget allocate" spinner reads as "stuck".
+const QUIET_TOOLS = new Set(["budget_allocate"]);
+
 function pushTrail(stage: StageKey, entry: TrailEntry) {
   useLiveRunStore.setState((s) => ({
     trail: {
@@ -409,6 +414,10 @@ export function ensureLiveRun(projectId: string) {
   on("tool:progress", (p: ToolProgress) => {
     if (!p?.stage || !p?.tool) return;
     upsertTool(p);
+    // Quiet background tools (the storyboard-time budget pre-fit) belong in the
+    // crew graph but must NOT spawn a "Producer working" chat spinner — it bleeds
+    // into the Storyboard->Generate flow and can linger after it finishes.
+    if (QUIET_TOOLS.has(p.tool)) return;
     const terminal = p.status !== "started";
     const existing = useLiveRunStore.getState().running[p.stage];
     // A terminal tool event must never BIRTH a bubble: event order across the
