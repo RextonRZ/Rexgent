@@ -13,7 +13,8 @@ def _has_plate(bible, name):
 
 
 def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
-                       anchor_lipsync, lipsync_enabled, wan_on_same_cast=False):
+                       anchor_lipsync, lipsync_enabled, wan_on_same_cast=False,
+                       happyhorse_native_talk=False):
     """Per-shot {model, lipsync} for one scene's ordered shots. Mirrors runtime routing."""
     out = []
     prev = None
@@ -39,9 +40,15 @@ def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
         ref_native = role in ("anchor", "entrance", "continue_reangle")
         model = "happyhorse" if (ref_native and anchor_ref_model == "happyhorse") else "wan"
         visible = [c for c in _chars(shot) if c not in fg]
-        single = bool((getattr(shot, "dialogue", None) or "").strip()) and len(visible) == 1
-        lipsync = (lipsync_enabled and single
-                   and (role == "continue_hold" or (ref_native and anchor_lipsync)))
+        has_dialogue = bool((getattr(shot, "dialogue", None) or "").strip())
+        single = has_dialogue and len(visible) == 1
+        # native talk makes HappyHorse SPEAK the line itself, so a ref-native shot
+        # with dialogue talks even with several people in frame (the speaker is
+        # named at render); wan/anchor lip-sync still needs a single visible face.
+        talk = happyhorse_native_talk and ref_native and has_dialogue
+        lipsync = (lipsync_enabled
+                   and (talk or (single and (role == "continue_hold"
+                                             or (ref_native and anchor_lipsync)))))
         out.append({"model": model, "lipsync": bool(lipsync)})
         prev = shot
     return out

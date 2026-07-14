@@ -422,3 +422,21 @@ async def test_image_legend_prepended_and_survives_sanitizer():
     # the [Image N] tokens must survive the text sanitizer and lead the prompt
     assert result["prompt"].startswith(legend)
     assert "[Image 1]" in result["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_native_talk_names_the_speaker_in_multi_person_shot():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "Two people at a table.", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    line = "Joo-Won, I can't believe you're here."
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "dialogue": line, "estimated_duration_seconds": 5, "action": "sits"},
+        character_visuals={"KIM SAN-HA": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse", native_talk=True, speaker="KIM SAN-HA")
+    p = result["prompt"]
+    assert "KIM SAN-HA is the one speaking" in p     # the speaker is named
+    assert line in p                                  # the exact line survives
+    assert "keeps a closed, still mouth" in p         # others held silent

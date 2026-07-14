@@ -40,6 +40,7 @@ class ScenePromptCraft:
         blocking: dict | None = None,
         lipsync: bool = False,
         native_talk: bool = False,
+        speaker: str = "",
         image_legend: str = "",
         environment: dict | None = None,
     ) -> dict:
@@ -229,10 +230,22 @@ class ScenePromptCraft:
         if native_talk and has_line:
             spoken = str(shot.get("dialogue") or "").strip()
             if spoken:
-                result["prompt"] = (
-                    result["prompt"].rstrip()
-                    + f' The character clearly speaks these exact words aloud: "{spoken}"'
-                )
+                who = (speaker or "").strip()
+                if who:
+                    # name the speaker (ties to their [Image N] in the legend) and
+                    # keep everyone else's mouth still, so HappyHorse animates the
+                    # RIGHT person in a multi-character shot
+                    result["prompt"] = (
+                        result["prompt"].rstrip()
+                        + f" {who} is the one speaking: {who} clearly says these exact "
+                          f"words aloud with natural lip movement while everyone else "
+                          f'keeps a closed, still mouth and listens: "{spoken}"'
+                    )
+                else:
+                    result["prompt"] = (
+                        result["prompt"].rstrip()
+                        + f' The character clearly speaks these exact words aloud: "{spoken}"'
+                    )
         if image_legend:
             # prepend AFTER sanitization so the [Image N] tokens survive the text
             # stripper; leads the prompt so the model reads the mapping first
