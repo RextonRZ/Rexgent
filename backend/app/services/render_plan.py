@@ -14,7 +14,8 @@ def _has_plate(bible, name):
 
 def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
                        anchor_lipsync, lipsync_enabled, wan_on_same_cast=False,
-                       happyhorse_native_talk=False):
+                       happyhorse_native_talk=False,
+                       route_continuation_to_happyhorse=False):
     """Per-shot {model, lipsync} for one scene's ordered shots. Mirrors runtime routing."""
     out = []
     prev = None
@@ -39,6 +40,10 @@ def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
             role = "continue_hold"
         ref_native = role in ("anchor", "entrance", "continue_reangle")
         model = "happyhorse" if (ref_native and anchor_ref_model == "happyhorse") else "wan"
+        # continuation shots render on HappyHorse r2v (not wan i2v) when opted in
+        # — mirrors _dispatch_by_role's continue_hold routing under the flag.
+        if route_continuation_to_happyhorse and role == "continue_hold":
+            model = "happyhorse"
         visible = [c for c in _chars(shot) if c not in fg]
         has_dialogue = bool((getattr(shot, "dialogue", None) or "").strip())
         single = has_dialogue and len(visible) == 1

@@ -574,6 +574,12 @@ class GenerationRunner:
             return ("happyhorse", await _happyhorse())
 
         # continue_hold
+        if getattr(get_settings(), "route_continuation_to_happyhorse", True):
+            # Wan i2v continuation hard-fails when the previous clip is >= the
+            # requested duration and can't lip-sync 2-face shots; HappyHorse r2v
+            # continues via the reference stack (which already carries the prev
+            # frame) and does multi-person native-talk. Flag OFF -> old wan path.
+            return ("happyhorse", await _happyhorse())
         media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor,
                            audio_url=(lip or {}).get("audio_url"), talking=bool(lip))
         if media:

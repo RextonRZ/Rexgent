@@ -23,7 +23,8 @@ def _no_ws(monkeypatch):
     # can't flip a legacy-path test. Tests that need a flag on monkeypatch it True.
     for _flag in ("identity_routing_v2", "repair_enabled", "multishot_enabled",
                   "anchor_lipsync_enabled", "happyhorse_native_talk",
-                  "wan_on_same_cast", "image_ref_labels"):
+                  "wan_on_same_cast", "image_ref_labels",
+                  "route_continuation_to_happyhorse"):
         monkeypatch.setattr(gr.get_settings(), _flag, False, raising=False)
 
 
@@ -988,4 +989,20 @@ async def test_anchor_lipsync_off_by_default_no_second_render(monkeypatch):
         prev_last_frame_url=None, scene_anchor_url=None, prev_in_frame=None,
         prev_shot_type=None, lipsync_line=line)
     runner.qwen.generate_video_wan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_continue_hold_routes_to_happyhorse_when_flagged(monkeypatch):
+    runner = make_runner()
+    runner.continuity.validate = _continuity_pass()
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    monkeypatch.setattr(gr.get_settings(), "route_continuation_to_happyhorse", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    # prev_shot_type == this shot's CU framing so angle_changed is False -> the
+    # role classifies as continue_hold (same cast, frame anchor, no angle change)
+    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
+                               "prevframe", prev_shot_type="CU")
+    assert runner.qwen.generate_video_happyhorse.await_count == 1
+    assert runner.qwen.generate_video_wan.await_count == 0
 

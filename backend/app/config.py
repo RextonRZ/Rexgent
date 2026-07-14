@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     # Route same-cast continuation shots to Wan even on an angle change (only a
     # NEW character forces the HappyHorse reference model). OFF by default.
     wan_on_same_cast: bool = False
+    # Render continuation (continue_hold) shots on HappyHorse r2v instead of Wan
+    # i2v. Wan i2v continuation hard-fails when the previous clip is >= the
+    # requested duration and can't lip-sync 2-face shots; HappyHorse r2v continues
+    # via the reference stack (which already carries the prev frame) and does
+    # multi-person native talk. ON by default; flip OFF for the old wan i2v path.
+    route_continuation_to_happyhorse: bool = True
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

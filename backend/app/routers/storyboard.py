@@ -195,6 +195,7 @@ def shots_with_render_plan(shots: list[Shot], bible: dict) -> list[dict]:
         lipsync_enabled=settings.lipsync_enabled,
         wan_on_same_cast=settings.wan_on_same_cast,
         happyhorse_native_talk=settings.happyhorse_native_talk,
+        route_continuation_to_happyhorse=settings.route_continuation_to_happyhorse,
     )
     out = []
     for shot, plan in zip(shots, plans):
