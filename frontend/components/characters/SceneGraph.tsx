@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { BlockingDiagram } from "@/components/storyboard/BlockingDiagram";
 import { explainFilmTerm, fullShotType } from "@/lib/filmTerms";
+import { tierLabel, isFullTier } from "@/lib/qualityTier";
 import type {
   GraphScene,
   GraphCharacterInfo,
@@ -164,7 +165,7 @@ export function SceneGraph({
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             {open.shots.map((shot) => {
-              const isWan = shot.quality_tier === "wan";
+              const isFull = isFullTier(shot.quality_tier);
               const isDeferred = shot.quality_tier === "deferred";
               return (
                 <div
@@ -266,12 +267,12 @@ export function SceneGraph({
                           className={`rounded-full px-1.5 py-0.5 font-medium ${
                             isDeferred
                               ? "bg-warn/15 text-warn"
-                              : isWan
+                              : isFull
                                 ? "bg-wan/15 text-wan"
                                 : "bg-hh/15 text-hh"
                           }`}
                         >
-                          {isDeferred ? "Deferred" : isWan ? "Wan 2.7" : "HappyHorse"}
+                          {tierLabel(shot.quality_tier)}
                         </span>
                       )}
                     </span>

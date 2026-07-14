@@ -30,23 +30,23 @@ export function GenerationLauncher({ projectId }: { projectId: string }) {
       b.scored_shots
         .filter((s) => tiers.includes(s.quality_tier))
         .reduce((sum, s) => sum + (s.estimated_cost_usd || 0), 0);
-    const wanCount = b.scored_shots.filter((s) => s.quality_tier === "wan").length;
-    const hhCount = b.scored_shots.filter((s) =>
-      ["happyhorse", "happyhorse_fast"].includes(s.quality_tier)
+    const fullCount = b.scored_shots.filter((s) =>
+      ["happyhorse", "wan"].includes(s.quality_tier)
     ).length;
+    const fastCount = b.scored_shots.filter((s) => s.quality_tier === "happyhorse_fast").length;
     const deferred = b.deferred_shots ?? 0;
     const breakdown: SpendItem[] = [];
-    if (wanCount > 0)
+    if (fullCount > 0)
       breakdown.push({
-        label: `Premium shots × ${wanCount}`,
-        detail: "Wan 2.7 at 1080P (t2v / i2v / r2v), the hook and the shots that matter most",
-        amount: tierCost(["wan"]),
+        label: `Full-quality shots × ${fullCount}`,
+        detail: "the hook and the shots that carry the story, full pass at 1080P",
+        amount: tierCost(["happyhorse", "wan"]),
       });
-    if (hhCount > 0)
+    if (fastCount > 0)
       breakdown.push({
-        label: `Standard shots × ${hhCount}`,
-        detail: "HappyHorse 1.1 with reference images for identity",
-        amount: tierCost(["happyhorse", "happyhorse_fast"]),
+        label: `Fast-pass shots × ${fastCount}`,
+        detail: "supporting shots on a lighter, cheaper pass",
+        amount: tierCost(["happyhorse_fast"]),
       });
     if (deferred > 0)
       breakdown.push({
@@ -56,7 +56,7 @@ export function GenerationLauncher({ projectId }: { projectId: string }) {
       });
     return {
       title: "Start video generation",
-      costLine: `The Producer fitted the plan under your $${cap.toFixed(0)} cap. Every shot below is priced by its assigned model.`,
+      costLine: `The Producer fitted the plan under your $${cap.toFixed(0)} cap. Every shot below is priced by its quality level.`,
       note: "Flagged takes can be fixed individually afterwards instead of re-running everything.",
       confirmLabel: "Start generation",
       breakdown,
@@ -83,8 +83,8 @@ export function GenerationLauncher({ projectId }: { projectId: string }) {
       <div className="space-y-1">
         <h2 className="font-semibold">Generate video</h2>
         <p className="text-sm text-muted-foreground max-w-md">
-          Every shot is dispatched to Wan 2.7 / HappyHorse 1.1, verified against
-          each character&apos;s locked identity, and self-corrected on failure.
+          Every shot renders on our video model, verified against each
+          character&apos;s locked identity, and self-corrected on failure.
         </p>
         {jobComplete && (
           <p className="text-sm text-ok font-medium">

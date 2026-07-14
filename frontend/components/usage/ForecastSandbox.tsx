@@ -9,14 +9,10 @@ import type { UsageAnalytics } from "@/hooks/useUsageAnalytics";
 
 /** ── the budget-runway planner ───────────────────────────────────────────
  * Hero = runway: how long the remaining budget lasts at the chosen pace.
- * Three levers (pace, video quality, budget) recompute everything live.
+ * Three levers (pace, shots per episode, budget) recompute everything live.
  * Numbers are simple averages over this range's real spend, clamped so a
  * burst day can't produce nonsense — and the math is never narrated.
  */
-
-// real per-second video rates — the quality lever maps to actual routing
-const RATE = { economy: 0.108, balanced: 0.129, premium: 0.15 };
-type Tier = keyof typeof RATE;
 
 const MS_DAY = 86_400_000;
 const MAX_WEEKS = 26;
@@ -60,12 +56,15 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
     );
     const videoShare =
       totalUsd > 0 ? (data.categories["video"]?.usd ?? 0) / totalUsd : 0.7;
-    const wan = data.reliability.by_tier["wan"]?.clips ?? 0;
-    const hh = data.reliability.by_tier["happyhorse"]?.clips ?? 0;
-    const wr = wan + hh > 0 ? wan / (wan + hh) : 0;
-    const blendedRate = wr * RATE.premium + (1 - wr) * RATE.economy;
-    // which tier the user's ACTUAL mix is closest to
-    const myTier: Tier = wr > 0.66 ? "premium" : wr < 0.33 ? "economy" : "balanced";
+    // average shots (clips) per produced episode — the real per-episode count
+    const shotsPerEp = Math.round(
+      Math.max(
+        2,
+        produced.length
+          ? produced.reduce((s, d) => s + d.clips, 0) / produced.length
+          : 8
+      )
+    );
     const spanDays = Math.max(1, data.trend.length);
     const pace = Math.min(
       10,
@@ -83,27 +82,25 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
         direction = r > 1.15 ? "accelerating" : r < 0.85 ? "slowing" : "stable";
       }
     }
-    return { costPerEpisode, videoShare, blendedRate, myTier, pace, direction };
+    return { costPerEpisode, videoShare, shotsPerEp, pace, direction };
   }, [data]);
 
   // ── the levers ──
   const [pace, setPace] = useState(base.pace);
-  const [tier, setTier] = useState<Tier>(base.myTier);
+  const [shots, setShots] = useState(base.shotsPerEp);
   const [budget, setBudget] = useState(10);
   const [editingBudget, setEditingBudget] = useState(false);
   useEffect(() => setPace(base.pace), [base.pace]);
-  useEffect(() => setTier(base.myTier), [base.myTier]);
+  useEffect(() => setShots(base.shotsPerEp), [base.shotsPerEp]);
 
-  const costFor = (t: Tier) => {
+  const costFor = (shotCount: number) => {
     const video = base.costPerEpisode * base.videoShare;
     const rest = base.costPerEpisode - video;
-    return Math.max(
-      0.05,
-      rest + video * (RATE[t] / (base.blendedRate || RATE.economy))
-    );
+    const perShot = video / Math.max(1, base.shotsPerEp);
+    return Math.max(0.05, rest + perShot * shotCount);
   };
 
-  const costEp = costFor(tier);
+  const costEp = costFor(shots);
   const weeklySpend = pace * costEp;
   const runwayEps = budget / costEp;
   const runwayWeeks = Math.min(MAX_WEEKS * 4, runwayEps / Math.max(pace, 0.01));
@@ -113,10 +110,10 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
   // "what changed" vs the fixed baseline: my tier, my pace, $10.
   // Pace never changes HOW MANY episodes the budget buys — only WHEN it runs
   // out — so the pill speaks in days when pace is the thing that moved.
-  const baselineRunway = 10 / costFor(base.myTier);
+  const baselineRunway = 10 / costFor(base.shotsPerEp);
   const baselineDays = (baselineRunway / Math.max(base.pace, 0.01)) * 7;
   const dirty =
-    tier !== base.myTier || Math.abs(pace - base.pace) > 0.01 || budget !== 10;
+    shots !== base.shotsPerEp || Math.abs(pace - base.pace) > 0.01 || budget !== 10;
   const deltaEps = runwayEps - baselineRunway;
   const deltaDays = Math.min(999, runwayWeeks * 7) - Math.min(999, baselineDays);
 
@@ -272,7 +269,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
         {trendChip}
         {dirty && (
           <span
-            key={`${pace}-${tier}-${budget}`}
+            key={`${pace}-${shots}-${budget}`}
             className={cn(
               "rounded-full px-2 py-0.5 text-[10px] motion-safe:animate-in motion-safe:fade-in-0",
               (Math.abs(deltaEps) >= 0.05 ? deltaEps >= 0 : deltaDays >= 0)
@@ -296,7 +293,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
             <button
               onClick={() => {
                 setPace(base.pace);
-                setTier(base.myTier);
+                setShots(base.shotsPerEp);
                 setBudget(10);
               }}
               className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300"
@@ -365,37 +362,30 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
           </div>
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-zinc-500">
-            Video quality
-          </p>
-          <div className="mt-2 flex items-center gap-2.5">
-          <div className="flex w-fit gap-0.5 rounded-lg border hairline bg-black/20 p-0.5">
-            {(["economy", "balanced", "premium"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTier(t)}
-                aria-pressed={tier === t}
-                className={cn(
-                  "relative rounded-md px-3 py-1 text-[11px] transition-colors motion-reduce:transition-none",
-                  tier === t
-                    ? "bg-primary/20 text-primary"
-                    : "text-zinc-500 hover:text-zinc-300"
-                )}
-              >
-                {t}
-                {base.myTier === t && (
-                  <span
-                    title="you’re here"
-                    className="absolute -top-0.5 right-1 h-1 w-1 rounded-full bg-ok"
-                  />
-                )}
-              </button>
-            ))}
+          <div className="flex items-baseline justify-between">
+            <label htmlFor="shots" className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Shots per episode
+            </label>
+            <span className="text-[11px] tabular-nums text-zinc-300">
+              {shots} shots
+            </span>
           </div>
-          <span className="flex items-center gap-1.5 text-[10px] text-zinc-500">
-            <span className="h-1.5 w-1.5 rounded-full bg-ok" />
-            you&apos;re here
-          </span>
+          <div className="relative mt-2">
+            <input
+              id="shots"
+              type="range"
+              min={2}
+              max={40}
+              step={1}
+              value={shots}
+              onChange={(e) => setShots(Number(e.target.value))}
+              className="w-full accent-violet-500"
+            />
+            <span
+              title="your current average"
+              className="absolute top-0 h-full w-[3px] cursor-help rounded-full bg-ok/80"
+              style={{ left: `${((base.shotsPerEp - 2) / 38) * 100}%` }}
+            />
           </div>
         </div>
       </div>
@@ -421,7 +411,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
           {
             label: "Episodes per $10",
             value: `≈ ${(10 / costEp).toFixed(1)}`,
-            sub: tier === base.myTier ? "on your current mix" : `on ${tier}`,
+            sub: shots === base.shotsPerEp ? "at your usual length" : `at ${shots} shots`,
           },
         ].map((c) => (
           <div

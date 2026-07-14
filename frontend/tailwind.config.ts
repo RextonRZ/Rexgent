@@ -48,9 +48,9 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Quality tiers
-        wan: "hsl(38 92% 60%)", // premium / Wan 2.7 (gold)
-        hh: "hsl(199 89% 60%)", // standard / HappyHorse (cyan)
+        // Quality levels (one video model; these are the full/fast accents)
+        wan: "hsl(38 92% 60%)", // full quality (gold)
+        hh: "hsl(199 89% 60%)", // fast pass (cyan); also a neutral cyan elsewhere
         // Pipeline / clip status
         ok: "hsl(152 60% 50%)",
         warn: "hsl(38 92% 60%)",

@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ShotEditor } from "./ShotEditor";
 import { useDeleteShot } from "@/hooks/useStoryboard";
 import { explainFilmTerm, fullShotType } from "@/lib/filmTerms";
+import { tierLabel, isFullTier } from "@/lib/qualityTier";
 import type { Shot, ShotPromptEngineering } from "@/lib/types";
 
 /** The beat expander's paper trail: what the model was actually told, what it
@@ -105,12 +106,12 @@ export function ShotCard({ shot }: { shot: Shot }) {
     }
   };
 
-  // render_plan mirrors runtime routing so the tag can't drift from what actually
-  // renders; fall back to quality_tier for older shots that predate the field.
+  // Every shot renders on the one video model, so the tag shows the quality
+  // LEVEL the Producer assigned (full vs fast), not a model name.
   const renderPlan = shot.render_plan;
-  const modelTierSource = renderPlan?.model ?? shot.quality_tier;
-  const isWan = modelTierSource === "wan";
-  const showModelTag = Boolean(renderPlan) || Boolean(shot.quality_tier);
+  const tier = shot.quality_tier;
+  const isFull = isFullTier(tier);
+  const showTierTag = Boolean(tier);
 
   return (
     <Card className="group">
@@ -153,13 +154,17 @@ export function ShotCard({ shot }: { shot: Shot }) {
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-            {showModelTag && (
+            {showTierTag && (
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  isWan ? "bg-wan/15 text-wan" : "bg-hh/15 text-hh"
+                  tier === "deferred"
+                    ? "bg-warn/15 text-warn"
+                    : isFull
+                      ? "bg-wan/15 text-wan"
+                      : "bg-hh/15 text-hh"
                 }`}
               >
-                {isWan ? "Wan 2.7" : "HappyHorse"}
+                {tierLabel(tier)}
               </span>
             )}
             {renderPlan?.lipsync && (

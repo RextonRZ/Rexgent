@@ -341,8 +341,9 @@ export function AutoRunPanel({
             Scripting costs cents. This drama&apos;s{" "}
             <span className="text-foreground">${cap.toFixed(0)}</span> cap limits
             how much <em>video</em> renders, not how long you write. A bigger
-            story renders as more, shorter shots; the agent tiers premium
-            generation to fit and tells you the real budget before you spend.
+            story renders as more, shorter shots; the agent eases lower-priority
+            shots to a faster pass to fit and tells you the real budget before
+            you spend.
           </p>
         </div>
 
@@ -437,8 +438,8 @@ export function AutoRunPanel({
                     result.budget.total_estimated_cost ??
                     0).toFixed(2)}
                 </span>{" "}
-                / ${cap.toFixed(0)} · {result.budget.wan_shots} Wan /{" "}
-                {result.budget.happyhorse_shots} HappyHorse
+                / ${cap.toFixed(0)} · {result.budget.full_shots} full /{" "}
+                {result.budget.fast_shots} fast
               </p>
             )}
             {fullAuto ? (

@@ -33,7 +33,7 @@ def test_allocate_within_budget():
     ]
     result = optimizer.allocate(shots, budget_usd=40.0)
     assert result["total_estimated_cost"] <= 40.0 * 0.85
-    assert result["wan_shots"] + result["happyhorse_shots"] == 2
+    assert result["full_shots"] + result["fast_shots"] == 2
 
 
 def test_allocate_assigns_tiers():
@@ -44,7 +44,7 @@ def test_allocate_assigns_tiers():
     ]
     result = optimizer.allocate(shots)
     tiers = {s["shot_id"]: s["quality_tier"] for s in result["scored_shots"]}
-    assert tiers["hero"] == "wan"
+    assert tiers["hero"] == "happyhorse"
     assert tiers["filler"] == "happyhorse_fast"
 
 
@@ -73,7 +73,7 @@ def test_hook_scene_boosts_score():
 
 def test_tiny_budget_downgrades_then_defers_to_fit():
     optimizer = TokenOptimizer()
-    shots = [_hero(f"s{i}") for i in range(10)]  # 10 wan shots x 10s = $15
+    shots = [_hero(f"s{i}") for i in range(10)]  # 10 full shots x 10s x $0.108 = $10.80
     result = optimizer.allocate(shots, budget_usd=5.0)  # available $4.25
     assert result["fits_budget"] is True
     assert result["video_cost_usd"] <= result["budget_available"]
@@ -89,8 +89,8 @@ def test_hook_shots_never_downgraded_or_deferred():
             [_hero(f"s{i}") for i in range(10)]
     result = optimizer.allocate(shots, budget_usd=5.0)
     by_id = {s["shot_id"]: s for s in result["scored_shots"]}
-    assert by_id["hook1"]["quality_tier"] == "wan"
-    assert by_id["hook2"]["quality_tier"] == "wan"
+    assert by_id["hook1"]["quality_tier"] == "happyhorse"
+    assert by_id["hook2"]["quality_tier"] == "happyhorse"
     assert result["hook_shots"] == 2
 
 
@@ -104,9 +104,9 @@ def test_single_scene_drama_still_fits_the_cap():
     assert result["fits_budget"] is True
     assert result["video_cost_usd"] <= result["budget_available"]
     by_number = {s["shot_id"]: s for s in result["scored_shots"]}
-    # the first two shots keep premium quality
-    assert by_number["s0"]["quality_tier"] == "wan"
-    assert by_number["s1"]["quality_tier"] == "wan"
+    # the first two shots keep full quality
+    assert by_number["s0"]["quality_tier"] == "happyhorse"
+    assert by_number["s1"]["quality_tier"] == "happyhorse"
 
 
 def test_hook_follows_shot_number_not_list_order():
@@ -143,8 +143,8 @@ def test_generous_budget_changes_nothing():
     assert result["fits_budget"] is True
 
 
-def test_allocator_model_matches_dispatched_wan():
-    # the runner dispatches wan2.7-*; the plan must not claim a different model
+def test_allocator_model_matches_dispatched_model():
+    # the runner dispatches happyhorse-1.1-*; the plan must not claim another model
     optimizer = TokenOptimizer()
     result = optimizer.allocate([_hero("s1")], budget_usd=40.0)
-    assert result["scored_shots"][0]["model"] == "wan2.7-t2v"
+    assert result["scored_shots"][0]["model"] == "happyhorse-1.1-t2v"

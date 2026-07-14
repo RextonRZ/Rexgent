@@ -29,7 +29,6 @@ import {
 import { ForecastSandbox } from "@/components/usage/ForecastSandbox";
 import {
   RankedBars,
-  TierRatioBar,
   TierSplitBar,
   TrendChart,
   fmtPct,
@@ -83,9 +82,8 @@ const ROSTER: {
     icon: Film,
     tint: "text-fuchsia-300/60",
     models: [
-      { name: "wan2.7-t2v / i2v / r2v", role: "Premium tier — the shots that matter most", match: ["wan2.7"] },
-      { name: "happyhorse-1.1-t2v / i2v / r2v", role: "Economy tier — supporting shots", match: ["happyhorse-1.1"] },
-      { name: "happyhorse-1.0-video-edit", role: "Fix a take — the regen loop", match: ["happyhorse-1.0-video-edit"] },
+      { name: "happyhorse-1.1-t2v / i2v / r2v", role: "Every shot renders on this video model", match: ["happyhorse-1.1", "wan2.7"] },
+      { name: "happyhorse-1.0-video-edit", role: "Fix a take, the regen loop", match: ["happyhorse-1.0-video-edit"] },
     ],
   },
   {
@@ -478,8 +476,15 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
   const totalClips = data.dramas.reduce((s, d) => s + d.clips, 0);
 
   const rel = data.reliability;
+  // One video model now: fold any legacy Wan clips into a single video bucket.
   const wan = rel.by_tier["wan"];
   const hh = rel.by_tier["happyhorse"];
+  const videoClips = (wan?.clips ?? 0) + (hh?.clips ?? 0);
+  const videoRetried = (wan?.retried ?? 0) + (hh?.retried ?? 0);
+  const video =
+    videoClips > 0
+      ? { clips: videoClips, retried: videoRetried, retry_rate: videoRetried / videoClips }
+      : null;
   const passHealth: Health | null =
     rel.continuity_pass_rate == null
       ? null
@@ -656,18 +661,11 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
                       </div>
                     );
                   })}
-                  {/* premium vs economy — the routing story again */}
-                  {group.group === "Video" && (wan || hh) && (
-                    <div className="py-3">
-                      <div className="mb-1.5 flex justify-between text-[10px] text-zinc-500">
-                        <span>premium · {wan?.clips ?? 0} clip{(wan?.clips ?? 0) === 1 ? "" : "s"}</span>
-                        <span>economy · {hh?.clips ?? 0} clip{(hh?.clips ?? 0) === 1 ? "" : "s"}</span>
-                      </div>
-                      <TierRatioBar
-                        a={{ label: "Wan 2.7 (premium)", clips: wan?.clips ?? 0 }}
-                        b={{ label: "HappyHorse 1.1 (economy)", clips: hh?.clips ?? 0 }}
-                      />
-                    </div>
+                  {group.group === "Video" && video && (
+                    <p className="py-3 text-[10px] text-zinc-500">
+                      {video.clips} clip{video.clips === 1 ? "" : "s"} rendered on
+                      the video model in this range.
+                    </p>
                   )}
                 </div>
               </div>
@@ -730,7 +728,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
       {/* ── 4 · reliability ── */}
       <Rise index={3}>
         <SectionTitle>Reliability</SectionTitle>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <HealthCard
             label="Continuity pass"
             value={rel.continuity_pass_rate != null ? fmtPct(rel.continuity_pass_rate) : null}
@@ -743,16 +741,10 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
             evidence={<EvidenceStrip samples={rel.flagged_samples} />}
           />
           <HealthCard
-            label="Wan retries"
-            value={wan ? fmtPct(wan.retry_rate) : null}
-            health={retryHealth(wan)}
-            note={wan ? `${wan.retried} of ${wan.clips} clips retried` : undefined}
-          />
-          <HealthCard
-            label="HappyHorse retries"
-            value={hh ? fmtPct(hh.retry_rate) : null}
-            health={retryHealth(hh)}
-            note={hh ? `${hh.retried} of ${hh.clips} clips retried` : undefined}
+            label="Video retries"
+            value={video ? fmtPct(video.retry_rate) : null}
+            health={retryHealth(video ?? undefined)}
+            note={video ? `${video.retried} of ${video.clips} clips retried` : undefined}
             evidence={<EvidenceStrip samples={rel.retried_samples} />}
           />
           <HealthCard

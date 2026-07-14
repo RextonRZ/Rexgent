@@ -188,9 +188,9 @@ export default function StoryboardPage({
                 <Skeleton className="h-48 rounded-xl" />
               ) : (
                 <div className="rounded-xl border hairline bg-card p-5 text-sm text-muted-foreground">
-                  The budget allocates itself once the storyboard exists —
-                  it decides which shots get Wan vs HappyHorse under the $40
-                  voucher.
+                  The budget allocates itself once the storyboard exists. It
+                  decides which shots render at full quality and which ease to a
+                  faster pass under the $40 voucher.
                 </div>
               )}
 
