@@ -1,10 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
 import api from "@/lib/api";
+import type { QualityTier } from "@/lib/qualityTier";
 
 export interface ScoredShot {
   shot_id: string;
   importance_score: number;
-  quality_tier: "wan" | "happyhorse" | "happyhorse_fast" | "deferred";
+  quality_tier: QualityTier;
   model: string;
   is_hook?: boolean;
   estimated_cost_usd: number;
@@ -18,8 +19,8 @@ export interface BudgetResult {
   budget_available: number;
   budget_reserved: number;
   scored_shots: ScoredShot[];
-  wan_shots: number;
-  happyhorse_shots: number;
+  full_shots: number;
+  fast_shots: number;
   hook_shots?: number;
   downgraded_shots?: number;
   deferred_shots?: number;

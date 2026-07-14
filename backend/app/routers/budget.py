@@ -59,8 +59,8 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
     optimizer = TokenOptimizer()
     with tool_run(project_id, "generate", "budget_allocate", "Producer") as tb:
         result = optimizer.allocate(shots_data, budget)
-        tb["artifact"] = (f"{result.get('wan_shots', 0)} wan / "
-                          f"{result.get('happyhorse_shots', 0)} happyhorse")
+        tb["artifact"] = (f"{result.get('full_shots', 0)} full / "
+                          f"{result.get('fast_shots', 0)} fast")
 
     # Persist the assigned tier back onto each shot.
     tier_by_id = {s["shot_id"]: s["quality_tier"] for s in result["scored_shots"]}

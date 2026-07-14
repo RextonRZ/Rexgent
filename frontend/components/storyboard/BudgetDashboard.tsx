@@ -81,7 +81,7 @@ export function BudgetDashboard({
           <p className="text-xs leading-relaxed text-warn">
             {deferredN > 0
               ? `${deferredN} shot${deferredN !== 1 ? "s" : ""} of your episode do not fit the $${cap.toFixed(0)} cap, so the Producer parked them.`
-              : `${downgradedN} shot${downgradedN !== 1 ? "s" : ""} lost premium quality to fit the $${cap.toFixed(0)} cap.`}{" "}
+              : `${downgradedN} shot${downgradedN !== 1 ? "s" : ""} eased to a lighter pass to fit the $${cap.toFixed(0)} cap.`}{" "}
             A ${rec} cap renders the full plan.
           </p>
           {projectId && (
@@ -127,27 +127,27 @@ export function BudgetDashboard({
         <Stat label="Deferred" value={`${budget.deferred_shots ?? 0}`} />
       </div>
 
-      {/* the model split, decoded for non-filmmakers */}
+      {/* the quality split, decoded for non-filmmakers */}
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span
             className="inline-flex items-center gap-1.5 rounded-full bg-wan/15 text-wan px-2 py-0.5"
-            title="Wan 2.7 is the premium video model: pricier per second, reserved for the shots that earn it"
+            title="Full quality: the shots that carry the story get the full generation pass"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-wan" />
-            {budget.wan_shots} premium (Wan)
+            {budget.full_shots} full quality
           </span>
           <span
             className="inline-flex items-center gap-1.5 rounded-full bg-hh/15 text-hh px-2 py-0.5"
-            title="HappyHorse is the workhorse video model: near-premium quality at a lower rate"
+            title="Fast pass: supporting shots render on a lighter, cheaper pass to protect the cap"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-hh" />
-            {budget.happyhorse_shots} standard (HappyHorse)
+            {budget.fast_shots} fast pass
           </span>
           {(budget.hook_shots ?? 0) > 0 && (
             <span
               className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 text-primary px-2 py-0.5"
-              title="The hook is the drama's first seconds on a phone screen. The Producer protects it: upgraded to the premium model when the budget allows, and never deferred at a tight cap"
+              title="The hook is the drama's first seconds on a phone screen. The Producer protects it: kept at full quality, and never deferred at a tight cap"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-primary" />
               {budget.hook_shots} hook protected
@@ -161,8 +161,9 @@ export function BudgetDashboard({
           )}
         </div>
         <p className="text-[11px] text-zinc-400">
-          The Producer splits every shot across two video models to fit your
-          cap; the opening hook gets premium treatment first.
+          Every shot renders on the same video model. The Producer keeps the
+          shots that carry the story at full quality and eases the rest to a
+          faster pass to fit your cap; the opening hook stays full first.
         </p>
       </div>
     </div>

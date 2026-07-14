@@ -220,50 +220,6 @@ export function RankedBars({ rows }: { rows: RankedRow[] }) {
   );
 }
 
-/** Premium vs economy split (the video roster) — same hover language as the
- * routing bar, one pole per tier from the same violet ramp. */
-export function TierRatioBar({
-  a,
-  b,
-}: {
-  a: { label: string; clips: number };
-  b: { label: string; clips: number };
-}) {
-  const [hover, setHover] = useState<string | null>(null);
-  const total = Math.max(1, a.clips + b.clips);
-  const seg = (s: { label: string; clips: number }, color: string, cls: string) => (
-    <div
-      onMouseEnter={() => setHover(s.label)}
-      onMouseLeave={() => setHover(null)}
-      className={cn("group relative transition-opacity duration-150 motion-reduce:transition-none", cls)}
-      style={{
-        width: `${(s.clips / total) * 100}%`,
-        background: color,
-        opacity: hover !== null && hover !== s.label ? 0.3 : 1,
-        minWidth: s.clips > 0 ? 4 : 0,
-      }}
-    >
-      <div
-        className={cn(
-          TIP,
-          "absolute -top-1.5 left-1/2 z-10 hidden -translate-x-1/2 -translate-y-full group-hover:block"
-        )}
-      >
-        <p className="text-[10px] text-zinc-200">{s.label}</p>
-        <p className="text-[10px] tabular-nums text-zinc-400">
-          {s.clips} clip{s.clips === 1 ? "" : "s"} · {fmtPct(s.clips / total)}
-        </p>
-      </div>
-    </div>
-  );
-  return (
-    <div className="flex h-2.5 w-full gap-[2px] overflow-visible">
-      {seg(a, "#5b21b6", "rounded-l-full")}
-      {seg(b, "#a78bfa", "rounded-r-full flex-1")}
-    </div>
-  );
-}
-
 const tooltipStyle = {
   background: "#161122",
   border: "1px solid rgba(255,255,255,0.1)",

@@ -325,7 +325,7 @@ def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_u
         t["artifact"] = f"{len(tier_by_id)} shots fitted"
     from app.agents.reporter import report_agent
     report_agent(db, project_id, agent="budget_allocator", stage="budget",
-                 decision={"wan": result.get("wan_shots"), "happyhorse": result.get("happyhorse_shots")}
+                 decision={"full": result.get("full_shots"), "fast": result.get("fast_shots")}
                          if isinstance(result, dict) else {},
                  rationale="Allocated quality tiers under the cap", confidence=1.0)
     # Tell the chat what fitting cost the plan, so the user can decide to

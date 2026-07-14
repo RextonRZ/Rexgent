@@ -18,8 +18,8 @@ export interface AutoRunResult {
   budget: {
     total_estimated_cost?: number;
     grand_total_cost?: number;
-    wan_shots?: number;
-    happyhorse_shots?: number;
+    full_shots?: number;
+    fast_shots?: number;
   } | null;
   job_id: string | null;
   dispatched: boolean;

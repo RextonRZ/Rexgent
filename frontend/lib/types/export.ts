@@ -14,10 +14,6 @@ export interface ProductionReport {
   total_clips: number;
   qwen_max_input_tokens: number;
   qwen_max_output_tokens: number;
-  wan_clips: number;
-  wan_seconds: number;
-  happyhorse_clips: number;
-  happyhorse_seconds: number;
   llm_cost_usd: number;
   video_cost_usd: number;
   grand_total_cost: number;

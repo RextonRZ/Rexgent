@@ -118,7 +118,7 @@ export function FlagPanel({
               onClick={() =>
                 setSpend({
                   title: "Regenerate this take",
-                  costLine: "Prices below assume a 5 second take. A long premium take can reach $1.50.",
+                  costLine: "Prices below assume a 5 second take. A long take can reach $1.50.",
                   note: "Your note rewrites the prompt first, so the new take targets exactly what you flagged.",
                   confirmLabel: "Regenerate",
                   breakdown: [

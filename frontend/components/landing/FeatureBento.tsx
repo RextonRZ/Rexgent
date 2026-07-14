@@ -23,7 +23,7 @@ const WOWS = [
   {
     k: "02",
     title: "The budget is a feature",
-    body: "A live meter spends premium generation only on the shots that matter, turning a hard limit into a smart allocator.",
+    body: "A live meter spends full-quality generation only on the shots that matter, turning a hard limit into a smart allocator.",
   },
   {
     k: "03",
