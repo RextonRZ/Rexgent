@@ -43,7 +43,7 @@ def _no_ws(monkeypatch):
     # can't flip a legacy-path test. Tests that need a flag on monkeypatch it True.
     for _flag in ("identity_routing_v2", "repair_enabled", "multishot_enabled",
                   "happyhorse_native_talk",
-                  "wan_on_same_cast", "image_ref_labels",
+                  "wan_on_same_cast", "image_ref_labels", "wan_primary",
                   "route_continuation_to_happyhorse", "cinematic_prompt"):
         monkeypatch.setattr(gr.get_settings(), _flag, False, raising=False)
 
