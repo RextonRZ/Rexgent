@@ -1,0 +1,7 @@
+{
+  "id": "bright_ukulele", "title": "Bright Ukulele", "filename": "bright_ukulele.mp3",
+  "type": "music", "mood": "happy", "scene_tags": ["daily", "montage"],
+  "tempo": "upbeat", "intensity": 3, "instruments": ["ukulele", "claps"], "loopable": true,
+  "duration": 60, "license": "CC0", "attribution": "",
+  "source": "TODO: add a royalty-free track named bright_ukulele.mp3 beside this file"
+}

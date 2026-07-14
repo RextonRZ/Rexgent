@@ -1,0 +1,7 @@
+{
+  "id": "sad_piano", "title": "Sad Piano", "filename": "sad_piano.mp3",
+  "type": "music", "mood": "sadness", "scene_tags": ["breakup", "goodbye"],
+  "tempo": "slow", "intensity": 2, "instruments": ["piano"], "loopable": true,
+  "duration": 45, "license": "CC0", "attribution": "",
+  "source": "TODO: add a royalty-free track named sad_piano.mp3 beside this file"
+}

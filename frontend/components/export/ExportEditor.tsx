@@ -14,6 +14,7 @@ import {
   type AudioSettings,
 } from "./EditorTimeline";
 import { MediaBin, type MediaAsset } from "./MediaBin";
+import { LibraryMusicPicker } from "./LibraryMusicPicker";
 import { ClipEditModal } from "./ClipEditModal";
 import { useLatestJob } from "@/hooks/useGeneration";
 import { useLatestJobClips } from "@/hooks/useClips";
@@ -569,6 +570,14 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         onImport={handleImportMedia}
         onAdd={onAddAsset}
         uploading={uploadMedia.isPending || uploadAudio.isPending}
+      />
+
+      {/* mood-matched music from the shared library */}
+      <LibraryMusicPicker
+        projectId={projectId}
+        onPick={({ url, title }) =>
+          onAddAsset({ id: crypto.randomUUID(), url, name: title, type: "audio" })
+        }
       />
 
       {/* bottom: timeline */}
