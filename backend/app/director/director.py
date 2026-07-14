@@ -1,5 +1,9 @@
+import json
+
 from app.director import knowledge_base as kb
-from app.director.types import PlannedShot, ShotPlan
+from app.director.types import LookProfile, PlannedShot, ShotPlan
+from app.services.prompt_loader import load_prompt
+from app.services.qwen_client import QwenClient
 
 
 def _enforce_coverage(shots: list[PlannedShot], n_lines: int) -> None:
@@ -60,3 +64,60 @@ def apply_guardrails(shots: list[PlannedShot], n_lines: int, budget: int) -> Sho
     _enforce_no_repeat(shots)
     _enforce_sanity(shots)
     return ShotPlan(shots=shots)
+
+
+_PLAN_PROMPT = None
+
+
+def _plan_prompt() -> str:
+    global _PLAN_PROMPT
+    if _PLAN_PROMPT is None:
+        _PLAN_PROMPT = load_prompt("director_plan.txt")
+    return _PLAN_PROMPT
+
+
+def _parse_plan(raw) -> list[PlannedShot]:
+    out: list[PlannedShot] = []
+    for d in QwenClient.as_list(raw):
+        if not isinstance(d, dict):
+            continue
+        try:
+            out.append(PlannedShot(
+                purpose=str(d.get("purpose") or "dialogue"),
+                shot_size=str(d.get("shot_size") or "MS"),
+                camera_movement=str(d.get("camera_movement") or "STATIC"),
+                lens=str(d.get("lens") or "50mm"),
+                composition=str(d.get("composition") or "rule_of_thirds"),
+                intended_duration=float(d.get("intended_duration") or 5.0),
+                covers_lines=[int(i) for i in (d.get("covers_lines") or []) if isinstance(i, (int, float))],
+                action_beat=str(d.get("action_beat") or "a beat"),
+                blocking_delta=(str(d["blocking_delta"]) if d.get("blocking_delta") else None),
+            ))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+async def plan_scene(scene: dict, cast: list[dict], look: LookProfile,
+                     budget: int, qwen) -> ShotPlan:
+    """Plan a scene's shots: LLM cinematic intent, then deterministic guardrails.
+    Never raises — a failed/empty LLM plan still yields a coverage-complete plan."""
+    lines = scene.get("dialogue") or []
+    n_lines = len(lines)
+    user = (
+        f"Scene:\n{json.dumps(scene, ensure_ascii=False)}\n\n"
+        f"Cast: {json.dumps([c.get('name') for c in cast], ensure_ascii=False)}\n\n"
+        f"Look: lighting={look.lighting}, colour={look.colour_mood}, "
+        f"lens_bias={look.lens_bias}, pace={look.camera_pace}\n\n"
+        f"Shot budget: at most {budget} shots. There are {n_lines} dialogue line(s) "
+        f"(0-based indices 0..{max(0, n_lines - 1)})."
+    )
+    try:
+        raw = await qwen.chat_json(
+            messages=[{"role": "system", "content": _plan_prompt()},
+                      {"role": "user", "content": user}],
+            temperature=0.7, task="director_plan")
+        shots = _parse_plan(raw)
+    except Exception:  # noqa: BLE001 — planning is best-effort; guardrails backfill
+        shots = []
+    return apply_guardrails(shots, n_lines=n_lines, budget=budget)
