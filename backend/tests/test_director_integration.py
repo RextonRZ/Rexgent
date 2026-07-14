@@ -71,3 +71,29 @@ async def test_director_on_produces_varied_shot_types(monkeypatch):
     shot_types = {s.shot_type for s in added_shots}
     assert len(shot_types) >= 3          # the anti-"all-MS" assertion
     assert any(getattr(s, "director_json", None) for s in added_shots)
+
+
+@pytest.mark.asyncio
+async def test_director_off_uses_legacy_path_only(monkeypatch):
+    monkeypatch.setattr(ops.get_settings(), "director_engine", False, raising=False)
+    db, script = _fixture_db()
+    calls = {"legacy": 0, "director": 0}
+
+    async def _legacy(*a, **k):
+        calls["legacy"] += 1
+        return [{"shot_number": 1, "shot_type": "MS", "dialogue": "Stop.",
+                 "characters_in_frame": ["A"]},
+                {"shot_number": 2, "shot_type": "MS", "dialogue": "No.",
+                 "characters_in_frame": ["B"]}]
+
+    async def _director(*a, **k):
+        calls["director"] += 1
+        raise AssertionError("director must not run when the flag is off")
+
+    with patch("app.services.storyboard_generator.StoryboardGenerator.generate_for_scene",
+               AsyncMock(side_effect=_legacy)), \
+         patch.object(ops, "plan_scene", AsyncMock(side_effect=_director)), \
+         patch("app.services.set_dresser.SetDresser.dress", AsyncMock(return_value={})):
+        await ops.generate_storyboard_op(db, str(script.id), target_length=20)
+
+    assert calls["legacy"] == 1 and calls["director"] == 0
