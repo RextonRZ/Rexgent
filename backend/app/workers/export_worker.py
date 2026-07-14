@@ -15,32 +15,11 @@ from app.models.final_export import FinalExport
 from app.services.caption_generator import CaptionGenerator
 from app.services.production_report import build_report
 from app.services.oss_manager import OSSManager
-from app.services.audio_timeline import place_dialogue
 from app.models.line_audio import LineAudio
 from app.websocket.tool_events import tool_run
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
-
-
-def probe_duration(audio_bytes: bytes) -> float:
-    """ffprobe the duration of a WAV blob. Local helper (formerly lived in the
-    deleted dialogue_synthesizer) so the pacing-retake path stays self-contained."""
-    import subprocess
-    p = tempfile.mktemp(suffix=".wav")
-    with open(p, "wb") as f:
-        f.write(audio_bytes)
-    try:
-        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                              "-of", "default=nw=1:nk=1", p], capture_output=True, text=True)
-        return float(out.stdout.strip() or 0.0)
-    except Exception:  # noqa: BLE001
-        return 0.0
-    finally:
-        try:
-            os.unlink(p)
-        except OSError:
-            pass
 
 
 def native_audio_policy():
@@ -60,24 +39,9 @@ def _stage(project_id: str, status: str, label: str) -> None:
         pass
 
 
-def build_dialogue_segments(line_rows, scene_plan):
-    """Place per-line dialogue audio on the global timeline, aligning each line to
-    the shot that speaks it. line_rows: dicts with scene_number, line_index,
-    audio_local, duration_seconds (+ optional text/character_name, which ride
-    along so burned captions share the voice's exact timing). scene_plan:
-    ordered per-scene shot layout."""
-    rows = [
-        {"scene_number": r["scene_number"], "line_index": r["line_index"],
-         "audio_path": r["audio_local"], "duration": r["duration_seconds"],
-         "text": r.get("text"), "character": r.get("character_name")}
-        for r in line_rows
-    ]
-    return place_dialogue(rows, scene_plan)
-
-
 def build_cut_plan(entries: list[dict]) -> list[dict]:
     """Fold the ACTUAL export cut — ordered chunks with real (probed)
-    durations — into the scene_plan shape place_dialogue consumes.
+    durations — into a per-scene shot layout.
     entries: [{scene_number|None, duration, has_dialogue}] in cut order.
     Consecutive same-scene chunks merge into one group; imported media
     (scene_number None) rides along as silent screen time. Building the
@@ -133,70 +97,6 @@ def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers,
         missing |= {ch for (sc, li, ch) in script_line_keys
                     if ch in script_speakers and (sc, li) not in have_slots}
     return stale | missing
-
-
-def _retime_rushed_lines(db, project_id: str, line_rows: list, scene_plan: list,
-                         workdir: str) -> None:
-    """Pacing retakes: a designed voice can speak a short line far faster than
-    the rendered mouth moves, and atempo may only slow it ~15% before it
-    drags. Any line still shorter than its mouth at the clamp is RE-PERFORMED
-    with written pauses (ellipses at phrase boundaries), escalating one pause
-    at a time until the take fits — a slower performance instead of a
-    stretched one. Captions keep the original text; the retimed audio and
-    duration persist to LineAudio so preview and every later export agree."""
-    from app.services.audio_timeline import pacing_retakes, paced_text, TEMPO_MIN
-    targets = pacing_retakes(line_rows, scene_plan)
-    if not targets:
-        return
-    import asyncio
-    from app.config import get_settings
-    from app.models.character import Character
-    from app.services.guardrails import canonical_character
-    from app.services.oss_manager import OSSManager
-    from app.services.qwen_client import QwenClient
-    settings = get_settings()
-    qwen, oss = QwenClient(settings), OSSManager(settings)
-    chars = db.query(Character).filter(Character.project_id == uuid.UUID(project_id)).all()
-    by_name = {c.name: c for c in chars if c.voice_id}
-    for ln, mouth in targets:
-        raw_name = ln.get("character_name") or ""
-        c = by_name.get(raw_name) or by_name.get(canonical_character(raw_name, by_name))
-        if not c:
-            continue
-        best = None  # (duration, audio_bytes, level)
-        for level in (1, 2, 3, 4):
-            text = paced_text(ln.get("text") or "", level)
-            try:
-                audio = asyncio.run(qwen.synthesize_speech(text, c.voice_id, c.voice_model))
-            except Exception as e:  # noqa: BLE001
-                logger.warning(f"Export: pacing retake synth failed: {e}")
-                break
-            dur = probe_duration(audio)
-            if best is None or dur > best[0]:
-                best = (dur, audio, level)
-            if mouth and dur / mouth >= TEMPO_MIN:
-                break
-        # only adopt a retake that actually got closer to the mouth
-        if not best or best[0] <= float(ln.get("duration_seconds") or 0.0):
-            continue
-        dur, audio, level = best
-        key = oss.get_project_path(project_id, "audio",
-                                   f"s{ln['scene_number']}_l{ln['line_index']}_paced.wav")
-        url = oss.upload_bytes(audio, key, content_type="audio/wav")
-        row = (db.query(LineAudio)
-               .filter(LineAudio.project_id == uuid.UUID(project_id),
-                       LineAudio.scene_number == ln["scene_number"],
-                       LineAudio.line_index == ln["line_index"]).first())
-        if row is not None:
-            row.audio_url, row.duration_seconds = url, dur
-            db.commit()
-        lp = os.path.join(workdir, f"line_{ln['scene_number']}_{ln['line_index']}_paced.wav")
-        with open(lp, "wb") as fh:
-            fh.write(audio)
-        ln["audio_local"], ln["duration_seconds"] = lp, dur
-        logger.info(
-            f"Export: pacing retake s{ln['scene_number']}l{ln['line_index']} "
-            f"({level} pause(s)): {dur:.2f}s toward mouth {mouth:.2f}s")
 
 
 def assign_episodes(cut_entries: list, episode_by_scene: dict) -> list[int]:
@@ -451,21 +351,9 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 stitcher.stitch(inputs, cut_local, ratio=ratio)
                 t["artifact"] = f"{len(inputs)} clips{label}"
 
-            # ── Dialogue placement: each line aligned to the shot that speaks
-            # it, on THIS cut's real probed chunk durations ──
+            # No TTS overlay now — clips carry their own native audio, so there
+            # are no separate dialogue lines to place on the timeline.
             dialogue_segments: list = []
-            try:
-                scene_plan = build_cut_plan(entries)
-                # a line the clamp can't slow enough gets a paused re-performance
-                try:
-                    _retime_rushed_lines(db, project_id, line_rows, scene_plan, workdir)
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(f"Export: pacing retakes skipped{label}: {e}")
-                with tool_run(project_id, "export", "assemble_timeline", "Editor") as t:
-                    dialogue_segments = build_dialogue_segments(line_rows, scene_plan)
-                    t["artifact"] = f"{len(dialogue_segments)} lines placed{label}"
-            except Exception as e:  # noqa: BLE001
-                logger.warning(f"Export: dialogue prep skipped{label}: {e}")
 
             # ── A held ending: when the final voice line outruns the footage,
             # freeze the last frame long enough for it to finish (plus a beat)

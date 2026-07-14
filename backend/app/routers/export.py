@@ -84,10 +84,10 @@ async def render_export(request: ExportRequest, db: Session = Depends(get_db)):
 
 @router.post("/preview_plan")
 async def preview_plan(request: dict, db: Session = Depends(get_db)):
-    """Dialogue segments for the editor's LIVE preview — computed by the very
-    same placement code the export uses (build_cut_plan + place_dialogue), so
-    the preview's captions and voices land exactly where the render will put
-    them. Pure math, no ffmpeg: milliseconds, not minutes.
+    """Per-chunk audio plan for the editor's LIVE preview. Clips now carry
+    their own native audio, so there are no separate dialogue lines to place —
+    every chunk simply plays at full volume, matching the export's native-audio
+    policy. Pure math, no ffmpeg: milliseconds, not minutes.
 
     Body: {project_id, entries: [{scene_number, duration, has_dialogue,
     text?}] in timeline order}."""
@@ -95,62 +95,12 @@ async def preview_plan(request: dict, db: Session = Depends(get_db)):
     entries = request.get("entries") or []
     if not project_id:
         raise HTTPException(status_code=400, detail="project_id required")
-    from app.workers.export_worker import build_cut_plan
-    from app.services.audio_timeline import place_dialogue
-    from app.models.line_audio import LineAudio
-    from app.models.generated_clip import GeneratedClip
 
-    # inject each clip's stored speech onset (trim-adjusted) so the preview
-    # places every line where the mouth starts moving — same as the export
-    onset_ids = [uuid.UUID(str(e["clip_id"])) for e in entries if e.get("clip_id")]
-    onset_clips = ({str(c.id): c for c in
-                    db.query(GeneratedClip).filter(GeneratedClip.id.in_(onset_ids)).all()}
-                   if onset_ids else {})
-    for e in entries:
-        c = onset_clips.get(str(e.get("clip_id") or ""))
-        pol = getattr(c, "audio_json", None) if c is not None else None
-        raw = pol.get("onset") if isinstance(pol, dict) else None
-        if e.get("has_dialogue") and raw is not None:
-            tin = float(e.get("trim_start") or 0.0)
-            dur = float(e.get("duration") or 0.0)
-            e["speech_onset"] = min(max(0.0, float(raw) - tin), max(0.0, dur - 1.0))
-            raw_mouth = pol.get("mouth_dur") if isinstance(pol, dict) else None
-            if raw_mouth:
-                e["mouth_dur"] = min(float(raw_mouth),
-                                     max(0.0, dur - e["speech_onset"]))
-    scene_plan = build_cut_plan(entries)
-    line_rows = [
-        {"scene_number": r.scene_number, "line_index": r.line_index,
-         "audio_path": r.audio_url, "duration": r.duration_seconds or 0.0,
-         "text": r.text, "character": r.character_name}
-        for r in db.query(LineAudio)
-        .filter(LineAudio.project_id == uuid.UUID(project_id))
-        .order_by(LineAudio.scene_number, LineAudio.line_index)
-        .all()
-        if r.audio_url
-    ]
-    segments = place_dialogue(line_rows, scene_plan)
+    # Native audio plays at full volume for every chunk — nothing is muted,
+    # nothing is treated as a bed (matches export_worker.native_audio_policy).
+    chunks = [{"mute": False, "volume": None} for _ in entries]
 
-    # per-chunk audio policy: the STORED verdict every export will also use
-    chunks = []
-    for e in entries:
-        c = onset_clips.get(str(e.get("clip_id") or ""))
-        pol = getattr(c, "audio_json", None) if c is not None else None
-        if isinstance(pol, dict) and "mute" in pol:
-            chunks.append({"mute": bool(pol.get("mute")), "volume": pol.get("volume")})
-        elif c is not None:
-            # no stored verdict yet — match the export's safe default so the
-            # preview never plays fake speech the render would mute
-            chunks.append({"mute": bool(e.get("has_dialogue")), "volume": None})
-        else:
-            chunks.append({"mute": False, "volume": None})  # imported media
-
-    return {"segments": [
-        {"start": s["start"], "duration": s.get("duration", 0.0),
-         "text": s.get("text"), "character": s.get("character"),
-         "audio_url": s.get("audio_path"), "tempo": s.get("tempo")}
-        for s in segments
-    ], "chunks": chunks}
+    return {"segments": [], "chunks": chunks}
 
 
 @router.get("/{project_id}/download_all")
