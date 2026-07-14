@@ -51,6 +51,33 @@ def extract_frame_at(clip_url: str, timestamp: float) -> bytes | None:
     return None
 
 
+def extract_first_frame(clip_url: str) -> bytes | None:
+    """Return the first frame of a clip as JPEG bytes (or None on failure).
+
+    Mirrors extract_last_frame: same no-download (ffmpeg reads the URL
+    directly), same temp-file handling, same best-effort try/except-and-return-None.
+    Only the seek direction differs — `-ss 0` lands exactly on frame 0, so
+    unlike -sseof there's no container-duration overshoot to guard against
+    with -update; a plain -vframes 1 grab is enough. `-pix_fmt yuvj420p` is
+    kept for the same reason as extract_last_frame: keeps the mjpeg encoder
+    happy for any input pixel format."""
+    out = tempfile.mktemp(suffix=".jpg")
+    cmd = [
+        "ffmpeg", "-y", "-ss", "0", "-i", clip_url,
+        "-vframes", "1", "-pix_fmt", "yuvj420p", "-q:v", "2", out,
+    ]
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=30)
+        if os.path.exists(out) and os.path.getsize(out) > 0:
+            with open(out, "rb") as f:
+                data = f.read()
+            os.unlink(out)
+            return data
+    except Exception:
+        pass
+    return None
+
+
 def extract_last_frame(clip_url: str) -> bytes | None:
     """Return the final frame of a clip as JPEG bytes (or None on failure).
 

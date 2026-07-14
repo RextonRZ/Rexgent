@@ -16,6 +16,9 @@ export interface Shot {
   director_note: string | null;
   blocking_json?: ShotBlocking | null;
   prompt_json?: ShotPromptEngineering | null;
+  /** The model (+ lipsync) this shot will actually render on, predicted from
+   * live settings — mirrors runtime routing so the label can't drift. */
+  render_plan?: { model: "wan" | "happyhorse"; lipsync: boolean } | null;
 }
 
 /** The beat expander's paper trail, written at render time. */

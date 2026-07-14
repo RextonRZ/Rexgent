@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     multishot_enabled: bool = False
     multishot_max_shots: int = 3
     multishot_max_duration: int = 15
+    # Anchor lip-sync: an eligible single-speaker dialogue anchor renders on
+    # HappyHorse (face) then re-renders on Wan i2v from that frame + driving_audio
+    # (mouth), keeping the better take. Two renders on those shots. OFF by default.
+    anchor_lipsync_enabled: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

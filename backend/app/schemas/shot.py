@@ -40,5 +40,10 @@ class ShotResponse(BaseModel):
     # screen_side, facing, eyeline, action}], "reverse_angle": bool}
     blocking_json: Optional[dict] = None
     prompt_json: Optional[dict] = None
+    # {"model": "wan"|"happyhorse", "lipsync": bool} — predicted by
+    # predict_scene_plan from LIVE settings at read time, mirroring the
+    # runtime routing so the storyboard label can never drift from what the
+    # shot actually renders on. None where the caller doesn't attach one.
+    render_plan: Optional[dict] = None
 
     model_config = {"from_attributes": True}

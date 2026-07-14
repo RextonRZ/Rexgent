@@ -105,7 +105,12 @@ export function ShotCard({ shot }: { shot: Shot }) {
     }
   };
 
-  const isWan = shot.quality_tier === "wan";
+  // render_plan mirrors runtime routing so the tag can't drift from what actually
+  // renders; fall back to quality_tier for older shots that predate the field.
+  const renderPlan = shot.render_plan;
+  const modelTierSource = renderPlan?.model ?? shot.quality_tier;
+  const isWan = modelTierSource === "wan";
+  const showModelTag = Boolean(renderPlan) || Boolean(shot.quality_tier);
 
   return (
     <Card className="group">
@@ -148,13 +153,18 @@ export function ShotCard({ shot }: { shot: Shot }) {
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-            {shot.quality_tier && (
+            {showModelTag && (
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                   isWan ? "bg-wan/15 text-wan" : "bg-hh/15 text-hh"
                 }`}
               >
                 {isWan ? "Wan 2.7" : "HappyHorse"}
+              </span>
+            )}
+            {renderPlan?.lipsync && (
+              <span className="rounded-full bg-primary/10 text-primary/90 px-2 py-0.5 text-[10px] font-medium">
+                Lipsync
               </span>
             )}
           </div>
