@@ -391,3 +391,34 @@ async def test_coverage_still_suppresses_mouth_in_negative():
         target_model="happyhorse", lipsync=False, native_talk=False)
     # unchanged when native talk is off: the mouth is still suppressed
     assert "clear front-facing talking mouth close-up" in result["negative_prompt"]
+
+
+def test_image_ref_legend_maps_each_image_to_its_person():
+    from app.services.reference_stack import image_ref_legend
+    legend = image_ref_legend([
+        {"url": "u1", "role": "identity", "character": "KIM"},
+        {"url": "u2", "role": "costume", "character": "KIM"},
+        {"url": "u3", "role": "identity", "character": "YOON"},
+        {"url": "u4", "role": "location"}])
+    assert "[Image 1] is KIM's face" in legend
+    assert "[Image 2] is KIM's outfit" in legend
+    assert "[Image 3] is YOON's face" in legend
+    assert "[Image 4] is the location and set" in legend
+    assert image_ref_legend([]) == ""
+
+
+@pytest.mark.asyncio
+async def test_image_legend_prepended_and_survives_sanitizer():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "Medium shot of a woman.", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    legend = "Reference image guide: [Image 1] is KIM's face."
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "estimated_duration_seconds": 5, "action": "sits"},
+        character_visuals={"KIM": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse", image_legend=legend)
+    # the [Image N] tokens must survive the text sanitizer and lead the prompt
+    assert result["prompt"].startswith(legend)
+    assert "[Image 1]" in result["prompt"]

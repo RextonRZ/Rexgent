@@ -79,7 +79,7 @@ def test_shots_with_render_plan_attaches_model_and_lipsync_per_shot(monkeypatch)
 
     fake_settings = SimpleNamespace(
         identity_routing_v2=True, anchor_ref_model="happyhorse",
-        anchor_lipsync_enabled=False, lipsync_enabled=True,
+        anchor_lipsync_enabled=False, lipsync_enabled=True, wan_on_same_cast=False,
     )
     monkeypatch.setattr(sb, "get_settings", lambda: fake_settings)
 

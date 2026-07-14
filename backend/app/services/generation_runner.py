@@ -491,7 +491,7 @@ class GenerationRunner:
                             prev_action=None, next_action=None, foreground=None,
                             environment=None,
                             outfits=None, blocking=None, lipsync=False,
-                            native_talk=False) -> str:
+                            native_talk=False, image_legend="") -> str:
         from app.services.guardrails import canonical_character
         in_frame = [canonical_character(n, char_by_name)
                     for n in (shot.characters_in_frame or [])]
@@ -518,6 +518,7 @@ class GenerationRunner:
             blocking=blocking,
             lipsync=lipsync,
             native_talk=native_talk,
+            image_legend=image_legend,
             environment=environment,
         )
         return result
@@ -813,6 +814,12 @@ class GenerationRunner:
                 is_angle_change=angle_changed(
                     prev_shot_type, shot.shot_type,
                     bool((getattr(shot, "blocking_json", None) or {}).get("reverse_angle"))))
+            # "same cast -> wan": a reangle keeps the same cast, so route it to
+            # wan continuation (it continues from the previous frame) rather than
+            # the HappyHorse reference model. Only a NEW character (entrance) or
+            # the opening shot (anchor) forces HappyHorse. OFF -> unchanged.
+            if role == "continue_reangle" and getattr(get_settings(), "wan_on_same_cast", False):
+                role = "continue_hold"
             # continue_hold is the only role that stays on wan i2v
             is_wan = role == "continue_hold"
         model_cap = 5 if is_wan else 9
@@ -836,6 +843,14 @@ class GenerationRunner:
             shot_type=shot.shot_type, scene_anchor_url=scene_anchor_url,
             suppress_location=suppress_location, foreground_characters=foreground)
         seed = stable_seed(pid, shot.id)
+        # [Image N] guide: tie each reference plate to its person so the model
+        # never swaps faces/outfits across a multi-character shot. r2v-only (wan
+        # i2v takes no reference_image), behind image_ref_labels. OFF -> "".
+        image_legend = ""
+        if (getattr(get_settings(), "image_ref_labels", False) and ref_stack
+                and settings_v2 and role in ("anchor", "entrance", "continue_reangle")):
+            from app.services.reference_stack import image_ref_legend
+            image_legend = image_ref_legend(ref_provenance)
 
         emit("generation.shot.started", {"scene_number": scene_number,
              "shot_number": shot.number, "index": job.completed_shots + 1,
@@ -870,11 +885,16 @@ class GenerationRunner:
                     and (lipsync_line.get("duration") or 0) > 0
                     and lipsync_line["duration"] <= shot.estimated_duration_seconds
                     and speaker_matches(lipsync_line, in_frame, foreground))
+                # wan driving_audio must be 2..30s (official i2v spec); under 2s
+                # wan rejects the track and the whole continuation fails. The wan
+                # lip paths take this stricter floor; HappyHorse native talk makes
+                # its own audio and has no floor, so it keeps plain line_eligible.
+                wan_audio_ok = line_eligible and (lipsync_line.get("duration") or 0) >= 2.0
                 if settings_v2:
-                    lip = (lipsync_line if (line_eligible and frame_anchor
+                    lip = (lipsync_line if (wan_audio_ok and frame_anchor
                                             and role == "continue_hold") else None)
                 else:
-                    lip = lipsync_line if (is_wan and line_eligible and frame_anchor) else None
+                    lip = lipsync_line if (is_wan and wan_audio_ok and frame_anchor) else None
                 # Anchor lip-sync upgrade eligibility, decided BEFORE crafting so
                 # the wan take is framed with an OPEN talking mouth (lipsync=True
                 # below) — the opposite of the mouth-hiding coverage a non-lip
@@ -895,7 +915,7 @@ class GenerationRunner:
                     getattr(get_settings(), "anchor_lipsync_enabled", False)
                     and settings_v2
                     and role in ("anchor", "entrance", "continue_reangle")
-                    and line_eligible
+                    and wan_audio_ok
                     and not native_talk)
                 tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
                            index=job.completed_shots + 1, total=job.total_shots)
@@ -904,7 +924,7 @@ class GenerationRunner:
                     foreground=foreground, outfits=outfits,
                     blocking=getattr(shot, "blocking_json", None),
                     lipsync=bool(lip) or anchor_lip, native_talk=native_talk,
-                    environment=environment)
+                    image_legend=image_legend, environment=environment)
                 prompt = crafted.get("prompt", "")
                 # the crafter has ALWAYS produced a negative prompt; until now
                 # it was dropped on the floor before dispatch
