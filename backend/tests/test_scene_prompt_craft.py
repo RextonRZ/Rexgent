@@ -458,6 +458,20 @@ async def test_eyeline_appended_from_blocking():
 
 
 @pytest.mark.asyncio
+async def test_final_prompt_normalizes_typographic_chars():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "black heels — she turns, the � light fading",
+        "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(shot={"shot_type": "MS", "estimated_duration_seconds": 5},
+                                 character_visuals={}, target_model="happyhorse")
+    assert "�" not in result["prompt"]   # replacement char gone
+    assert "—" not in result["prompt"]    # em dash normalized
+
+
+@pytest.mark.asyncio
 async def test_environment_appended_when_missing():
     crafter = ScenePromptCraft.__new__(ScenePromptCraft)
     crafter.qwen = MagicMock()

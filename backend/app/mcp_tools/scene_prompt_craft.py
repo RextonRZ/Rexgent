@@ -287,4 +287,18 @@ class ScenePromptCraft:
             sup = environment["suppressed"]
             if sup.lower() not in (result.get("negative_prompt") or "").lower():
                 result["negative_prompt"] += ", " + sup
+        # Final gate (rule A5): the crafted prompt still carries typographic
+        # gremlins — em/en dashes, smart quotes, and the replacement char (mojibake)
+        # — which corrupt adjacent words and confuse the video model. Fold them to
+        # plain ASCII as the VERY LAST transformation so LLM text AND every appended
+        # clause above are cleaned uniformly, just before dispatch.
+        def _normtype(s: str) -> str:
+            repl = {"—": " - ", "–": " - ", "’": "'", "‘": "'",
+                    "“": '"', "”": '"', "�": ""}
+            for k, v in repl.items():
+                s = s.replace(k, v)
+            import re
+            return re.sub(r"\s{2,}", " ", s).strip()
+        result["prompt"] = _normtype(result.get("prompt", ""))
+        result["negative_prompt"] = _normtype(result.get("negative_prompt", ""))
         return result
