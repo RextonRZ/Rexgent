@@ -17,6 +17,7 @@ _BEAT_KEYWORDS = {
     "action": ("fight", "battle"),
 }
 _MUSIC_MOODS = set(categories_for("music"))
+assert "daily" in _MUSIC_MOODS, "music registry must include the 'daily' fallback mood"
 
 
 def derive_mood(genre=None, beats=None) -> str:

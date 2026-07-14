@@ -2,7 +2,7 @@ import pytest
 from app.assets.schema import AssetMeta, MusicMeta
 
 
-def test_asset_meta_requires_core_fields():
+def test_asset_meta_optional_fields_have_defaults():
     m = AssetMeta(id="x", title="X", filename="x.mp3", type="music")
     assert m.tags == [] and m.license is None
 
