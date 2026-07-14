@@ -15,3 +15,7 @@ GOOD: "grey wool three-piece suit, white shirt, dark tie, polished shoes"
 GOOD: "faded floral cotton day dress, cardigan, low heels"
 BAD:  "40s, standing quietly outside Emma's room" (that is a scene, not clothing)
 label is a short outfit name (e.g. "work suit", "evening dress"), never a scene.
+NEVER assign face-COVERING accessories: sunglasses, goggles, lab/safety glasses,
+ski/face/gas/welding masks, visors, VR headsets, or an eye patch. They hide the
+character's locked face, wreck face consistency, and flicker between shots.
+Ordinary prescription glasses/spectacles are fine.
