@@ -82,6 +82,35 @@ export function useUploadMedia(projectId: string) {
   });
 }
 
+export interface SuggestedTrack {
+  id: string;
+  title: string;
+  url: string | null;
+  mood?: string;
+  duration?: number | null;
+  tempo?: string | null;
+  intensity?: number;
+}
+
+export interface MusicSuggestion {
+  mood: string;
+  results: SuggestedTrack[];
+}
+
+/** Lazily fetch mood-matched library music for this project (fires on demand,
+ *  not on mount, because resolving each track uploads it to shared storage). */
+export function useSuggestMusic(projectId: string) {
+  return useMutation({
+    mutationFn: async (): Promise<MusicSuggestion> => {
+      const { data } = await api.get<MusicSuggestion>(
+        `/api/assets/music/suggest`,
+        { params: { project_id: projectId } }
+      );
+      return data;
+    },
+  });
+}
+
 export function useExportDownload(projectId: string) {
   return useQuery<ExportDownload>({
     queryKey: ["export", projectId],
