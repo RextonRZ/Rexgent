@@ -9,9 +9,27 @@ scene; the generation runner also drops the (now outdated) location plate
 once the state has changed.
 """
 import json
+import re
 from app.services.qwen_client import QwenClient
 from app.services.prompt_loader import load_prompt
 from app.config import get_settings
+
+_TEXT_PROP = re.compile(r"\b(reading|labeled|labelled|marked|says|sign|number(s)?|"
+                        r"letters|written|inscription|plate\s+reading)\b", re.I)
+_QUOTED = re.compile(r"['\"‘’“”].*?['\"‘’“”]")
+
+
+def _strip_readable_text(items: list) -> list:
+    """Drop props whose specific TEXT matters (signs, mailbox numbers, labels) —
+    AI video can't render legible text and it corrupts nearby words in the prompt.
+    Also scrub any stray quoted text off the props that remain."""
+    out = []
+    for it in items:
+        s = str(it)
+        if _TEXT_PROP.search(s):
+            continue
+        out.append(_QUOTED.sub("", s).strip())
+    return [i for i in out if i]
 
 
 class SetDresser:
@@ -30,7 +48,7 @@ class SetDresser:
         ], temperature=0.2, task="set_dress")
         if not isinstance(result, dict):
             return {"set_items": [], "state_changes": []}
-        items = [str(i) for i in (result.get("set_items") or []) if i]
+        items = _strip_readable_text([str(i) for i in (result.get("set_items") or []) if i])
         changes = [c for c in (result.get("state_changes") or [])
                    if isinstance(c, dict) and c.get("state")]
         return {"set_items": items, "state_changes": changes}

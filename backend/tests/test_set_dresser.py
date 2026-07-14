@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from app.services.set_dresser import SetDresser, setting_for_shot
+from app.services.set_dresser import SetDresser, setting_for_shot, _strip_readable_text
 
 
 SET_JSON = {
@@ -61,3 +61,13 @@ def test_setting_location_only_still_pins_the_room():
     setting, changed = setting_for_shot(None, "rooftop at night", shot_number=1)
     assert changed is False
     assert setting == {"location": "rooftop at night", "set_items": []}
+
+
+def test_readable_text_props_removed():
+    items = ["a rusted mailbox with faded numbers '3B'",
+             "a wooden sign reading 'CHEN YI - 3B'",
+             "a worn leather couch"]
+    out = _strip_readable_text(items)
+    assert "a worn leather couch" in out
+    assert not any("3B" in i for i in out)
+    assert not any("reading" in i.lower() for i in out)
