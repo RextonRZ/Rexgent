@@ -244,26 +244,16 @@ async def list_shots(project_id: str, db: Session = Depends(get_db)):
 
 @router.delete("/scene/{scene_id}")
 async def delete_scene(scene_id: str, db: Session = Depends(get_db)):
-    """Remove a scene and everything that hangs off it: its shots (FK
-    cascade) and its synthesized voice lines (matched by scene_number, so a
-    deleted scene's dialogue can never be placed onto the cut). Remaining
-    scene numbers keep their gaps on purpose — renumbering would detach every
-    later scene from its already-synthesized lines."""
+    """Remove a scene and its shots (FK cascade). Remaining scene numbers keep
+    their gaps on purpose: renumbering would detach every later scene from the
+    rest of the storyboard."""
     scene = db.query(Scene).filter(Scene.id == uuid.UUID(scene_id)).first()
     if not scene:
         raise HTTPException(status_code=404, detail="Scene not found")
-    script = db.query(Script).filter(Script.id == scene.script_id).first()
-    from app.models.line_audio import LineAudio
-    n_lines = 0
-    if script:
-        n_lines = (db.query(LineAudio)
-                   .filter(LineAudio.project_id == script.project_id,
-                           LineAudio.scene_number == scene.number)
-                   .delete())
     number = scene.number
     db.delete(scene)
     db.commit()
-    return {"deleted": True, "scene_number": number, "voice_lines_removed": n_lines}
+    return {"deleted": True, "scene_number": number}
 
 
 @router.patch("/{shot_id}", response_model=ShotResponse)

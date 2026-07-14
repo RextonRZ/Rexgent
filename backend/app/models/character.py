@@ -29,10 +29,6 @@ class Character(Base):
     visual_description = Column(Text, nullable=True)
     video_prompt_fragment = Column(Text, nullable=True)
     face_keywords = Column(JSONB, nullable=True)
-    voice_id = Column(String(255), nullable=True)
-    voice_model = Column(String(100), nullable=True)
-    voice_source = Column(String(20), nullable=True)   # designed | cloned
-    voice_sample_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project", back_populates="characters")

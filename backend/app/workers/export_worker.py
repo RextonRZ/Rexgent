@@ -15,7 +15,6 @@ from app.models.final_export import FinalExport
 from app.services.caption_generator import CaptionGenerator
 from app.services.production_report import build_report
 from app.services.oss_manager import OSSManager
-from app.models.line_audio import LineAudio
 from app.websocket.tool_events import tool_run
 from app.config import get_settings
 
@@ -310,30 +309,10 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 bgm_local = None
                 logger.warning(f"Export: music download failed: {e}")
 
-        # ── Voice lines: ensured and downloaded ONCE; every cut places from
-        # the same pool (placement is scene-keyed, so a line can only land in
-        # the cut that contains its scene) ──
+        # ── Voice lines: TTS synthesis is gone, so clips play their own NATIVE
+        # audio and there are no separate voice lines to place. line_rows stays
+        # empty and nothing is laid on the timeline. ──
         line_rows: list = []
-        try:
-            # TTS synthesis removed: clips play their own NATIVE audio, so no
-            # voice lines are synthesized. LineAudio stays empty, so line_rows
-            # stays empty and nothing is placed on the timeline.
-            for row in db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(project_id)).all():
-                if not row.audio_url:
-                    continue
-                lp = os.path.join(workdir, f"line_{row.scene_number}_{row.line_index}.wav")
-                try:
-                    lr = httpx.get(row.audio_url, timeout=120.0)
-                    lr.raise_for_status()
-                    with open(lp, "wb") as fh:
-                        fh.write(lr.content)
-                    line_rows.append({"scene_number": row.scene_number, "line_index": row.line_index,
-                                      "audio_local": lp, "duration_seconds": row.duration_seconds or 0.0,
-                                      "text": row.text, "character_name": row.character_name})
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(f"Export: could not download line audio {row.audio_url}: {e}")
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"Export: voice prep skipped: {e}")
 
         # A dialogue drop shows up here as fewer voiced lines than the cut speaks
         # — surface it so a half-silent export is diagnosable from the log alone.
