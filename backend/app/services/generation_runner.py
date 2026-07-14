@@ -19,7 +19,7 @@ from app.services.frame_sampler import extract_last_frame, extract_first_frame
 from app.services.cost_ledger import record_video
 from app.services.continuity_repair import repair_steps
 from app.websocket.emitter import emit
-from app.websocket.tool_events import tool_event, tool_run
+from app.websocket.tool_events import tool_event
 from app.agents.reporter import report_agent
 from app.config import get_settings
 
@@ -118,8 +118,8 @@ class GenerationRunner:
 
         job.status = "RUNNING"
         self.db.commit()
-        # picked up: keep the pipeline lit through the pre-render phases
-        # (voice synth, duration fit, preflight) before the first shot event
+        # picked up: keep the pipeline lit through the pre-render phase
+        # (preflight) before the first shot event
         emit("stage:progress", {"stage": "generate", "status": "update",
              "agent": "Renderer", "label": "Preparing the studio"},
              str(job.project_id))
@@ -133,28 +133,9 @@ class GenerationRunner:
         # Delivery format the user picked at creation (vertical by default).
         self._video_ratio = (getattr(project, "video_ratio", None) or VIDEO_RATIO)
 
-        # ── Audio-first: synthesize the dialogue BEFORE rendering and fit each
-        # speaking shot's duration to its real line audio, so a two-person
-        # exchange gets pictures long enough to hold both voices. The lines are
-        # reused at export (not paid for twice). Never fatal to the render.
-        try:
-            from app.models.line_audio import LineAudio
-            if not self.db.query(LineAudio).filter(
-                    LineAudio.project_id == job.project_id).count():
-                from app.agent.pipeline_ops import synth_dialogue_op
-                with tool_run(job.project_id, "generate", "synth_voices",
-                              "Audio Mixer") as t:
-                    n_lines = await synth_dialogue_op(self.db, str(job.project_id))
-                    t["artifact"] = f"{n_lines} lines"
-            from app.services.shot_duration_fitter import fit_project_shot_durations
-            with tool_run(job.project_id, "generate", "fit_durations", "Director") as t:
-                fitted = fit_project_shot_durations(self.db, str(job.project_id))
-                t["artifact"] = f"{fitted} shots resized"
-            if fitted:
-                logger.info(f"Audio-first fit: {fitted} shot duration(s) adjusted")
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"Audio-first duration fit skipped: {e}")
-
+        # TTS synthesis removed: clips play their own NATIVE audio, so there is
+        # no audio-first synth pass and no duration fit to line audio. Shots keep
+        # the estimated_duration_seconds the storyboard already sized them with.
         shots = self._ordered_shots(job.project_id)
         characters = self.db.query(Character).filter(Character.project_id == job.project_id).all()
         char_by_name = {c.name: c for c in characters}

@@ -17,7 +17,7 @@ from app.services.production_report import build_report
 from app.services.oss_manager import OSSManager
 from app.services.audio_timeline import place_dialogue
 from app.models.line_audio import LineAudio
-from app.websocket.tool_events import tool_event, tool_run
+from app.websocket.tool_events import tool_run
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -107,51 +107,6 @@ def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers,
         missing |= {ch for (sc, li, ch) in script_line_keys
                     if ch in script_speakers and (sc, li) not in have_slots}
     return stale | missing
-
-
-def _ensure_voice_lines(db, project_id: str) -> None:
-    """Make the dialogue audio match casting before the mix.
-    - No lines at all (manual Generate never synthesizes) -> synthesize everything.
-    - A character was recast (voice_id on their lines != their current voice,
-      e.g. switched preset or enrolled a clone) -> re-synthesize ONLY their lines.
-    Other characters' audio is reused, so a recast costs TTS for one character,
-    not the whole script."""
-    try:
-        import asyncio
-        from app.models.character import Character
-        from app.models.script import Script, Scene
-        from app.agent.pipeline_ops import synth_dialogue_op
-
-        pid = uuid.UUID(project_id)
-        rows = db.query(LineAudio).filter(LineAudio.project_id == pid).all()
-        if not rows:
-            # First export (manual flow never synthesized before): do the full
-            # synth, then FALL THROUGH to the missing-line recheck below. A line
-            # whose TTS failed every retry during this synth would otherwise be
-            # dropped with no second pass until a LATER export — the drama ships
-            # with half its conversation silent and uncaptioned.
-            asyncio.run(synth_dialogue_op(db, project_id))
-            rows = db.query(LineAudio).filter(LineAudio.project_id == pid).all()
-
-        chars = db.query(Character).filter(Character.project_id == pid).all()
-        current = {c.name: c.voice_id for c in chars if c.voice_id}
-        speakers: set = set()
-        line_keys: set = set()
-        script = (db.query(Script).filter(Script.project_id == pid)
-                  .order_by(Script.created_at.desc()).first())
-        if script:
-            for s in db.query(Scene).filter(Scene.script_id == script.id).all():
-                for li, line in enumerate(s.dialogue_json or []):
-                    if line.get("character"):
-                        speakers.add(line["character"])
-                        line_keys.add((s.number, li, line["character"]))
-
-        redo = characters_needing_resynthesis(rows, current, speakers, line_keys)
-        if redo:
-            logger.info(f"Export: re-synthesizing recast voices for {sorted(redo)}")
-            asyncio.run(synth_dialogue_op(db, project_id, only_characters=redo))
-    except Exception as e:  # noqa: BLE001
-        logger.warning(f"Export: dialogue synth skipped: {e}")
 
 
 def _retime_rushed_lines(db, project_id: str, line_rows: list, scene_plan: list,
@@ -462,10 +417,9 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         # the cut that contains its scene) ──
         line_rows: list = []
         try:
-            tool_event(project_id, "export", "synth_voices", "started", agent="Audio Mixer")
-            _ensure_voice_lines(db, project_id)
-            tool_event(project_id, "export", "synth_voices", "succeeded", agent="Audio Mixer",
-                       artifact="voices match casting")
+            # TTS synthesis removed: clips play their own NATIVE audio, so no
+            # voice lines are synthesized. LineAudio stays empty, so line_rows
+            # stays empty and nothing is placed on the timeline.
             for row in db.query(LineAudio).filter(LineAudio.project_id == uuid.UUID(project_id)).all():
                 if not row.audio_url:
                     continue
