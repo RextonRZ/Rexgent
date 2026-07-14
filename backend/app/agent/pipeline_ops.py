@@ -18,6 +18,9 @@ from app.mcp_tools.token_optimizer import TokenOptimizer
 from app.graph.sync import sync_scenes, sync_characters
 from app.websocket.emitter import emit
 from app.websocket.tool_events import tool_event, tool_run
+from app.config import get_settings
+from app.director.director import plan_scene
+from app.director.recommender import recommend_look
 
 
 def _progress(pid, stage: str, status: str, agent: str, label: str, **extra) -> None:
@@ -188,20 +191,38 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                                  else "no prior facts"))
             tool_event(script.project_id, "storyboard", "shot_breakdown", "started",
                        agent="Director", index=scene_index, total=len(scenes))
-            shots = await gen.generate_for_scene(
-                {"scene_number": scene.number, "heading": scene.heading,
-                 "description": scene.description, "emotional_beat": scene.emotional_beat,
-                 # the scripted lines: the generator distributes them onto shots so
-                 # has_dialogue is REAL — the audio-first duration fitter and voice
-                 # placement both key on it. Omitting this left every full-auto
-                 # shot silent on paper while the scene still talked.
-                 "dialogue": scene.dialogue_json or [],
-                 # what earlier scenes established — shots must not contradict it
-                 "established_facts": established},
-                scene_chars,
-                max_shots=shots_per_scene,
-                shot_seconds=shot_seconds,
-            )
+            scene_json = {
+                "scene_number": scene.number, "heading": scene.heading,
+                "description": scene.description, "emotional_beat": scene.emotional_beat,
+                # the scripted lines: the generator distributes them onto shots so
+                # has_dialogue is REAL — the audio-first duration fitter and voice
+                # placement both key on it. Omitting this left every full-auto
+                # shot silent on paper while the scene still talked.
+                "dialogue": scene.dialogue_json or [],
+                # what earlier scenes established — shots must not contradict it
+                "established_facts": established,
+            }
+            if getattr(get_settings(), "director_engine", False):
+                try:
+                    # genre lives on Project (Script has none); safe on a detached
+                    # Script. Budget = the legacy cap so coverage never forces an
+                    # over-budget plan: at least one shot per line, capped at 12.
+                    genre = getattr(getattr(script, "project", None), "genre", None)
+                    n_lines = len(scene.dialogue_json or [])
+                    budget = min(max(shots_per_scene, n_lines), gen._HARD_CAP)
+                    look = recommend_look(genre)
+                    plan = await plan_scene(scene_json, scene_chars, look,
+                                            budget=budget, qwen=gen.qwen)
+                    shots = await gen.stage_plan(scene_json, scene_chars, plan)
+                except Exception as e:  # noqa: BLE001 — Director is best-effort
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "Director pass failed for scene %s, falling back: %s", scene.number, e)
+                    shots = await gen.generate_for_scene(
+                        scene_json, scene_chars, max_shots=shots_per_scene, shot_seconds=shot_seconds)
+            else:
+                shots = await gen.generate_for_scene(
+                    scene_json, scene_chars, max_shots=shots_per_scene, shot_seconds=shot_seconds)
             # the 180-degree rule, enforced not requested: first placement
             # establishes each character's screen side; drift snaps back,
             # a flagged reverse angle re-establishes the line of action.
@@ -270,6 +291,7 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                                     "reverse_angle": bool(sd.get("reverse_angle"))}
                                    if sd.get("subjects") else None),
                     notes=sd.get("notes"),
+                    director_json=sd.get("director_json"),
                 )
                 db.add(shot)
                 created.append((shot, scene.number))

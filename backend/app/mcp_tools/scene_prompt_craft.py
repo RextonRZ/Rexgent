@@ -286,6 +286,18 @@ class ScenePromptCraft:
             sup = environment["suppressed"]
             if sup.lower() not in (result.get("negative_prompt") or "").lower():
                 result["negative_prompt"] += ", " + sup
+        # Director lens/composition: weave the planned optics in deterministically
+        # (after sanitization, before the typographic normalizer) so they survive
+        # the text stripper — same idiom as the eyeline/setting clauses above.
+        dj = shot.get("director_json") if isinstance(shot, dict) else None
+        if isinstance(dj, dict):
+            bits = []
+            if dj.get("lens"):
+                bits.append(f"shot on a {dj['lens']} lens")
+            if dj.get("composition"):
+                bits.append(dj["composition"].replace("_", "-") + " composition")
+            if bits:
+                result["prompt"] = result["prompt"].rstrip() + " " + ", ".join(bits) + "."
         # Final gate (rule A5): the crafted prompt still carries typographic
         # gremlins — em/en dashes, smart quotes, and the replacement char (mojibake)
         # — which corrupt adjacent words and confuse the video model. Fold them to
