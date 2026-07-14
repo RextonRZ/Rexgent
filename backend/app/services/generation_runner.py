@@ -289,10 +289,9 @@ class GenerationRunner:
             already_good = getattr(self, "_approved_shot_ids", set())
             ordered = [s for s in shots if (s.quality_tier or "") != "deferred"]
 
-            # native-talk inputs: the scene's synthesized lines (audio-first, so
-            # they exist before rendering) + which shots speak, in order. The
-            # k-th speaking shot speaks the k-th line — same convention as
-            # place_dialogue. The picked line names the on-camera speaker so
+            # native-talk inputs: the scene's SCRIPT dialogue (character + line)
+            # + which shots speak, in order. The k-th speaking shot speaks the
+            # k-th line. The picked line names the on-camera speaker so
             # HappyHorse native-talk animates the right mouth.
             from app.services.lipsync import pick_lipsync_line
             # over ALL non-deferred shots of the scene, NOT `active`: on a
