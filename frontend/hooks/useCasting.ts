@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import api from "@/lib/api";
+import { getSocket } from "@/lib/websocket";
 
 export interface CostumeVariant {
   id: string;
@@ -58,14 +60,44 @@ export interface Bible {
 }
 
 export function useBible(projectId: string) {
-  return useQuery<Bible>({
+  const queryClient = useQueryClient();
+  const q = useQuery<Bible>({
     queryKey: ["bible", projectId],
     queryFn: async () => {
       const { data } = await api.get(`/api/casting/${projectId}`);
       return data;
     },
     enabled: !!projectId,
+    // The cast lands via websocket, not on the query clock. Always refetch on
+    // mount so "Review cast" shows fresh data instead of the empty bible that
+    // was cached when casting STARTED, and invalidate on the events below so an
+    // already-open panel fills in the instant loading finishes.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
+
+  useEffect(() => {
+    if (!projectId) return;
+    const socket = getSocket();
+    socket.connect();
+    socket.emit("join_project", { project_id: projectId });
+    const invalidate = () =>
+      queryClient.invalidateQueries({ queryKey: ["bible", projectId] });
+    // any casting artifact landing (a plate, the final cast, a review pause)
+    // refreshes the panel immediately
+    const events = [
+      "casting.completed",
+      "casting.awaiting_review",
+      "casting.plate.completed",
+    ];
+    events.forEach((e) => socket.on(e, invalidate));
+    return () => {
+      events.forEach((e) => socket.off(e, invalidate));
+      // shared app-wide socket — never disconnect here
+    };
+  }, [projectId, queryClient]);
+
+  return q;
 }
 
 export function useApproveCasting(projectId: string) {

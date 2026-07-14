@@ -34,6 +34,19 @@ export function VoiceRow({
   const [mode, setMode] = useState<"designed" | "preset" | "clone">(
     cloned ? "clone" : designed ? "designed" : "preset"
   );
+  // Keep the open tab matching the character's ACTUAL voice: a designed (or
+  // cloned) voice usually arrives AFTER this row mounts (the bible loads async),
+  // so snap to that tab instead of leaving the user staring at Preset. Only a
+  // real voiceSource change re-syncs, so a manual tab click is preserved.
+  useEffect(() => {
+    setMode(
+      voiceSource === "cloned"
+        ? "clone"
+        : voiceSource === "designed"
+          ? "designed"
+          : "preset"
+    );
+  }, [voiceSource]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [recording, setRecording] = useState(false);
