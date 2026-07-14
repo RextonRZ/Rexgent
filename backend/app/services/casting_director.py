@@ -97,12 +97,32 @@ async def ensure_location_plates(db: Session, project_id) -> int:
     return len(missing)
 
 
+import re as _re
+# Face-COVERING eyewear/masks occlude the locked face: they tank ArcFace scores
+# and flicker between framings (a zoom-in makes the lab glasses vanish). Plain
+# prescription glasses/spectacles are fine and kept.
+_FACE_OBSCURING = _re.compile(
+    r"\b(sun\s?glasses|goggles|safety\s+glasses|lab\s+glasses|ski\s+goggles|"
+    r"face\s+mask|gas\s+mask|welding\s+mask|ski\s+mask|balaclava|visor|"
+    r"tinted\s+(glasses|lenses|shades)|shades|vr\s+headset|blindfold|"
+    r"eye\s+patch)\b", _re.I)
+
+
+def _strip_face_obscuring_eyewear(outfit: str) -> str:
+    """Drop face-covering accessories from a comma-listed outfit; keep the rest."""
+    kept = [p.strip() for p in (outfit or "").split(",")
+            if p.strip() and not _FACE_OBSCURING.search(p)]
+    return ", ".join(kept)
+
+
 def resolve_outfit(scene_outfit: str | None, default_clothing: str | None) -> str:
     """Clothing ownership: the wardrobe's per-scene outfit wins; when a scene
     has none, fall back to the character's default clothing (appearance's
     clothing_keywords). The appearance FRAGMENT no longer carries clothing, so
-    without this fallback an unwardrobed scene renders the character naked."""
-    return (scene_outfit or "").strip() or (default_clothing or "").strip()
+    without this fallback an unwardrobed scene renders the character naked.
+    Face-obscuring eyewear/masks are stripped — they break face consistency."""
+    resolved = (scene_outfit or "").strip() or (default_clothing or "").strip()
+    return _strip_face_obscuring_eyewear(resolved)
 
 
 def voice_design_prompt(char) -> str:

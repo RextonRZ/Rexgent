@@ -1,6 +1,19 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from app.services.casting_director import distinct_locations, style_from_request
+from app.services.casting_director import (distinct_locations, style_from_request,
+                                           resolve_outfit, _strip_face_obscuring_eyewear)
+
+
+def test_strips_face_obscuring_eyewear():
+    assert _strip_face_obscuring_eyewear("black dress, heels, lab glasses") == "black dress, heels"
+    assert _strip_face_obscuring_eyewear("grey suit, sunglasses, dark tie") == "grey suit, dark tie"
+    assert _strip_face_obscuring_eyewear("hoodie, ski mask, jeans") == "hoodie, jeans"
+    # ordinary prescription glasses are kept
+    assert "reading glasses" in _strip_face_obscuring_eyewear("cardigan, reading glasses")
+
+
+def test_resolve_outfit_drops_eyewear():
+    assert resolve_outfit("navy blazer, safety glasses, slacks", None) == "navy blazer, slacks"
 
 
 def test_distinct_locations_groups_by_key():
