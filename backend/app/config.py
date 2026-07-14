@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # via the reference stack (which already carries the prev frame) and does
     # multi-person native talk. ON by default; flip OFF for the old wan i2v path.
     route_continuation_to_happyhorse: bool = True
+    # Storyboard camera intent: when true, the storyboard prompt asks the model to
+    # pick a PURPOSEFUL camera_movement per beat instead of defaulting to STATIC.
+    # OFF by default — flag off leaves the storyboard prompt byte-identical to today.
+    cinematic_prompt: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

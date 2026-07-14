@@ -69,6 +69,14 @@ class StoryboardGenerator:
             f"length is set automatically to fit each spoken line, so give each "
             f"shot the dialogue it should carry."
         )
+        if getattr(get_settings(), "cinematic_prompt", False):
+            user_content += (
+                "\n\nCAMERA (choose a `camera_movement` that SERVES the beat; do NOT default to STATIC):\n"
+                "- tension / intimacy / a dawning realization -> DOLLY_IN (push in)\n"
+                "- isolation / loss / scale -> DOLLY_OUT (pull out)\n"
+                "- follow a subject or reveal -> PAN_LEFT/PAN_RIGHT/TILT_UP/TILT_DOWN\n"
+                "- a deliberate, held standoff -> STATIC (reserved, never the default)\n"
+                "Use HANDHELD/DRONE sparingly. One smooth move per shot.\n")
         messages = [
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user_content},
