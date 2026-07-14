@@ -304,3 +304,37 @@ async def test_no_presence_rule_without_characters():
                         character_visuals={}, target_model="happyhorse")
     user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "Presence (rule 20)" not in user_msg
+
+
+@pytest.mark.asyncio
+async def test_native_talk_frames_open_speaking():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "p", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    await crafter.craft(
+        shot={"shot_type": "MS", "dialogue": "I can't believe this.",
+              "estimated_duration_seconds": 5, "action": "sits"},
+        character_visuals={"KIM": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse", native_talk=True)
+    content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "aloud" in content or "audibly" in content          # native speaking instruction present
+    assert "I can't believe this." in content                   # the line is passed
+    assert "must never be sharply front-facing" not in content  # NOT the hide-mouth coverage block
+
+
+@pytest.mark.asyncio
+async def test_native_talk_off_keeps_coverage():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "p", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    await crafter.craft(
+        shot={"shot_type": "MS", "dialogue": "I can't believe this.",
+              "estimated_duration_seconds": 5, "action": "sits"},
+        character_visuals={"KIM": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse", lipsync=False, native_talk=False)
+    content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "must never be sharply front-facing" in content       # hide-mouth coverage unchanged when off
