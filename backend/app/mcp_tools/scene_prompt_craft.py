@@ -219,6 +219,19 @@ class ScenePromptCraft:
         from app.services.guardrails import validate_and_repair_prompt
         result["prompt"], repairs = validate_and_repair_prompt(
             result["prompt"], shot.get("estimated_duration_seconds", 5))
+        # Native-talk shots must SPEAK the exact scripted line, but the text
+        # sanitizer above strips quoted words (to keep on-screen text out) and
+        # eats the dialogue with them. Re-append the verbatim line AFTER all
+        # stripping so HappyHorse lip-syncs the real words. Export mutes the
+        # model's own generated voice and overlays the TTS, so this only shapes
+        # the mouth, not the final audio.
+        if native_talk and has_line:
+            spoken = str(shot.get("dialogue") or "").strip()
+            if spoken:
+                result["prompt"] = (
+                    result["prompt"].rstrip()
+                    + f' The character clearly speaks these exact words aloud: "{spoken}"'
+                )
         if repairs:
             import logging
             logging.getLogger(__name__).warning(
@@ -227,9 +240,10 @@ class ScenePromptCraft:
         result["negative_prompt"] = sanitizer.inject_negative_prompt(
             result.get("negative_prompt", "")
         )
-        if has_line and not lipsync:
+        if has_line and not lipsync and not native_talk:
             # secondary backstop to the coverage framing above — negatives
-            # alone are unreliable, but they bias away from readable lips
+            # alone are unreliable, but they bias away from readable lips.
+            # Skipped for native_talk: those shots WANT a readable talking mouth.
             result["negative_prompt"] += ", clear front-facing talking mouth close-up"
         if environment and environment.get("suppressed"):
             # deterministic backstop: the overridden location default always

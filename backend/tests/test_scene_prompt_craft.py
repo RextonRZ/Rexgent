@@ -338,3 +338,56 @@ async def test_native_talk_off_keeps_coverage():
         target_model="happyhorse", lipsync=False, native_talk=False)
     content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "must never be sharply front-facing" in content       # hide-mouth coverage unchanged when off
+
+
+@pytest.mark.asyncio
+async def test_native_talk_preserves_exact_line_through_sanitizer():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "Medium shot of a woman at a table.",
+        "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    line = "San-Ha, you look like you've seen a ghost."
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "dialogue": line,
+              "estimated_duration_seconds": 5, "action": "walks in"},
+        character_visuals={"YOON": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse", native_talk=True)
+    # the EXACT scripted line must survive the text sanitizer (it was truncated
+    # to "ve seen a ghost." before this fix)
+    assert line in result["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_native_talk_does_not_suppress_mouth_in_negative():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "Medium shot of a woman.",
+        "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "dialogue": "Hello there.",
+              "estimated_duration_seconds": 5, "action": "sits"},
+        character_visuals={"KIM": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse", native_talk=True)
+    # native talk WANTS a readable talking mouth — the anti-mouth backstop is gone
+    assert "clear front-facing talking mouth close-up" not in result["negative_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_coverage_still_suppresses_mouth_in_negative():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "Medium shot of a woman.",
+        "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "dialogue": "Hello there.",
+              "estimated_duration_seconds": 5, "action": "sits"},
+        character_visuals={"KIM": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse", lipsync=False, native_talk=False)
+    # unchanged when native talk is off: the mouth is still suppressed
+    assert "clear front-facing talking mouth close-up" in result["negative_prompt"]
