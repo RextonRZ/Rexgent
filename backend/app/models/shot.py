@@ -32,6 +32,10 @@ class Shot(Base):
     # the crafted prompt engineering: {action, prompt, negative_prompt,
     # environment {behavior, suppressed, source, priority}} written at render
     prompt_json = Column(JSONB, nullable=True)
+    # the Director Engine's per-shot cinematic plan: {purpose, lens, composition,
+    # intended_duration, transition_in, blocking_delta}. Null on shots boarded
+    # without DIRECTOR_ENGINE — read by scene_prompt_craft when present.
+    director_json = Column(JSONB, nullable=True)
     notes = Column(Text, nullable=True)
     director_note = Column(Text, nullable=True)
 
