@@ -286,18 +286,25 @@ class ScenePromptCraft:
             sup = environment["suppressed"]
             if sup.lower() not in (result.get("negative_prompt") or "").lower():
                 result["negative_prompt"] += ", " + sup
-        # Director lens/composition: weave the planned optics in deterministically
-        # (after sanitization, before the typographic normalizer) so they survive
-        # the text stripper — same idiom as the eyeline/setting clauses above.
+        # Director controls-first (Alibaba pattern): PREPEND a model-honored
+        # comma-list of technical controls (light quality, lens, composition)
+        # ahead of the scene, so the model reads the optics before the action.
+        # Placed after sanitization, before the typographic normalizer, so the
+        # clause survives the text stripper — same idiom as the image_legend prefix.
         dj = shot.get("director_json") if isinstance(shot, dict) else None
         if isinstance(dj, dict):
-            bits = []
+            ctrl = []
+            lq = dj.get("light_quality")
+            if lq:
+                ctrl.append(f"{lq} light")
             if dj.get("lens"):
-                bits.append(f"shot on a {dj['lens']} lens")
+                ctrl.append(f"{dj['lens']} lens")
             if dj.get("composition"):
-                bits.append(dj["composition"].replace("_", "-") + " composition")
-            if bits:
-                result["prompt"] = result["prompt"].rstrip() + " " + ", ".join(bits) + "."
+                ctrl.append(dj["composition"].replace("_", "-") + " composition")
+            if ctrl:
+                prefix = ", ".join(ctrl)
+                prefix = prefix[:1].upper() + prefix[1:] + ". "
+                result["prompt"] = prefix + result["prompt"].lstrip()
         # Final gate (rule A5): the crafted prompt still carries typographic
         # gremlins — em/en dashes, smart quotes, and the replacement char (mojibake)
         # — which corrupt adjacent words and confuse the video model. Fold them to

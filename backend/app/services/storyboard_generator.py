@@ -134,6 +134,7 @@ class StoryboardGenerator:
             sd["director_json"] = {
                 "purpose": planned.purpose, "lens": planned.lens,
                 "composition": planned.composition,
+                "light_quality": planned.light_quality,
                 "intended_duration": planned.intended_duration,
                 "transition_in": planned.transition_in,
                 "blocking_delta": planned.blocking_delta,

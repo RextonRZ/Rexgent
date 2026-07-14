@@ -43,6 +43,17 @@ COMPOSITIONS = {
     "silhouette": "subject dark against a bright background",
 }
 
+# ── light QUALITY (distinct from lighting = time-of-day/mood). Model-honored terms. ──
+LIGHT_QUALITIES = {
+    "soft": "soft, diffused light; gentle shadows, flattering and calm",
+    "hard": "hard, direct light; sharp shadows, high drama and edge",
+    "side": "side light; sculpts the face, mood and volume",
+    "rim": "rim light; a bright outline separating subject from background",
+    "backlight": "backlight; silhouette or glow behind the subject",
+    "top": "top light; downward, oppressive or clinical",
+    "practical": "practical light; visible in-scene sources (lamps, neon, fire)",
+}
+
 # ── the heart: each purpose -> recommended technique ──
 # duration is a (min, max) rhythm hint in seconds; dialogue = may this shot speak.
 SHOT_PURPOSES = {
@@ -69,19 +80,19 @@ SHOT_PURPOSES = {
 # ── genre/tone -> scene-wide look ──
 GENRE_LOOKS = {
     "romance":  {"lighting": "GOLDEN_HOUR", "colour_mood": "WARM", "lens_bias": "50mm",
-                 "camera_pace": "slow", "bgm_hint": "tender piano", "ambience_hint": "soft room tone"},
+                 "camera_pace": "slow", "light_quality": "soft", "bgm_hint": "tender piano", "ambience_hint": "soft room tone"},
     "thriller": {"lighting": "NIGHT", "colour_mood": "COOL", "lens_bias": "85mm",
-                 "camera_pace": "measured", "bgm_hint": "sparse tension drones", "ambience_hint": "low hum, distant traffic"},
+                 "camera_pace": "measured", "light_quality": "side", "bgm_hint": "sparse tension drones", "ambience_hint": "low hum, distant traffic"},
     "action":   {"lighting": "DRAMATIC_SIDE", "colour_mood": "HIGH_CONTRAST", "lens_bias": "35mm",
-                 "camera_pace": "kinetic", "bgm_hint": "driving percussion", "ambience_hint": "wind, movement"},
+                 "camera_pace": "kinetic", "light_quality": "hard", "bgm_hint": "driving percussion", "ambience_hint": "wind, movement"},
     "drama":    {"lighting": "NATURAL", "colour_mood": "DESATURATED", "lens_bias": "50mm",
-                 "camera_pace": "measured", "bgm_hint": "restrained strings", "ambience_hint": "quiet interior"},
+                 "camera_pace": "measured", "light_quality": "soft", "bgm_hint": "restrained strings", "ambience_hint": "quiet interior"},
     "horror":   {"lighting": "NIGHT", "colour_mood": "MONOCHROME", "lens_bias": "35mm",
-                 "camera_pace": "slow", "bgm_hint": "dissonant swells", "ambience_hint": "creaks, wind"},
+                 "camera_pace": "slow", "light_quality": "top", "bgm_hint": "dissonant swells", "ambience_hint": "creaks, wind"},
     "comedy":   {"lighting": "NATURAL", "colour_mood": "VIVID", "lens_bias": "35mm",
-                 "camera_pace": "measured", "bgm_hint": "light plucked strings", "ambience_hint": "bright room tone"},
+                 "camera_pace": "measured", "light_quality": "soft", "bgm_hint": "light plucked strings", "ambience_hint": "bright room tone"},
     "_default": {"lighting": "NATURAL", "colour_mood": "WARM", "lens_bias": "50mm",
-                 "camera_pace": "measured", "bgm_hint": None, "ambience_hint": None},
+                 "camera_pace": "measured", "light_quality": "soft", "bgm_hint": None, "ambience_hint": None},
 }
 
 # ── show-don't-tell: emotion -> a physical/visual action the Director can stage ──

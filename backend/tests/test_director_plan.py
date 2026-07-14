@@ -31,6 +31,8 @@ async def test_plan_scene_covers_all_lines_and_varies():
     covered = sorted(i for s in out.shots for i in s.covers_lines)
     assert covered == [0, 1]
     assert len(out.shots) <= 4
+    # scene-wide light quality flows from the look onto every shot
+    assert all(s.light_quality == "side" for s in out.shots)
 
 
 @pytest.mark.asyncio

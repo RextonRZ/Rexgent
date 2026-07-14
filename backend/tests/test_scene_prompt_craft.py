@@ -507,10 +507,14 @@ async def test_craft_weaves_lens_and_composition_from_director_json(monkeypatch)
         "prompt": "A woman stands in a doorway.", "negative_prompt": ""})
     crafter.prompt_template = "placeholder"
     shot = {"shot_type": "CU", "action": "she turns",
-            "director_json": {"lens": "85mm", "composition": "rule_of_thirds"}}
+            "director_json": {"light_quality": "soft", "lens": "85mm",
+                              "composition": "rule_of_thirds"}}
     out = await crafter.craft(shot, character_visuals={}, target_model="happyhorse")
+    # controls-first: the technical controls PREPEND, then the scene text
+    assert out["prompt"].startswith("Soft light, 85mm lens, rule-of-thirds composition.")
     assert "85mm" in out["prompt"]
     assert "rule-of-thirds" in out["prompt"] or "rule of thirds" in out["prompt"]
+    assert "woman stands in a doorway" in out["prompt"]     # scene survives
 
 
 @pytest.mark.asyncio

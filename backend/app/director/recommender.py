@@ -9,5 +9,6 @@ def recommend_look(genre: str | None, tone: str | None = None) -> LookProfile:
     return LookProfile(
         lighting=spec["lighting"], colour_mood=spec["colour_mood"],
         lens_bias=spec["lens_bias"], camera_pace=spec["camera_pace"],
+        light_quality=spec.get("light_quality", "soft"),
         bgm_hint=spec.get("bgm_hint"), ambience_hint=spec.get("ambience_hint"),
     )
