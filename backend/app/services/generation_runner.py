@@ -490,7 +490,8 @@ class GenerationRunner:
     async def _craft_prompt(self, shot, char_by_name, scene_setting=None,
                             prev_action=None, next_action=None, foreground=None,
                             environment=None,
-                            outfits=None, blocking=None, lipsync=False) -> str:
+                            outfits=None, blocking=None, lipsync=False,
+                            native_talk=False) -> str:
         from app.services.guardrails import canonical_character
         in_frame = [canonical_character(n, char_by_name)
                     for n in (shot.characters_in_frame or [])]
@@ -516,6 +517,7 @@ class GenerationRunner:
             foreground_characters=[n for n in in_frame if n in fg],
             blocking=blocking,
             lipsync=lipsync,
+            native_talk=native_talk,
             environment=environment,
         )
         return result
@@ -879,18 +881,30 @@ class GenerationRunner:
                 # shot gets. An anchor/entrance/reangle shot renders its own first
                 # frame, so it needs NO frame_anchor. OFF by default; role exists
                 # only under v2. Reused by the upgrade block after render+score.
+                # HappyHorse native lip-sync: on an identity shot that speaks, let
+                # HappyHorse say the line itself (mouth synced to its own speech)
+                # instead of hiding the mouth. Replaces the wan two-pass on these
+                # shots. OFF by default -> byte-identical. Export already mutes the
+                # model voice and overlays the real TTS.
+                native_talk = (
+                    getattr(get_settings(), "happyhorse_native_talk", False)
+                    and settings_v2
+                    and role in ("anchor", "entrance", "continue_reangle")
+                    and line_eligible)
                 anchor_lip = (
                     getattr(get_settings(), "anchor_lipsync_enabled", False)
                     and settings_v2
                     and role in ("anchor", "entrance", "continue_reangle")
-                    and line_eligible)
+                    and line_eligible
+                    and not native_talk)
                 tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
                            index=job.completed_shots + 1, total=job.total_shots)
                 crafted = await self._craft_prompt(
                     shot, char_by_name, scene_setting, prev_action, next_action,
                     foreground=foreground, outfits=outfits,
                     blocking=getattr(shot, "blocking_json", None),
-                    lipsync=bool(lip) or anchor_lip, environment=environment)
+                    lipsync=bool(lip) or anchor_lip, native_talk=native_talk,
+                    environment=environment)
                 prompt = crafted.get("prompt", "")
                 # the crafter has ALWAYS produced a negative prompt; until now
                 # it was dropped on the floor before dispatch
