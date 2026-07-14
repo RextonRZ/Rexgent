@@ -10,7 +10,6 @@ import {
   PenLine,
   Scissors,
   Users,
-  Volume2,
   Wallet,
   X,
   type LucideIcon,
@@ -111,12 +110,6 @@ const CREW: Record<
     did: (n) => `Fitted the spend plan ${n} time${n === 1 ? "" : "s"}`,
     detail: (d) => `Fitted budgets on ${plural(d, "drama")}`,
   },
-  audio_continuity: {
-    icon: Volume2,
-    role: "Audio",
-    did: (n) => `Voiced dialogue in ${plural(n, "run")}`,
-    detail: (d) => `Voiced ${plural(d, "drama")}`,
-  },
   Showrunner: {
     icon: Clapperboard,
     role: "Showrunner",
@@ -176,13 +169,6 @@ const SPLIT_ORDER: {
     color: "bg-blue-400",
     phrase: "writing and analysis",
     noun: "Writing and analysis",
-  },
-  {
-    key: "tts",
-    label: "Voice",
-    color: "bg-zinc-500",
-    phrase: "voice synthesis",
-    noun: "Voice synthesis",
   },
 ];
 

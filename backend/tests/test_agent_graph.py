@@ -23,10 +23,15 @@ def test_casting_node_in_graph():
     assert "casting" in node_names
 
 
-def test_audio_node_in_graph():
+def test_casting_wires_straight_into_budget():
+    # TTS synthesis was removed, so the no-op audio node is gone: casting now
+    # flows directly into budget.
     from app.agent.graph import build_pipeline_graph
     g = build_pipeline_graph(db=None)
-    assert "audio" in set(g.get_graph().nodes.keys())
+    graph = g.get_graph()
+    assert "audio" not in set(graph.nodes.keys())
+    edges = {(e.source, e.target) for e in graph.edges}
+    assert ("casting", "budget") in edges
 
 
 def test_clarify_node_in_graph():

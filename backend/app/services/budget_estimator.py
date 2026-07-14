@@ -1,7 +1,7 @@
 """Project-out a drama's budget before it is generated.
 
 Two numbers the create flow headlines:
-- credit_usd: what the video / image / voice generation will cost (the real cap
+- credit_usd: what the video / image generation will cost (the real cap
   on how much film you can make).
 - llm_tokens: the LLM tokens the pipeline burns writing + boarding + crafting —
   the hackathon's judged allowance.
@@ -58,11 +58,7 @@ def estimate_budget(episode_count: int, target_length: int, characters: int = 4)
     image_count = chars * 3 + scope["scenes"] + 1
     image_usd = image_count * RATES["image_per_item"]
 
-    # tts: ~90 spoken characters per shot that talks (~70% of shots)
-    tts_chars = int(scope["shots"] * 0.7 * 90)
-    tts_usd = (tts_chars / 10_000) * RATES["tts_per_10k_chars"]
-
-    credit_usd = round(video_usd + image_usd + tts_usd, 2)
+    credit_usd = round(video_usd + image_usd, 2)
 
     llm_tokens = (
         scope["episodes"] * _TOK["per_episode"]
@@ -78,7 +74,6 @@ def estimate_budget(episode_count: int, target_length: int, characters: int = 4)
         "credit_breakdown": {
             "video": round(video_usd, 2),
             "image": round(image_usd, 2),
-            "tts": round(tts_usd, 2),
         },
         "llm_tokens": int(llm_tokens),
     }

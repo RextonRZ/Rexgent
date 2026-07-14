@@ -100,7 +100,21 @@ async def preview_plan(request: dict, db: Session = Depends(get_db)):
     # nothing is treated as a bed (matches export_worker.native_audio_policy).
     chunks = [{"mute": False, "volume": None} for _ in entries]
 
-    return {"segments": [], "chunks": chunks}
+    # Caption segments for the live preview: each shot's own dialogue, placed at
+    # its cumulative timeline offset and held for the chunk's duration — the same
+    # timing the export burns via caption_generator.generate_srt. No TTS needed.
+    segments = []
+    t = 0.0
+    for e in entries:
+        dur = float(e.get("duration") or 0.0)
+        text = (e.get("text") or "").strip()
+        if text:
+            segments.append({"start": round(t, 3),
+                             "duration": round(dur, 3),
+                             "text": text})
+        t += dur
+
+    return {"segments": segments, "chunks": chunks}
 
 
 @router.get("/{project_id}/download_all")

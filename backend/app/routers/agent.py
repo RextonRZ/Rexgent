@@ -154,7 +154,6 @@ CREW_PIPELINE_GUIDE = {
         "map_relationships (conditional: builds itself right after extraction and heals on page load if bonds are missing, no button needed)",
         "profile_cast (conditional: runs by itself inside Generate Plates for any character still missing a visual look, so skipping face upload never blocks anything; the Generate Appearance (no photo) button on a character card re-runs it for one character)",
         "generate_plates (auto: renders style, location and character plates)",
-        "voice_assign (auto: gives each character a distinct voice)",
         "face_lock (conditional: locks automatically when plates capture a clear face; uploading a reference photo on a character card locks a real look instead. Uploading a face is ALWAYS optional, never required)",
     ]},
     "storyboard": {"agent": "Director", "steps": [
@@ -165,8 +164,6 @@ CREW_PIPELINE_GUIDE = {
     ]},
     "generate": {"agent": "Showrunner", "steps": [
         "budget_allocate (conditional: fits itself on the Storyboard page the moment the board lands, splitting the cap across shots and picking tiers; it appears in the crew graph only when it actually runs)",
-        "synth_voices (conditional: first generation only, later runs reuse the synthesized lines)",
-        "fit_durations (auto: sizes each speaking shot to its real dialogue audio)",
         "prompt_craft (auto, per shot: expands the beat into concrete physical action, aims a negative prompt at the wrong default interpretation, and asks the Neo4j world graph whether an active event overrides the location's usual crowd behavior)",
         "dispatch_video (auto, per shot: renders the clip)",
         "verify_face (auto, per shot: continuity scoring of face, outfit, background)",
@@ -176,8 +173,6 @@ CREW_PIPELINE_GUIDE = {
     ]},
     "export": {"agent": "Editor", "steps": [
         "stitch_clips (auto: joins the approved clips into one cut)",
-        "synth_voices (conditional: fills any voice line still missing before placement)",
-        "assemble_timeline (auto: places each voice line on the shot that speaks it)",
         "burn_captions (conditional: when the cut has dialogue to caption)",
         "mix_audio (conditional: when there are voices or music to mix)",
         "render_mp4 (auto: uploads the final cut)",
@@ -260,7 +255,7 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
     except Exception:  # noqa: BLE001
         pass
     # what each crew node actually is + what has ACTUALLY run this production,
-    # so "why is synth_voices idle" gets the real answer (conditional, healthy)
+    # so "why is self_correct idle" gets the real answer (conditional, healthy)
     # instead of an invented problem
     tool_status: dict = {}
     try:
