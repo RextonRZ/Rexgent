@@ -7,9 +7,11 @@ from app.models.script import Script, Scene
 from app.models.shot import Shot
 from app.models.character import Character
 from app.schemas.shot import ShotResponse
+from app.services.render_plan import predict_scene_plan
 from app.services.script_structurer import ScriptStructurer
 from app.services.usage_tracker import track_project
 from app.websocket.emitter import emit
+from app.config import get_settings
 
 from app.deps import get_current_user
 
@@ -162,6 +164,44 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
     return {"status": "started", "scenes": len(scenes)}
 
 
+def build_bible(db: Session, project_id) -> dict:
+    """The same character/location bible generation renders against, built
+    straight from this project's rows — so a storyboard shot's render_plan
+    can never drift from what the runner will actually see. Mirrors
+    GenerationRunner._load_bible; imported lazily to avoid pulling the
+    renderer's heavy clients into every storyboard request."""
+    from app.models.location_plate import LocationPlate
+    from app.models.style_preset import StylePreset
+    from app.services.generation_runner import GenerationRunner
+    characters = db.query(Character).filter(Character.project_id == project_id).all()
+    locations = db.query(LocationPlate).filter(LocationPlate.project_id == project_id).all()
+    style = db.query(StylePreset).filter(StylePreset.project_id == project_id).first()
+    return GenerationRunner._shape_bible(characters, locations, style.plate_image_url if style else None)
+
+
+def shots_with_render_plan(shots: list[Shot], bible: dict) -> list[dict]:
+    """Serialize a scene's ordered shots and attach each one's render_plan —
+    the {model, lipsync} it will actually render on under LIVE settings —
+    so the frontend can show the model a shot really renders on instead of a
+    label that can drift from runtime routing. `shots` must be the scene's
+    shots in generation order; predict_scene_plan returns one entry per
+    input shot, in the same order, so they zip 1:1."""
+    settings = get_settings()
+    plans = predict_scene_plan(
+        shots, bible,
+        identity_routing_v2=settings.identity_routing_v2,
+        anchor_ref_model=settings.anchor_ref_model,
+        anchor_lipsync=settings.anchor_lipsync_enabled,
+        lipsync_enabled=settings.lipsync_enabled,
+    )
+    out = []
+    for shot, plan in zip(shots, plans):
+        data = ShotResponse.model_validate(shot).model_dump()
+        data["render_plan"] = plan
+        out.append(data)
+    return out
+
+
 @router.get("/project/{project_id}")
 async def list_shots(project_id: str, db: Session = Depends(get_db)):
     script = (
@@ -183,6 +223,7 @@ async def list_shots(project_id: str, db: Session = Depends(get_db)):
                 ep_by_scene[int(sc["scene_number"])] = int(sc.get("episode_number") or 1)
             except (TypeError, ValueError):
                 pass
+    bible = build_bible(db, script.project_id)
     result = []
     for scene in scenes:
         shots = db.query(Shot).filter(Shot.scene_id == scene.id).order_by(Shot.number).all()
@@ -194,7 +235,7 @@ async def list_shots(project_id: str, db: Session = Depends(get_db)):
             "heading": scene.heading,
             "set_items": set_json.get("set_items") or [],
             "state_changes": set_json.get("state_changes") or [],
-            "shots": [ShotResponse.model_validate(s).model_dump() for s in shots],
+            "shots": shots_with_render_plan(shots, bible),
         })
     return {"scenes": result}
 
