@@ -1,0 +1,7 @@
+{
+  "id": "soft_strings", "title": "Soft Strings", "filename": "soft_strings.mp3",
+  "type": "music", "mood": "romance", "scene_tags": ["confession", "first_meet"],
+  "tempo": "medium", "intensity": 2, "instruments": ["strings", "piano"], "loopable": true,
+  "duration": 50, "license": "CC0", "attribution": "",
+  "source": "TODO: add a royalty-free track named soft_strings.mp3 beside this file"
+}
