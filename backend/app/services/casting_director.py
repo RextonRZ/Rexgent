@@ -40,12 +40,6 @@ async def style_from_request(qwen, prompt_template: str, free_text: str) -> dict
     return result if isinstance(result, dict) else {"style_tags": [], "prompt": free_text, "negative_prompt": ""}
 
 
-# Back-compat: a flat pool of clean general-purpose presets. The full catalog
-# (with gender + descriptions) lives in app.services.voice_catalog.
-from app.services.voice_catalog import FEMALE_DEFAULTS, MALE_DEFAULTS, default_voice
-VOICE_POOL = FEMALE_DEFAULTS + MALE_DEFAULTS
-
-
 async def ensure_location_plates(db: Session, project_id) -> int:
     """Generate background plates for scene locations that don't have one
     yet. Idempotent — existing plates are never touched — so the storyboard
@@ -125,85 +119,6 @@ def resolve_outfit(scene_outfit: str | None, default_clothing: str | None) -> st
     return _strip_face_obscuring_eyewear(resolved)
 
 
-def voice_design_prompt(char) -> str:
-    """The character sheet, folded into a voice description: age, gender,
-    personality and role shape a bespoke timbre instead of a rotated preset."""
-    bits = []
-    age = getattr(char, "estimated_age", None)
-    gender = getattr(char, "gender", None)
-    lead = "A"
-    if age and gender:
-        lead = f"A {gender} around {age} years old,"
-    elif gender:
-        lead = f"A {gender},"
-    elif age:
-        lead = f"A person around {age} years old,"
-    bits.append(lead)
-    persona = (getattr(char, "personality_summary", None) or "").strip()
-    if persona:
-        bits.append(f"personality: {persona[:400]}.")
-    bits.append("Natural conversational voice for a drama, emotionally expressive, "
-                "clear diction, speaks English.")
-    return " ".join(bits)[:2000]
-
-
-def design_voice(char, db=None, project_id=None) -> bool:
-    """qwen-voice-design: create a voice matched to THIS character. Returns
-    True when the designed voice is assigned; False falls back to presets."""
-    import re as _re
-    import httpx
-    from app.config import get_settings
-    from app.services.api_keys import resolve_qwen_key, MissingApiKey
-    s = get_settings()
-    try:
-        key = resolve_qwen_key(s)
-    except MissingApiKey:
-        return False
-    if not key:
-        return False
-    name = _re.sub(r"[^a-z0-9]", "", str(getattr(char, "name", "voice")).lower())[:10] or "voice"
-    try:
-        r = httpx.post(
-            s.qwen_video_base_url + "/services/audio/tts/customization",
-            json={"model": s.qwen_voice_design_model,
-                  "input": {"action": "create",
-                            "target_model": s.qwen_tts_vd_model,
-                            "preferred_name": name,
-                            "voice_prompt": voice_design_prompt(char),
-                            "preview_text": "This is how I sound."},
-                  "parameters": {"sample_rate": 24000, "response_format": "wav"}},
-            headers={"Authorization": f"Bearer {key}"}, timeout=120.0)
-        voice = (r.json().get("output") or {}).get("voice") if r.status_code == 200 else None
-        if not voice:
-            raise RuntimeError(f"{r.status_code}: {r.text[:150]}")
-        char.voice_id = voice
-        char.voice_model = s.qwen_tts_vd_model
-        char.voice_source = "designed"
-        if db is not None and project_id is not None:
-            from app.services.cost_ledger import record
-            record(db, project_id, "tts", "casting", "voice", 1, 0.2,
-                   model=s.qwen_voice_design_model)
-        return True
-    except Exception as e:  # noqa: BLE001 — casting must never block on a voice
-        logger.warning("voice design failed for %s: %s", getattr(char, "name", "?"), e)
-        return False
-
-
-def assign_voice(char, index: int = 0, db=None, project_id=None) -> None:
-    """Give the character a voice: DESIGN one from their character sheet
-    (age/gender/personality matched); fall back to a gender-matched preset
-    rotated by index when the design service is unavailable."""
-    if char.voice_id:
-        return
-    # designing spends real money — only when a db is here to ledger it
-    if db is not None and design_voice(char, db=db, project_id=project_id):
-        return
-    from app.config import get_settings
-    char.voice_id = default_voice(getattr(char, "gender", None), index)
-    char.voice_model = get_settings().qwen_tts_designed_model
-    char.voice_source = "preset"
-
-
 class CastingDirector:
     def __init__(self, db: Session):
         self.db = db
@@ -211,7 +126,7 @@ class CastingDirector:
         self.plates = PlateGenerator(self.db)
         self.style_prompt = load_prompt("style_plate.txt")
 
-    async def cast_bible(self, project_id, design_voice: bool = True) -> dict:
+    async def cast_bible(self, project_id) -> dict:
         pid = str(project_id)
         emit("casting.started", {}, pid)
         script = (self.db.query(Script).filter(Script.project_id == project_id)
@@ -351,17 +266,6 @@ class CastingDirector:
         if faces_locked:
             tool_event(pid, "characters", "face_lock", "succeeded", agent="Casting",
                        artifact=f"{faces_locked} identities locked")
-
-        with tool_run(pid, "characters", "voice_assign", "Casting",
-                      total=len(characters)) as t:
-            for idx_v, c in enumerate(characters):
-                emit("casting.voice.started", {"character": c.name}, pid)
-                if design_voice:
-                    assign_voice(c, idx_v, db=self.db, project_id=pid)
-                else:  # the user unticked the paid design — free presets
-                    assign_voice(c, idx_v)
-                emit("casting.voice.completed", {"character": c.name}, pid)
-            t["artifact"] = f"{len(characters)} voices"
 
         self.db.commit()
         from app.agents.reporter import report_agent

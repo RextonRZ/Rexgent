@@ -40,6 +40,18 @@ CHAR_PLATE_NEGATIVE = (
 )
 
 
+def gender_bucket(gender: str | None) -> str | None:
+    """Coarse male/female/unknown bucket from a free-text gender string, used to
+    lead the face-plate subject phrase. (Not TTS — a plate needs to know whether
+    to render 'a woman' vs 'a man' vs neither.)"""
+    g = str(gender or "").lower()
+    if any(w in g for w in ("female", "woman", "girl", "lady")):
+        return "female"
+    if any(w in g for w in ("male", "man", "boy", "guy")):
+        return "male"
+    return None
+
+
 def subject_descriptor(gender: str | None = None, age: str | None = None,
                        appearance: str | None = None) -> str:
     """A concise 'who this is' phrase so plates stay CHARACTER-SPECIFIC even if the
@@ -47,7 +59,6 @@ def subject_descriptor(gender: str | None = None, age: str | None = None,
     generic person. Uses gender/age/appearance, never the character's name (a name
     isn't visual). When gender is unknown (e.g. a pet or a child) we lean on the
     appearance so a dog stays a dog rather than becoming 'a person'."""
-    from app.services.voice_catalog import gender_bucket
     b = gender_bucket(gender)
     lead = "a woman" if b == "female" else "a man" if b == "male" else ""
     # A numeric age ("20s") implies a human even when gender wasn't extracted —

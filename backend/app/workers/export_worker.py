@@ -23,6 +23,26 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
+def probe_duration(audio_bytes: bytes) -> float:
+    """ffprobe the duration of a WAV blob. Local helper (formerly lived in the
+    deleted dialogue_synthesizer) so the pacing-retake path stays self-contained."""
+    import subprocess
+    p = tempfile.mktemp(suffix=".wav")
+    with open(p, "wb") as f:
+        f.write(audio_bytes)
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                              "-of", "default=nw=1:nk=1", p], capture_output=True, text=True)
+        return float(out.stdout.strip() or 0.0)
+    except Exception:  # noqa: BLE001
+        return 0.0
+    finally:
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+
+
 def native_audio_policy():
     """No TTS overlay now, so every clip keeps its own voice + ambience at full
     volume — never muted."""
@@ -131,7 +151,6 @@ def _retime_rushed_lines(db, project_id: str, line_rows: list, scene_plan: list,
     import asyncio
     from app.config import get_settings
     from app.models.character import Character
-    from app.services.dialogue_synthesizer import probe_duration
     from app.services.guardrails import canonical_character
     from app.services.oss_manager import OSSManager
     from app.services.qwen_client import QwenClient

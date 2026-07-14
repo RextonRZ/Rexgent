@@ -26,19 +26,6 @@ def test_run_casting_dispatches():
     assert r.status_code in (200, 404)
 
 
-def test_voice_design_endpoint_exists():
-    r = client.post("/api/casting/character/00000000-0000-0000-0000-000000000000/voice/design?voice=Ethan")
-    assert r.status_code in (200, 404)
-
-
-def test_voices_catalog_endpoint():
-    r = client.get("/api/casting/voices")
-    assert r.status_code == 200
-    data = r.json()
-    assert isinstance(data, list) and len(data) > 0
-    assert {"id", "gender", "desc"} <= set(data[0].keys())
-
-
 def test_generate_character_plates_endpoint_exists():
     r = client.post("/api/casting/character/00000000-0000-0000-0000-000000000000/plates")
     # 404 for a missing character; 200 if it somehow resolves — both structurally ok
