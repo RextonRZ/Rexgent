@@ -17,6 +17,12 @@ import {
 import { AutoRunPanel } from "@/components/agent/AutoRunPanel";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useAnalyzeScript,
@@ -43,6 +49,7 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
   } | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [judgement, setJudgement] = useState<JudgeResult | null>(null);
+  const [rewriteOpen, setRewriteOpen] = useState(false);
 
   // Resume an existing project straight into the editor instead of the blank
   // "write a script" tabs. (404 for a brand-new project just leaves scriptData null.)
@@ -220,6 +227,13 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
               </h2>
               <div className="flex gap-2">
                 <Button
+                  onClick={() => setRewriteOpen(true)}
+                  variant="secondary"
+                  size="sm"
+                >
+                  Rewrite script
+                </Button>
+                <Button
                   onClick={handleAnalyze}
                   disabled={analyzeScript.isPending}
                   variant="secondary"
@@ -302,6 +316,26 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
               )}
             </div>
           )}
+
+          <Dialog open={rewriteOpen} onOpenChange={setRewriteOpen}>
+            <DialogContent
+              className="glass sm:max-w-2xl max-h-[90vh] overflow-y-auto"
+              showCloseButton
+            >
+              <DialogHeader>
+                <DialogTitle>Rewrite script</DialogTitle>
+              </DialogHeader>
+              <AutoRunPanel
+                projectId={params.id}
+                mode="rewrite"
+                initialPremise={projectPremise}
+                initialGenre={projectGenre}
+                initialEpisodes={epParam}
+                initialTargetLength={lenParam}
+                onRewritten={() => setRewriteOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
         </div>
       )}
       <NextStepButton projectId={params.id} current="script" />
