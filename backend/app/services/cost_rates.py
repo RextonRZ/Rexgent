@@ -2,8 +2,6 @@ RATES = {
     "video_wan_per_sec": 0.15,
     "video_hh_per_sec": 0.108,
     "image_per_item": 0.075,
-    # still read by budget_estimator's TTS projection (no tts_cost() helper anymore)
-    "tts_per_10k_chars": 0.13,
     "llm_in_per_1k": 0.0016,
     "llm_out_per_1k": 0.0064,
 }

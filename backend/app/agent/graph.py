@@ -160,12 +160,6 @@ def build_pipeline_graph(db=None):
             await cast_bible_op(db, state["project_id"])
         return state
 
-    async def n_audio(state: PipelineState) -> PipelineState:
-        _emit_node(state, "audio")
-        # TTS synthesis removed: clips now play their own NATIVE (model-generated)
-        # audio, so nothing is synthesized here. The node + graph edges stay intact.
-        return {}
-
     async def n_budget(state: PipelineState) -> PipelineState:
         _emit_node(state, "budget")
         if db is None:
@@ -205,7 +199,6 @@ def build_pipeline_graph(db=None):
     g.add_node("clarify", n_clarify)
     g.add_node("storyboard", n_storyboard)
     g.add_node("casting", n_casting)
-    g.add_node("audio", n_audio)
     g.add_node("budget", n_budget)
     g.add_node("generate_video", n_generate_video)
 
@@ -221,8 +214,7 @@ def build_pipeline_graph(db=None):
         lambda s: "END" if s.get("clarify_pause") else "storyboard",
         {"END": END, "storyboard": "storyboard"})
     g.add_edge("storyboard", "casting")
-    g.add_edge("casting", "audio")
-    g.add_edge("audio", "budget")
+    g.add_edge("casting", "budget")
     g.add_edge("budget", "generate_video")
     g.add_edge("generate_video", END)
     return g.compile()

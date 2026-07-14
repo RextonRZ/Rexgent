@@ -51,7 +51,7 @@ const STAGE_COST_KEYS: Record<StageKey, string[]> = {
   script: ["script", "structure", "judge", "revise", "title", "plot_gap", "ending"],
   characters: ["characters", "relationships", "mbti", "appearance", "clarify", "casting", "wardrobe"],
   storyboard: ["storyboard", "set_dress", "prompt_craft", "style"],
-  generate: ["generation", "audio", "budget", "regen_rewrite"],
+  generate: ["generation", "budget", "regen_rewrite"],
   export: ["export"],
 };
 

@@ -431,7 +431,6 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
       ["Video", "video", (q: number) => `${Math.round(q)}s of footage`],
       ["Language", "llm", (q: number) => `${fmtTokens(q)} tokens`],
       ["Image", "image", (q: number) => `${Math.round(q)} images`],
-      ["Voice", "tts", (q: number) => `${fmtTokens(q)} characters`],
     ] as const
   )
     .filter(([, key]) => cats[key])
@@ -443,7 +442,11 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
     }))
     .sort((a, b) => b.value - a.value);
 
-  const totalUsd = Object.values(cats).reduce((s, c) => s + c.usd, 0);
+  // dead voice spend stays in the ledger for history but is excluded here
+  const totalUsd = Object.entries(cats).reduce(
+    (s, [k, c]) => (k === "tts" ? s : s + c.usd),
+    0
+  );
   const videoShare = cats["video"] && totalUsd > 0 ? cats["video"].usd / totalUsd : 0;
   const totalUp = useCountUp(totalUsd, reduced);
 

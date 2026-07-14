@@ -30,7 +30,7 @@ export interface ProjectCreate {
 export interface BudgetEstimate {
   scope: { episodes: number; scenes: number; shots: number; video_seconds: number };
   credit_usd: number;
-  credit_breakdown: { video: number; image: number; tts: number };
+  credit_breakdown: { video: number; image: number };
   llm_tokens: number;
 }
 

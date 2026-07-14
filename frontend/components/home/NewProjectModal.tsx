@@ -216,8 +216,7 @@ export function NewProjectModal({
             {estimate && (
               <p className="text-[10px] text-muted-foreground">
                 Video ${estimate.credit_breakdown.video.toFixed(2)} · Images $
-                {estimate.credit_breakdown.image.toFixed(2)} · Voice $
-                {estimate.credit_breakdown.tts.toFixed(2)}
+                {estimate.credit_breakdown.image.toFixed(2)}
               </p>
             )}
 
