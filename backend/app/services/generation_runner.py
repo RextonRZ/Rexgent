@@ -326,7 +326,8 @@ class GenerationRunner:
                          .order_by(LineAudio.line_index).all())
             scene_lines = [{"audio_url": r.audio_url,
                             "character_name": r.character_name,
-                            "duration": r.duration_seconds}
+                            "duration": r.duration_seconds,
+                            "text": r.text}
                            for r in line_rows if r.audio_url]
             if not getattr(get_settings(), "multishot_enabled", False):
                 for i, shot in enumerate(ordered):
@@ -368,7 +369,7 @@ class GenerationRunner:
                         scene_anchor_url=scene_anchor, scene_setting=scene_setting,
                         suppress_location=state_changed,
                         prev_action=prev_action, next_action=next_action,
-                        lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines),
+                        lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines, shot_dialogue=shot.dialogue),
                         environment=environment, prev_in_frame=prev_in_frame,
                         prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
                         prev_clip_url=prev_clip)
@@ -427,7 +428,7 @@ class GenerationRunner:
                         scene_anchor_url=scene_anchor, scene_setting=scene_setting,
                         suppress_location=state_changed,
                         prev_action=prev_action, next_action=next_action,
-                        lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines),
+                        lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines, shot_dialogue=shot.dialogue),
                         environment=environment, prev_in_frame=prev_in_frame,
                         prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
                         prev_clip_url=prev_clip)

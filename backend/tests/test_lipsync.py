@@ -50,3 +50,19 @@ def test_lipsync_media_shape():
         {"type": "first_frame", "url": "https://oss/frame.jpg"},
         {"type": "driving_audio", "url": "https://oss/l0.wav"},
     ]
+
+
+def test_pick_matches_by_dialogue_text_not_position():
+    lines = [
+        {"character_name": "THE STRANGER", "text": "You can run, but you can't hide.", "audio_url": "a", "duration": 3.0},
+        {"character_name": "MIAO JING", "text": "Chen Yi, please, trust me.", "audio_url": "b", "duration": 2.0},
+    ]
+    speaking = ["shotA", "shotB"]
+    got = pick_lipsync_line("shotB", speaking, lines,
+                            shot_dialogue="You can run, but you can't hide.")
+    assert got["character_name"] == "THE STRANGER"
+
+
+def test_pick_falls_back_to_position_without_dialogue():
+    lines = [{"character_name": "A", "text": "hi", "audio_url": "a", "duration": 1.0}]
+    assert pick_lipsync_line("s1", ["s1"], lines)["character_name"] == "A"
