@@ -227,23 +227,33 @@ class ScenePromptCraft:
         # model's own generated voice and overlays the TTS, so this only shapes
         # the mouth, not the final audio.
         if native_talk and has_line:
-            spoken = str(shot.get("dialogue") or "").strip()
+            import re as _re
+            raw = str(shot.get("dialogue") or "").strip()
+            # words said ALOUD: strip any (parenthetical) so the model does not read
+            # the stage direction out loud; the parenthetical becomes the delivery TONE
+            spoken = _re.sub(r"\s{2,}", " ", _re.sub(r"\([^)]*\)", " ", raw)).strip() or raw
+            tone = ", ".join(p.strip() for p in _re.findall(r"\(([^)]+)\)", raw) if p.strip())
             if spoken:
                 who = (speaker or "").strip()
+                # a distinct TONE label (Alibaba's multi-character principle 3) so the
+                # native voice is delivered WITH emotion, not flat
+                tone_clause = f", {tone}," if tone else ""
                 if who:
                     # name the speaker (ties to their [Image N] in the legend) and
                     # keep everyone else's mouth still, so HappyHorse animates the
                     # RIGHT person in a multi-character shot
                     result["prompt"] = (
                         result["prompt"].rstrip()
-                        + f" {who} is the one speaking: {who} clearly says these exact "
-                          f"words aloud with natural lip movement while everyone else "
+                        + f" {who} is the one speaking{tone_clause}: {who} clearly says these "
+                          f"exact words aloud with natural lip movement while everyone else "
                           f'keeps a closed, still mouth and listens: "{spoken}"'
                     )
                 else:
                     result["prompt"] = (
                         result["prompt"].rstrip()
-                        + f' The character clearly speaks these exact words aloud: "{spoken}"'
+                        + " The character clearly speaks these exact words aloud"
+                        + (f" {tone}" if tone else "")
+                        + f': "{spoken}"'
                     )
         # Eyeline: the blocking's eyelines are authoritative — append them so
         # faces look where the shot staged them instead of at the camera.
