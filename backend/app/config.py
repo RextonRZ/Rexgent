@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     # (mouth), keeping the better take. Two renders on those shots. OFF by default.
     anchor_lipsync_enabled: bool = False
     happyhorse_native_talk: bool = False
+    # Prepend an [Image N] legend to r2v prompts so the model ties each person to
+    # their OWN reference plate (face/outfit) instead of guessing. OFF by default.
+    image_ref_labels: bool = False
+    # Route same-cast continuation shots to Wan even on an angle change (only a
+    # NEW character forces the HappyHorse reference model). OFF by default.
+    wan_on_same_cast: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

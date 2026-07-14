@@ -491,7 +491,7 @@ class GenerationRunner:
                             prev_action=None, next_action=None, foreground=None,
                             environment=None,
                             outfits=None, blocking=None, lipsync=False,
-                            native_talk=False) -> str:
+                            native_talk=False, image_legend="") -> str:
         from app.services.guardrails import canonical_character
         in_frame = [canonical_character(n, char_by_name)
                     for n in (shot.characters_in_frame or [])]
@@ -518,6 +518,7 @@ class GenerationRunner:
             blocking=blocking,
             lipsync=lipsync,
             native_talk=native_talk,
+            image_legend=image_legend,
             environment=environment,
         )
         return result
@@ -836,6 +837,14 @@ class GenerationRunner:
             shot_type=shot.shot_type, scene_anchor_url=scene_anchor_url,
             suppress_location=suppress_location, foreground_characters=foreground)
         seed = stable_seed(pid, shot.id)
+        # [Image N] guide: tie each reference plate to its person so the model
+        # never swaps faces/outfits across a multi-character shot. r2v-only (wan
+        # i2v takes no reference_image), behind image_ref_labels. OFF -> "".
+        image_legend = ""
+        if (getattr(get_settings(), "image_ref_labels", False) and ref_stack
+                and settings_v2 and role in ("anchor", "entrance", "continue_reangle")):
+            from app.services.reference_stack import image_ref_legend
+            image_legend = image_ref_legend(ref_provenance)
 
         emit("generation.shot.started", {"scene_number": scene_number,
              "shot_number": shot.number, "index": job.completed_shots + 1,
@@ -909,7 +918,7 @@ class GenerationRunner:
                     foreground=foreground, outfits=outfits,
                     blocking=getattr(shot, "blocking_json", None),
                     lipsync=bool(lip) or anchor_lip, native_talk=native_talk,
-                    environment=environment)
+                    image_legend=image_legend, environment=environment)
                 prompt = crafted.get("prompt", "")
                 # the crafter has ALWAYS produced a negative prompt; until now
                 # it was dropped on the floor before dispatch

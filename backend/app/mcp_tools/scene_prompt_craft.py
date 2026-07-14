@@ -40,6 +40,7 @@ class ScenePromptCraft:
         blocking: dict | None = None,
         lipsync: bool = False,
         native_talk: bool = False,
+        image_legend: str = "",
         environment: dict | None = None,
     ) -> dict:
         # A location named after a character ("Bear's apartment") must not smuggle
@@ -232,6 +233,10 @@ class ScenePromptCraft:
                     result["prompt"].rstrip()
                     + f' The character clearly speaks these exact words aloud: "{spoken}"'
                 )
+        if image_legend:
+            # prepend AFTER sanitization so the [Image N] tokens survive the text
+            # stripper; leads the prompt so the model reads the mapping first
+            result["prompt"] = image_legend + " " + result["prompt"].lstrip()
         if repairs:
             import logging
             logging.getLogger(__name__).warning(

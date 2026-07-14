@@ -81,6 +81,29 @@ def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
     return media, provenance
 
 
+def image_ref_legend(provenance) -> str:
+    """A one-line map from [Image N] to what each reference image IS, so the
+    model ties each person to their own plate instead of guessing which face
+    goes where. N is 1-based and matches the media order sent to the model
+    (the same order as build_reference_stack_labeled's provenance)."""
+    role_label = {
+        "identity": "{c}'s face",
+        "costume": "{c}'s outfit",
+        "prev_frame": "the previous shot's frame for continuity",
+        "scene_anchor": "the scene's establishing frame",
+        "location": "the location and set",
+        "style": "the visual style",
+    }
+    parts = []
+    for i, p in enumerate(provenance or [], start=1):
+        tmpl = role_label.get(p.get("role"), "a reference")
+        parts.append(f"[Image {i}] is " + tmpl.format(c=p.get("character") or "the subject"))
+    if not parts:
+        return ""
+    return ("Reference image guide (match each person to their OWN image, never "
+            "swap faces or outfits between people): " + "; ".join(parts) + ".")
+
+
 def build_reference_stack(characters_in_frame, scene_number, bible,
                           prev_last_frame_url, model_cap, shot_type=None,
                           foreground_characters=None):
