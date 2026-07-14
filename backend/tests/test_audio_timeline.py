@@ -205,10 +205,12 @@ def test_speech_onset_shifts_the_line_to_the_mouth():
 
 def test_line_tempo_clamps_to_natural_range():
     from app.services.audio_timeline import line_tempo
-    assert line_tempo(2.0, 2.97) == 0.75      # big stretch clamps
+    assert line_tempo(2.0, 2.97) == 0.85      # big stretch clamps to the ~15% floor
     assert line_tempo(3.0, 3.1) is None       # close enough already
     assert line_tempo(4.0, 2.0) == 1.3        # big compress clamps
     assert line_tempo(2.0, None) is None      # unmeasured mouth: leave alone
+    # a hallucinated over-long mouth is capped, never dragging the voice further
+    assert line_tempo(2.0, 12.0) == 0.85
 
 
 def test_placement_paces_the_line_across_the_mouth():
@@ -219,8 +221,8 @@ def test_placement_paces_the_line_across_the_mouth():
     segs = place_dialogue([{"scene_number": 1, "line_index": 0,
                             "audio_path": "l.wav", "duration": 2.0}], plan)
     assert segs[0]["start"] == 2.17
-    assert segs[0]["tempo"] == 0.75
-    assert abs(segs[0]["duration"] - 2.0 / 0.75) < 0.01
+    assert segs[0]["tempo"] == 0.85
+    assert abs(segs[0]["duration"] - 2.0 / 0.85) < 0.01
 
 
 def test_paced_text_inserts_pauses_at_word_boundaries():
@@ -244,7 +246,8 @@ def test_pacing_retakes_targets_only_unbridgeable_gaps():
         {"duration": 5.0, "has_dialogue": True, "mouth_dur": None},
     ]}]
     rows = [
-        # 1.6s voice vs 3.0s mouth: 0.53 < clamp -> retake
+        # 1.6s voice vs 3.0s mouth -> retake; the 3.0s mouth is >1.5x the line,
+        # so it is capped to 1.6*1.5 = 2.4 and only that span is chased
         {"scene_number": 1, "line_index": 0, "duration_seconds": 1.6, "text": "a"},
         # 1.8s vs 2.0s: 0.9, clamp bridges it -> untouched
         {"scene_number": 1, "line_index": 1, "duration_seconds": 1.8, "text": "b"},
@@ -256,4 +259,4 @@ def test_pacing_retakes_targets_only_unbridgeable_gaps():
     targets = pacing_retakes(rows, plan)
     assert len(targets) == 1
     ln, mouth = targets[0]
-    assert ln["line_index"] == 0 and mouth == 3.0
+    assert ln["line_index"] == 0 and mouth == 2.4
