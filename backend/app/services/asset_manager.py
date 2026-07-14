@@ -73,10 +73,10 @@ class AssetManager:
                          intensity=intensity)
 
     def find_ambience(self, environment=None):
-        return self.find("ambience", mood=environment) if environment else self.all("ambience")
+        return self.find("ambience", tag=environment) if environment else self.all("ambience")
 
     def find_transition(self, style=None):
-        return self.find("transitions", style=style) if style else self.all("transitions")
+        return self.find("transitions", tag=style) if style else self.all("transitions")
 
     def random_match(self, asset_type: str, **criteria) -> AssetMeta | None:
         hits = self.find(asset_type, **criteria)

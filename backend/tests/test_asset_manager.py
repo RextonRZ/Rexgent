@@ -60,6 +60,33 @@ def test_local_path_points_at_the_file(library):
     assert library.local_path(a).exists()
 
 
+def test_find_ambience_by_environment_tag(tmp_path):
+    import json
+    from app.services.asset_manager import AssetManager
+    p = tmp_path / "ambience/rain/soft_rain.mp3"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"A")
+    p.with_suffix(".json").write_text(json.dumps({
+        "id": "soft_rain", "title": "Soft Rain", "filename": "soft_rain.mp3",
+        "type": "ambience", "tags": ["rain"]}))
+    m = AssetManager(root=tmp_path); m.scan()
+    assert [a.id for a in m.find_ambience(environment="rain")] == ["soft_rain"]
+    assert m.find_ambience() == m.all("ambience")
+
+
+def test_find_transition_by_style_tag(tmp_path):
+    import json
+    from app.services.asset_manager import AssetManager
+    p = tmp_path / "transitions/fade/soft_fade.mov"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"T")
+    p.with_suffix(".json").write_text(json.dumps({
+        "id": "soft_fade", "title": "Soft Fade", "filename": "soft_fade.mov",
+        "type": "transitions", "tags": ["fade"]}))
+    m = AssetManager(root=tmp_path); m.scan()
+    assert [a.id for a in m.find_transition(style="fade")] == ["soft_fade"]
+
+
 def test_resolve_url_uploads_to_shared_library_key(library):
     calls = {}
     class FakeOSS:
