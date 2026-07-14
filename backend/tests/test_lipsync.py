@@ -43,3 +43,16 @@ def test_pick_matches_by_dialogue_text_not_position():
 def test_pick_falls_back_to_position_without_dialogue():
     lines = [{"character_name": "A", "text": "hi", "audio_url": "a", "duration": 1.0}]
     assert pick_lipsync_line("s1", ["s1"], lines)["character_name"] == "A"
+
+
+def test_pick_resolves_speaker_without_audio_url():
+    # native-talk sources scene_lines straight from the SCRIPT (character + line),
+    # with NO synthesized audio_url — the speaker must still resolve by text so the
+    # right mouth moves even though nothing was ever synthesized.
+    lines = [
+        {"character_name": "A", "text": "Stop right there."},
+        {"character_name": "B", "text": "You lied to me."},
+    ]
+    got = pick_lipsync_line("s2", ["s1", "s2"], lines,
+                            shot_dialogue="You lied to me.")
+    assert got is not None and got["character_name"] == "B"

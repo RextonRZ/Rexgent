@@ -295,22 +295,19 @@ class GenerationRunner:
             # place_dialogue. The picked line names the on-camera speaker so
             # HappyHorse native-talk animates the right mouth.
             from app.services.lipsync import pick_lipsync_line
-            from app.models.line_audio import LineAudio
             # over ALL non-deferred shots of the scene, NOT `active`: on a
             # resume run `active` excludes already-approved shots, which would
             # shift every speaking index and drive mouths with the WRONG line
             speaking_ids = [s.id for s in shots
                             if (s.quality_tier or "") != "deferred"
                             and (s.dialogue or "").strip()]
-            line_rows = (db2.query(LineAudio)
-                         .filter(LineAudio.project_id == job2.project_id,
-                                 LineAudio.scene_number == scene.number)
-                         .order_by(LineAudio.line_index).all())
-            scene_lines = [{"audio_url": r.audio_url,
-                            "character_name": r.character_name,
-                            "duration": r.duration_seconds,
-                            "text": r.text}
-                           for r in line_rows if r.audio_url]
+            # Native-talk names the speaker from the SCRIPT's dialogue (character +
+            # line): the model speaks the text itself, so no synthesized audio is
+            # needed to know who talks.
+            scene_lines = [{"character_name": ln.get("character"),
+                            "text": ln.get("line")}
+                           for ln in (scene.dialogue_json or [])
+                           if (ln.get("line") or "").strip()]
             if not getattr(get_settings(), "multishot_enabled", False):
                 for i, shot in enumerate(ordered):
                     if self._cancelled:
@@ -824,7 +821,7 @@ class GenerationRunner:
                 # NAME the speaker in the prompt so the right mouth moves and the
                 # others stay closed. Only needs the speaker to be IN FRAME (the
                 # line supplies who is speaking). OFF by default -> byte-identical.
-                # Export mutes the model's own voice and overlays the real TTS.
+                # The model's own voice IS the delivered audio (no TTS overlay).
                 native_speaker = str((lipsync_line or {}).get("character_name") or "").strip()
                 native_talk = (
                     getattr(get_settings(), "happyhorse_native_talk", False)
@@ -833,7 +830,6 @@ class GenerationRunner:
                     and attempt == 0
                     and get_settings().lipsync_enabled
                     and lipsync_line
-                    and lipsync_line.get("audio_url")
                     and bool(native_speaker)
                     and native_speaker.upper() in {str(c).strip().upper() for c in in_frame})
                 tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
