@@ -217,6 +217,25 @@ async def test_eligible_wan_shot_lip_syncs_to_its_own_line(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_wan_shot_skips_driving_audio_under_2s(monkeypatch):
+    """A line shorter than wan's 2s driving_audio floor must NOT be sent as
+    driving_audio (wan rejects it and the whole continuation fails); the shot
+    still continues from the frame, just without lip-sync."""
+    runner = make_runner()
+    runner.continuity.validate = _continuity_pass()
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "get_settings",
+                        lambda: SimpleNamespace(lipsync_enabled=True))
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    short = {**LINE, "duration": 1.5}   # below the 2s floor
+    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
+                               "prevframe", lipsync_line=short)
+    assert runner.qwen.generate_video_wan.await_count == 1
+    media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
+    assert not any(m.get("type") == "driving_audio" for m in media)
+
+
+@pytest.mark.asyncio
 async def test_lipsync_dispatch_failure_falls_back_to_plain_first_frame(monkeypatch):
     runner = make_runner()
     runner.qwen.generate_video_wan = AsyncMock(

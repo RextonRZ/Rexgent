@@ -870,11 +870,16 @@ class GenerationRunner:
                     and (lipsync_line.get("duration") or 0) > 0
                     and lipsync_line["duration"] <= shot.estimated_duration_seconds
                     and speaker_matches(lipsync_line, in_frame, foreground))
+                # wan driving_audio must be 2..30s (official i2v spec); under 2s
+                # wan rejects the track and the whole continuation fails. The wan
+                # lip paths take this stricter floor; HappyHorse native talk makes
+                # its own audio and has no floor, so it keeps plain line_eligible.
+                wan_audio_ok = line_eligible and (lipsync_line.get("duration") or 0) >= 2.0
                 if settings_v2:
-                    lip = (lipsync_line if (line_eligible and frame_anchor
+                    lip = (lipsync_line if (wan_audio_ok and frame_anchor
                                             and role == "continue_hold") else None)
                 else:
-                    lip = lipsync_line if (is_wan and line_eligible and frame_anchor) else None
+                    lip = lipsync_line if (is_wan and wan_audio_ok and frame_anchor) else None
                 # Anchor lip-sync upgrade eligibility, decided BEFORE crafting so
                 # the wan take is framed with an OPEN talking mouth (lipsync=True
                 # below) — the opposite of the mouth-hiding coverage a non-lip
@@ -895,7 +900,7 @@ class GenerationRunner:
                     getattr(get_settings(), "anchor_lipsync_enabled", False)
                     and settings_v2
                     and role in ("anchor", "entrance", "continue_reangle")
-                    and line_eligible
+                    and wan_audio_ok
                     and not native_talk)
                 tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
                            index=job.completed_shots + 1, total=job.total_shots)
