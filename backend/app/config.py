@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # pick a PURPOSEFUL camera_movement per beat instead of defaulting to STATIC.
     # OFF by default — flag off leaves the storyboard prompt byte-identical to today.
     cinematic_prompt: bool = False
+    # Two-pass Director->Stager shot planning (purpose/variety/pacing/action).
+    # OFF by default: flag off leaves storyboard boarding byte-identical to today.
+    director_engine: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.
