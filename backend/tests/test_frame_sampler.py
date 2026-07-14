@@ -39,3 +39,16 @@ def test_extract_last_frame_returns_final_frame_bytes(tmp_path):
     data = extract_last_frame(clip)
     assert data and len(data) > 500
     assert data.startswith(b"\xff\xd8")  # JPEG magic
+
+
+def test_extract_first_frame_is_exposed():
+    from app.services import frame_sampler
+    assert hasattr(frame_sampler, "extract_first_frame")
+
+
+def test_extract_first_frame_and_last_frame_have_same_signature():
+    import inspect
+    from app.services import frame_sampler
+    first = inspect.signature(frame_sampler.extract_first_frame)
+    last = inspect.signature(frame_sampler.extract_last_frame)
+    assert list(first.parameters) == list(last.parameters)
