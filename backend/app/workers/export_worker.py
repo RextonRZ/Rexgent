@@ -157,8 +157,8 @@ def _ensure_voice_lines(db, project_id: str) -> None:
 def _retime_rushed_lines(db, project_id: str, line_rows: list, scene_plan: list,
                          workdir: str) -> None:
     """Pacing retakes: a designed voice can speak a short line far faster than
-    the rendered mouth moves, and atempo may only slow it ~25% before it
-    slurs. Any line still shorter than its mouth at the clamp is RE-PERFORMED
+    the rendered mouth moves, and atempo may only slow it ~15% before it
+    drags. Any line still shorter than its mouth at the clamp is RE-PERFORMED
     with written pauses (ellipses at phrase boundaries), escalating one pause
     at a time until the take fits — a slower performance instead of a
     stretched one. Captions keep the original text; the retimed audio and

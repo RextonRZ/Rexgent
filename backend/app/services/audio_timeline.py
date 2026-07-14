@@ -49,8 +49,24 @@ def dialogue_shot_offsets(scene_plan: list[dict]) -> dict[int, list[float]]:
 
 
 # the voice may stretch or compress to match the on-screen mouth, but only
-# within what still sounds human: beyond these bounds a partial match wins
-TEMPO_MIN, TEMPO_MAX = 0.75, 1.3
+# within what still sounds human. Slowing a line DRAGS it, so the floor is
+# tight (~15% max): past that the quiet native bed covers the trailing mouth
+# movement instead of stretching the words into a sluggish read.
+TEMPO_MIN, TEMPO_MAX = 0.85, 1.3
+# A rendered mouth can babble far longer than the real line (hallucinated
+# speech past the words). Never chase a mouth more than this multiple of the
+# line's natural length: beyond it the bed covers the gap, so the voice is
+# neither dragged (atempo) nor over-paused chasing lips that aren't speaking.
+MOUTH_FILL_CAP = 1.5
+
+
+def _effective_mouth(line_duration: float, mouth_duration) -> float | None:
+    """The mouth span we actually try to fill: the measured span, capped so a
+    hallucinated over-long mouth can't drag or over-pace the voice. None when
+    the mouth is unmeasured or too short to trust."""
+    if not mouth_duration or mouth_duration <= 0.5 or line_duration <= 0:
+        return None
+    return round(min(float(mouth_duration), line_duration * MOUTH_FILL_CAP), 3)
 
 
 def dialogue_shot_mouths(scene_plan: list[dict]) -> dict[int, list]:
@@ -70,7 +86,7 @@ def paced_text(text: str, level: int) -> str:
     """Rewrite a line with `level` written pauses (ellipses) at even word
     boundaries: 'I can't do this anymore.' -> 'I... can't do this... anymore.'
     TTS honors the punctuation, so the take comes back naturally longer —
-    a slower PERFORMANCE, where atempo past ~25% only makes a slurred one.
+    a slower PERFORMANCE, where atempo past ~15% only makes a dragged one.
     Captions keep the original text; only the audio is re-performed."""
     words = [w for w in (text or "").split() if w]
     if level <= 0 or len(words) < 2:
@@ -103,20 +119,25 @@ def pacing_retakes(line_rows: list[dict], scene_plan: list[dict]) -> list[tuple]
         for i, ln in enumerate(lines):
             mouth = scene_mouths[i] if i < len(scene_mouths) else None
             dur = float(ln.get("duration") or ln.get("duration_seconds") or 0.0)
-            if not mouth or float(mouth) <= 0.5 or dur <= 0:
+            m = _effective_mouth(dur, mouth)
+            if m is None or dur <= 0:
                 continue
-            if dur / float(mouth) < TEMPO_MIN - 0.02:
-                out.append((ln, float(mouth)))
+            # chase the CAPPED mouth: a hallucinated over-long mouth is bridged
+            # only up to the cap, the rest is left to the bed
+            if dur / m < TEMPO_MIN - 0.02:
+                out.append((ln, m))
     return out
 
 
 def line_tempo(line_duration: float, mouth_duration) -> float | None:
     """atempo factor that plays the line across the mouth's real speaking
-    span. tempo < 1 stretches, > 1 compresses; clamped to stay natural, and
-    tiny mismatches are left alone."""
-    if not mouth_duration or mouth_duration <= 0.5 or line_duration <= 0:
+    span. tempo < 1 stretches, > 1 compresses; clamped to stay natural (never
+    dragging a line more than ~15%), and tiny mismatches are left alone. The
+    mouth is capped first so a hallucinated over-long mouth can't drag it."""
+    mouth = _effective_mouth(line_duration, mouth_duration)
+    if mouth is None:
         return None
-    tempo = max(TEMPO_MIN, min(TEMPO_MAX, line_duration / float(mouth_duration)))
+    tempo = max(TEMPO_MIN, min(TEMPO_MAX, line_duration / mouth))
     if abs(tempo - 1.0) < 0.08:
         return None
     return round(tempo, 3)
