@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
-  Mic,
   Pencil,
   RefreshCw,
   Shirt,
@@ -37,8 +36,8 @@ const WOWS = [
   },
   {
     k: "05",
-    title: "Clone your voice",
-    body: "Read one short passage into your mic and your characters speak with your voice, or pick from a catalog of studio presets.",
+    title: "Characters that speak",
+    body: "Every character speaks their lines with the mouth moving in time, generated with the shot so the voice lands on the picture instead of being dubbed on afterward.",
   },
   {
     k: "06",
@@ -165,9 +164,8 @@ function FaceScanStrip({ reduced }: { reduced: boolean }) {
 const BUDGET_TARGET = 2.77;
 const BUDGET_CAP = 40;
 const BUDGET_ROWS = [
-  { label: "Video", share: 0.76 },
-  { label: "Image", share: 0.16 },
-  { label: "TTS", share: 0.08 },
+  { label: "Video", share: 0.82 },
+  { label: "Image", share: 0.18 },
 ];
 
 /** Mini live-cost meter: counts up once when it scrolls into view. */
@@ -292,14 +290,18 @@ function WardrobeRow() {
   );
 }
 
-/** Mic + a small equalizer that breathes. */
-function VoiceWave({ reduced }: { reduced: boolean }) {
+/** A character frame beside a breathing equalizer: the voice synced to the shot. */
+function SpeechWave({ reduced }: { reduced: boolean }) {
   const heights = [6, 10, 15, 9, 17, 7, 12, 18, 10, 14, 6, 11];
   return (
     <div className="mt-5 flex items-center gap-3">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-400">
-        <Mic className="size-3.5" />
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/poster5.jpg"
+        alt=""
+        loading="lazy"
+        className="h-8 w-8 shrink-0 rounded-md border border-white/15 object-cover"
+      />
       <div className="flex h-5 items-center gap-[3px]">
         {heights.map((h, i) => (
           <span
@@ -315,6 +317,7 @@ function VoiceWave({ reduced }: { reduced: boolean }) {
           />
         ))}
       </div>
+      <span className="ml-1 text-[10px] text-muted-foreground">in sync</span>
     </div>
   );
 }
@@ -364,7 +367,7 @@ export function FeatureBento() {
 
         <GlowCard className="md:col-span-3">
           <CardText {...WOWS[4]} />
-          <VoiceWave reduced={reduced} />
+          <SpeechWave reduced={reduced} />
         </GlowCard>
 
         <GlowCard className="md:col-span-3">
