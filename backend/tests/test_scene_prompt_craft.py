@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
 
@@ -440,3 +441,75 @@ async def test_native_talk_names_the_speaker_in_multi_person_shot():
     assert "KIM SAN-HA is the one speaking" in p     # the speaker is named
     assert line in p                                  # the exact line survives
     assert "keeps a closed, still mouth" in p         # others held silent
+
+
+@pytest.mark.asyncio
+async def test_eyeline_appended_from_blocking():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={"prompt": "Two people in a room.", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "estimated_duration_seconds": 5},
+        character_visuals={"KIM": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse",
+        blocking={"subjects": [{"character": "KIM", "eyeline": "at Yoon"},
+                               {"character": "YOON", "eyeline": "off-camera left"}]})
+    assert "looks at Yoon" in result["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_final_prompt_normalizes_typographic_chars():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "black heels — she turns, the � light fading",
+        "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(shot={"shot_type": "MS", "estimated_duration_seconds": 5},
+                                 character_visuals={}, target_model="happyhorse")
+    assert "�" not in result["prompt"]   # replacement char gone
+    assert "—" not in result["prompt"]    # em dash normalized
+
+
+@pytest.mark.asyncio
+async def test_environment_appended_when_missing():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={"prompt": "A tense close-up.", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "estimated_duration_seconds": 5},
+        character_visuals={"KIM": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse",
+        scene_setting={"location": "a dark street", "set_items": ["a parked sedan with bright headlights", "a broken streetlamp"]})
+    assert "parked sedan" in result["prompt"] or "dark street" in result["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_cinematic_flag_injects_camera_motion_sound(monkeypatch):
+    import app.mcp_tools.scene_prompt_craft as spc
+    monkeypatch.setattr(spc, "get_settings", lambda: SimpleNamespace(cinematic_prompt=True))
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={"prompt": "p", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    await crafter.craft(shot={"shot_type": "MS", "camera_movement": "DOLLY_IN", "estimated_duration_seconds": 5},
+                        character_visuals={}, target_model="happyhorse")
+    content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "camera move" in content.lower()
+    assert "sound" in content.lower()
+
+
+@pytest.mark.asyncio
+async def test_cinematic_flag_off_no_injection(monkeypatch):
+    import app.mcp_tools.scene_prompt_craft as spc
+    monkeypatch.setattr(spc, "get_settings", lambda: SimpleNamespace(cinematic_prompt=False))
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={"prompt": "p", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    await crafter.craft(shot={"shot_type": "MS", "estimated_duration_seconds": 5},
+                        character_visuals={}, target_model="happyhorse")
+    content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "CINEMATIC" not in content

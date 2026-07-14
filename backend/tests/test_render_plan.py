@@ -116,3 +116,14 @@ def test_native_talk_badges_a_multi_person_happyhorse_shot():
     assert on[1]["model"] == "happyhorse"
     assert off[1]["lipsync"] is False   # 2 faces, no native talk -> no lip badge
     assert on[1]["lipsync"] is True     # native talk -> talks even with 2 faces
+
+
+def test_continuation_routes_to_happyhorse_when_flagged():
+    shots = [_shot(1, ["A"]), _shot(2, ["A"])]   # shot 2 = continue_hold (same cast, same framing)
+    off = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                             anchor_ref_model="happyhorse", anchor_lipsync=False, lipsync_enabled=True)
+    on = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                            anchor_ref_model="happyhorse", anchor_lipsync=False, lipsync_enabled=True,
+                            route_continuation_to_happyhorse=True)
+    assert off[1]["model"] == "wan"
+    assert on[1]["model"] == "happyhorse"

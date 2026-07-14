@@ -326,7 +326,8 @@ class GenerationRunner:
                          .order_by(LineAudio.line_index).all())
             scene_lines = [{"audio_url": r.audio_url,
                             "character_name": r.character_name,
-                            "duration": r.duration_seconds}
+                            "duration": r.duration_seconds,
+                            "text": r.text}
                            for r in line_rows if r.audio_url]
             if not getattr(get_settings(), "multishot_enabled", False):
                 for i, shot in enumerate(ordered):
@@ -368,7 +369,7 @@ class GenerationRunner:
                         scene_anchor_url=scene_anchor, scene_setting=scene_setting,
                         suppress_location=state_changed,
                         prev_action=prev_action, next_action=next_action,
-                        lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines),
+                        lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines, shot_dialogue=shot.dialogue),
                         environment=environment, prev_in_frame=prev_in_frame,
                         prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
                         prev_clip_url=prev_clip)
@@ -427,7 +428,7 @@ class GenerationRunner:
                         scene_anchor_url=scene_anchor, scene_setting=scene_setting,
                         suppress_location=state_changed,
                         prev_action=prev_action, next_action=next_action,
-                        lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines),
+                        lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines, shot_dialogue=shot.dialogue),
                         environment=environment, prev_in_frame=prev_in_frame,
                         prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
                         prev_clip_url=prev_clip)
@@ -573,6 +574,12 @@ class GenerationRunner:
             return ("happyhorse", await _happyhorse())
 
         # continue_hold
+        if getattr(get_settings(), "route_continuation_to_happyhorse", True):
+            # Wan i2v continuation hard-fails when the previous clip is >= the
+            # requested duration and can't lip-sync 2-face shots; HappyHorse r2v
+            # continues via the reference stack (which already carries the prev
+            # frame) and does multi-person native-talk. Flag OFF -> old wan path.
+            return ("happyhorse", await _happyhorse())
         media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor,
                            audio_url=(lip or {}).get("audio_url"), talking=bool(lip))
         if media:

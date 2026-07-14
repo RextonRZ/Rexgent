@@ -8,10 +8,27 @@ fold onto the LAST speaking shot — which therefore never lip-syncs.
 """
 
 
-def pick_lipsync_line(shot_id, speaking_shot_ids: list, lines: list[dict]) -> dict | None:
-    """The single line this shot speaks, or None when it has none / has many."""
+def _norm_line(s):
+    import re
+    return re.sub(r"[^a-z0-9 ]", "", (s or "").lower()).strip()
+
+
+def pick_lipsync_line(shot_id, speaking_shot_ids: list, lines: list[dict],
+                      shot_dialogue: str | None = None) -> dict | None:
+    """The single line this shot speaks. Prefer a CONTENT match on the shot's own
+    dialogue (the storyboard can reorder lines across shots); fall back to the
+    positional convention when no dialogue/text is available."""
     if shot_id not in speaking_shot_ids:
         return None
+    if shot_dialogue:
+        want = _norm_line(shot_dialogue)
+        for ln in lines:
+            if want and _norm_line(ln.get("text")) == want:
+                return ln
+        for ln in lines:  # partial: one contains the other (truncation-safe)
+            t = _norm_line(ln.get("text"))
+            if t and want and (t in want or want in t):
+                return ln
     idx = speaking_shot_ids.index(shot_id)
     if idx >= len(lines):
         return None

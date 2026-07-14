@@ -195,6 +195,13 @@ class ScenePromptCraft:
             f"Duration: {shot.get('estimated_duration_seconds', 5)}s\n"
             f"Style bible: {json.dumps(style_bible or {})}"
         )
+        if getattr(get_settings(), "cinematic_prompt", False):
+            user_content += (
+                "\n\nCINEMATIC: Express the given camera_movement as ONE subtle, continuous "
+                "camera move with intent and speed (e.g. a slow push-in tightening on the face). "
+                "Give the subject CONCRETE motion with amplitude and speed. Name the shot's "
+                "diegetic SOUND tied to the action and place (footsteps on wet gravel, a car door "
+                "thunking shut, rain on glass, distant traffic). Do NOT invent music or extra voices.\n")
         messages = [
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user_content},
@@ -246,6 +253,24 @@ class ScenePromptCraft:
                         result["prompt"].rstrip()
                         + f' The character clearly speaks these exact words aloud: "{spoken}"'
                     )
+        # Eyeline: the blocking's eyelines are authoritative — append them so
+        # faces look where the shot staged them instead of at the camera.
+        subs = (blocking or {}).get("subjects") if isinstance(blocking, dict) else None
+        eye = [f"{s.get('character')} looks {s.get('eyeline')}"
+               for s in (subs or []) if isinstance(s, dict) and s.get('character') and s.get('eyeline')]
+        if eye:
+            result["prompt"] = result["prompt"].rstrip() + " Eyelines: " + "; ".join(eye) + "."
+        # Environment: never render a blank background — if the crafted prompt
+        # names none of the scene's setting, append a concise setting clause
+        # (matters most when the location plate was trimmed from the ref stack).
+        if scene_setting:
+            items = [str(i) for i in (scene_setting.get("set_items") or [])][:4]
+            loc = str(scene_setting.get("location") or "").strip()
+            hay = result["prompt"].lower()
+            named = (loc and loc.lower() in hay) or any(it.lower()[:15] in hay for it in items)
+            if not named and (loc or items):
+                clause = ", ".join([p for p in [loc] + items if p])
+                result["prompt"] = result["prompt"].rstrip() + f" Setting: {clause}."
         if image_legend:
             # prepend AFTER sanitization so the [Image N] tokens survive the text
             # stripper; leads the prompt so the model reads the mapping first
@@ -269,4 +294,18 @@ class ScenePromptCraft:
             sup = environment["suppressed"]
             if sup.lower() not in (result.get("negative_prompt") or "").lower():
                 result["negative_prompt"] += ", " + sup
+        # Final gate (rule A5): the crafted prompt still carries typographic
+        # gremlins — em/en dashes, smart quotes, and the replacement char (mojibake)
+        # — which corrupt adjacent words and confuse the video model. Fold them to
+        # plain ASCII as the VERY LAST transformation so LLM text AND every appended
+        # clause above are cleaned uniformly, just before dispatch.
+        def _normtype(s: str) -> str:
+            repl = {"—": " - ", "–": " - ", "’": "'", "‘": "'",
+                    "“": '"', "”": '"', "�": ""}
+            for k, v in repl.items():
+                s = s.replace(k, v)
+            import re
+            return re.sub(r"\s{2,}", " ", s).strip()
+        result["prompt"] = _normtype(result.get("prompt", ""))
+        result["negative_prompt"] = _normtype(result.get("negative_prompt", ""))
         return result
