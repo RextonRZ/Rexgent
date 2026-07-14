@@ -41,6 +41,21 @@ def stable_seed(project_id: str, shot_id) -> int:
     return int(digest[:8], 16) % 2_147_483_647
 
 
+def _is_catastrophic(guard: dict, in_frame: list) -> bool:
+    """A render that failed CATASTROPHICALLY — a black/empty frame, or a
+    face-locked character the model dropped entirely — NOT a soft continuity
+    miss. These are worth a fresh-seed re-roll regardless of the repair flag,
+    so a black clip never ships when a re-render could save it."""
+    if (guard.get("continuity_score") or 0) < 20:            # near-zero: garbage frame
+        return True
+    bg = guard.get("background_score")
+    if bg is not None and bg < 0.15:                         # black / empty background
+        return True
+    if in_frame and guard.get("face_score") is None:         # a face was expected, none found
+        return True
+    return False
+
+
 class GenerationRunner:
     _max_concurrency = 5
 
@@ -959,6 +974,26 @@ class GenerationRunner:
                     status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
                     logger.info("repair for shot %s: best continuity %s (%s)",
                                 shot.id, guard["continuity_score"], status)
+                # Catastrophic render (black / empty / faceless) — always worth one
+                # fresh-seed re-roll, independent of repair_enabled, so a dead frame
+                # like a black Shot never ships flagged when a re-render could save
+                # it. Bill the failed render (we paid for it), then re-loop with a
+                # new seed. On the last attempt it falls through and ships flagged.
+                if (attempt < MAX_RETRIES and not guard["overall_pass"]
+                        and _is_catastrophic(guard, in_frame)):
+                    bad_amt = record_video(self.db, str(job.project_id),
+                                           shot.estimated_duration_seconds, used_tier,
+                                           ref_id=str(shot.id))
+                    job.actual_cost += bad_amt
+                    spent_usd += bad_amt
+                    logger.warning("shot %s render catastrophic (cont=%s face=%s bg=%s) "
+                                   "— re-rolling with a fresh seed",
+                                   shot.id, guard.get("continuity_score"),
+                                   guard.get("face_score"), guard.get("background_score"))
+                    tool_event(pid, "generate", "self_correct", "started", agent="Renderer",
+                               index=attempt + 1, total=MAX_RETRIES, error="catastrophic render")
+                    seed = seed + 7919   # a fresh seed so the re-render actually differs
+                    continue
                 # No TTS overlay now: the clip plays its own NATIVE audio at full
                 # volume, so no bed/mute/onset policy is computed or stored.
                 tool_event(pid, "generate", "write_clip_db", "started", agent="Renderer")
