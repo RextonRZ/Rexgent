@@ -531,7 +531,8 @@ class GenerationRunner:
             return None
 
     async def _dispatch_by_role(self, *, role, prompt, duration, seed, ratio,
-                                negative, ref_stack, frame_anchor, prev_clip_url):
+                                negative, ref_stack, frame_anchor, prev_clip_url,
+                                speaks=False, has_newcomers=False, has_faces=False):
         """Route a shot to a model by its identity role. Never-blocking: every
         path degrades to happyhorse r2v so a model surprise can't fail the shot.
         Returns (used_tier, task_id)."""
@@ -543,6 +544,22 @@ class GenerationRunner:
                 mode="r2v" if ref_stack else "t2v",
                 reference_media=ref_stack or None,
                 seed=seed, ratio=ratio, negative_prompt=negative)
+
+        if getattr(get_settings(), "wan_primary", False):
+            # Wan-primary: HappyHorse = talking shots + shots that must LOCK a
+            # new/establishing face; Wan = every silent visual shot (continuation
+            # of established faces, or scenery). Wan errors chain to happyhorse.
+            if speaks or has_newcomers or (role == "anchor" and has_faces):
+                return ("happyhorse", await _happyhorse())
+            media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor)
+            try:
+                task = await self.qwen.generate_video_wan(
+                    prompt=prompt, duration=duration, reference_media=media,
+                    seed=seed, ratio=ratio, negative_prompt=negative)
+                return ("wan", task)
+            except Exception as e:  # noqa: BLE001 — chain to happyhorse, never block
+                logger.warning("wan_primary wan dispatch failed (%s) — happyhorse", e)
+                return ("happyhorse", await _happyhorse())
 
         if role in ("anchor", "entrance", "continue_reangle"):
             # Identity shots go to the reference model. happyhorse r2v is the SAFE
@@ -877,7 +894,10 @@ class GenerationRunner:
                         role=role, prompt=prompt, duration=shot.estimated_duration_seconds,
                         seed=seed, ratio=ratio, negative=negative,
                         ref_stack=ref_stack or None, frame_anchor=frame_anchor,
-                        prev_clip_url=prev_clip_url)
+                        prev_clip_url=prev_clip_url,
+                        speaks=bool((shot.dialogue or "").strip()),
+                        has_newcomers=bool(newcomers),
+                        has_faces=bool(in_frame))
                 elif is_wan:
                     # wan2.7-i2v does NOT take identity references — its media
                     # schema is first_frame / last_frame / first_clip only. wan's

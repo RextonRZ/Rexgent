@@ -43,7 +43,7 @@ def _no_ws(monkeypatch):
     # can't flip a legacy-path test. Tests that need a flag on monkeypatch it True.
     for _flag in ("identity_routing_v2", "repair_enabled", "multishot_enabled",
                   "happyhorse_native_talk",
-                  "wan_on_same_cast", "image_ref_labels",
+                  "wan_on_same_cast", "image_ref_labels", "wan_primary",
                   "route_continuation_to_happyhorse", "cinematic_prompt"):
         monkeypatch.setattr(gr.get_settings(), _flag, False, raising=False)
 
@@ -810,4 +810,85 @@ async def test_continue_hold_routes_to_happyhorse_when_flagged(monkeypatch):
                                "prevframe", prev_shot_type="CU")
     assert runner.qwen.generate_video_happyhorse.await_count == 1
     assert runner.qwen.generate_video_wan.await_count == 0
+
+
+# ── wan_primary routing: HappyHorse for talk/new-face, Wan for silent visuals ──
+def _hh_wan(runner):
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="hh_task")
+    runner.qwen.generate_video_wan = AsyncMock(return_value="wan_task")
+    runner.qwen.generate_video_wan_r2v = AsyncMock(return_value="wanr2v_task")
+
+
+async def _dispatch(runner, **over):
+    kw = dict(role="continue_hold", speaks=False, has_newcomers=False, has_faces=True,
+              prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
+              ref_stack=[{"type": "reference_image", "url": "u"}],
+              frame_anchor="f", prev_clip_url="c")
+    kw.update(over)
+    return await runner._dispatch_by_role(**kw)
+
+
+@pytest.mark.asyncio
+async def test_wan_primary_speaking_shot_goes_happyhorse(monkeypatch):
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
+    r = _make_dispatch_runner(); _hh_wan(r)
+    tier, _ = await _dispatch(r, role="continue_hold", speaks=True)
+    assert tier == "happyhorse"
+    r.qwen.generate_video_happyhorse.assert_awaited()
+    r.qwen.generate_video_wan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_wan_primary_newcomer_goes_happyhorse(monkeypatch):
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
+    r = _make_dispatch_runner(); _hh_wan(r)
+    tier, _ = await _dispatch(r, role="entrance", speaks=False, has_newcomers=True)
+    assert tier == "happyhorse"
+
+
+@pytest.mark.asyncio
+async def test_wan_primary_anchor_with_faces_goes_happyhorse(monkeypatch):
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
+    r = _make_dispatch_runner(); _hh_wan(r)
+    tier, _ = await _dispatch(r, role="anchor", speaks=False, has_faces=True)
+    assert tier == "happyhorse"
+
+
+@pytest.mark.asyncio
+async def test_wan_primary_silent_continuation_goes_wan(monkeypatch):
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
+    r = _make_dispatch_runner(); _hh_wan(r)
+    tier, _ = await _dispatch(r, role="continue_hold", speaks=False, has_faces=True)
+    assert tier == "wan"
+    r.qwen.generate_video_wan.assert_awaited()
+    r.qwen.generate_video_happyhorse.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_wan_primary_scenery_goes_wan_t2v(monkeypatch):
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
+    r = _make_dispatch_runner(); _hh_wan(r)
+    tier, _ = await _dispatch(r, role="anchor", speaks=False, has_faces=False,
+                              frame_anchor=None, prev_clip_url=None, ref_stack=None)
+    assert tier == "wan"
+    assert r.qwen.generate_video_wan.await_args.kwargs["reference_media"] is None
+
+
+@pytest.mark.asyncio
+async def test_wan_primary_wan_failure_falls_back_to_happyhorse(monkeypatch):
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
+    r = _make_dispatch_runner(); _hh_wan(r)
+    r.qwen.generate_video_wan = AsyncMock(side_effect=RuntimeError("wan down"))
+    tier, _ = await _dispatch(r, role="continue_hold", speaks=False)
+    assert tier == "happyhorse"
+
+
+@pytest.mark.asyncio
+async def test_wan_primary_off_uses_existing_routing(monkeypatch):
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", False, raising=False)
+    monkeypatch.setattr(gr.get_settings(), "route_continuation_to_happyhorse", True, raising=False)
+    r = _make_dispatch_runner(); _hh_wan(r)
+    tier, _ = await _dispatch(r, role="continue_hold", speaks=True)
+    assert tier == "happyhorse"
+    r.qwen.generate_video_wan.assert_not_awaited()
 

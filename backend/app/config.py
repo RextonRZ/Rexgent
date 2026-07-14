@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     # via the reference stack (which already carries the prev frame) and does
     # multi-person native talk. ON by default; flip OFF for the old wan i2v path.
     route_continuation_to_happyhorse: bool = True
+    # Wan-primary routing: HappyHorse renders talking shots + new/changed-face
+    # shots; Wan renders every silent visual shot (continuation of established
+    # faces, or scenery). Builds on identity_routing_v2. OFF -> today's routing.
+    wan_primary: bool = False
     # Storyboard camera intent: when true, the storyboard prompt asks the model to
     # pick a PURPOSEFUL camera_movement per beat instead of defaulting to STATIC.
     # OFF by default — flag off leaves the storyboard prompt byte-identical to today.
