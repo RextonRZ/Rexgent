@@ -23,6 +23,12 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
+def native_audio_policy():
+    """No TTS overlay now, so every clip keeps its own voice + ambience at full
+    volume — never muted."""
+    return False, None
+
+
 def _stage(project_id: str, status: str, label: str) -> None:
     """Export progress on the shared stage:progress channel — the same pipe the
     agent chat, crew modal and pipeline nav already listen to. Never fatal."""
@@ -319,34 +325,17 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         # the ACTUAL cut, chunk by chunk, with REAL durations — dialogue and
         # captions are placed on this, not on the storyboard's estimates
         cut_entries: list = []
-        kept_beds = 0
         for i, seg in enumerate(resolved):
             local = os.path.join(workdir, f"seg_{i:03d}.mp4")
             meta = shot_meta.get(str(seg["clip"].shot_id)) if seg["clip"] else None
-            has_dialogue = bool(meta and meta["dialogue"])
             try:
                 resp = httpx.get(seg["url"], timeout=180.0)
                 resp.raise_for_status()
                 with open(local, "wb") as fh:
                     fh.write(resp.content)
-                # the model's own music/ambience/SFX survive whenever the
-                # track carries no real words — the clip's STORED verdict wins
-                # (the preview showed the same one); compute only when missing
-                policy = getattr(seg["clip"], "audio_json", None) if seg["clip"] else None
-                if isinstance(policy, dict) and "mute" in policy:
-                    mute, vol = bool(policy.get("mute")), policy.get("volume")
-                else:
-                    from app.services.audio_policy import bed_decision
-                    mute, vol = bed_decision(local, has_dialogue)
-                    if seg["clip"] is not None:
-                        try:
-                            seg["clip"].audio_json = {"mute": mute, "volume": vol}
-                            db.commit()
-                        except Exception:  # noqa: BLE001
-                            db.rollback()
-                if vol is not None:
-                    kept_beds += 1
-                    logger.info("chunk %d: original soundtrack kept as bed", i)
+                # No TTS overlay now, so every clip keeps its own native voice +
+                # ambience at full volume — never muted, never treated as a bed.
+                mute, vol = native_audio_policy()
                 # what this chunk really contributes to the final timeline
                 probed = VideoStitcher._duration(local)
                 tin = float(seg["in"] or 0.0)
@@ -358,16 +347,9 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     eff = max(0.0, probed - tin)
                 else:  # probe failed — fall back to the storyboard estimate
                     eff = duration_by_clip.get(str(seg["clip"].id), 5) if seg["clip"] else 5
+                # native audio plays in the stitched cut, so there is no TTS line
+                # to place — onset/mouth timing is no longer computed
                 onset, mouth = None, None
-                if meta and meta["dialogue"] and isinstance(policy, dict):
-                    raw_onset = policy.get("onset")
-                    if raw_onset is not None:
-                        onset = min(max(0.0, float(raw_onset) - tin),
-                                    max(0.0, eff - 1.0))
-                        raw_mouth = policy.get("mouth_dur")
-                        if raw_mouth:
-                            # the mouth can't talk past the chunk's end
-                            mouth = min(float(raw_mouth), max(0.0, eff - onset))
                 cut_entries.append({
                     "scene_number": meta["scene"] if meta else None,
                     "duration": eff,
@@ -393,9 +375,6 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         project = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
         ratio = (getattr(project, "video_ratio", None) or "9:16")
         stitcher = VideoStitcher()
-        if kept_beds:
-            _stage(project_id, "update",
-                   f"Keeping {kept_beds} original soundtrack(s) as the ambient bed")
 
         # ── User-chosen music: downloaded on its OWN so a dialogue-prep hiccup
         # can never silently drop the track the user set ──
@@ -520,22 +499,24 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: subtitle burn skipped{label}: {e}")
 
-            # ── Mix: dialogue track + optional BGM bed ducking under speech ──
+            # ── Mix: the stitched cut ALREADY carries native audio at full
+            # volume, so a mix is only needed to lay the user's BGM UNDER it.
+            # No BGM -> the stitched cut is the final audio, nothing to mix. ──
             try:
                 from app.websocket.emitter import emit
-                if dialogue_segments or bgm_local:
+                if bgm_local:
                     emit("audio.mix.started", {}, project_id)
                     mixed = os.path.join(workdir, f"final_audio{suffix}.mp4")
                     with tool_run(project_id, "export", "mix_audio", "Audio Mixer") as t:
                         stitcher.mix_tracks(
-                            cut_local, dialogue_segments, bgm_local, mixed,
-                            bgm_volume=float(audio.get("volume", 1.0)) if audio else 1.0,
-                            duck=bool(audio.get("duck", True)) if audio else True,
+                            cut_local, [], bgm_local, mixed,
+                            bgm_volume=float(audio.get("volume", 0.35)) if audio else 0.35,
+                            duck=False,
                             bgm_fade_in=float(audio.get("fade_in", 0.0)) if audio else 0.0,
                             bgm_fade_out=float(audio.get("fade_out", 0.0)) if audio else 0.0,
+                            ambient_volume=1.0,
                         )
-                        t["artifact"] = (f"{len(dialogue_segments)} voices"
-                                         + (" + music" if bgm_local else ""))
+                        t["artifact"] = "native audio + bgm"
                     cut_local = mixed
                     emit("audio.mix.completed", {}, project_id)
             except Exception as e:  # noqa: BLE001

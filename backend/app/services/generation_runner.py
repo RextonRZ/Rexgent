@@ -1071,29 +1071,8 @@ class GenerationRunner:
                     status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
                     logger.info("repair for shot %s: best continuity %s (%s)",
                                 shot.id, guard["continuity_score"], status)
-                # the clip's audio policy, decided ONCE (VAD + Qwen ASR) and
-                # stored — the editor preview and the export worker both read
-                # this verdict, so what you hear is what ships
-                audio_policy = None
-                try:
-                    from app.services.audio_policy import bed_decision, speech_span
-                    has_dlg = bool((shot.dialogue or "").strip())
-                    a_mute, a_vol = bed_decision(clip_url, has_dlg)
-                    from app.services.video_stitcher import VideoStitcher
-                    real_dur = VideoStitcher._duration(clip_url)
-                    span = speech_span(clip_url) if has_dlg else None
-                    audio_policy = {"mute": a_mute, "volume": a_vol,
-                                    # when the on-screen mouth starts AND how
-                                    # long it talks: the TTS line is placed at
-                                    # the onset and paced across the span
-                                    "onset": span[0] if span else None,
-                                    "mouth_dur": span[1] if span else None,
-                                    # the clip's REAL length: models render a
-                                    # "10s" request ~7.6s, and every consumer
-                                    # (timeline, captions, export) must agree
-                                    "duration": real_dur if real_dur > 0 else None}
-                except Exception as ae:  # noqa: BLE001 — policy is best-effort
-                    logger.warning(f"audio policy skipped for shot {shot.id}: {ae}")
+                # No TTS overlay now: the clip plays its own NATIVE audio at full
+                # volume, so no bed/mute/onset policy is computed or stored.
                 tool_event(pid, "generate", "write_clip_db", "started", agent="Renderer")
                 clip = GeneratedClip(
                     job_id=job.id, shot_id=shot.id,
@@ -1104,7 +1083,7 @@ class GenerationRunner:
                     face_score=guard.get("face_score"), outfit_score=guard.get("outfit_score"),
                     background_score=guard.get("background_score"),
                     references_json=ref_provenance, seed=seed,
-                    status=status, retries=attempt, audio_json=audio_policy)
+                    status=status, retries=attempt)
                 self.db.add(clip)
                 job.completed_shots += 1
                 self.db.commit()
