@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { getSocket } from "@/lib/websocket";
+import { useLatestJobLive } from "./useGeneration";
 
 /** ── ONE live-run store for the whole project session ────────────────────
  * The Showrunner chat's typing bubbles, the dock's crew micro-status and the
@@ -207,6 +208,25 @@ function clearRunning(rawStage: string) {
     const next = { ...s.running };
     delete next[rawStage];
     return { running: next };
+  });
+}
+
+/** Self-heal: drop every running spinner whose pipeline stage the backend now
+ * reports as FINISHED. A spinner normally clears on a live "done" websocket
+ * event, which a dropped socket message or a backgrounded tab can miss — this
+ * reconciles against real status so a finished stage can never spin forever. */
+export function clearFinishedStage(stage: StageKey) {
+  useLiveRunStore.setState((s) => {
+    let changed = false;
+    const next: Record<string, RunningStage> = {};
+    for (const [rawKey, r] of Object.entries(s.running)) {
+      if (RAW_TO_STAGE[rawKey] === stage) {
+        changed = true;
+        continue;
+      }
+      next[rawKey] = r;
+    }
+    return changed ? { running: next } : s;
   });
 }
 
@@ -575,6 +595,16 @@ export function useRunningStages(projectId: string): RunningStage[] {
   useEffect(() => {
     ensureLiveRun(projectId);
   }, [projectId]);
+  // Self-heal the Generate spinner against the authoritative job status: the
+  // live job query polls while RUNNING/PENDING and lands on the terminal status
+  // (COMPLETE / BUDGET_EXHAUSTED / BLOCKED), clearing any generate spinner that a
+  // missed job:completed event would otherwise strand forever.
+  const jobStatus = useLatestJobLive(projectId).data?.status;
+  useEffect(() => {
+    if (jobStatus && jobStatus !== "RUNNING" && jobStatus !== "PENDING") {
+      clearFinishedStage("generate");
+    }
+  }, [jobStatus]);
   const running = useLiveRunStore((s) => s.running);
   return useMemo(() => Object.values(running), [running]);
 }

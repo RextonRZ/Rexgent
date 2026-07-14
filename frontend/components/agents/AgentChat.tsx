@@ -98,7 +98,7 @@ function TypingBubble({
 }) {
   const secs = Math.max(0, Math.floor((now - since) / 1000));
   return (
-    <div>
+    <div className="animate-in fade-in slide-in-from-bottom-1 duration-200">
       <div className="flex items-center gap-1.5">
         <span className={cn("h-1.5 w-1.5 rounded-full animate-pulse", AGENT_DOT[agent] ?? "bg-primary")} />
         <span className="text-[10px] font-medium text-foreground">{agent}</span>
