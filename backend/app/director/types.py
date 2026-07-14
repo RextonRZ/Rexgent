@@ -13,6 +13,7 @@ class PlannedShot:
     action_beat: str               # the physical/visual beat shown; never just "speaks"
     blocking_delta: str | None = None
     transition_in: str | None = None
+    light_quality: str = "soft"    # scene-wide light quality from the look
 
 
 @dataclass
@@ -26,5 +27,6 @@ class LookProfile:
     colour_mood: str
     lens_bias: str
     camera_pace: str        # "slow" | "measured" | "kinetic"
+    light_quality: str = "soft"    # "soft"|"hard"|"side"|"rim"|"backlight"|"top"|"practical"
     bgm_hint: str | None = None
     ambience_hint: str | None = None

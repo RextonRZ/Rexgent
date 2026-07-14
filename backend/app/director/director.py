@@ -120,4 +120,7 @@ async def plan_scene(scene: dict, cast: list[dict], look: LookProfile,
         shots = _parse_plan(raw)
     except Exception:  # noqa: BLE001 — planning is best-effort; guardrails backfill
         shots = []
-    return apply_guardrails(shots, n_lines=n_lines, budget=budget)
+    plan = apply_guardrails(shots, n_lines=n_lines, budget=budget)
+    for s in plan.shots:
+        s.light_quality = look.light_quality
+    return plan
