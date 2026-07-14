@@ -18,6 +18,12 @@ def _no_ws(monkeypatch):
     monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.54)
     monkeypatch.setattr(gr, "report_agent", lambda *a, **k: None)
     monkeypatch.setattr(gr, "persist_clip_url", lambda pid, hint, url: url)
+    # Isolate every test from the local .env: baseline the routing/feature flags
+    # to their code defaults so a developer's .env (e.g. IDENTITY_ROUTING_V2=true)
+    # can't flip a legacy-path test. Tests that need a flag on monkeypatch it True.
+    for _flag in ("identity_routing_v2", "repair_enabled", "multishot_enabled",
+                  "anchor_lipsync_enabled"):
+        monkeypatch.setattr(gr.get_settings(), _flag, False, raising=False)
 
 
 def make_runner():
