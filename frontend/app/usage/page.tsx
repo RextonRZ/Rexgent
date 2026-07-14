@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
-  AudioWaveform,
   CheckCircle2,
   Clapperboard,
   Film,
@@ -95,20 +94,6 @@ const ROSTER: {
     models: [
       { name: "wan2.6-t2i", role: "Reference plates — character, location, style", match: ["wan2.6-t2i"] },
       { name: "qwen-image-edit-max", role: "Costume plates and frame edits", match: ["qwen-image-edit-max"] },
-    ],
-  },
-  {
-    group: "Voice",
-    unit: "character",
-    category: "tts",
-    icon: AudioWaveform,
-    tint: "text-sky-300/60",
-    models: [
-      { name: "qwen3-tts-vd", role: "Designed voices — bespoke timbre per character", match: ["qwen3-tts-vd-2026-01-26"] },
-      { name: "qwen-voice-design", role: "Voice design — casting writes each voice from age and personality", match: ["qwen-voice-design"] },
-      { name: "qwen3-tts-flash", role: "Preset voices — fallback when design is unavailable", match: ["qwen3-tts-flash"] },
-      { name: "qwen3-tts-vc-realtime", role: "Cloned voices", match: ["qwen3-tts-vc-realtime"] },
-      { name: "qwen-voice-enrollment", role: "Clone enrollment" },
     ],
   },
 ];
@@ -350,7 +335,7 @@ export default function UsagePage() {
               Usage &amp; analytics
             </h1>
             <p className="mt-1 max-w-xl text-sm text-zinc-500">
-              13 Qwen Cloud models, routed by task. This page proves the routing
+              Qwen Cloud models, routed by task. This page proves the routing
               works and shows where the money goes.
             </p>
           </div>
@@ -599,7 +584,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
 
       {/* ── 2 · the 13-model roster: the crew list ── */}
       <Rise index={1}>
-        <SectionTitle>The 13-model roster</SectionTitle>
+        <SectionTitle>The model roster</SectionTitle>
         <div className="gap-4 lg:columns-2">
           {ROSTER.map((group) => {
             const subtotal = group.category

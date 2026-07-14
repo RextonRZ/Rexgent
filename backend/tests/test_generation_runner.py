@@ -22,7 +22,7 @@ def _no_ws(monkeypatch):
     # to their code defaults so a developer's .env (e.g. IDENTITY_ROUTING_V2=true)
     # can't flip a legacy-path test. Tests that need a flag on monkeypatch it True.
     for _flag in ("identity_routing_v2", "repair_enabled", "multishot_enabled",
-                  "anchor_lipsync_enabled", "happyhorse_native_talk",
+                  "happyhorse_native_talk",
                   "wan_on_same_cast", "image_ref_labels",
                   "route_continuation_to_happyhorse", "cinematic_prompt"):
         monkeypatch.setattr(gr.get_settings(), _flag, False, raising=False)
@@ -181,7 +181,7 @@ async def test_hard_failure_retries_then_needs_review(monkeypatch):
     assert runner.qwen.generate_video_happyhorse.await_count == 2
 
 
-# --- wan lip-sync render chain: lip-sync -> plain first-frame -> happyhorse ---
+# --- wan continuation routing: plain first-frame -> happyhorse fallback ---
 
 def _continuity_pass():
     return AsyncMock(return_value={
@@ -197,66 +197,6 @@ def _wan_shot():
 
 LINE = {"audio_url": "http://a/line.mp3", "character_name": "Yuki",
         "duration": 4.0}  # fits the 5s shot
-
-
-@pytest.mark.asyncio
-async def test_eligible_wan_shot_lip_syncs_to_its_own_line(monkeypatch):
-    runner = make_runner()
-    runner.continuity.validate = _continuity_pass()
-    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
-    monkeypatch.setattr(gr, "get_settings",
-                        lambda: SimpleNamespace(lipsync_enabled=True))
-    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
-    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
-                               "prevframe", lipsync_line=LINE)
-    # ONE wan dispatch: continue from the frame AND drive the mouth
-    assert runner.qwen.generate_video_wan.await_count == 1
-    kwargs = runner.qwen.generate_video_wan.await_args.kwargs
-    assert kwargs["reference_media"] == [
-        {"type": "first_frame", "url": "prevframe"},
-        {"type": "driving_audio", "url": "http://a/line.mp3"}]
-    assert runner.qwen.generate_video_happyhorse.await_count == 0
-
-
-@pytest.mark.asyncio
-async def test_wan_shot_skips_driving_audio_under_2s(monkeypatch):
-    """A line shorter than wan's 2s driving_audio floor must NOT be sent as
-    driving_audio (wan rejects it and the whole continuation fails); the shot
-    still continues from the frame, just without lip-sync."""
-    runner = make_runner()
-    runner.continuity.validate = _continuity_pass()
-    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
-    monkeypatch.setattr(gr, "get_settings",
-                        lambda: SimpleNamespace(lipsync_enabled=True))
-    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
-    short = {**LINE, "duration": 1.5}   # below the 2s floor
-    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
-                               "prevframe", lipsync_line=short)
-    assert runner.qwen.generate_video_wan.await_count == 1
-    media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
-    assert not any(m.get("type") == "driving_audio" for m in media)
-
-
-@pytest.mark.asyncio
-async def test_lipsync_dispatch_failure_falls_back_to_plain_first_frame(monkeypatch):
-    runner = make_runner()
-    runner.qwen.generate_video_wan = AsyncMock(
-        side_effect=[RuntimeError("400 driving_audio rejected"), "task1"])
-    runner.continuity.validate = _continuity_pass()
-    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
-    monkeypatch.setattr(gr, "get_settings",
-                        lambda: SimpleNamespace(lipsync_enabled=True))
-    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
-    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
-                               "prevframe", lipsync_line=LINE)
-    # first call (lip-sync) blew up, second call retries WITHOUT driving_audio
-    assert runner.qwen.generate_video_wan.await_count == 2
-    second = runner.qwen.generate_video_wan.await_args_list[1].kwargs
-    assert second["reference_media"] == [{"type": "first_frame", "url": "prevframe"}]
-    # the chain recovered on wan — happyhorse never entered, tier stays truthful
-    assert runner.qwen.generate_video_happyhorse.await_count == 0
-    added = runner.db.add.call_args[0][0]
-    assert added.model_used == "wan"
 
 
 @pytest.mark.asyncio
@@ -286,64 +226,6 @@ async def test_wan_shot_without_frame_anchor_renders_on_happyhorse(monkeypatch):
     added = runner.db.add.call_args[0][0]
     assert added.model_used == "happyhorse"
     assert seen["tier"] == "happyhorse"
-
-
-@pytest.mark.asyncio
-async def test_retry_attempt_never_repeats_the_lip_path(monkeypatch):
-    runner = make_runner()
-    # wan ACCEPTED the driving_audio task but failed it asynchronously — the
-    # dispatch succeeds, the POLL raises into the attempt loop
-    runner.qwen.poll_video_task = AsyncMock(
-        side_effect=[RuntimeError("task failed server-side"), "http://x/clip.mp4"])
-    runner.continuity.validate = _continuity_pass()
-    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
-    monkeypatch.setattr(gr, "get_settings",
-                        lambda: SimpleNamespace(lipsync_enabled=True))
-    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
-    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
-                               "prevframe", lipsync_line=LINE)
-    # attempt 0 lip-synced and died at poll time; the retry DEGRADES to plain
-    # first-frame instead of repeating the same doomed lip dispatch
-    assert runner.qwen.generate_video_wan.await_count == 2
-    second = runner.qwen.generate_video_wan.await_args_list[1].kwargs
-    assert second["reference_media"] == [{"type": "first_frame", "url": "prevframe"}]
-    # and the shot survived
-    added = runner.db.add.call_args[0][0]
-    assert added.status == "APPROVED"
-
-
-@pytest.mark.asyncio
-async def test_over_long_line_never_drives_the_shot(monkeypatch):
-    runner = make_runner()
-    runner.continuity.validate = _continuity_pass()
-    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
-    monkeypatch.setattr(gr, "get_settings",
-                        lambda: SimpleNamespace(lipsync_enabled=True))
-    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
-    long_line = dict(LINE, duration=8.0)  # 8s of audio cannot fit a 5s shot
-    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
-                               "prevframe", lipsync_line=long_line)
-    # otherwise eligible, but the line outruns the shot: plain first-frame only
-    assert runner.qwen.generate_video_wan.await_count == 1
-    kwargs = runner.qwen.generate_video_wan.await_args.kwargs
-    assert kwargs["reference_media"] == [{"type": "first_frame", "url": "prevframe"}]
-
-
-@pytest.mark.asyncio
-async def test_lipsync_kill_switch_renders_plain_first_frame(monkeypatch):
-    runner = make_runner()
-    runner.continuity.validate = _continuity_pass()
-    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
-    # settings read via the MODULE import, so this patch is the kill switch
-    monkeypatch.setattr(gr, "get_settings",
-                        lambda: SimpleNamespace(lipsync_enabled=False))
-    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
-    await runner._process_shot(job, _wan_shot(), {"Yuki": make_char()}, BIBLE, 1,
-                               "prevframe", lipsync_line=LINE)
-    # otherwise-eligible shot: wan still continues the scene, mouth NOT driven
-    assert runner.qwen.generate_video_wan.await_count == 1
-    kwargs = runner.qwen.generate_video_wan.await_args.kwargs
-    assert kwargs["reference_media"] == [{"type": "first_frame", "url": "prevframe"}]
 
 
 @pytest.mark.asyncio
@@ -474,7 +356,7 @@ async def test_v2_anchor_shot_dispatches_r2v_with_ref_stack(monkeypatch):
     tier, task = await runner._dispatch_by_role(
         role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
         ref_stack=[{"type": "reference_image", "url": "face.png"}],
-        frame_anchor="prev.png", prev_clip_url=None, lip=None)
+        frame_anchor="prev.png", prev_clip_url=None)
     assert tier == "wan_r2v"
     runner.qwen.generate_video_wan_r2v.assert_awaited_once()
     # anchor gets NO first_frame (establishing), just the plates
@@ -490,26 +372,11 @@ async def test_v2_entrance_shot_adds_first_frame_to_r2v(monkeypatch):
     tier, task = await runner._dispatch_by_role(
         role="entrance", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
         ref_stack=[{"type": "reference_image", "url": "newface.png"}],
-        frame_anchor="prev.png", prev_clip_url=None, lip=None)
+        frame_anchor="prev.png", prev_clip_url=None)
     assert tier == "wan_r2v"
     media = runner.qwen.generate_video_wan_r2v.await_args.kwargs["reference_media"]
     assert media[0] == {"type": "first_frame", "url": "prev.png"}
     assert {"type": "reference_image", "url": "newface.png"} in media
-
-
-@pytest.mark.asyncio
-async def test_v2_continue_hold_talking_dispatches_wan_lipsync(monkeypatch):
-    runner = _make_dispatch_runner()
-    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
-    tier, task = await runner._dispatch_by_role(
-        role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
-        ref_stack=[{"type": "reference_image", "url": "x.png"}],
-        frame_anchor="prev.png", prev_clip_url="clip.mp4",
-        lip={"audio_url": "a.wav", "duration": 2.0})
-    assert tier == "wan"
-    media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
-    assert media == [{"type": "first_frame", "url": "prev.png"},
-                     {"type": "driving_audio", "url": "a.wav"}]
 
 
 @pytest.mark.asyncio
@@ -518,7 +385,7 @@ async def test_v2_continue_hold_silent_uses_first_clip(monkeypatch):
     runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
     tier, task = await runner._dispatch_by_role(
         role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
-        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4", lip=None)
+        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4")
     media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
     assert media == [{"type": "first_clip", "url": "clip.mp4"}]
 
@@ -532,7 +399,7 @@ async def test_v2_r2v_failure_falls_back_to_happyhorse(monkeypatch):
     tier, task = await runner._dispatch_by_role(
         role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
         ref_stack=[{"type": "reference_image", "url": "f.png"}],
-        frame_anchor=None, prev_clip_url=None, lip=None)
+        frame_anchor=None, prev_clip_url=None)
     assert tier == "happyhorse"
     runner.qwen.generate_video_happyhorse.assert_awaited_once()
 
@@ -544,7 +411,7 @@ async def test_v2_anchor_with_no_refs_falls_back_to_happyhorse():
     runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
     tier, task = await runner._dispatch_by_role(
         role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
-        ref_stack=None, frame_anchor=None, prev_clip_url=None, lip=None)
+        ref_stack=None, frame_anchor=None, prev_clip_url=None)
     assert tier == "happyhorse"
     runner.qwen.generate_video_wan_r2v.assert_not_awaited()
     # no refs -> happyhorse runs in t2v mode
@@ -558,7 +425,7 @@ async def test_v2_continue_hold_with_no_media_falls_back_to_happyhorse():
     runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
     tier, task = await runner._dispatch_by_role(
         role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
-        ref_stack=None, frame_anchor=None, prev_clip_url=None, lip=None)
+        ref_stack=None, frame_anchor=None, prev_clip_url=None)
     assert tier == "happyhorse"
     runner.qwen.generate_video_wan.assert_not_awaited()
 
@@ -570,7 +437,7 @@ async def test_v2_continue_hold_wan_failure_falls_back_to_happyhorse():
     runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
     tier, task = await runner._dispatch_by_role(
         role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
-        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4", lip=None)
+        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4")
     assert tier == "happyhorse"
     runner.qwen.generate_video_happyhorse.assert_awaited_once()
 
@@ -583,7 +450,7 @@ async def test_v2_reangle_adds_first_frame_to_r2v(monkeypatch):
     tier, task = await runner._dispatch_by_role(
         role="continue_reangle", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
         ref_stack=[{"type": "reference_image", "url": "face.png"}],
-        frame_anchor="prev.png", prev_clip_url=None, lip=None)
+        frame_anchor="prev.png", prev_clip_url=None)
     assert tier == "wan_r2v"
     media = runner.qwen.generate_video_wan_r2v.await_args.kwargs["reference_media"]
     assert media[0] == {"type": "first_frame", "url": "prev.png"}
@@ -599,7 +466,7 @@ async def test_v2_anchor_defaults_to_happyhorse_r2v():
     tier, task = await runner._dispatch_by_role(
         role="anchor", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
         ref_stack=[{"type": "reference_image", "url": "face.png"}],
-        frame_anchor=None, prev_clip_url=None, lip=None)
+        frame_anchor=None, prev_clip_url=None)
     assert tier == "happyhorse"
     runner.qwen.generate_video_wan_r2v.assert_not_awaited()
     # happyhorse renders in r2v mode with the plate stack
@@ -907,88 +774,6 @@ async def test_multishot_beat_post_dispatch_failure_is_caught(monkeypatch):
         [s1, s2], job, {"Yuki": make_char()}, BIBLE, 1,
         prev_last_frame_url=None, scene_anchor_url=None, prev_shot_type=None)
     assert result[1] is None   # clip is None; did NOT raise
-
-
-# --- anchor lip-sync upgrade: HappyHorse anchor frame -> Wan lip-sync take ---
-
-@pytest.mark.asyncio
-async def test_anchor_lipsync_keeps_passing_wan_take(monkeypatch):
-    runner = make_runner()
-    scores = iter([
-        {"continuity_score": 70, "overall_pass": True, "face_score": 0.7,
-         "outfit_score": 0.7, "background_score": 0.7},   # happyhorse anchor
-        {"continuity_score": 74, "overall_pass": True, "face_score": 0.75,
-         "outfit_score": 0.7, "background_score": 0.7},    # wan lip-sync take
-    ])
-    runner.continuity.validate = AsyncMock(side_effect=lambda **k: next(scores))
-    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
-    monkeypatch.setattr(gr, "extract_first_frame", lambda url: b"ff")
-    monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.5)
-    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
-    monkeypatch.setattr(gr.get_settings(), "anchor_lipsync_enabled", True, raising=False)
-    runner.oss.upload_bytes = MagicMock(return_value="http://x/firstframe.png")
-    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
-    shot = make_shot()  # anchor (no frame anchor), single char "Yuki", has dialogue
-    line = {"audio_url": "a.wav", "duration": 2.0, "character_name": "YUKI"}
-    await runner._process_shot(
-        job, shot, {"Yuki": make_char()}, BIBLE, 1,
-        prev_last_frame_url=None, scene_anchor_url=None, prev_in_frame=None,
-        prev_shot_type=None, lipsync_line=line)
-    wan_media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
-    assert any(m.get("type") == "driving_audio" for m in wan_media)
-    # the wan take was framed OPEN-MOUTHED: the crafter received lipsync=True,
-    # not the mouth-hiding coverage a non-lip shot gets
-    assert runner.prompt_crafter.craft.await_args.kwargs.get("lipsync") is True
-    # extract_first_frame produces JPEG bytes: the frame is uploaded as
-    # image/jpeg, not mislabeled png
-    up = runner.oss.upload_bytes.call_args
-    assert up.kwargs.get("content_type", (up.args[2:3] or ["?"])[0]) == "image/jpeg"
-    added = runner.db.add.call_args[0][0]
-    assert added.consistency_score == 74          # kept the Wan take
-    assert job.actual_cost == 1.0                 # both renders billed
-
-
-@pytest.mark.asyncio
-async def test_anchor_lipsync_falls_back_when_wan_worse(monkeypatch):
-    runner = make_runner()
-    scores = iter([
-        {"continuity_score": 70, "overall_pass": True, "face_score": 0.7,
-         "outfit_score": 0.7, "background_score": 0.7},   # happyhorse anchor
-        {"continuity_score": 40, "overall_pass": False, "face_score": 0.3,
-         "outfit_score": 0.6, "background_score": 0.6},    # wan wrecked the face
-    ])
-    runner.continuity.validate = AsyncMock(side_effect=lambda **k: next(scores))
-    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
-    monkeypatch.setattr(gr, "extract_first_frame", lambda url: b"ff")
-    monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.5)
-    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
-    monkeypatch.setattr(gr.get_settings(), "anchor_lipsync_enabled", True, raising=False)
-    runner.oss.upload_bytes = MagicMock(return_value="http://x/firstframe.png")
-    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
-    line = {"audio_url": "a.wav", "duration": 2.0, "character_name": "YUKI"}
-    await runner._process_shot(
-        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
-        prev_last_frame_url=None, scene_anchor_url=None, prev_in_frame=None,
-        prev_shot_type=None, lipsync_line=line)
-    added = runner.db.add.call_args[0][0]
-    assert added.consistency_score == 70          # kept the HappyHorse take
-
-
-@pytest.mark.asyncio
-async def test_anchor_lipsync_off_by_default_no_second_render(monkeypatch):
-    runner = make_runner()
-    runner.continuity.validate = AsyncMock(return_value={
-        "continuity_score": 70, "overall_pass": True, "face_score": 0.7,
-        "outfit_score": 0.7, "background_score": 0.7})
-    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
-    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
-    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
-    line = {"audio_url": "a.wav", "duration": 2.0, "character_name": "YUKI"}
-    await runner._process_shot(
-        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
-        prev_last_frame_url=None, scene_anchor_url=None, prev_in_frame=None,
-        prev_shot_type=None, lipsync_line=line)
-    runner.qwen.generate_video_wan.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -38,10 +38,6 @@ class Settings(BaseSettings):
     multishot_enabled: bool = False
     multishot_max_shots: int = 3
     multishot_max_duration: int = 15
-    # Anchor lip-sync: an eligible single-speaker dialogue anchor renders on
-    # HappyHorse (face) then re-renders on Wan i2v from that frame + driving_audio
-    # (mouth), keeping the better take. Two renders on those shots. OFF by default.
-    anchor_lipsync_enabled: bool = False
     happyhorse_native_talk: bool = False
     # Prepend an [Image N] legend to r2v prompts so the model ties each person to
     # their OWN reference plate (face/outfit) instead of guessing. OFF by default.
@@ -95,32 +91,14 @@ class Settings(BaseSettings):
     qwen_image_model: str = "wan2.6-t2i"
     qwen_image_edit_model: str = "qwen-image-edit-max"
     qwen_vl_continuity_model: str = "qwen3-vl-plus"
-    # Wan lip-sync (first_frame + driving_audio on eligible shots). Flip to
-    # false to disable instantly — the fallback path is today's renderer.
+    # Gates HappyHorse native-talk (the model speaks the scripted line itself and
+    # syncs its own mouth; no audio is sent to the model). Flip false to disable
+    # native-talk instantly — the fallback is a silent take with coverage framing.
     lipsync_enabled: bool = True
     qwen_image_path: str = "/services/aigc/image-generation/generation"
     # qwen-image-edit-max lives on the SYNCHRONOUS multimodal endpoint — the async
     # image-generation endpoint rejects it with InvalidParameter "url error".
     qwen_image_edit_path: str = "/services/aigc/multimodal-generation/generation"
-
-    # Production Bible: TTS synthesis.
-    # qwen3-tts-flash is the OFFLINE model (simple SDK call, preset voices) — the DEFAULT
-    # for dialogue + previews. Cloning is an EXTRA option: the user uploads a voice sample,
-    # we enrol a custom voice via qwen-voice-enrollment, then synthesize it through the
-    # qwen3-tts-vc-realtime WebSocket. A voice_model containing "realtime" routes to that path.
-    qwen_tts_designed_model: str = "qwen3-tts-flash"
-    # instruct variant: honors natural-language delivery directions
-    # ("whispering, tearful") — same timbres, near-identical price
-    qwen_tts_instruct_model: str = "qwen3-tts-instruct-flash"
-    # voice design: a bespoke timbre from a text description ($0.2/voice),
-    # synthesized with the vd snapshot model
-    qwen_voice_design_model: str = "qwen-voice-design"
-    qwen_tts_vd_model: str = "qwen3-tts-vd-2026-01-26"
-    qwen_tts_preview_model: str = "qwen3-tts-flash"
-    qwen_tts_cloned_model: str = "qwen3-tts-vc-realtime-2026-01-15"
-    qwen_voice_enroll_model: str = "qwen-voice-enrollment"
-    qwen_voice_enroll_path: str = "/services/audio/tts/customization"
-    qwen_tts_realtime_url: str = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

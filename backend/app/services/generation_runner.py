@@ -15,11 +15,11 @@ from app.services.guardrails import CostCircuitBreaker, PreGenerationValidator
 from app.services.reference_stack import WIDE_FRAMINGS, build_reference_stack_labeled
 from app.services.set_dresser import setting_for_shot
 from app.services.clip_store import persist_clip_url
-from app.services.frame_sampler import extract_last_frame, extract_first_frame
+from app.services.frame_sampler import extract_last_frame
 from app.services.cost_ledger import record_video
 from app.services.continuity_repair import repair_steps
 from app.websocket.emitter import emit
-from app.websocket.tool_events import tool_event, tool_run
+from app.websocket.tool_events import tool_event
 from app.agents.reporter import report_agent
 from app.config import get_settings
 
@@ -118,8 +118,8 @@ class GenerationRunner:
 
         job.status = "RUNNING"
         self.db.commit()
-        # picked up: keep the pipeline lit through the pre-render phases
-        # (voice synth, duration fit, preflight) before the first shot event
+        # picked up: keep the pipeline lit through the pre-render phase
+        # (preflight) before the first shot event
         emit("stage:progress", {"stage": "generate", "status": "update",
              "agent": "Renderer", "label": "Preparing the studio"},
              str(job.project_id))
@@ -133,28 +133,9 @@ class GenerationRunner:
         # Delivery format the user picked at creation (vertical by default).
         self._video_ratio = (getattr(project, "video_ratio", None) or VIDEO_RATIO)
 
-        # ── Audio-first: synthesize the dialogue BEFORE rendering and fit each
-        # speaking shot's duration to its real line audio, so a two-person
-        # exchange gets pictures long enough to hold both voices. The lines are
-        # reused at export (not paid for twice). Never fatal to the render.
-        try:
-            from app.models.line_audio import LineAudio
-            if not self.db.query(LineAudio).filter(
-                    LineAudio.project_id == job.project_id).count():
-                from app.agent.pipeline_ops import synth_dialogue_op
-                with tool_run(job.project_id, "generate", "synth_voices",
-                              "Audio Mixer") as t:
-                    n_lines = await synth_dialogue_op(self.db, str(job.project_id))
-                    t["artifact"] = f"{n_lines} lines"
-            from app.services.shot_duration_fitter import fit_project_shot_durations
-            with tool_run(job.project_id, "generate", "fit_durations", "Director") as t:
-                fitted = fit_project_shot_durations(self.db, str(job.project_id))
-                t["artifact"] = f"{fitted} shots resized"
-            if fitted:
-                logger.info(f"Audio-first fit: {fitted} shot duration(s) adjusted")
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"Audio-first duration fit skipped: {e}")
-
+        # TTS synthesis removed: clips play their own NATIVE audio, so there is
+        # no audio-first synth pass and no duration fit to line audio. Shots keep
+        # the estimated_duration_seconds the storyboard already sized them with.
         shots = self._ordered_shots(job.project_id)
         characters = self.db.query(Character).filter(Character.project_id == job.project_id).all()
         char_by_name = {c.name: c for c in characters}
@@ -308,27 +289,24 @@ class GenerationRunner:
             already_good = getattr(self, "_approved_shot_ids", set())
             ordered = [s for s in shots if (s.quality_tier or "") != "deferred"]
 
-            # lip-sync inputs: the scene's synthesized lines (audio-first, so
-            # they exist before rendering) + which shots speak, in order. The
-            # k-th speaking shot speaks the k-th line — same convention as
-            # place_dialogue, so mouth and overlay can't disagree.
+            # native-talk inputs: the scene's SCRIPT dialogue (character + line)
+            # + which shots speak, in order. The k-th speaking shot speaks the
+            # k-th line. The picked line names the on-camera speaker so
+            # HappyHorse native-talk animates the right mouth.
             from app.services.lipsync import pick_lipsync_line
-            from app.models.line_audio import LineAudio
             # over ALL non-deferred shots of the scene, NOT `active`: on a
             # resume run `active` excludes already-approved shots, which would
             # shift every speaking index and drive mouths with the WRONG line
             speaking_ids = [s.id for s in shots
                             if (s.quality_tier or "") != "deferred"
                             and (s.dialogue or "").strip()]
-            line_rows = (db2.query(LineAudio)
-                         .filter(LineAudio.project_id == job2.project_id,
-                                 LineAudio.scene_number == scene.number)
-                         .order_by(LineAudio.line_index).all())
-            scene_lines = [{"audio_url": r.audio_url,
-                            "character_name": r.character_name,
-                            "duration": r.duration_seconds,
-                            "text": r.text}
-                           for r in line_rows if r.audio_url]
+            # Native-talk names the speaker from the SCRIPT's dialogue (character +
+            # line): the model speaks the text itself, so no synthesized audio is
+            # needed to know who talks.
+            scene_lines = [{"character_name": ln.get("character"),
+                            "text": ln.get("line")}
+                           for ln in (scene.dialogue_json or [])
+                           if (ln.get("line") or "").strip()]
             if not getattr(get_settings(), "multishot_enabled", False):
                 for i, shot in enumerate(ordered):
                     if self._cancelled:
@@ -537,8 +515,7 @@ class GenerationRunner:
             return None
 
     async def _dispatch_by_role(self, *, role, prompt, duration, seed, ratio,
-                                negative, ref_stack, frame_anchor, prev_clip_url,
-                                lip):
+                                negative, ref_stack, frame_anchor, prev_clip_url):
         """Route a shot to a model by its identity role. Never-blocking: every
         path degrades to happyhorse r2v so a model surprise can't fail the shot.
         Returns (used_tier, task_id)."""
@@ -576,59 +553,20 @@ class GenerationRunner:
         # continue_hold
         if getattr(get_settings(), "route_continuation_to_happyhorse", True):
             # Wan i2v continuation hard-fails when the previous clip is >= the
-            # requested duration and can't lip-sync 2-face shots; HappyHorse r2v
-            # continues via the reference stack (which already carries the prev
-            # frame) and does multi-person native-talk. Flag OFF -> old wan path.
+            # requested duration; HappyHorse r2v continues via the reference stack
+            # (which already carries the prev frame) and does multi-person
+            # native-talk. Flag OFF -> old wan i2v continuation path.
             return ("happyhorse", await _happyhorse())
-        media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor,
-                           audio_url=(lip or {}).get("audio_url"), talking=bool(lip))
+        media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor)
         if media:
             try:
                 task = await self.qwen.generate_video_wan(
                     prompt=prompt, duration=duration, reference_media=media,
                     seed=seed, ratio=ratio, negative_prompt=negative)
-                if any(m.get("type") == "driving_audio" for m in media):
-                    logger.info("continue-hold shot lip-synced to its line")
                 return ("wan", task)
             except Exception as e:  # noqa: BLE001 — chain to happyhorse
                 logger.warning("wan continuation failed (%s) — happyhorse", e)
         return ("happyhorse", await _happyhorse())
-
-    async def _anchor_lipsync_upgrade(self, *, project_id, shot, bible, scene_number,
-                                      in_frame, foreground, hh_clip_url, hh_guard,
-                                      prompt, negative, ratio, seed, lipsync_line):
-        """Render a Wan lip-sync take from the HappyHorse anchor's FIRST frame and
-        keep the better of the two. Returns (clip_url, guard, used_tier, spent) — on
-        any failure returns the HappyHorse take unchanged with spent 0.0. Never raises."""
-        from app.services.lipsync import lipsync_media
-        try:
-            frame_bytes = extract_first_frame(hh_clip_url)
-            if not frame_bytes:
-                return hh_clip_url, hh_guard, "happyhorse", 0.0
-            # extract_first_frame produces JPEG bytes (like extract_last_frame),
-            # so store it as .jpg / image/jpeg — matches _store_last_frame
-            key = self.oss.get_project_path(project_id, "media", f"anchorframe_{shot.id}.jpg")
-            frame_url = await asyncio.to_thread(self.oss.upload_bytes, frame_bytes, key, "image/jpeg")
-            task_id = await self.qwen.generate_video_wan(
-                prompt=prompt, duration=shot.estimated_duration_seconds,
-                reference_media=lipsync_media(frame_url, lipsync_line["audio_url"]),
-                seed=seed, ratio=ratio, negative_prompt=negative)
-            wan_url = await self.qwen.poll_video_task(task_id)
-            wan_url = await asyncio.to_thread(persist_clip_url, project_id, f"anchorlip_{shot.id}", wan_url)
-            wan_guard = await self.continuity.validate(
-                clip_url=wan_url, duration=shot.estimated_duration_seconds,
-                characters_in_frame=in_frame, bible=bible, scene_number=scene_number,
-                foreground_characters=foreground)
-            spent = record_video(self.db, project_id, shot.estimated_duration_seconds,
-                                 "wan", ref_id=str(shot.id))
-            keep_wan = (wan_guard["overall_pass"]
-                        or wan_guard["continuity_score"] > hh_guard["continuity_score"])
-            if keep_wan:
-                return wan_url, wan_guard, "wan", spent
-            return hh_clip_url, hh_guard, "happyhorse", spent
-        except Exception as e:  # noqa: BLE001 — never blocks; keep the HappyHorse take
-            logger.warning("anchor lip-sync upgrade failed for shot %s: %s", shot.id, e)
-            return hh_clip_url, hh_guard, "happyhorse", 0.0
 
     async def _run_repair_step(self, step, *, project_id, shot, prompt, negative,
                                ratio, seed, ref_stack, frame_anchor, prev_clip_url,
@@ -641,13 +579,13 @@ class GenerationRunner:
                     role=role, prompt=prompt, duration=shot.estimated_duration_seconds,
                     seed=(seed or 0) + 7, ratio=ratio, negative=negative,
                     ref_stack=ref_stack or None, frame_anchor=frame_anchor,
-                    prev_clip_url=prev_clip_url, lip=None)
+                    prev_clip_url=prev_clip_url)
             elif step == "reanchor":
                 used_tier, task_id = await self._dispatch_by_role(
                     role="anchor", prompt=prompt, duration=shot.estimated_duration_seconds,
                     seed=(seed or 0) + 11, ratio=ratio, negative=negative,
                     ref_stack=ref_stack or None, frame_anchor=None,
-                    prev_clip_url=None, lip=None)
+                    prev_clip_url=None)
             elif step == "videoedit":
                 media = (ref_stack or [])[:2]        # identity/costume plates
                 if not media:
@@ -788,8 +726,8 @@ class GenerationRunner:
         # holds a face far WORSE than happyhorse r2v (continuity ~46 vs ~67),
         # because happyhorse is reference-image native while wan's r2v is a
         # secondary mode. So identity-critical shots demote to happyhorse r2v,
-        # which carries the full bible stack. wan keeps its real strengths:
-        # lip-sync, and continuing a face already established in the last frame.
+        # which carries the full bible stack. wan keeps its real strength:
+        # continuing a face already established in the last frame.
         frame_anchor_pre = prev_last_frame_url or scene_anchor_url
         settings_v2 = getattr(get_settings(), "identity_routing_v2", False)
         # Compute newcomers for EVERY tier, not just wan: under the v2 flag the
@@ -873,49 +811,16 @@ class GenerationRunner:
         for attempt in range(MAX_RETRIES + 1):
             try:
                 ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
-                # the lip decision comes BEFORE prompt crafting: a mouth-driven
-                # shot is framed openly talking, every other spoken line gets
-                # mouth-hiding coverage — the crafter needs to know which
-                from app.services.lipsync import lipsync_media, speaker_matches
+                # the native-talk decision comes BEFORE prompt crafting: a
+                # native-talk shot is framed openly talking, every other spoken
+                # line gets mouth-hiding coverage — the crafter needs to know which.
                 frame_anchor = frame_anchor_pre if (is_wan or settings_v2) else None
-                # SHARED line eligibility — everything EXCEPT a frame to continue
-                # from. The continuation lip additionally needs a frame_anchor;
-                # the anchor-lipsync upgrade does NOT (it renders its own frame).
-                line_eligible = (
-                    # a poll-time lip failure must degrade on the retry, not
-                    # repeat itself — so only attempt 0 is lip-eligible
-                    attempt == 0
-                    and get_settings().lipsync_enabled
-                    and lipsync_line
-                    and lipsync_line.get("audio_url")
-                    # an over-long driving track risks a wan-side rejection;
-                    # unknown duration (0/None) is treated as unsafe
-                    and (lipsync_line.get("duration") or 0) > 0
-                    and lipsync_line["duration"] <= shot.estimated_duration_seconds
-                    and speaker_matches(lipsync_line, in_frame, foreground))
-                # wan driving_audio must be 2..30s (official i2v spec); under 2s
-                # wan rejects the track and the whole continuation fails. The wan
-                # lip paths take this stricter floor; HappyHorse native talk makes
-                # its own audio and has no floor, so it keeps plain line_eligible.
-                wan_audio_ok = line_eligible and (lipsync_line.get("duration") or 0) >= 2.0
-                if settings_v2:
-                    lip = (lipsync_line if (wan_audio_ok and frame_anchor
-                                            and role == "continue_hold") else None)
-                else:
-                    lip = lipsync_line if (is_wan and wan_audio_ok and frame_anchor) else None
-                # Anchor lip-sync upgrade eligibility, decided BEFORE crafting so
-                # the wan take is framed with an OPEN talking mouth (lipsync=True
-                # below) — the opposite of the mouth-hiding coverage a non-lip
-                # shot gets. An anchor/entrance/reangle shot renders its own first
-                # frame, so it needs NO frame_anchor. OFF by default; role exists
-                # only under v2. Reused by the upgrade block after render+score.
-                # HappyHorse native lip-sync: the model speaks the line ITSELF (no
-                # driving_audio), so it works on MULTI-person shots too — we NAME
-                # the speaker in the prompt so the right mouth moves and the others
-                # stay closed. Eligibility drops the single-visible-speaker rule
-                # (line_eligible) and only needs the speaker to be IN FRAME.
-                # OFF by default -> byte-identical. Export mutes the model's own
-                # voice and overlays the real TTS.
+                # HappyHorse native-talk: the model SPEAKS the line itself and
+                # syncs its own mouth, so it works on MULTI-person shots too — we
+                # NAME the speaker in the prompt so the right mouth moves and the
+                # others stay closed. Only needs the speaker to be IN FRAME (the
+                # line supplies who is speaking). OFF by default -> byte-identical.
+                # The model's own voice IS the delivered audio (no TTS overlay).
                 native_speaker = str((lipsync_line or {}).get("character_name") or "").strip()
                 native_talk = (
                     getattr(get_settings(), "happyhorse_native_talk", False)
@@ -924,22 +829,15 @@ class GenerationRunner:
                     and attempt == 0
                     and get_settings().lipsync_enabled
                     and lipsync_line
-                    and lipsync_line.get("audio_url")
                     and bool(native_speaker)
                     and native_speaker.upper() in {str(c).strip().upper() for c in in_frame})
-                anchor_lip = (
-                    getattr(get_settings(), "anchor_lipsync_enabled", False)
-                    and settings_v2
-                    and role in ("anchor", "entrance", "continue_reangle")
-                    and wan_audio_ok
-                    and not native_talk)
                 tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
                            index=job.completed_shots + 1, total=job.total_shots)
                 crafted = await self._craft_prompt(
                     shot, char_by_name, scene_setting, prev_action, next_action,
                     foreground=foreground, outfits=outfits,
                     blocking=getattr(shot, "blocking_json", None),
-                    lipsync=bool(lip) or anchor_lip, native_talk=native_talk,
+                    native_talk=native_talk,
                     speaker=(native_speaker if native_talk else ""),
                     image_legend=image_legend, environment=environment)
                 prompt = crafted.get("prompt", "")
@@ -963,32 +861,17 @@ class GenerationRunner:
                         role=role, prompt=prompt, duration=shot.estimated_duration_seconds,
                         seed=seed, ratio=ratio, negative=negative,
                         ref_stack=ref_stack or None, frame_anchor=frame_anchor,
-                        prev_clip_url=prev_clip_url, lip=lip)
+                        prev_clip_url=prev_clip_url)
                 elif is_wan:
                     # wan2.7-i2v does NOT take identity references — its media
-                    # schema is first_frame / last_frame / driving_audio /
-                    # first_clip only. Give wan its REAL jobs: continue the
-                    # scene from the previous shot's last frame, and when this
-                    # shot speaks exactly one line with one visible speaker,
-                    # DRIVE the mouth with that line's own TTS audio. Any
-                    # failure falls down the chain: lip-sync -> plain
-                    # first-frame -> happyhorse r2v. Never blocks the shot.
-                    # is_wan is only still true here for a CONTINUATION shot —
-                    # a frame anchor exists and no locked-identity newcomer
-                    # entered — so wan continues the established face or drives
-                    # the mouth. Identity-critical shots were demoted upstream.
+                    # schema is first_frame / last_frame / first_clip only. wan's
+                    # job here is to CONTINUE the scene from the previous shot's
+                    # last frame. is_wan is only still true for a CONTINUATION
+                    # shot (a frame anchor exists and no locked-identity newcomer
+                    # entered); identity-critical shots were demoted upstream. On
+                    # failure it falls down the chain: first-frame -> happyhorse r2v.
                     task_id = None
-                    if lip:
-                        try:
-                            task_id = await self.qwen.generate_video_wan(
-                                prompt=prompt, duration=shot.estimated_duration_seconds,
-                                reference_media=lipsync_media(frame_anchor, lip["audio_url"]),
-                                seed=seed, ratio=ratio, negative_prompt=negative)
-                            logger.info("shot %s: lip-synced to its line", shot.id)
-                        except Exception as le:  # noqa: BLE001 — never blocks
-                            logger.warning("lip-sync dispatch failed for shot %s (%s) — "
-                                           "falling back to plain first-frame", shot.id, le)
-                    if task_id is None and frame_anchor:
+                    if frame_anchor:
                         try:
                             task_id = await self.qwen.generate_video_wan(
                                 prompt=prompt, duration=shot.estimated_duration_seconds,
@@ -1036,21 +919,6 @@ class GenerationRunner:
                              confidence=guard["continuity_score"] / 100.0)
 
                 status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
-                # Anchor lip-sync upgrade (eligibility decided above, before
-                # crafting, so the wan take was framed open-mouthed): render a
-                # SECOND wan take from the HappyHorse anchor's own first frame and
-                # keep whichever take scores better. Both renders are billed.
-                if anchor_lip:
-                    clip_url, guard, used_tier, lip_spent = await self._anchor_lipsync_upgrade(
-                        project_id=str(job.project_id), shot=shot, bible=bible,
-                        scene_number=scene_number, in_frame=in_frame, foreground=foreground,
-                        hh_clip_url=clip_url, hh_guard=guard, prompt=prompt,
-                        negative=negative, ratio=ratio, seed=seed, lipsync_line=lipsync_line)
-                    # both renders are billed: the primary happyhorse render bills
-                    # below via first_tier as always; this bills the wan take too
-                    job.actual_cost += lip_spent
-                    spent_usd += lip_spent
-                    status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
                 # Bounded, budget-gated repair ladder: a soft continuity fail gets
                 # a shot at reseed/reanchor/videoedit (cheapest first), keeping
                 # whichever render scores best. OFF by default — a settings object
@@ -1090,29 +958,8 @@ class GenerationRunner:
                     status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
                     logger.info("repair for shot %s: best continuity %s (%s)",
                                 shot.id, guard["continuity_score"], status)
-                # the clip's audio policy, decided ONCE (VAD + Qwen ASR) and
-                # stored — the editor preview and the export worker both read
-                # this verdict, so what you hear is what ships
-                audio_policy = None
-                try:
-                    from app.services.audio_policy import bed_decision, speech_span
-                    has_dlg = bool((shot.dialogue or "").strip())
-                    a_mute, a_vol = bed_decision(clip_url, has_dlg)
-                    from app.services.video_stitcher import VideoStitcher
-                    real_dur = VideoStitcher._duration(clip_url)
-                    span = speech_span(clip_url) if has_dlg else None
-                    audio_policy = {"mute": a_mute, "volume": a_vol,
-                                    # when the on-screen mouth starts AND how
-                                    # long it talks: the TTS line is placed at
-                                    # the onset and paced across the span
-                                    "onset": span[0] if span else None,
-                                    "mouth_dur": span[1] if span else None,
-                                    # the clip's REAL length: models render a
-                                    # "10s" request ~7.6s, and every consumer
-                                    # (timeline, captions, export) must agree
-                                    "duration": real_dur if real_dur > 0 else None}
-                except Exception as ae:  # noqa: BLE001 — policy is best-effort
-                    logger.warning(f"audio policy skipped for shot {shot.id}: {ae}")
+                # No TTS overlay now: the clip plays its own NATIVE audio at full
+                # volume, so no bed/mute/onset policy is computed or stored.
                 tool_event(pid, "generate", "write_clip_db", "started", agent="Renderer")
                 clip = GeneratedClip(
                     job_id=job.id, shot_id=shot.id,
@@ -1123,7 +970,7 @@ class GenerationRunner:
                     face_score=guard.get("face_score"), outfit_score=guard.get("outfit_score"),
                     background_score=guard.get("background_score"),
                     references_json=ref_provenance, seed=seed,
-                    status=status, retries=attempt, audio_json=audio_policy)
+                    status=status, retries=attempt)
                 self.db.add(clip)
                 job.completed_shots += 1
                 self.db.commit()

@@ -7,7 +7,6 @@ import { MBTIBadge } from "./MBTIBadge";
 import { FaceUpload } from "./FaceUpload";
 import { AppearanceGenerator } from "./AppearanceGenerator";
 import { PlateCard } from "@/components/casting/PlateCard";
-import { VoiceRow } from "@/components/casting/VoiceRow";
 import { ZoomableImage } from "@/components/shared/Lightbox";
 import { SpendConfirm, type SpendRequest } from "@/components/shared/SpendConfirm";
 import {
@@ -221,23 +220,8 @@ export function CharacterCard({
                           amount: Math.max(casting?.variants.length ?? 0, 1) * 0.075,
                         },
                       ],
-                      options: casting?.voice_id
-                        ? undefined
-                        : [
-                            {
-                              key: "designVoice",
-                              label: "Design a bespoke voice",
-                              priceLine: "$0.20 once",
-                              note: "qwen-voice-design writes a voice from this character's age and personality. Untick for a free preset voice instead.",
-                              defaultOn: true,
-                              amount: 0.2,
-                            },
-                          ],
-                      run: (choices) =>
-                        generatePlates.mutate({
-                          characterId: character.id,
-                          designVoice: choices?.designVoice ?? true,
-                        }),
+                      run: () =>
+                        generatePlates.mutate({ characterId: character.id }),
                     })
                   }
                   title={
@@ -286,15 +270,6 @@ export function CharacterCard({
                   No costume plates yet.
                 </p>
               )}
-            </Section>
-
-            <Section title="Voice">
-              <VoiceRow
-                characterId={character.id}
-                voiceId={casting.voice_id}
-                voiceSource={casting.voice_source}
-                voiceDesign={casting.voice_design}
-              />
             </Section>
           </>
         )}

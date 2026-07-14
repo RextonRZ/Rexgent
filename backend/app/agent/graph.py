@@ -162,11 +162,9 @@ def build_pipeline_graph(db=None):
 
     async def n_audio(state: PipelineState) -> PipelineState:
         _emit_node(state, "audio")
-        # Dialogue synthesis (TTS spend) — same rule as casting: full-auto only.
-        if db is not None and state.get("project_id") and state.get("dispatch_video"):
-            from app.agent.pipeline_ops import synth_dialogue_op
-            await synth_dialogue_op(db, state["project_id"])
-        return state
+        # TTS synthesis removed: clips now play their own NATIVE (model-generated)
+        # audio, so nothing is synthesized here. The node + graph edges stay intact.
+        return {}
 
     async def n_budget(state: PipelineState) -> PipelineState:
         _emit_node(state, "budget")

@@ -1,6 +1,6 @@
 import uuid
 from app.models.cost_event import CostEvent
-from app.services.cost_rates import video_cost, image_cost, tts_cost, llm_cost
+from app.services.cost_rates import video_cost, image_cost, llm_cost
 from app.websocket.emitter import emit
 
 
@@ -92,11 +92,6 @@ def record_video(db, project_id, seconds, model, ref_id=None, model_name=None):
 
 def record_image(db, project_id, n=1, stage="casting", model=None):
     return record(db, project_id, "image", stage, "image", n, image_cost(n),
-                  model=model)
-
-
-def record_tts(db, project_id, chars, model=None):
-    return record(db, project_id, "tts", "audio", "char", chars, tts_cost(chars),
                   model=model)
 
 

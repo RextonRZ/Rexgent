@@ -1,4 +1,4 @@
-from app.services.lipsync import pick_lipsync_line, speaker_matches, lipsync_media
+from app.services.lipsync import pick_lipsync_line
 
 
 LINES = [
@@ -29,29 +29,6 @@ def test_folded_overflow_shot_is_ineligible():
     assert pick_lipsync_line("s1", ["s1", "s2"], three) == three[0]
 
 
-def test_speaker_must_be_the_only_visible_character():
-    line = {"character_name": "IM SOL"}
-    assert speaker_matches(line, ["IM SOL"], []) is True
-    # case-insensitive
-    assert speaker_matches({"character_name": "im sol"}, ["IM SOL"], []) is True
-    # two visible people -> no
-    assert speaker_matches(line, ["IM SOL", "RYU SUN-JAE"], []) is False
-    # the other person is a foreground occluder (face unseen) -> yes
-    assert speaker_matches(line, ["IM SOL", "RYU SUN-JAE"], ["RYU SUN-JAE"]) is True
-    # the visible person is NOT the speaker -> no
-    assert speaker_matches(line, ["RYU SUN-JAE"], []) is False
-    # nobody visible -> no
-    assert speaker_matches(line, ["RYU SUN-JAE"], ["RYU SUN-JAE"]) is False
-
-
-def test_lipsync_media_shape():
-    media = lipsync_media("https://oss/frame.jpg", "https://oss/l0.wav")
-    assert media == [
-        {"type": "first_frame", "url": "https://oss/frame.jpg"},
-        {"type": "driving_audio", "url": "https://oss/l0.wav"},
-    ]
-
-
 def test_pick_matches_by_dialogue_text_not_position():
     lines = [
         {"character_name": "THE STRANGER", "text": "You can run, but you can't hide.", "audio_url": "a", "duration": 3.0},
@@ -66,3 +43,16 @@ def test_pick_matches_by_dialogue_text_not_position():
 def test_pick_falls_back_to_position_without_dialogue():
     lines = [{"character_name": "A", "text": "hi", "audio_url": "a", "duration": 1.0}]
     assert pick_lipsync_line("s1", ["s1"], lines)["character_name"] == "A"
+
+
+def test_pick_resolves_speaker_without_audio_url():
+    # native-talk sources scene_lines straight from the SCRIPT (character + line),
+    # with NO synthesized audio_url — the speaker must still resolve by text so the
+    # right mouth moves even though nothing was ever synthesized.
+    lines = [
+        {"character_name": "A", "text": "Stop right there."},
+        {"character_name": "B", "text": "You lied to me."},
+    ]
+    got = pick_lipsync_line("s2", ["s1", "s2"], lines,
+                            shot_dialogue="You lied to me.")
+    assert got is not None and got["character_name"] == "B"

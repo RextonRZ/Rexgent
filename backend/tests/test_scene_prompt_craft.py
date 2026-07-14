@@ -180,23 +180,6 @@ async def test_unsynced_dialogue_shot_gets_mouth_hiding_coverage():
 
 
 @pytest.mark.asyncio
-async def test_lipsynced_dialogue_shot_stays_front_facing():
-    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
-    crafter.qwen = MagicMock()
-    crafter.qwen.chat_json = AsyncMock(return_value={
-        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
-    crafter.prompt_template = "placeholder"
-
-    result = await crafter.craft(
-        shot={"shot_type": "MCU", "dialogue": "We need to go, now."},
-        character_visuals={}, target_model="wan", lipsync=True)
-    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
-    assert "mid-conversation" in user_msg
-    assert "We need to go, now." in user_msg
-    assert "talking mouth close-up" not in result["negative_prompt"]
-
-
-@pytest.mark.asyncio
 async def test_blocking_renders_absolute_positions():
     crafter = ScenePromptCraft.__new__(ScenePromptCraft)
     crafter.qwen = MagicMock()

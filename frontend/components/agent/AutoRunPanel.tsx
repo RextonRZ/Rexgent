@@ -82,8 +82,8 @@ export function AutoRunPanel({
 
   const { data: bible } = useBible(projectId);
   const hasCast = Boolean(
-    bible?.characters?.some(
-      (c) => c.voice_id || c.variants?.some((v) => v.plate_image_url)
+    bible?.characters?.some((c) =>
+      c.variants?.some((v) => v.plate_image_url)
     )
   );
 
@@ -173,7 +173,7 @@ export function AutoRunPanel({
           the whole episode by itself. With it off, the run stops at the
           script checkpoint and you continue each stage from the Showrunner
           chat, so nothing runs before you say so. Writing costs a few cents;
-          your voucher only goes to plates, voices and video.`}
+          your voucher only goes to plates and video.`}
         </p>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -370,7 +370,7 @@ export function AutoRunPanel({
             </span>
             <span className="mt-0.5 block text-[11px] text-muted-foreground">
               {fullAuto
-                ? `Casts, voices, renders and exports the episode automatically under the $${cap.toFixed(0)} cap. This spends your voucher.`
+                ? `Casts, renders and exports the episode automatically under the $${cap.toFixed(0)} cap. This spends your voucher.`
                 : "Off: writes and judges the script, then stops. You review it and continue each stage from the Showrunner chat."}
             </span>
           </button>
@@ -444,15 +444,15 @@ export function AutoRunPanel({
             )}
             {fullAuto ? (
               <p className="text-xs text-muted-foreground">
-                Plates, voices and video are rendering automatically. Watch
+                Plates and video are rendering automatically. Watch
                 progress on the Generate step.
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
                 The run paused at the script checkpoint, nothing else has
                 started. Read the script in the editor, then continue from
-                the Showrunner chat: cast, storyboard, generate. Only plates,
-                voices and video spend your voucher.
+                the Showrunner chat: cast, storyboard, generate. Only plates
+                and video spend your voucher.
               </p>
             )}
             <Button
