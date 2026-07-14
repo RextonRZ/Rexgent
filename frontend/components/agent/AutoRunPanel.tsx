@@ -19,6 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAutoRun, type AutoRunResult } from "@/hooks/useAgent";
 import { useProject } from "@/hooks/useProjects";
+import { useBible } from "@/hooks/useCasting";
 import { GENRES } from "@/lib/genres";
 import { errText } from "@/lib/errText";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,8 @@ export function AutoRunPanel({
   initialEpisodes,
   initialTargetLength,
   onScriptReady,
+  mode = "create",
+  onRewritten,
 }: {
   projectId: string;
   initialPremise?: string;
@@ -49,8 +52,12 @@ export function AutoRunPanel({
   /** fires when a checkpoint run finishes writing the script, with the run
    * result — the Script page uses it to surface the judge's report */
   onScriptReady?: (result: AutoRunResult) => void;
+  mode?: "create" | "rewrite";
+  /** rewrite mode: fired after a new draft is written, so the caller can close the dialog */
+  onRewritten?: () => void;
 }) {
   const router = useRouter();
+  const rewrite = mode === "rewrite";
   const { data: project } = useProject(projectId);
   const [premise, setPremise] = useState(initialPremise);
   const [genre, setGenre] = useState(initialGenre || "sci-fi");
@@ -67,6 +74,18 @@ export function AutoRunPanel({
   const autoRun = useAutoRun();
   const queryClient = useQueryClient();
   const cap = project?.credit_budget ?? 40;
+
+  const [budget, setBudget] = useState<number>(project?.credit_budget ?? 40);
+  useEffect(() => {
+    if (project?.credit_budget != null) setBudget(project.credit_budget);
+  }, [project?.credit_budget]);
+
+  const { data: bible } = useBible(projectId);
+  const hasCast = Boolean(
+    bible?.characters?.some(
+      (c) => c.voice_id || c.variants?.some((v) => v.plate_image_url)
+    )
+  );
 
   // Rough pre-flight scope estimate (the agent computes the real budget).
   // ~1 short scene per 15s, ~3 shots per scene.
@@ -97,6 +116,15 @@ export function AutoRunPanel({
     setResult(null);
     setRunError(null);
     try {
+      if (rewrite) {
+        // persist the tweaked scope + budget before the run, so the drama's
+        // stored settings follow the new draft
+        await api.patch(`/api/projects/${projectId}`, {
+          episode_count: episodeCount,
+          target_length: targetLength,
+          credit_budget: budget,
+        });
+      }
       const res = await autoRun.mutateAsync({
         project_id: projectId,
         premise,
@@ -107,18 +135,21 @@ export function AutoRunPanel({
         target_length: targetLength,
         episode_count: episodeCount,
         // Full Auto renders + exports the finished episode under the spend cap;
-        // otherwise the run stops at the script checkpoint.
-        dispatch_video: fullAuto,
+        // otherwise the run stops at the script checkpoint. Rewrite never
+        // dispatches video — it only writes a fresh draft.
+        dispatch_video: rewrite ? false : fullAuto,
       });
       setResult(res);
-      if (!fullAuto) {
+      if (rewrite || !fullAuto) {
         // the script exists NOW — refresh the queries so the Script page
         // flips straight into the editor instead of hanging on stale data,
         // and hand the judge's report up for the analysis rail
         onScriptReady?.(res);
         queryClient.invalidateQueries({ queryKey: ["latest-script", projectId] });
         queryClient.invalidateQueries({ queryKey: ["progress", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       }
+      if (rewrite) onRewritten?.();
     } catch (err) {
       // long runs can outlive the HTTP timeout while STILL progressing
       // server-side — say so, never go mute
@@ -129,16 +160,20 @@ export function AutoRunPanel({
   return (
     <Card className="py-6">
       <CardHeader className="px-6">
-        <CardTitle>Full Auto — One Premise → Whole Drama</CardTitle>
+        <CardTitle>
+          {rewrite ? "Rewrite script" : "Full Auto — One Premise → Whole Drama"}
+        </CardTitle>
       </CardHeader>
       <CardContent className="px-6 space-y-5">
         <p className="text-sm text-muted-foreground">
-          The agent writes your script and judges it, rewriting weak drafts.
+          {rewrite
+            ? "Adjust the premise, scope or budget and write a fresh draft. Your current draft stays in history."
+            : `The agent writes your script and judges it, rewriting weak drafts.
           With Full Auto on it then casts, storyboards, renders and exports
           the whole episode by itself. With it off, the run stops at the
           script checkpoint and you continue each stage from the Showrunner
           chat, so nothing runs before you say so. Writing costs a few cents;
-          your voucher only goes to plates, voices and video.
+          your voucher only goes to plates, voices and video.`}
         </p>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -282,6 +317,21 @@ export function AutoRunPanel({
           </div>
         </div>
 
+        {rewrite && (
+          <div className="space-y-1.5">
+            <Label>Spend cap ($)</Label>
+            <Input
+              type="number"
+              min={5}
+              step={5}
+              value={budget}
+              onChange={(e) =>
+                setBudget(Math.max(5, Number(e.target.value) || 5))
+              }
+            />
+          </div>
+        )}
+
         <div className="rounded-lg border hairline bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
           <p>
             <span className="text-foreground font-medium">Scope:</span> ≈{" "}
@@ -296,39 +346,51 @@ export function AutoRunPanel({
           </p>
         </div>
 
-        <button
-          onClick={() => setFullAuto((v) => !v)}
-          className={cn(
-            "w-full rounded-lg border p-3 text-left transition-all",
-            fullAuto
-              ? "border-primary bg-primary/10"
-              : "border-border hover:border-primary/40"
-          )}
-        >
-          <span className="flex items-center justify-between text-sm font-semibold">
-            <span>⚡ Full Auto: premise → finished episode</span>
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                fullAuto ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"
-              )}
-            >
-              {fullAuto ? "ON" : "OFF"}
+        {!rewrite && (
+          <button
+            onClick={() => setFullAuto((v) => !v)}
+            className={cn(
+              "w-full rounded-lg border p-3 text-left transition-all",
+              fullAuto
+                ? "border-primary bg-primary/10"
+                : "border-border hover:border-primary/40"
+            )}
+          >
+            <span className="flex items-center justify-between text-sm font-semibold">
+              <span>⚡ Full Auto: premise → finished episode</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                  fullAuto ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"
+                )}
+              >
+                {fullAuto ? "ON" : "OFF"}
+              </span>
             </span>
-          </span>
-          <span className="mt-0.5 block text-[11px] text-muted-foreground">
-            {fullAuto
-              ? `Casts, voices, renders and exports the episode automatically under the $${cap.toFixed(0)} cap. This spends your voucher.`
-              : "Off: writes and judges the script, then stops. You review it and continue each stage from the Showrunner chat."}
-          </span>
-        </button>
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+              {fullAuto
+                ? `Casts, voices, renders and exports the episode automatically under the $${cap.toFixed(0)} cap. This spends your voucher.`
+                : "Off: writes and judges the script, then stops. You review it and continue each stage from the Showrunner chat."}
+            </span>
+          </button>
+        )}
+
+        {rewrite && hasCast && (
+          <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-4 text-amber-300">
+            You already cast this drama. Rewriting changes the script, so your cast may no longer match. Nothing is deleted, recast whatever changed when you are ready.
+          </p>
+        )}
 
         <Button
           onClick={handleRun}
           disabled={!premise || autoRun.isPending}
           className="w-full"
         >
-          {autoRun.isPending
+          {rewrite
+            ? autoRun.isPending
+              ? "Rewriting…"
+              : "Rewrite my script (no video spend)"
+            : autoRun.isPending
             ? fullAuto
               ? "Producing your episode…"
               : "Writing…"
@@ -344,7 +406,7 @@ export function AutoRunPanel({
           </p>
         )}
 
-        {result && (
+        {result && !rewrite && (
           <div className="border-t pt-3 text-sm space-y-2">
             <p className="font-medium">
               {fullAuto ? "✓ Episode in production" : "✓ Script ready"}
