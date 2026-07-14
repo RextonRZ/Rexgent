@@ -39,6 +39,7 @@ class ScenePromptCraft:
         foreground_characters: list | None = None,
         blocking: dict | None = None,
         lipsync: bool = False,
+        native_talk: bool = False,
         environment: dict | None = None,
     ) -> dict:
         # A location named after a character ("Bear's apartment") must not smuggle
@@ -127,7 +128,22 @@ class ScenePromptCraft:
         # flapping mouth is never front-and-center. Audio itself stays
         # export's job (TTS overlays there); this shapes only the picture.
         has_line = bool(str(shot.get("dialogue") or "").strip())
-        if has_line and lipsync:
+        if has_line and native_talk:
+            # HappyHorse native lip-sync: the model speaks the line itself and
+            # syncs the mouth to its own generated speech. Export mutes that
+            # generated voice and overlays the real TTS, so the picture is a
+            # natural talking take with the correct words. Opposite of coverage.
+            dialogue_block = (
+                "Dialogue delivery (the speaker says THIS line ALOUD on camera: the "
+                "character audibly speaks it with natural mouth movement precisely "
+                "synced to the spoken words, front-facing and readable is fine, warm "
+                "conversational delivery over the full shot. Generate the spoken "
+                "dialogue in the character's own voice so the lips match the words. "
+                "NO on-screen text or subtitles): "
+                + json.dumps(str(shot.get("dialogue")), ensure_ascii=False)
+                + "\n\n"
+            )
+        elif has_line and lipsync:
             dialogue_block = (
                 "Dialogue delivery (rule 10 applied to THIS shot — the speaker is visibly mid-conversation: "
                 "natural mouth movement while speaking, conversational gesture, eye "

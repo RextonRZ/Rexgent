@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     # HappyHorse (face) then re-renders on Wan i2v from that frame + driving_audio
     # (mouth), keeping the better take. Two renders on those shots. OFF by default.
     anchor_lipsync_enabled: bool = False
+    happyhorse_native_talk: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.
