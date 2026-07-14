@@ -496,3 +496,31 @@ async def test_cinematic_flag_off_no_injection(monkeypatch):
                         character_visuals={}, target_model="happyhorse")
     content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "CINEMATIC" not in content
+
+
+@pytest.mark.asyncio
+async def test_craft_weaves_lens_and_composition_from_director_json(monkeypatch):
+    from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "A woman stands in a doorway.", "negative_prompt": ""})
+    crafter.prompt_template = "placeholder"
+    shot = {"shot_type": "CU", "action": "she turns",
+            "director_json": {"lens": "85mm", "composition": "rule_of_thirds"}}
+    out = await crafter.craft(shot, character_visuals={}, target_model="happyhorse")
+    assert "85mm" in out["prompt"]
+    assert "rule-of-thirds" in out["prompt"] or "rule of thirds" in out["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_craft_without_director_json_unchanged(monkeypatch):
+    from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "A woman stands in a doorway.", "negative_prompt": ""})
+    crafter.prompt_template = "placeholder"
+    out = await crafter.craft({"shot_type": "CU", "action": "she turns"},
+                              character_visuals={}, target_model="happyhorse")
+    assert "mm" not in out["prompt"]  # no lens clause injected
