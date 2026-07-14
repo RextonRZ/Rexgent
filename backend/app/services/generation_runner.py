@@ -15,7 +15,7 @@ from app.services.guardrails import CostCircuitBreaker, PreGenerationValidator
 from app.services.reference_stack import WIDE_FRAMINGS, build_reference_stack_labeled
 from app.services.set_dresser import setting_for_shot
 from app.services.clip_store import persist_clip_url
-from app.services.frame_sampler import extract_last_frame
+from app.services.frame_sampler import extract_last_frame, extract_first_frame
 from app.services.cost_ledger import record_video
 from app.services.continuity_repair import repair_steps
 from app.websocket.emitter import emit
@@ -583,6 +583,39 @@ class GenerationRunner:
                 logger.warning("wan continuation failed (%s) — happyhorse", e)
         return ("happyhorse", await _happyhorse())
 
+    async def _anchor_lipsync_upgrade(self, *, project_id, shot, bible, scene_number,
+                                      in_frame, foreground, hh_clip_url, hh_guard,
+                                      prompt, negative, ratio, seed, lipsync_line):
+        """Render a Wan lip-sync take from the HappyHorse anchor's FIRST frame and
+        keep the better of the two. Returns (clip_url, guard, used_tier, spent) — on
+        any failure returns the HappyHorse take unchanged with spent 0.0. Never raises."""
+        from app.services.lipsync import lipsync_media
+        try:
+            frame_bytes = extract_first_frame(hh_clip_url)
+            if not frame_bytes:
+                return hh_clip_url, hh_guard, "happyhorse", 0.0
+            key = self.oss.get_project_path(project_id, "media", f"anchorframe_{shot.id}.png")
+            frame_url = await asyncio.to_thread(self.oss.upload_bytes, frame_bytes, key, "image/png")
+            task_id = await self.qwen.generate_video_wan(
+                prompt=prompt, duration=shot.estimated_duration_seconds,
+                reference_media=lipsync_media(frame_url, lipsync_line["audio_url"]),
+                seed=seed, ratio=ratio, negative_prompt=negative)
+            wan_url = await self.qwen.poll_video_task(task_id)
+            wan_url = await asyncio.to_thread(persist_clip_url, project_id, f"anchorlip_{shot.id}", wan_url)
+            wan_guard = await self.continuity.validate(
+                clip_url=wan_url, duration=shot.estimated_duration_seconds,
+                characters_in_frame=in_frame, bible=bible, scene_number=scene_number,
+                foreground_characters=foreground)
+            spent = record_video(self.db, project_id, shot.estimated_duration_seconds, "wan")
+            keep_wan = (wan_guard["overall_pass"]
+                        or wan_guard["continuity_score"] > hh_guard["continuity_score"])
+            if keep_wan:
+                return wan_url, wan_guard, "wan", spent
+            return hh_clip_url, hh_guard, "happyhorse", spent
+        except Exception as e:  # noqa: BLE001 — never blocks; keep the HappyHorse take
+            logger.warning("anchor lip-sync upgrade failed for shot %s: %s", shot.id, e)
+            return hh_clip_url, hh_guard, "happyhorse", 0.0
+
     async def _run_repair_step(self, step, *, project_id, shot, prompt, negative,
                                ratio, seed, ref_stack, frame_anchor, prev_clip_url,
                                role, source_clip_url):
@@ -935,6 +968,34 @@ class GenerationRunner:
                              confidence=guard["continuity_score"] / 100.0)
 
                 status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
+                # Anchor lip-sync upgrade: an anchor/entrance/reangle shot that
+                # renders a single eligible speaker's line gets a SECOND render —
+                # a Wan lip-sync take from the HappyHorse anchor's own first
+                # frame — and keeps whichever take is better. OFF by default;
+                # gated on identity_routing_v2 (role is only computed under v2)
+                # and attempt 0 (a hard-failure retry doesn't repeat this).
+                anchor_lip = (
+                    getattr(get_settings(), "anchor_lipsync_enabled", False)
+                    and settings_v2 and role in ("anchor", "entrance", "continue_reangle")
+                    and attempt == 0
+                    and get_settings().lipsync_enabled
+                    and lipsync_line and lipsync_line.get("audio_url")
+                    # an over-long driving track risks a wan-side rejection;
+                    # unknown duration (0/None) is treated as unsafe
+                    and (lipsync_line.get("duration") or 0) > 0
+                    and lipsync_line["duration"] <= shot.estimated_duration_seconds
+                    and speaker_matches(lipsync_line, in_frame, foreground))
+                if anchor_lip:
+                    clip_url, guard, used_tier, lip_spent = await self._anchor_lipsync_upgrade(
+                        project_id=str(job.project_id), shot=shot, bible=bible,
+                        scene_number=scene_number, in_frame=in_frame, foreground=foreground,
+                        hh_clip_url=clip_url, hh_guard=guard, prompt=prompt,
+                        negative=negative, ratio=ratio, seed=seed, lipsync_line=lipsync_line)
+                    # both renders are billed: the primary happyhorse render bills
+                    # below via first_tier as always; this bills the wan take too
+                    job.actual_cost += lip_spent
+                    spent_usd += lip_spent
+                    status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
                 # Bounded, budget-gated repair ladder: a soft continuity fail gets
                 # a shot at reseed/reanchor/videoedit (cheapest first), keeping
                 # whichever render scores best. OFF by default — a settings object

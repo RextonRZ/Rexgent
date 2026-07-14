@@ -881,3 +881,78 @@ async def test_multishot_beat_post_dispatch_failure_is_caught(monkeypatch):
         prev_last_frame_url=None, scene_anchor_url=None, prev_shot_type=None)
     assert result[1] is None   # clip is None; did NOT raise
 
+
+# --- anchor lip-sync upgrade: HappyHorse anchor frame -> Wan lip-sync take ---
+
+@pytest.mark.asyncio
+async def test_anchor_lipsync_keeps_passing_wan_take(monkeypatch):
+    runner = make_runner()
+    scores = iter([
+        {"continuity_score": 70, "overall_pass": True, "face_score": 0.7,
+         "outfit_score": 0.7, "background_score": 0.7},   # happyhorse anchor
+        {"continuity_score": 74, "overall_pass": True, "face_score": 0.75,
+         "outfit_score": 0.7, "background_score": 0.7},    # wan lip-sync take
+    ])
+    runner.continuity.validate = AsyncMock(side_effect=lambda **k: next(scores))
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "extract_first_frame", lambda url: b"ff")
+    monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.5)
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    monkeypatch.setattr(gr.get_settings(), "anchor_lipsync_enabled", True, raising=False)
+    runner.oss.upload_bytes = MagicMock(return_value="http://x/firstframe.png")
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    shot = make_shot()  # anchor (no frame anchor), single char "Yuki", has dialogue
+    line = {"audio_url": "a.wav", "duration": 2.0, "character_name": "YUKI"}
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url=None, scene_anchor_url=None, prev_in_frame=None,
+        prev_shot_type=None, lipsync_line=line)
+    wan_media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
+    assert any(m.get("type") == "driving_audio" for m in wan_media)
+    added = runner.db.add.call_args[0][0]
+    assert added.consistency_score == 74          # kept the Wan take
+    assert job.actual_cost == 1.0                 # both renders billed
+
+
+@pytest.mark.asyncio
+async def test_anchor_lipsync_falls_back_when_wan_worse(monkeypatch):
+    runner = make_runner()
+    scores = iter([
+        {"continuity_score": 70, "overall_pass": True, "face_score": 0.7,
+         "outfit_score": 0.7, "background_score": 0.7},   # happyhorse anchor
+        {"continuity_score": 40, "overall_pass": False, "face_score": 0.3,
+         "outfit_score": 0.6, "background_score": 0.6},    # wan wrecked the face
+    ])
+    runner.continuity.validate = AsyncMock(side_effect=lambda **k: next(scores))
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr, "extract_first_frame", lambda url: b"ff")
+    monkeypatch.setattr(gr, "record_video", lambda *a, **k: 0.5)
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    monkeypatch.setattr(gr.get_settings(), "anchor_lipsync_enabled", True, raising=False)
+    runner.oss.upload_bytes = MagicMock(return_value="http://x/firstframe.png")
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    line = {"audio_url": "a.wav", "duration": 2.0, "character_name": "YUKI"}
+    await runner._process_shot(
+        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url=None, scene_anchor_url=None, prev_in_frame=None,
+        prev_shot_type=None, lipsync_line=line)
+    added = runner.db.add.call_args[0][0]
+    assert added.consistency_score == 70          # kept the HappyHorse take
+
+
+@pytest.mark.asyncio
+async def test_anchor_lipsync_off_by_default_no_second_render(monkeypatch):
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 70, "overall_pass": True, "face_score": 0.7,
+        "outfit_score": 0.7, "background_score": 0.7})
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    line = {"audio_url": "a.wav", "duration": 2.0, "character_name": "YUKI"}
+    await runner._process_shot(
+        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url=None, scene_anchor_url=None, prev_in_frame=None,
+        prev_shot_type=None, lipsync_line=line)
+    runner.qwen.generate_video_wan.assert_not_awaited()
+
