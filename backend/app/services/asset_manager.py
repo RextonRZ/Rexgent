@@ -85,3 +85,13 @@ class AssetManager:
     def local_path(self, asset: AssetMeta) -> Path:
         """The on-disk file for an asset (its sidecar dir + filename)."""
         return Path(asset.__dict__.get("_dir", str(self.root))) / asset.filename
+
+    def resolve_url(self, asset, oss=None) -> str:
+        """Upload the library file to a SHARED (non-per-project) OSS key and return
+        the public URL, so the export/frontend can consume it. Idempotent enough:
+        the same asset always maps to the same key, so re-uploads just overwrite."""
+        from app.services.oss_manager import OSSManager
+        from app.config import get_settings
+        oss = oss or OSSManager(get_settings())
+        key = f"library/{asset.type}/{asset.filename}"
+        return oss.upload_file(str(self.local_path(asset)), key)

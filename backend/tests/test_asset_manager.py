@@ -58,3 +58,16 @@ def test_local_path_points_at_the_file(library):
     a = library.find_music(mood="sadness")[0]
     assert library.local_path(a).name == "sad_piano.mp3"
     assert library.local_path(a).exists()
+
+
+def test_resolve_url_uploads_to_shared_library_key(library):
+    calls = {}
+    class FakeOSS:
+        def upload_file(self, local, key):
+            calls["local"], calls["key"] = local, key
+            return f"https://bucket/{key}"
+    a = library.find_music(mood="sadness")[0]
+    url = library.resolve_url(a, oss=FakeOSS())
+    assert url == "https://bucket/library/music/sad_piano.mp3"
+    assert calls["key"] == "library/music/sad_piano.mp3"
+    assert calls["local"].endswith("sad_piano.mp3")
