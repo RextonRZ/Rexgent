@@ -1,23 +1,17 @@
 """Pure builders for the DashScope video `media[]` payloads, one place for the
 confirmed request-shape rules so a wrong shape can't leak into dispatch:
 
-- wan2.7-i2v accepts first_frame / last_frame / first_clip / driving_audio ONLY.
-  driving_audio is valid ONLY alongside first_frame (never first_clip).
+- wan2.7-i2v accepts first_frame / last_frame / first_clip ONLY.
 - wan2.7-r2v accepts up to 5 reference_image entries PLUS an optional first_frame
   together (joint control: continue the scene AND lock the references).
 """
 
 
-def hold_media(*, first_clip_url=None, first_frame_url=None, audio_url=None,
-               talking: bool = False):
+def hold_media(*, first_clip_url=None, first_frame_url=None):
     """Continue-Hold media for wan2.7-i2v.
 
-    Talking + both frame and audio present -> first_frame + driving_audio (lip-sync).
-    Otherwise silent continuation: first_clip if available (best motion), else
-    first_frame. Returns None when there is nothing to continue from."""
-    if talking and first_frame_url and audio_url:
-        return [{"type": "first_frame", "url": first_frame_url},
-                {"type": "driving_audio", "url": audio_url}]
+    Silent continuation: first_clip if available (best motion), else first_frame.
+    Returns None when there is nothing to continue from."""
     if first_clip_url:
         return [{"type": "first_clip", "url": first_clip_url}]
     if first_frame_url:

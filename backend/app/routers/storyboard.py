@@ -191,7 +191,6 @@ def shots_with_render_plan(shots: list[Shot], bible: dict) -> list[dict]:
         shots, bible,
         identity_routing_v2=settings.identity_routing_v2,
         anchor_ref_model=settings.anchor_ref_model,
-        anchor_lipsync=settings.anchor_lipsync_enabled,
         lipsync_enabled=settings.lipsync_enabled,
         wan_on_same_cast=settings.wan_on_same_cast,
         happyhorse_native_talk=settings.happyhorse_native_talk,

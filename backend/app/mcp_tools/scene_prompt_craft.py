@@ -124,11 +124,13 @@ class ScenePromptCraft:
             "the action explicitly describes an entrance.\n\n"
             if character_visuals else ""
         )
-        # Per-shot dialogue treatment, two modes. A shot whose mouth will be
-        # DRIVEN by its own line (wan driving_audio) is framed openly talking;
-        # every other spoken line hides the mouth (coverage) so an unsynced
-        # flapping mouth is never front-and-center. Audio itself stays
-        # export's job (TTS overlays there); this shapes only the picture.
+        # Per-shot dialogue treatment. A native-talk shot (HappyHorse speaks the
+        # line itself) is framed openly talking; every other spoken line hides
+        # the mouth (coverage) so an unsynced flapping mouth is never
+        # front-and-center. Audio itself stays export's job (native voice muted,
+        # real TTS overlaid there); this shapes only the picture. (`lipsync` is a
+        # retained-but-inert parameter — the old wan driving-audio path it framed
+        # for has been removed.)
         has_line = bool(str(shot.get("dialogue") or "").strip())
         if has_line and native_talk:
             # HappyHorse native lip-sync: the model speaks the line itself and
@@ -142,16 +144,6 @@ class ScenePromptCraft:
                 "conversational delivery over the full shot. Generate the spoken "
                 "dialogue in the character's own voice so the lips match the words. "
                 "NO on-screen text or subtitles): "
-                + json.dumps(str(shot.get("dialogue")), ensure_ascii=False)
-                + "\n\n"
-            )
-        elif has_line and lipsync:
-            dialogue_block = (
-                "Dialogue delivery (rule 10 applied to THIS shot — the speaker is visibly mid-conversation: "
-                "natural mouth movement while speaking, conversational gesture, eye "
-                "focus on the listener or camera; NO on-screen text or subtitles. "
-                "Background audio: ambient sound, sound effects and light musical "
-                "score only, with NO spoken voices): "
                 + json.dumps(str(shot.get("dialogue")), ensure_ascii=False)
                 + "\n\n"
             )
@@ -283,7 +275,7 @@ class ScenePromptCraft:
         result["negative_prompt"] = sanitizer.inject_negative_prompt(
             result.get("negative_prompt", "")
         )
-        if has_line and not lipsync and not native_talk:
+        if has_line and not native_talk:
             # secondary backstop to the coverage framing above — negatives
             # alone are unreliable, but they bias away from readable lips.
             # Skipped for native_talk: those shots WANT a readable talking mouth.

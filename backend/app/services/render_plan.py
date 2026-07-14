@@ -13,7 +13,7 @@ def _has_plate(bible, name):
 
 
 def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
-                       anchor_lipsync, lipsync_enabled, wan_on_same_cast=False,
+                       lipsync_enabled, wan_on_same_cast=False,
                        happyhorse_native_talk=False,
                        route_continuation_to_happyhorse=False):
     """Per-shot {model, lipsync} for one scene's ordered shots. Mirrors runtime routing."""
@@ -44,16 +44,13 @@ def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
         # — mirrors _dispatch_by_role's continue_hold routing under the flag.
         if route_continuation_to_happyhorse and role == "continue_hold":
             model = "happyhorse"
-        visible = [c for c in _chars(shot) if c not in fg]
         has_dialogue = bool((getattr(shot, "dialogue", None) or "").strip())
-        single = has_dialogue and len(visible) == 1
         # native talk makes HappyHorse SPEAK the line itself, so a ref-native shot
         # with dialogue talks even with several people in frame (the speaker is
-        # named at render); wan/anchor lip-sync still needs a single visible face.
+        # named at render). The badge tracks native-talk only; it is gated by the
+        # same lipsync_enabled flag the runner uses.
         talk = happyhorse_native_talk and ref_native and has_dialogue
-        lipsync = (lipsync_enabled
-                   and (talk or (single and (role == "continue_hold"
-                                             or (ref_native and anchor_lipsync)))))
+        lipsync = lipsync_enabled and talk
         out.append({"model": model, "lipsync": bool(lipsync)})
         prev = shot
     return out

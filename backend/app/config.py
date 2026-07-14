@@ -38,10 +38,6 @@ class Settings(BaseSettings):
     multishot_enabled: bool = False
     multishot_max_shots: int = 3
     multishot_max_duration: int = 15
-    # Anchor lip-sync: an eligible single-speaker dialogue anchor renders on
-    # HappyHorse (face) then re-renders on Wan i2v from that frame + driving_audio
-    # (mouth), keeping the better take. Two renders on those shots. OFF by default.
-    anchor_lipsync_enabled: bool = False
     happyhorse_native_talk: bool = False
     # Prepend an [Image N] legend to r2v prompts so the model ties each person to
     # their OWN reference plate (face/outfit) instead of guessing. OFF by default.
@@ -95,8 +91,9 @@ class Settings(BaseSettings):
     qwen_image_model: str = "wan2.6-t2i"
     qwen_image_edit_model: str = "qwen-image-edit-max"
     qwen_vl_continuity_model: str = "qwen3-vl-plus"
-    # Wan lip-sync (first_frame + driving_audio on eligible shots). Flip to
-    # false to disable instantly — the fallback path is today's renderer.
+    # Gates HappyHorse native-talk (the model speaks the scripted line itself and
+    # syncs its own mouth; no audio is sent to the model). Flip false to disable
+    # native-talk instantly — the fallback is a silent take with coverage framing.
     lipsync_enabled: bool = True
     qwen_image_path: str = "/services/aigc/image-generation/generation"
     # qwen-image-edit-max lives on the SYNCHRONOUS multimodal endpoint — the async

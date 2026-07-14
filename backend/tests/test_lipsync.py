@@ -1,4 +1,4 @@
-from app.services.lipsync import pick_lipsync_line, speaker_matches, lipsync_media
+from app.services.lipsync import pick_lipsync_line
 
 
 LINES = [
@@ -27,29 +27,6 @@ def test_folded_overflow_shot_is_ineligible():
     assert pick_lipsync_line("s2", ["s1", "s2"], three) is None
     # the first shot still speaks exactly one line
     assert pick_lipsync_line("s1", ["s1", "s2"], three) == three[0]
-
-
-def test_speaker_must_be_the_only_visible_character():
-    line = {"character_name": "IM SOL"}
-    assert speaker_matches(line, ["IM SOL"], []) is True
-    # case-insensitive
-    assert speaker_matches({"character_name": "im sol"}, ["IM SOL"], []) is True
-    # two visible people -> no
-    assert speaker_matches(line, ["IM SOL", "RYU SUN-JAE"], []) is False
-    # the other person is a foreground occluder (face unseen) -> yes
-    assert speaker_matches(line, ["IM SOL", "RYU SUN-JAE"], ["RYU SUN-JAE"]) is True
-    # the visible person is NOT the speaker -> no
-    assert speaker_matches(line, ["RYU SUN-JAE"], []) is False
-    # nobody visible -> no
-    assert speaker_matches(line, ["RYU SUN-JAE"], ["RYU SUN-JAE"]) is False
-
-
-def test_lipsync_media_shape():
-    media = lipsync_media("https://oss/frame.jpg", "https://oss/l0.wav")
-    assert media == [
-        {"type": "first_frame", "url": "https://oss/frame.jpg"},
-        {"type": "driving_audio", "url": "https://oss/l0.wav"},
-    ]
 
 
 def test_pick_matches_by_dialogue_text_not_position():
