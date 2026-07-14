@@ -1,6 +1,8 @@
 """Read-only Asset Library API: search assets and suggest music by drama mood.
 The AssetManager is the reusable core; a future Music/Editing Agent calls the
 same manager methods directly."""
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -9,20 +11,32 @@ from app.database import get_db
 from app.services.asset_manager import AssetManager
 from app.services.music_suggest import derive_mood
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/assets", tags=["assets"],
                    dependencies=[Depends(get_current_user)])
 
 _manager = AssetManager()
 _manager.scan()
 
+# Resolved library URLs are cached by asset id: resolve_url uploads to a
+# deterministic shared key, so the first search pays the upload and later ones
+# reuse the URL instead of re-uploading on a read-only GET.
+_url_cache: dict[str, str] = {}
+
 
 def _serialize(asset, resolve=True):
     out = asset.model_dump()
     if resolve:
-        try:
-            out["url"] = _manager.resolve_url(asset)
-        except Exception:  # noqa: BLE001 - a serving hiccup shouldn't fail the search
-            out["url"] = None
+        url = _url_cache.get(asset.id)
+        if url is None:
+            try:
+                url = _manager.resolve_url(asset)
+                _url_cache[asset.id] = url
+            except Exception:  # noqa: BLE001 - a serving hiccup shouldn't fail the search
+                logger.warning("asset: resolve_url failed for %s", asset.id, exc_info=True)
+                url = None
+        out["url"] = url
     return out
 
 

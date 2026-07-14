@@ -7,6 +7,7 @@ OSS upload is ever touched: only routing + response shape are under test.
 import uuid
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -14,6 +15,14 @@ from app.database import get_db
 from app.assets.schema import MusicMeta
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _clear_url_cache():
+    from app.routers import assets as assets_module
+    assets_module._url_cache.clear()
+    yield
+    assets_module._url_cache.clear()
 
 
 def _fake_music(asset_id="m1", title="Sad Theme", mood="sadness"):
@@ -113,3 +122,24 @@ def test_suggest_music_returns_mood_and_results(monkeypatch):
     assert body["mood"] == "romance"
     assert isinstance(body["results"], list)
     assert body["results"][0]["url"] == "https://cdn.test/m1.mp3"
+
+
+# --- Test C: suggest falls back to "daily" when the project is missing -------
+def test_suggest_music_missing_project_falls_back_to_daily(monkeypatch):
+    db = FakeDB(projects=[])  # project lookup returns None
+
+    def _fake_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _fake_get_db
+    _mock_manager(monkeypatch, music_result=[_fake_music(mood="daily")])
+    try:
+        r = client.get(f"/api/assets/music/suggest?project_id={uuid.uuid4()}")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert r.status_code == 200
+    body = r.json()
+    # no genre, no beats -> derive_mood's no-signal fallback
+    assert body["mood"] == "daily"
+    assert isinstance(body["results"], list)
