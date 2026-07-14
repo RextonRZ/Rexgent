@@ -112,36 +112,8 @@ export default function CharactersPage({
                   detail: "about 3 frames on wan2.6-t2i, at $0.075 per image",
                   amount: 3 * 0.075,
                 },
-                ...(characters.length > 0 &&
-                characters.every((c) => castingByCharId[c.id]?.voice_id)
-                  ? [
-                      {
-                        label: "Voices",
-                        detail: "every character already has a voice, nothing to charge",
-                        amount: 0,
-                      },
-                    ]
-                  : []),
               ],
-              options: (() => {
-                const voiceless = characters.filter(
-                  (c) => !castingByCharId[c.id]?.voice_id
-                ).length;
-                return voiceless > 0
-                  ? [
-                      {
-                        key: "designVoice",
-                        label: `Designed voices for ${voiceless} character${voiceless === 1 ? "" : "s"}`,
-                        priceLine: `$${(voiceless * 0.2).toFixed(2)}`,
-                        note: "qwen-voice-design writes each voice from the character's age and personality, spoken by qwen3-tts-vd. Untick for free preset voices.",
-                        defaultOn: true,
-                        amount: voiceless * 0.2,
-                      },
-                    ]
-                  : undefined;
-              })(),
-              run: (choices) =>
-                runCasting.mutate({ designVoice: choices?.designVoice ?? true }),
+              run: () => runCasting.mutate(),
             })
           }
           disabled={runCasting.isPending}
@@ -176,7 +148,7 @@ export default function CharactersPage({
       )}
       {runCasting.isSuccess && (
         <p className="text-xs text-muted-foreground">
-          Plate generation started — costume plates and voices will appear on each
+          Plate generation started — costume plates will appear on each
           card as they finish. Review locations, style, and approve on the{" "}
           <span className="text-primary">Generate</span> step.
         </p>
@@ -198,7 +170,7 @@ export default function CharactersPage({
             <EmptyState
               icon="🎭"
               title="No cast yet"
-              line="The casting director reads your script and builds a profile for every character: face, wardrobe, voice and personality. Extract them to start casting."
+              line="The casting director reads your script and builds a profile for every character: face, wardrobe and personality. Extract them to start casting."
             >
               <Button onClick={handleExtract}>Extract from Script</Button>
             </EmptyState>
