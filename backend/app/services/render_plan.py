@@ -13,7 +13,7 @@ def _has_plate(bible, name):
 
 
 def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
-                       anchor_lipsync, lipsync_enabled):
+                       anchor_lipsync, lipsync_enabled, wan_on_same_cast=False):
     """Per-shot {model, lipsync} for one scene's ordered shots. Mirrors runtime routing."""
     out = []
     prev = None
@@ -33,6 +33,9 @@ def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
                             bool((getattr(shot, "blocking_json", None) or {}).get("reverse_angle")))
         role = classify_shot_role(has_frame_anchor=has_anchor,
                                   has_locked_newcomer=bool(newcomer), is_angle_change=chg)
+        # same-cast reangle routes to wan continuation when opted in (mirrors runtime)
+        if role == "continue_reangle" and wan_on_same_cast:
+            role = "continue_hold"
         ref_native = role in ("anchor", "entrance", "continue_reangle")
         model = "happyhorse" if (ref_native and anchor_ref_model == "happyhorse") else "wan"
         visible = [c for c in _chars(shot) if c not in fg]

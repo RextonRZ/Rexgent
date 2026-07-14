@@ -80,3 +80,25 @@ def test_anchor_ref_model_wan_uses_wan_for_anchors():
     plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
                               anchor_ref_model="wan", anchor_lipsync=False, lipsync_enabled=True)
     assert plan[0]["model"] == "wan"
+
+
+def test_wan_on_same_cast_routes_reangle_to_wan():
+    # shot 2: same cast as shot 1 but a framing change -> continue_reangle
+    shots = [_shot(1, ["A"], stype="MS"), _shot(2, ["A"], stype="OTS")]
+    off = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                             anchor_ref_model="happyhorse", anchor_lipsync=False,
+                             lipsync_enabled=True)
+    on = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                            anchor_ref_model="happyhorse", anchor_lipsync=False,
+                            lipsync_enabled=True, wan_on_same_cast=True)
+    assert off[1]["model"] == "happyhorse"   # reangle -> HappyHorse by default
+    assert on[1]["model"] == "wan"           # same cast -> wan continuation
+
+
+def test_wan_on_same_cast_still_happyhorse_for_new_character():
+    # a NEW character (entrance) must stay HappyHorse even with the flag on
+    shots = [_shot(1, ["A"]), _shot(2, ["A", "B"])]
+    on = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                            anchor_ref_model="happyhorse", anchor_lipsync=False,
+                            lipsync_enabled=True, wan_on_same_cast=True)
+    assert on[1]["model"] == "happyhorse"

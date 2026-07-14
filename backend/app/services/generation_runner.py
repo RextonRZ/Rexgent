@@ -814,6 +814,12 @@ class GenerationRunner:
                 is_angle_change=angle_changed(
                     prev_shot_type, shot.shot_type,
                     bool((getattr(shot, "blocking_json", None) or {}).get("reverse_angle"))))
+            # "same cast -> wan": a reangle keeps the same cast, so route it to
+            # wan continuation (it continues from the previous frame) rather than
+            # the HappyHorse reference model. Only a NEW character (entrance) or
+            # the opening shot (anchor) forces HappyHorse. OFF -> unchanged.
+            if role == "continue_reangle" and getattr(get_settings(), "wan_on_same_cast", False):
+                role = "continue_hold"
             # continue_hold is the only role that stays on wan i2v
             is_wan = role == "continue_hold"
         model_cap = 5 if is_wan else 9
