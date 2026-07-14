@@ -915,6 +915,13 @@ async def test_anchor_lipsync_keeps_passing_wan_take(monkeypatch):
         prev_shot_type=None, lipsync_line=line)
     wan_media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
     assert any(m.get("type") == "driving_audio" for m in wan_media)
+    # the wan take was framed OPEN-MOUTHED: the crafter received lipsync=True,
+    # not the mouth-hiding coverage a non-lip shot gets
+    assert runner.prompt_crafter.craft.await_args.kwargs.get("lipsync") is True
+    # extract_first_frame produces JPEG bytes: the frame is uploaded as
+    # image/jpeg, not mislabeled png
+    up = runner.oss.upload_bytes.call_args
+    assert up.kwargs.get("content_type", (up.args[2:3] or ["?"])[0]) == "image/jpeg"
     added = runner.db.add.call_args[0][0]
     assert added.consistency_score == 74          # kept the Wan take
     assert job.actual_cost == 1.0                 # both renders billed

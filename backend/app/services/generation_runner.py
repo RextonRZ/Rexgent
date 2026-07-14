@@ -594,8 +594,10 @@ class GenerationRunner:
             frame_bytes = extract_first_frame(hh_clip_url)
             if not frame_bytes:
                 return hh_clip_url, hh_guard, "happyhorse", 0.0
-            key = self.oss.get_project_path(project_id, "media", f"anchorframe_{shot.id}.png")
-            frame_url = await asyncio.to_thread(self.oss.upload_bytes, frame_bytes, key, "image/png")
+            # extract_first_frame produces JPEG bytes (like extract_last_frame),
+            # so store it as .jpg / image/jpeg — matches _store_last_frame
+            key = self.oss.get_project_path(project_id, "media", f"anchorframe_{shot.id}.jpg")
+            frame_url = await asyncio.to_thread(self.oss.upload_bytes, frame_bytes, key, "image/jpeg")
             task_id = await self.qwen.generate_video_wan(
                 prompt=prompt, duration=shot.estimated_duration_seconds,
                 reference_media=lipsync_media(frame_url, lipsync_line["audio_url"]),
@@ -606,7 +608,8 @@ class GenerationRunner:
                 clip_url=wan_url, duration=shot.estimated_duration_seconds,
                 characters_in_frame=in_frame, bible=bible, scene_number=scene_number,
                 foreground_characters=foreground)
-            spent = record_video(self.db, project_id, shot.estimated_duration_seconds, "wan")
+            spent = record_video(self.db, project_id, shot.estimated_duration_seconds,
+                                 "wan", ref_id=str(shot.id))
             keep_wan = (wan_guard["overall_pass"]
                         or wan_guard["continuity_score"] > hh_guard["continuity_score"])
             if keep_wan:
@@ -850,12 +853,14 @@ class GenerationRunner:
                 # mouth-hiding coverage — the crafter needs to know which
                 from app.services.lipsync import lipsync_media, speaker_matches
                 frame_anchor = frame_anchor_pre if (is_wan or settings_v2) else None
-                lip_eligible = (
+                # SHARED line eligibility — everything EXCEPT a frame to continue
+                # from. The continuation lip additionally needs a frame_anchor;
+                # the anchor-lipsync upgrade does NOT (it renders its own frame).
+                line_eligible = (
                     # a poll-time lip failure must degrade on the retry, not
                     # repeat itself — so only attempt 0 is lip-eligible
                     attempt == 0
                     and get_settings().lipsync_enabled
-                    and frame_anchor
                     and lipsync_line
                     and lipsync_line.get("audio_url")
                     # an over-long driving track risks a wan-side rejection;
@@ -864,16 +869,28 @@ class GenerationRunner:
                     and lipsync_line["duration"] <= shot.estimated_duration_seconds
                     and speaker_matches(lipsync_line, in_frame, foreground))
                 if settings_v2:
-                    lip = lipsync_line if (lip_eligible and role == "continue_hold") else None
+                    lip = (lipsync_line if (line_eligible and frame_anchor
+                                            and role == "continue_hold") else None)
                 else:
-                    lip = lipsync_line if (is_wan and lip_eligible) else None
+                    lip = lipsync_line if (is_wan and line_eligible and frame_anchor) else None
+                # Anchor lip-sync upgrade eligibility, decided BEFORE crafting so
+                # the wan take is framed with an OPEN talking mouth (lipsync=True
+                # below) — the opposite of the mouth-hiding coverage a non-lip
+                # shot gets. An anchor/entrance/reangle shot renders its own first
+                # frame, so it needs NO frame_anchor. OFF by default; role exists
+                # only under v2. Reused by the upgrade block after render+score.
+                anchor_lip = (
+                    getattr(get_settings(), "anchor_lipsync_enabled", False)
+                    and settings_v2
+                    and role in ("anchor", "entrance", "continue_reangle")
+                    and line_eligible)
                 tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
                            index=job.completed_shots + 1, total=job.total_shots)
                 crafted = await self._craft_prompt(
                     shot, char_by_name, scene_setting, prev_action, next_action,
                     foreground=foreground, outfits=outfits,
                     blocking=getattr(shot, "blocking_json", None),
-                    lipsync=bool(lip), environment=environment)
+                    lipsync=bool(lip) or anchor_lip, environment=environment)
                 prompt = crafted.get("prompt", "")
                 # the crafter has ALWAYS produced a negative prompt; until now
                 # it was dropped on the floor before dispatch
@@ -968,23 +985,10 @@ class GenerationRunner:
                              confidence=guard["continuity_score"] / 100.0)
 
                 status = "APPROVED" if guard["overall_pass"] else "NEEDS_REVIEW"
-                # Anchor lip-sync upgrade: an anchor/entrance/reangle shot that
-                # renders a single eligible speaker's line gets a SECOND render —
-                # a Wan lip-sync take from the HappyHorse anchor's own first
-                # frame — and keeps whichever take is better. OFF by default;
-                # gated on identity_routing_v2 (role is only computed under v2)
-                # and attempt 0 (a hard-failure retry doesn't repeat this).
-                anchor_lip = (
-                    getattr(get_settings(), "anchor_lipsync_enabled", False)
-                    and settings_v2 and role in ("anchor", "entrance", "continue_reangle")
-                    and attempt == 0
-                    and get_settings().lipsync_enabled
-                    and lipsync_line and lipsync_line.get("audio_url")
-                    # an over-long driving track risks a wan-side rejection;
-                    # unknown duration (0/None) is treated as unsafe
-                    and (lipsync_line.get("duration") or 0) > 0
-                    and lipsync_line["duration"] <= shot.estimated_duration_seconds
-                    and speaker_matches(lipsync_line, in_frame, foreground))
+                # Anchor lip-sync upgrade (eligibility decided above, before
+                # crafting, so the wan take was framed open-mouthed): render a
+                # SECOND wan take from the HappyHorse anchor's own first frame and
+                # keep whichever take scores better. Both renders are billed.
                 if anchor_lip:
                     clip_url, guard, used_tier, lip_spent = await self._anchor_lipsync_upgrade(
                         project_id=str(job.project_id), shot=shot, bible=bible,
