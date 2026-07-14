@@ -60,44 +60,6 @@ def build_cut_plan(entries: list[dict]) -> list[dict]:
     return plan
 
 
-def voice_captions_incomplete(spoken: list, entries: list) -> bool:
-    """True when the placed voice lines cover FEWER dialogue lines than the cut
-    actually shows on screen — a dropped TTS call left part of the conversation
-    unvoiced. Captions follow the voices, so without this the subtitles would
-    silently shrink to match the missing audio; instead we fall back to the
-    shots' own dialogue so every spoken line is still captioned."""
-    dialogue_shots = sum(1 for e in entries if (e.get("text") or "").strip())
-    return len([s for s in spoken if s.get("text")]) < dialogue_shots
-
-
-def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers,
-                                   script_line_keys=None) -> set:
-    """Names whose dialogue audio no longer matches casting: their lines were
-    synthesized with a different voice_id than the character's CURRENT one
-    (recast after generation; rows with NO recorded voice count too), or they
-    speak in the script but audio is missing — either no lines at all, or
-    individual line slots that a flaky TTS call skipped (script_line_keys:
-    {(scene_number, line_index, character)}). Pure function so the recast
-    rules are testable."""
-    from app.services.guardrails import canonical_character
-    stale = set()
-    for r in rows:
-        # "CATHERINE (V.O.)" rows are judged against CATHERINE's current
-        # voice — a stage qualifier must not exempt a line from recasting
-        cur = (current_voice_by_name.get(r.character_name)
-               or current_voice_by_name.get(
-                   canonical_character(r.character_name or "", current_voice_by_name)))
-        if cur and r.voice_id != cur:
-            stale.add(r.character_name)
-    have = {r.character_name for r in rows}
-    missing = {s for s in script_speakers if s not in have}
-    if script_line_keys:
-        have_slots = {(r.scene_number, r.line_index) for r in rows}
-        missing |= {ch for (sc, li, ch) in script_line_keys
-                    if ch in script_speakers and (sc, li) not in have_slots}
-    return stale | missing
-
-
 def assign_episodes(cut_entries: list, episode_by_scene: dict) -> list[int]:
     """Which episode each cut chunk belongs to. Scene-less chunks (imported
     media) ride the episode currently playing; anything unknown is episode 1,
@@ -351,25 +313,13 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: ending hold skipped{label}: {e}")
 
-            # ── Captions: timed to the placed voice lines when they exist,
-            # else to chunk durations. Burned in AND uploaded as sidecar .srt ──
+            # ── Captions: the shot dialogue timed to chunk durations. Burned in
+            # AND uploaded as a sidecar .srt ──
             srt_url = None
             try:
-                spoken = [s for s in dialogue_segments if s.get("text")]
                 cut_captions = [{"dialogue": e.get("text"), "duration": e["duration"]}
                                 for e in entries]
-                # Voice-timed captions are best WHEN COMPLETE; if a TTS drop left
-                # fewer voices than the cut speaks, fall back to the shots' own
-                # dialogue so the captions still cover the whole conversation.
-                use_voice = bool(spoken) and not voice_captions_incomplete(spoken, entries)
-                if spoken and not use_voice:
-                    logger.warning(
-                        "captions: only %d voiced line(s) for %d dialogue shot(s)%s "
-                        "— captioning from shot dialogue so none are missing",
-                        len(spoken),
-                        sum(1 for e in entries if (e.get("text") or "").strip()), label)
-                srt = (caption_gen.generate_srt_from_segments(spoken) if use_voice
-                       else caption_gen.generate_srt(cut_captions))
+                srt = caption_gen.generate_srt(cut_captions)
                 if srt.strip():
                     srt_path = os.path.join(workdir, f"captions{suffix}.srt")
                     with open(srt_path, "w", encoding="utf-8") as f:
