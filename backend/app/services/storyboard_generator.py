@@ -2,6 +2,7 @@ import json
 from app.services.qwen_client import QwenClient
 from app.services.prompt_loader import load_prompt
 from app.config import get_settings
+from app.director.types import ShotPlan
 
 
 def plan_shot_budget(num_scenes: int, target_length: int) -> tuple[int, int]:
@@ -93,3 +94,57 @@ class StoryboardGenerator:
                 s["estimated_duration_seconds"] = fit_duration_to_dialogue(
                     s.get("dialogue"))
         return shots
+
+    async def stage_plan(self, scene_json: dict, characters_in_scene: list[dict],
+                         plan: ShotPlan, style_bible: dict | None = None) -> list[dict]:
+        """Stager: fill blocking/action/verbatim-dialogue INSIDE a fixed director
+        plan. The plan's cinematic choices (size/camera/lens/composition/duration)
+        are authoritative and forced after staging. Raises on LLM failure so the
+        caller can fall back to generate_for_scene."""
+        from app.services.prompt_loader import load_prompt
+        lines = scene_json.get("dialogue") or []
+        plan_rows = [{
+            "shot_number": i + 1, "purpose": s.purpose, "shot_size": s.shot_size,
+            "camera_movement": s.camera_movement, "lens": s.lens, "composition": s.composition,
+            "covers_lines": s.covers_lines, "action_beat": s.action_beat,
+            "blocking_delta": s.blocking_delta,
+        } for i, s in enumerate(plan.shots)]
+        user_content = (
+            f"Scene details:\n{json.dumps(scene_json, ensure_ascii=False)}\n\n"
+            f"Characters involved:\n{json.dumps(characters_in_scene, ensure_ascii=False)}\n\n"
+            f"Director's style bible:\n{json.dumps(style_bible or {}, ensure_ascii=False)}\n\n"
+            f"THE SHOT PLAN (stage each in order; do not change size/camera/lens/composition):\n"
+            f"{json.dumps(plan_rows, ensure_ascii=False)}\n\n"
+            f"The scene's dialogue lines by index:\n"
+            f"{json.dumps({i: l.get('line') for i, l in enumerate(lines)}, ensure_ascii=False)}"
+        )
+        stage_prompt = load_prompt("storyboard_stage.txt")
+        result = await self.qwen.chat_json(
+            messages=[{"role": "system", "content": stage_prompt},
+                      {"role": "user", "content": user_content}],
+            temperature=0.4, task="storyboard_stage")
+        staged = QwenClient.as_list(result)
+        out: list[dict] = []
+        for i, planned in enumerate(plan.shots):
+            sd = staged[i] if i < len(staged) and isinstance(staged[i], dict) else {}
+            # the plan is authoritative for cinematic intent — force it, don't trust the LLM echo
+            sd["shot_number"] = i + 1
+            sd["shot_type"] = planned.shot_size
+            sd["camera_movement"] = planned.camera_movement
+            sd["director_json"] = {
+                "purpose": planned.purpose, "lens": planned.lens,
+                "composition": planned.composition,
+                "intended_duration": planned.intended_duration,
+                "transition_in": planned.transition_in,
+                "blocking_delta": planned.blocking_delta,
+            }
+            # verbatim dialogue for the covered lines, in order (coverage invariant)
+            covered = [str(lines[j].get("line")) for j in planned.covers_lines
+                       if 0 <= j < len(lines) and lines[j].get("line")]
+            sd["dialogue"] = " ".join(covered) if covered else None
+            # a dialogue floor so a spoken line is never cut off; else the plan's rhythm
+            from app.services.storyboard_generator import fit_duration_to_dialogue
+            sd["estimated_duration_seconds"] = (fit_duration_to_dialogue(sd["dialogue"])
+                                                if covered else round(planned.intended_duration))
+            out.append(sd)
+        return out
