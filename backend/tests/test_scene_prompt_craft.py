@@ -440,3 +440,32 @@ async def test_native_talk_names_the_speaker_in_multi_person_shot():
     assert "KIM SAN-HA is the one speaking" in p     # the speaker is named
     assert line in p                                  # the exact line survives
     assert "keeps a closed, still mouth" in p         # others held silent
+
+
+@pytest.mark.asyncio
+async def test_eyeline_appended_from_blocking():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={"prompt": "Two people in a room.", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "estimated_duration_seconds": 5},
+        character_visuals={"KIM": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse",
+        blocking={"subjects": [{"character": "KIM", "eyeline": "at Yoon"},
+                               {"character": "YOON", "eyeline": "off-camera left"}]})
+    assert "looks at Yoon" in result["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_environment_appended_when_missing():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={"prompt": "A tense close-up.", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "estimated_duration_seconds": 5},
+        character_visuals={"KIM": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse",
+        scene_setting={"location": "a dark street", "set_items": ["a parked sedan with bright headlights", "a broken streetlamp"]})
+    assert "parked sedan" in result["prompt"] or "dark street" in result["prompt"]

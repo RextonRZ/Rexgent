@@ -246,6 +246,24 @@ class ScenePromptCraft:
                         result["prompt"].rstrip()
                         + f' The character clearly speaks these exact words aloud: "{spoken}"'
                     )
+        # Eyeline: the blocking's eyelines are authoritative — append them so
+        # faces look where the shot staged them instead of at the camera.
+        subs = (blocking or {}).get("subjects") if isinstance(blocking, dict) else None
+        eye = [f"{s.get('character')} looks {s.get('eyeline')}"
+               for s in (subs or []) if isinstance(s, dict) and s.get('character') and s.get('eyeline')]
+        if eye:
+            result["prompt"] = result["prompt"].rstrip() + " Eyelines: " + "; ".join(eye) + "."
+        # Environment: never render a blank background — if the crafted prompt
+        # names none of the scene's setting, append a concise setting clause
+        # (matters most when the location plate was trimmed from the ref stack).
+        if scene_setting:
+            items = [str(i) for i in (scene_setting.get("set_items") or [])][:4]
+            loc = str(scene_setting.get("location") or "").strip()
+            hay = result["prompt"].lower()
+            named = (loc and loc.lower() in hay) or any(it.lower()[:15] in hay for it in items)
+            if not named and (loc or items):
+                clause = ", ".join([p for p in [loc] + items if p])
+                result["prompt"] = result["prompt"].rstrip() + f" Setting: {clause}."
         if image_legend:
             # prepend AFTER sanitization so the [Image N] tokens survive the text
             # stripper; leads the prompt so the model reads the mapping first
