@@ -3,7 +3,11 @@ import subprocess
 
 import pytest
 
-from app.services.frame_sampler import even_timestamps, extract_last_frame
+from app.services.frame_sampler import (
+    even_timestamps,
+    extract_first_frame,
+    extract_last_frame,
+)
 
 
 def test_even_timestamps_three():
@@ -26,17 +30,25 @@ def test_even_timestamps_spacing():
     assert ts == [3.0, 6.0, 9.0]
 
 
-@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
-def test_extract_last_frame_returns_final_frame_bytes(tmp_path):
-    # a real (tiny) mp4: the -sseof recipe must survive container durations
-    # that overshoot the last packet, which killed every frame anchor (and
-    # with them wan continuations, lip-sync and posters) in production
+@pytest.fixture
+def sample_clip(tmp_path):
+    # a real (tiny) animated mp4. testsrc's moving pattern + on-screen timer means
+    # frame 0 and the final frame differ, so it exercises both extractors honestly.
+    # The -sseof recipe in extract_last_frame must also survive container durations
+    # that overshoot the last packet, which killed every frame anchor (and with them
+    # wan continuations, lip-sync and posters) in production.
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg not installed")
     clip = str(tmp_path / "clip.mp4")
     subprocess.run(
         ["ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=duration=1:size=64x64:rate=12",
          "-pix_fmt", "yuv420p", clip],
         capture_output=True, timeout=30, check=True)
-    data = extract_last_frame(clip)
+    return clip
+
+
+def test_extract_last_frame_returns_final_frame_bytes(sample_clip):
+    data = extract_last_frame(sample_clip)
     assert data and len(data) > 500
     assert data.startswith(b"\xff\xd8")  # JPEG magic
 
@@ -52,3 +64,12 @@ def test_extract_first_frame_and_last_frame_have_same_signature():
     first = inspect.signature(frame_sampler.extract_first_frame)
     last = inspect.signature(frame_sampler.extract_last_frame)
     assert list(first.parameters) == list(last.parameters)
+
+
+def test_extract_first_frame_returns_first_frame_bytes(sample_clip):
+    data = extract_first_frame(sample_clip)
+    assert data is not None
+    assert data.startswith(b"\xff\xd8")  # JPEG magic
+    assert len(data) > 500
+    # really frame 0, not the last: on an animated clip the two frames differ
+    assert data != extract_last_frame(sample_clip)
