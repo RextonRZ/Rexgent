@@ -11,6 +11,26 @@ def _make_dispatch_runner():
     return runner
 
 
+def test_is_catastrophic_flags_black_and_faceless_renders():
+    from app.services.generation_runner import _is_catastrophic
+    # the Shot-3 case: face-locked character in frame, no face found, black bg
+    assert _is_catastrophic({"continuity_score": 50, "face_score": None, "background_score": 0.1}, ["MIAO JING"]) is True
+    # near-zero continuity is garbage
+    assert _is_catastrophic({"continuity_score": 10, "face_score": 0.8, "background_score": 0.9}, ["A"]) is True
+    # a face was expected but none rendered
+    assert _is_catastrophic({"continuity_score": 55, "face_score": None, "background_score": 0.9}, ["A"]) is True
+
+
+def test_is_catastrophic_ignores_good_and_soft_misses():
+    from app.services.generation_runner import _is_catastrophic
+    # a good render
+    assert _is_catastrophic({"continuity_score": 90, "face_score": 0.88, "background_score": 0.95}, ["A"]) is False
+    # a SOFT miss (mediocre face/bg) is not catastrophic — it ships flagged, no re-roll
+    assert _is_catastrophic({"continuity_score": 55, "face_score": 0.42, "background_score": 0.6}, ["A"]) is False
+    # an insert/establishing with no characters + no face is fine
+    assert _is_catastrophic({"continuity_score": 80, "face_score": None, "background_score": 0.9}, []) is False
+
+
 @pytest.fixture(autouse=True)
 def _no_ws(monkeypatch):
     """Keep tests isolated from Redis/WebSocket, OSS re-hosting, and the cost ledger."""
