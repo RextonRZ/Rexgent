@@ -218,6 +218,15 @@ export function SceneGraph({
                         shotType={shot.shot_type}
                         faceByName={faceByName}
                       />
+                    ) : (shot.characters_in_frame ?? []).length === 0 ? (
+                      // a people-free scenery / Wan shot: show the camera over an
+                      // empty stage instead of "no geometry"
+                      <BlockingDiagram
+                        blocking={{ subjects: [] }}
+                        cameraMovement={shot.camera_movement}
+                        shotType={shot.shot_type}
+                        scenery
+                      />
                     ) : (
                       <p className="text-[11px] text-muted-foreground/70">
                         No camera geometry recorded for this shot.

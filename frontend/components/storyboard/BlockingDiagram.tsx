@@ -161,6 +161,7 @@ export function BlockingDiagram({
   cameraMovement,
   shotType,
   faceByName,
+  scenery = false,
 }: {
   blocking: ShotBlocking;
   cameraMovement?: string | null;
@@ -170,6 +171,9 @@ export function BlockingDiagram({
    * identity colour becomes the ring); without one it falls back to the colour
    * fill. */
   faceByName?: Map<string, string | null | undefined>;
+  /** A people-free scenery / Wan shot: no cast to block, so render the camera
+   * and its field of view over an empty stage instead of nothing. */
+  scenery?: boolean;
 }) {
   const gradientId = useId();
   const [focusIdx, setFocusIdx] = useState<number | null>(null);
@@ -178,9 +182,10 @@ export function BlockingDiagram({
   const subjects = (blocking.subjects ?? []).filter(
     (s): s is BlockingSubject => !!s && typeof s === "object"
   );
-  // presence-only subjects (LLM drift) carry no geometry: show nothing
-  // rather than a diagram that contradicts the prose
-  if (!subjects.some((s) => s.screen_side || s.frame_position)) return null;
+  // presence-only subjects (LLM drift) carry no geometry: show nothing rather
+  // than a diagram that contradicts the prose. EXCEPT a scenery shot, which has
+  // no cast BY DESIGN — it still shows the camera framing the empty environment.
+  if (!scenery && !subjects.some((s) => s.screen_side || s.frame_position)) return null;
 
   // place tokens; several in one cell fan out horizontally
   const cellCount: Record<string, number> = {};
@@ -307,7 +312,7 @@ export function BlockingDiagram({
     <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-1.5">
       <div className="mb-0.5 flex items-center justify-between px-0.5">
         <span className="text-[10px] uppercase tracking-widest text-zinc-300">
-          blocking
+          {scenery ? "scenery" : "blocking"}
         </span>
         <span className="flex items-center gap-1">
           {blocking.reverse_angle && (
@@ -507,6 +512,20 @@ export function BlockingDiagram({
           );
         })}
 
+        {/* scenery shot: no cast on the empty stage, just the camera + its cone */}
+        {scenery && placed.length === 0 && (
+          <text
+            x={50}
+            y={27}
+            textAnchor="middle"
+            fontSize={5}
+            fill="#71717a"
+            fontStyle="italic"
+          >
+            no cast
+          </text>
+        )}
+
         {/* the camera anchor */}
         <g>
           <title>
@@ -574,6 +593,10 @@ export function BlockingDiagram({
               <span className="italic text-zinc-400"> · {focused.s.action}</span>
             )}
           </span>
+        </div>
+      ) : scenery ? (
+        <div className="px-0.5 text-center text-[10px] text-zinc-400">
+          the camera holds the empty environment — no cast
         </div>
       ) : (
         <div className="flex justify-between px-0.5 text-[10px] text-zinc-300">
