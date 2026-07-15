@@ -125,9 +125,9 @@ async def test_clip_records_reference_provenance_and_seed(monkeypatch):
     await runner._process_shot(job, make_shot(), {"Yuki": make_char()}, BIBLE, 1, "prevframe")
     added = runner.db.add.call_args[0][0]
     roles = {p["role"] for p in added.references_json}
-    # CU shot: identity plate + last-frame chain + style; NO location plate
-    assert roles == {"identity", "prev_frame", "style"}
-    ident = next(p for p in added.references_json if p["role"] == "identity")
+    # CU shot: ONE character plate (face + outfit) + last-frame chain + style; NO location
+    assert roles == {"character", "prev_frame", "style"}
+    ident = next(p for p in added.references_json if p["role"] == "character")
     assert ident["character"] == "Yuki"
     # deterministic seed, stored AND sent to the video model
     assert added.seed == gr.stable_seed("p1", "shot1")

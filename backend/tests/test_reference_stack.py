@@ -11,15 +11,16 @@ def _bible():
     return {"characters": CHAR, "style_plate": "style", "location_by_scene": {1: "loc1", 2: "loc2"}}
 
 
-def test_identity_anchor_plus_scene_costume():
+def test_one_plate_carries_face_and_scene_outfit():
     stack = build_reference_stack(
         characters_in_frame=["Mia"], scene_number=2, bible=_bible(),
         prev_last_frame_url="prev", model_cap=9)
     urls = [m["url"] for m in stack]
-    # identity (default uniform) locks the face FIRST, then the scene-2 dress outfit,
-    # then continuity frame, location, style
-    assert urls == ["mia_uniform", "mia_dress", "prev", "loc2", "style"]
-    assert urls.index("mia_uniform") < urls.index("mia_dress")
+    # ONE plate per character: the scene-2 dress plate (face + outfit), then the
+    # continuity frame, location, style. The default uniform is NOT also sent —
+    # two plates of the same person in different outfits drifted the face.
+    assert urls == ["mia_dress", "prev", "loc2", "style"]
+    assert "mia_uniform" not in urls
 
 
 def test_default_scene_dedupes_identity():
@@ -80,23 +81,22 @@ def test_labeled_provenance_matches_media_and_carries_roles():
         prev_last_frame_url="prev", model_cap=9)
     assert [m["url"] for m in media] == [p["url"] for p in prov]
     by_url = {p["url"]: p for p in prov}
-    assert by_url["mia_uniform"]["role"] == "identity"
-    assert by_url["mia_uniform"]["character"] == "Mia"
-    assert by_url["mia_dress"]["role"] == "costume"
+    assert by_url["mia_dress"]["role"] == "character"   # one plate: face + outfit
+    assert by_url["mia_dress"]["character"] == "Mia"
+    assert "mia_uniform" not in by_url                  # no separate identity plate
     assert by_url["prev"]["role"] == "prev_frame"
     assert by_url["loc2"]["role"] == "location"
     assert by_url["style"]["role"] == "style"
 
 
-def test_labeled_dedupe_keeps_first_role():
-    # in the default-outfit scene the identity plate IS the costume plate;
-    # provenance keeps the identity role (the reason it is in the stack first)
+def test_labeled_single_plate_is_the_character():
+    # one plate per character, carrying face + outfit, tagged "character"
     _, prov = build_reference_stack_labeled(
         characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
         prev_last_frame_url=None, model_cap=9)
     uniform = [p for p in prov if p["url"] == "mia_uniform"]
     assert len(uniform) == 1
-    assert uniform[0]["role"] == "identity"
+    assert uniform[0]["role"] == "character"
 
 
 def test_labeled_cap_trims_provenance_too():
@@ -146,19 +146,19 @@ def _two_bible():
     return {"characters": TWO, "style_plate": "style", "location_by_scene": {1: "loc1"}}
 
 
-def test_foreground_character_drops_face_lock():
-    # Mia is only a foreground shoulder: her face plate must NOT be injected,
-    # so the model does not render her front-and-centre in Rex's reveal.
+def test_foreground_character_gets_outfit_only():
+    # Mia is only a foreground shoulder: her plate is the OUTFIT reference (face
+    # unseen), never a face subject, so the model doesn't render her front-and-
+    # centre in Rex's reveal.
     _, prov = build_reference_stack_labeled(
         characters_in_frame=["Rex", "Mia"], scene_number=1, bible=_two_bible(),
         prev_last_frame_url=None, model_cap=9, shot_type="OTS",
         foreground_characters=["Mia"])
     roles = {(p["url"], p["role"]) for p in prov}
-    assert ("rex_face", "identity") in roles      # subject keeps the face lock
-    assert ("mia_face", "identity") not in roles  # foreground loses it
-    # Mia's plate can still appear as a costume reference, never as identity
-    mia_roles = {p["role"] for p in prov if p["url"] == "mia_face"}
-    assert "identity" not in mia_roles
+    assert ("rex_face", "character") in roles   # subject: one plate, face + outfit
+    assert ("mia_face", "costume") in roles      # foreground: outfit only
+    assert ("mia_face", "character") not in roles
+    assert ("mia_face", "identity") not in roles
 
 
 def test_subject_ordered_before_foreground_under_tight_cap():
@@ -170,13 +170,13 @@ def test_subject_ordered_before_foreground_under_tight_cap():
     assert [m["url"] for m in media] == ["rex_face"]
 
 
-def test_no_foreground_keeps_both_faces():
-    # a genuine two-shot: both faces are referenced as before
+def test_no_foreground_both_get_character_plate():
+    # a genuine two-shot: both people get their single face+outfit plate
     _, prov = build_reference_stack_labeled(
         characters_in_frame=["Rex", "Mia"], scene_number=1, bible=_two_bible(),
         prev_last_frame_url=None, model_cap=9)
-    ident = {p["url"] for p in prov if p["role"] == "identity"}
-    assert ident == {"rex_face", "mia_face"}
+    chars = {p["url"] for p in prov if p["role"] == "character"}
+    assert chars == {"rex_face", "mia_face"}
 
 
 def test_ots_and_pov_keep_location_plate():

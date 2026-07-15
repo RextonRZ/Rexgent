@@ -48,13 +48,19 @@ def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
         if not ch:
             continue
         variants = ch.get("variants", [])
-        identity = next((v.get("plate_image_url") for v in variants
-                         if v.get("is_default") and v.get("plate_image_url")), None)
-        if identity and name not in fg:
-            entries.append((identity, "identity", name))
+        # ONE plate per character: the scene's costume variant already carries the
+        # FACE (image-edited FROM the identity plate) AND the correct outfit.
+        # Sending a SECOND identity plate — in the character's DEFAULT (different)
+        # outfit — handed HappyHorse two conflicting references of the same person
+        # in different clothes; asked to take "face from image 1, outfit from image
+        # 2" it blended them and the face drifted. A foreground occluder (face
+        # unseen) is the same single plate, framed as a back/shoulder.
         scene_variant = map_variant_for_scene(variants, scene_number)
-        if scene_variant and scene_variant.get("plate_image_url"):
-            entries.append((scene_variant["plate_image_url"], "costume", name))
+        plate = ((scene_variant or {}).get("plate_image_url")
+                 or next((v.get("plate_image_url") for v in variants
+                          if v.get("is_default") and v.get("plate_image_url")), None))
+        if plate:
+            entries.append((plate, "costume" if name in fg else "character", name))
     if prev_last_frame_url:
         entries.append((prev_last_frame_url, "prev_frame", None))
     if scene_anchor_url:
@@ -87,6 +93,7 @@ def image_ref_legend(provenance) -> str:
     goes where. N is 1-based and matches the media order sent to the model
     (the same order as build_reference_stack_labeled's provenance)."""
     role_label = {
+        "character": "{c} (their face AND the exact outfit to wear)",
         "identity": "{c}'s face",
         "costume": "{c}'s outfit",
         "prev_frame": "the previous shot's frame for continuity",
@@ -97,7 +104,7 @@ def image_ref_legend(provenance) -> str:
     parts = []
     has_person = False
     for i, p in enumerate(provenance or [], start=1):
-        if p.get("role") in ("identity", "costume"):
+        if p.get("role") in ("character", "identity", "costume"):
             has_person = True
         tmpl = role_label.get(p.get("role"), "a reference")
         parts.append(f"[Image {i}] is " + tmpl.format(c=p.get("character") or "the subject"))
