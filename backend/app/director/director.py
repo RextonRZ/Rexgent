@@ -27,6 +27,39 @@ def _enforce_coverage(shots: list[PlannedShot], n_lines: int) -> None:
                                      covers_lines=[i], action_beat="delivers the line"))
 
 
+def _enforce_single_speaker(shots: list[PlannedShot], line_speakers: list[str]) -> list[PlannedShot]:
+    """A dialogue shot must voice ONE speaker. Covering two characters' lines in a
+    single shot mashes them into a speaker-less string (the Stager does " ".join),
+    and the render then pins the whole line to one wrong person ("Deok-hyun speaks
+    Anna's line"). Split any multi-speaker shot into consecutive single-speaker
+    shots, in script order, so each voices only its own speaker's line(s)."""
+    import copy
+    out: list[PlannedShot] = []
+    for s in shots:
+        cov = sorted(i for i in s.covers_lines if 0 <= i < len(line_speakers))
+        if len(cov) <= 1:
+            out.append(s)
+            continue
+        # group consecutive script-order lines by speaker
+        groups: list[list[int]] = []
+        speakers: list[str] = []
+        for i in cov:
+            spk = line_speakers[i]
+            if groups and speakers[-1] == spk:
+                groups[-1].append(i)
+            else:
+                groups.append([i])
+                speakers.append(spk)
+        s.covers_lines = groups[0]           # first speaker keeps this shot (script order)
+        out.append(s)
+        for idxs in groups[1:]:              # every other speaker gets its own cloned shot
+            clone = copy.copy(s)
+            clone.covers_lines = list(idxs)
+            clone.purpose = "dialogue"
+            out.append(clone)
+    return out
+
+
 def _enforce_no_repeat(shots: list[PlannedShot]) -> None:
     for prev, cur in zip(shots, shots[1:]):
         if cur.shot_size == prev.shot_size:
@@ -56,9 +89,14 @@ def _enforce_sanity(shots: list[PlannedShot]) -> None:
                 s.shot_size = (kb.SHOT_PURPOSES.get(s.purpose, {}).get("sizes") or ["MS"])[0]
 
 
-def apply_guardrails(shots: list[PlannedShot], n_lines: int, budget: int) -> ShotPlan:
+def apply_guardrails(shots: list[PlannedShot], n_lines: int, budget: int,
+                     line_speakers: list[str] | None = None) -> ShotPlan:
     shots = list(shots)
     _enforce_coverage(shots, n_lines)
+    # split multi-speaker dialogue shots BEFORE budget so each single-speaker shot
+    # is dialogue-bearing (protected from the budget trim)
+    if line_speakers:
+        shots = _enforce_single_speaker(shots, line_speakers)
     shots = _enforce_budget(shots, budget)
     _enforce_coverage(shots, n_lines)   # re-check: budget trim never drops a line, but keep the invariant explicit
     _enforce_no_repeat(shots)
@@ -107,6 +145,8 @@ async def plan_scene(scene: dict, cast: list[dict], look: LookProfile,
     Never raises — a failed/empty LLM plan still yields a coverage-complete plan."""
     lines = scene.get("dialogue") or []
     n_lines = len(lines)
+    # who says each line — so a dialogue shot never voices two characters at once
+    line_speakers = [str(ln.get("character") or "").strip().upper() for ln in lines]
     user = (
         f"Scene:\n{json.dumps(scene, ensure_ascii=False)}\n\n"
         f"Cast: {json.dumps([c.get('name') for c in cast], ensure_ascii=False)}\n\n"
@@ -123,7 +163,7 @@ async def plan_scene(scene: dict, cast: list[dict], look: LookProfile,
         shots = _parse_plan(raw)
     except Exception:  # noqa: BLE001 — planning is best-effort; guardrails backfill
         shots = []
-    plan = apply_guardrails(shots, n_lines=n_lines, budget=budget)
+    plan = apply_guardrails(shots, n_lines=n_lines, budget=budget, line_speakers=line_speakers)
     for s in plan.shots:
         # scene-wide look attributes flow onto every shot (special_effect stays per-shot)
         s.light_quality = look.light_quality
