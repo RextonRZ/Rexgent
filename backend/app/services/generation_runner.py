@@ -438,7 +438,8 @@ class GenerationRunner:
                         }, pid)
 
                 from app.services.multishot import group_beats
-                beats = group_beats(ordered, get_settings().multishot_max_shots)
+                beats = group_beats(ordered, get_settings().multishot_max_shots,
+                                    wan_primary=getattr(get_settings(), "wan_primary", False))
                 idx = 0
                 for unit in beats:
                     if self._cancelled:
@@ -668,7 +669,7 @@ class GenerationRunner:
                     in_frame.append(cn)
         durations = [s.estimated_duration_seconds for s in beat]
         want = min(sum(durations), get_settings().multishot_max_duration)
-        prompt = multishot_prompt(beat)
+        prompt = multishot_prompt(beat, durations)
         ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
         seed = stable_seed(pid, beat[0].id)
         frame_anchor = prev_last_frame_url or scene_anchor_url
