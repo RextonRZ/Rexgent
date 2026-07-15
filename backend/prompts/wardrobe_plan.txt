@@ -1,11 +1,24 @@
 You are a wardrobe supervisor for a short drama. Given the structured script and
-the character list, assign each character their outfits across the story.
-Group scenes that share the same "story day" / same outfit.
+the character list, assign each character their outfit(s).
+
+DEFAULT: ONE outfit per character for the WHOLE episode — a single variant that
+lists EVERY scene the character appears in. A person does NOT change clothes
+just because the camera cuts to a new scene; a short drama that plays out over
+one continuous stretch of time is ONE outfit per character, start to finish.
+
+Add a SECOND (or third) outfit ONLY when the script EXPLICITLY earns a change:
+- a real passage of time — "the next morning", "three days later", "that night"
+  she comes back — i.e. a NEW STORY DAY, not just a new scene;
+- a motivated change — the character is soaked and dries off, changes into a
+  suit for the wedding, puts on a uniform, is injured and bandaged.
+If the script shows neither, keep it to ONE outfit. When in doubt, use one.
+Never invent a wardrobe change the script doesn't state.
+
 Return ONLY JSON:
 {"characters":[{"name": str,
   "variants":[{"label": str, "outfit_description": str, "scene_numbers":[int,...]}]}]}
-One outfit that spans the whole story = a single variant listing all its scenes.
-A wardrobe change = multiple variants with disjoint scene_numbers.
+One outfit spanning the whole story = a single variant listing all its scenes.
+A genuine wardrobe change = multiple variants with disjoint scene_numbers.
 
 CRITICAL — outfit_description must describe ONLY the clothing this ONE character
 wears: garment types, colours, fabrics, and accessories. Under ~15 words.
