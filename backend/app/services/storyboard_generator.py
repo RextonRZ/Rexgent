@@ -37,6 +37,28 @@ def fit_duration_to_dialogue(text: str | None, tiers: tuple = DURATION_TIERS) ->
     return tiers[-1]
 
 
+def _default_subjects(names) -> list[dict]:
+    """Deterministic blocking when the Stager LLM omits `subjects`, so the
+    interactive camera plan always has geometry to draw. A two-hander faces each
+    other across the frame; a solo subject faces camera; extras face center. The
+    stage map then keeps screen sides consistent across the scene."""
+    names = [str(n).strip() for n in (names or []) if str(n).strip()]
+    if not names:
+        return []
+    if len(names) == 1:
+        return [{"character": names[0], "frame_position": "MG", "screen_side": "center",
+                 "facing": "camera", "eyeline": "camera", "posture": "standing"}]
+    sides = ["left", "right", "center"]
+    facings = {"left": "right", "right": "left", "center": "camera"}
+    out = []
+    for i, n in enumerate(names):
+        side = sides[i % len(sides)]
+        out.append({"character": n, "frame_position": "MG", "screen_side": side,
+                    "facing": facings[side], "eyeline": "toward the other character",
+                    "posture": "standing"})
+    return out
+
+
 class StoryboardGenerator:
     # Never balloon a single scene past this many shots, even if it is very
     # dialogue-heavy — keeps cost and length sane.
@@ -149,5 +171,12 @@ class StoryboardGenerator:
             from app.services.storyboard_generator import fit_duration_to_dialogue
             sd["estimated_duration_seconds"] = (fit_duration_to_dialogue(sd["dialogue"])
                                                 if covered else round(planned.intended_duration))
+            # the interactive camera plan draws from blocking `subjects`; the Stager
+            # LLM often omits them, so backfill a deterministic default from who is
+            # in frame (the stage map then enforces the 180-degree rule across shots)
+            from app.services.stage_map import normalize_subjects
+            if not normalize_subjects(sd.get("subjects")):
+                names = sd.get("characters_in_frame") or [c.get("name") for c in characters_in_scene]
+                sd["subjects"] = _default_subjects(names)
             out.append(sd)
         return out
