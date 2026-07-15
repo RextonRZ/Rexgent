@@ -92,6 +92,9 @@ def _parse_plan(raw) -> list[PlannedShot]:
                 covers_lines=[int(i) for i in (d.get("covers_lines") or []) if isinstance(i, (int, float))],
                 action_beat=str(d.get("action_beat") or "a beat"),
                 blocking_delta=(str(d["blocking_delta"]) if d.get("blocking_delta") else None),
+                # per-shot Wan effect: honored only if it's a known special-effect term
+                special_effect=(str(d["special_effect"])
+                                if kb.is_special_effect(d.get("special_effect")) else None),
             ))
         except (TypeError, ValueError):
             continue
@@ -122,5 +125,7 @@ async def plan_scene(scene: dict, cast: list[dict], look: LookProfile,
         shots = []
     plan = apply_guardrails(shots, n_lines=n_lines, budget=budget)
     for s in plan.shots:
+        # scene-wide look attributes flow onto every shot (special_effect stays per-shot)
         s.light_quality = look.light_quality
+        s.stylization = look.stylization
     return plan

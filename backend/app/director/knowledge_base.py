@@ -24,6 +24,10 @@ CAMERA_MOVES = {
     "DOLLY_OUT": "pull out; isolation, loss, releasing the moment",
     "HANDHELD": "unsteady; urgency, chaos (use sparingly)",
     "DRONE": "aerial; scale (exteriors only)",
+    "ORBIT": "orbit; circles the subject, signals importance (keep the arc under 45 degrees)",
+    "CRANE": "crane; a vertical sweep for scale",
+    "TRACKING": "tracking; travels alongside the subject",
+    "COMPOUND": "compound move; several moves in sequence for epic momentum",
 }
 LENSES = {
     "24mm": "wide; environment and geography, deep focus",
@@ -54,6 +58,30 @@ LIGHT_QUALITIES = {
     "practical": "practical light; visible in-scene sources (lamps, neon, fire)",
 }
 
+# ── stylization: the overall aesthetic treatment (model-honored terms). Scene-wide. ──
+STYLIZATIONS = {
+    "cinematic": "cinematic film look; graded, filmic depth",
+    "realistic": "photoreal; natural detail and light",
+    "anime": "anime / 2D cel animation",
+    "stop_motion": "stop-motion; handcrafted, tactile frames",
+    "watercolor": "watercolor illustration; soft washes",
+    "line_art": "line-art illustration; clean inked lines",
+    "cyberpunk": "cyberpunk; neon, rain, high-tech decay",
+    "steampunk": "steampunk; brass, steam, Victorian machinery",
+    "pixel_8bit": "8-bit pixel-art; retro game aesthetic",
+    "vhs_glitch": "VHS glitch; scanlines, analog noise",
+    "noir": "film noir; hard shadows, monochrome mood",
+}
+
+# ── special-effect shots: a per-shot visual treatment (Wan visual shots only). ──
+SPECIAL_EFFECTS = {
+    "tilt_shift": "tilt-shift; miniature-model look, selective focus",
+    "time_lapse": "time-lapse; accelerated time, drifting light/clouds",
+    "slow_motion": "slow motion; heightened, dilated action",
+    "macro": "macro; extreme detail on a small subject",
+    "drone_flythrough": "drone fly-through; sweeping aerial motion",
+}
+
 # ── the heart: each purpose -> recommended technique ──
 # duration is a (min, max) rhythm hint in seconds; dialogue = may this shot speak.
 SHOT_PURPOSES = {
@@ -80,19 +108,19 @@ SHOT_PURPOSES = {
 # ── genre/tone -> scene-wide look ──
 GENRE_LOOKS = {
     "romance":  {"lighting": "GOLDEN_HOUR", "colour_mood": "WARM", "lens_bias": "50mm",
-                 "camera_pace": "slow", "light_quality": "soft", "bgm_hint": "tender piano", "ambience_hint": "soft room tone"},
+                 "camera_pace": "slow", "light_quality": "soft", "stylization": "cinematic", "bgm_hint": "tender piano", "ambience_hint": "soft room tone"},
     "thriller": {"lighting": "NIGHT", "colour_mood": "COOL", "lens_bias": "85mm",
-                 "camera_pace": "measured", "light_quality": "side", "bgm_hint": "sparse tension drones", "ambience_hint": "low hum, distant traffic"},
+                 "camera_pace": "measured", "light_quality": "side", "stylization": "noir", "bgm_hint": "sparse tension drones", "ambience_hint": "low hum, distant traffic"},
     "action":   {"lighting": "DRAMATIC_SIDE", "colour_mood": "HIGH_CONTRAST", "lens_bias": "35mm",
-                 "camera_pace": "kinetic", "light_quality": "hard", "bgm_hint": "driving percussion", "ambience_hint": "wind, movement"},
+                 "camera_pace": "kinetic", "light_quality": "hard", "stylization": "cinematic", "bgm_hint": "driving percussion", "ambience_hint": "wind, movement"},
     "drama":    {"lighting": "NATURAL", "colour_mood": "DESATURATED", "lens_bias": "50mm",
-                 "camera_pace": "measured", "light_quality": "soft", "bgm_hint": "restrained strings", "ambience_hint": "quiet interior"},
+                 "camera_pace": "measured", "light_quality": "soft", "stylization": "realistic", "bgm_hint": "restrained strings", "ambience_hint": "quiet interior"},
     "horror":   {"lighting": "NIGHT", "colour_mood": "MONOCHROME", "lens_bias": "35mm",
-                 "camera_pace": "slow", "light_quality": "top", "bgm_hint": "dissonant swells", "ambience_hint": "creaks, wind"},
+                 "camera_pace": "slow", "light_quality": "top", "stylization": "noir", "bgm_hint": "dissonant swells", "ambience_hint": "creaks, wind"},
     "comedy":   {"lighting": "NATURAL", "colour_mood": "VIVID", "lens_bias": "35mm",
-                 "camera_pace": "measured", "light_quality": "soft", "bgm_hint": "light plucked strings", "ambience_hint": "bright room tone"},
+                 "camera_pace": "measured", "light_quality": "soft", "stylization": "cinematic", "bgm_hint": "light plucked strings", "ambience_hint": "bright room tone"},
     "_default": {"lighting": "NATURAL", "colour_mood": "WARM", "lens_bias": "50mm",
-                 "camera_pace": "measured", "light_quality": "soft", "bgm_hint": None, "ambience_hint": None},
+                 "camera_pace": "measured", "light_quality": "soft", "stylization": "cinematic", "bgm_hint": None, "ambience_hint": None},
 }
 
 # ── show-don't-tell: emotion -> a physical/visual action the Director can stage ──
@@ -119,6 +147,14 @@ def genre_look(genre: str | None) -> dict:
 
 def is_incompatible(size: str, lens: str) -> bool:
     return (size, lens) in _INCOMPATIBLE
+
+
+def is_stylization(x: str | None) -> bool:
+    return (x or "") in STYLIZATIONS
+
+
+def is_special_effect(x: str | None) -> bool:
+    return (x or "") in SPECIAL_EFFECTS
 
 
 def alt_size_for(size: str, purpose: str) -> str:

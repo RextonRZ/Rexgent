@@ -43,6 +43,7 @@ class ScenePromptCraft:
         speaker: str = "",
         image_legend: str = "",
         environment: dict | None = None,
+        to_wan: bool = False,
     ) -> dict:
         # A location named after a character ("Bear's apartment") must not smuggle
         # the character-noun into the background — strip names from the setting text
@@ -304,6 +305,9 @@ class ScenePromptCraft:
         dj = shot.get("director_json") if isinstance(shot, dict) else None
         if isinstance(dj, dict):
             ctrl = []
+            # special_effect leads (a tilt-shift/time-lapse treatment frames the whole shot)
+            if dj.get("special_effect"):
+                ctrl.append(str(dj["special_effect"]).replace("_", "-"))
             lq = dj.get("light_quality")
             if lq:
                 ctrl.append(f"{lq} light")
@@ -311,10 +315,25 @@ class ScenePromptCraft:
                 ctrl.append(f"{dj['lens']} lens")
             if dj.get("composition"):
                 ctrl.append(dj["composition"].replace("_", "-") + " composition")
+            # stylization closes the control list (the overall aesthetic treatment)
+            if dj.get("stylization"):
+                ctrl.append(str(dj["stylization"]).replace("_", "-"))
             if ctrl:
                 prefix = ", ".join(ctrl)
                 prefix = prefix[:1].upper() + prefix[1:] + ". "
                 result["prompt"] = prefix + result["prompt"].lstrip()
+        # Wan sound formula (visual shots only): Wan generates its OWN diegetic
+        # SFX + ambience, but never VOICE (dialogue routes to HappyHorse — resolved
+        # decision 3) and never per-clip MUSIC (one episode track owns BGM —
+        # resolved decision 1). Appended at the tail, after sanitization, so it
+        # survives the text stripper and lands deterministically before dispatch.
+        # Skipped for HappyHorse shots and for any shot that carries a line.
+        if to_wan and not has_line:
+            result["prompt"] = (
+                result["prompt"].rstrip()
+                + " Ambient sound and diegetic sound effects. "
+                  "No dialogue. No background music."
+            )
         # Final gate (rule A5): the crafted prompt still carries typographic
         # gremlins — em/en dashes, smart quotes, and the replacement char (mojibake)
         # — which corrupt adjacent words and confuse the video model. Fold them to

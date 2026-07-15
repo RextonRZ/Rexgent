@@ -7,6 +7,8 @@ def test_planned_shot_construct_and_defaults():
                      covers_lines=[], action_beat="a slow, held glance")
     assert ps.blocking_delta is None and ps.transition_in is None
     assert ps.light_quality == "soft"
+    assert ps.special_effect is None            # per-shot, off by default
+    assert ps.stylization == "cinematic"        # scene-wide, defaults to cinematic
 
 
 def test_shot_plan_and_look_profile():
@@ -16,3 +18,4 @@ def test_shot_plan_and_look_profile():
                        camera_pace="slow")
     assert look.bgm_hint is None
     assert look.light_quality == "soft"
+    assert look.stylization == "cinematic"

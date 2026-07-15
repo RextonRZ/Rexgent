@@ -10,10 +10,12 @@ async def test_stage_plan_forces_plan_choices_and_fills_dialogue():
     plan = ShotPlan(shots=[
         PlannedShot(purpose="reaction", shot_size="CU", camera_movement="STATIC",
                     lens="85mm", composition="rule_of_thirds", intended_duration=2.0,
-                    covers_lines=[], action_beat="eyes widen", light_quality="side"),
+                    covers_lines=[], action_beat="eyes widen", light_quality="side",
+                    stylization="noir", special_effect="tilt_shift"),
         PlannedShot(purpose="dialogue", shot_size="OTS", camera_movement="DOLLY_IN",
                     lens="50mm", composition="over_the_shoulder", intended_duration=4.0,
-                    covers_lines=[0], action_beat="a step in", light_quality="side"),
+                    covers_lines=[0], action_beat="a step in", light_quality="side",
+                    stylization="noir"),
     ])
     gen = StoryboardGenerator.__new__(StoryboardGenerator)
     gen.qwen = MagicMock()
@@ -34,6 +36,9 @@ async def test_stage_plan_forces_plan_choices_and_fills_dialogue():
     assert shots[0]["director_json"]["purpose"] == "reaction"
     assert shots[0]["director_json"]["lens"] == "85mm"
     assert shots[0]["director_json"]["light_quality"] == "side"    # scene-wide light carried through
+    assert shots[0]["director_json"]["stylization"] == "noir"      # scene-wide stylization carried through
+    assert shots[0]["director_json"]["special_effect"] == "tilt_shift"  # per-shot effect carried through
+    assert shots[1]["director_json"]["special_effect"] is None     # unset stays None
     assert shots[0]["dialogue"] is None                              # non-verbal beat stays silent
     assert shots[1]["dialogue"] == "You lied."                       # covers_lines[0] filled verbatim
     assert shots[1]["director_json"]["intended_duration"] == 4.0

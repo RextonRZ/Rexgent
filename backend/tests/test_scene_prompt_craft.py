@@ -528,3 +528,66 @@ async def test_craft_without_director_json_unchanged(monkeypatch):
     out = await crafter.craft({"shot_type": "CU", "action": "she turns"},
                               character_visuals={}, target_model="happyhorse")
     assert "mm" not in out["prompt"]  # no lens clause injected
+
+
+def _spc():
+    from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "A quiet street at dawn.", "negative_prompt": ""})
+    crafter.prompt_template = "placeholder"
+    return crafter
+
+
+@pytest.mark.asyncio
+async def test_craft_prefix_includes_special_effect_and_stylization():
+    crafter = _spc()
+    shot = {"shot_type": "EWS", "action": "light creeps in",
+            "director_json": {"stylization": "cinematic", "special_effect": "tilt_shift",
+                              "light_quality": "side", "lens": "24mm",
+                              "composition": "leading_lines"}}
+    out = await crafter.craft(shot, character_visuals={}, target_model="wan")
+    # controls-first prefix: special_effect leads, stylization closes
+    assert out["prompt"].startswith(
+        "Tilt-shift, side light, 24mm lens, leading-lines composition, cinematic.")
+    assert "Tilt-shift" in out["prompt"]
+    assert "cinematic" in out["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_craft_to_wan_silent_shot_appends_sound_and_suppression_tail():
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "EWS", "action": "wind on an empty street",
+         "estimated_duration_seconds": 5},
+        character_visuals={}, target_model="wan", to_wan=True)
+    assert out["prompt"].endswith(
+        "Ambient sound and diegetic sound effects. No dialogue. No background music.")
+
+
+@pytest.mark.asyncio
+async def test_craft_to_wan_false_is_byte_identical_to_default_path():
+    # the wan sound tail must NOT appear when to_wan is False, and the output must
+    # be byte-identical to the pre-existing (no-param) path.
+    a = _spc()
+    b = _spc()
+    shot = {"shot_type": "EWS", "action": "wind on an empty street",
+            "estimated_duration_seconds": 5}
+    out_default = await a.craft(shot, character_visuals={}, target_model="wan")
+    out_false = await b.craft(shot, character_visuals={}, target_model="wan", to_wan=False)
+    assert out_default["prompt"] == out_false["prompt"]           # byte-identical
+    assert "No dialogue. No background music." not in out_false["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_craft_to_wan_dialogue_shot_never_gets_no_dialogue_clause():
+    # a Wan-flagged shot that (contrary to routing) carries a line must NOT get the
+    # No-dialogue tail — the tail is only for silent visual shots.
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MS", "dialogue": "We have to leave.",
+         "estimated_duration_seconds": 5},
+        character_visuals={}, target_model="wan", to_wan=True)
+    assert "No dialogue." not in out["prompt"]
+    assert "No background music." not in out["prompt"]

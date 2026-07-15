@@ -17,3 +17,11 @@ def test_light_quality_from_genre_and_default():
     assert recommend_look("romance").light_quality == "soft"
     # unknown genre falls back to the neutral default's soft light
     assert recommend_look("no-such-genre").light_quality == "soft"
+
+
+def test_stylization_from_genre_and_default():
+    assert recommend_look("thriller").stylization == "noir"
+    assert recommend_look("romance").stylization == "cinematic"
+    # unknown genre falls back to the neutral default
+    assert recommend_look("no-such-genre").stylization == "cinematic"
+    assert recommend_look(None).stylization == "cinematic"

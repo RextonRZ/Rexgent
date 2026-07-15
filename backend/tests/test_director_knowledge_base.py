@@ -34,3 +34,34 @@ def test_incompatible_pairs_flagged():
 def test_alt_size_differs_and_fits_purpose():
     alt = kb.alt_size_for("MS", "dialogue")
     assert alt != "MS" and alt in kb.SHOT_PURPOSES["dialogue"]["sizes"]
+
+
+def test_stylization_and_special_effect_catalogs_exist():
+    assert "cinematic" in kb.STYLIZATIONS
+    assert "noir" in kb.STYLIZATIONS
+    assert "tilt_shift" in kb.SPECIAL_EFFECTS
+    assert "time_lapse" in kb.SPECIAL_EFFECTS
+    # every value is a human-readable description
+    assert all(isinstance(v, str) and v for v in kb.STYLIZATIONS.values())
+    assert all(isinstance(v, str) and v for v in kb.SPECIAL_EFFECTS.values())
+
+
+def test_every_genre_look_has_valid_stylization():
+    for genre, spec in kb.GENRE_LOOKS.items():
+        assert "stylization" in spec, genre
+        assert spec["stylization"] in kb.STYLIZATIONS, genre
+    assert kb.genre_look("thriller")["stylization"] == "noir"
+    assert kb.genre_look("no-such-genre")["stylization"] == "cinematic"
+
+
+def test_advanced_camera_moves_present():
+    for mv in ("ORBIT", "CRANE", "TRACKING", "COMPOUND"):
+        assert mv in kb.CAMERA_MOVES
+    # the existing moves are untouched
+    assert "STATIC" in kb.CAMERA_MOVES and "DOLLY_IN" in kb.CAMERA_MOVES
+
+
+def test_validity_helpers():
+    assert kb.is_stylization("noir") and not kb.is_stylization("nope")
+    assert kb.is_special_effect("tilt_shift") and not kb.is_special_effect("nope")
+    assert not kb.is_stylization(None) and not kb.is_special_effect(None)
