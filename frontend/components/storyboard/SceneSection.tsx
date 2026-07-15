@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, Lightbulb, Palette } from "lucide-react";
 import { ShotCard } from "./ShotCard";
 import { ZoomableImage } from "@/components/shared/Lightbox";
 import { SettingChip } from "@/components/script/BeatSheet";
@@ -23,6 +23,9 @@ export function SceneSection({
 }) {
   const [open, setOpen] = useState(true);
   const deleteScene = useDeleteScene();
+  // lighting + colour_mood are one scene-wide look (identical on every shot),
+  // so we show them ONCE here instead of repeating them on each ShotCard.
+  const look = scene.shots.find((s) => s.lighting || s.colour_mood);
 
   const handleDelete = () => {
     const shots = scene.shots.length;
@@ -146,6 +149,30 @@ export function SceneSection({
                         </p>
                       ))}
                     </div>
+                  )}
+                </div>
+              )}
+              {/* the scene's look, once: the lighting + colour treatment every
+                  shot in the scene shares (was repeated on every shot card) */}
+              {look && (look.lighting || look.colour_mood) && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border hairline bg-background/40 px-3 py-2 text-[11px] text-muted-foreground">
+                  <span
+                    className="text-[10px] uppercase tracking-widest text-zinc-400 mr-0.5"
+                    title="The scene's look: one lighting and colour treatment carried across every shot"
+                  >
+                    Look
+                  </span>
+                  {look.lighting && (
+                    <span className="inline-flex items-center gap-1">
+                      <Lightbulb className="h-3 w-3 opacity-70" />
+                      {look.lighting.toLowerCase().replace(/_/g, " ")}
+                    </span>
+                  )}
+                  {look.colour_mood && (
+                    <span className="inline-flex items-center gap-1">
+                      <Palette className="h-3 w-3 opacity-70" />
+                      {look.colour_mood.toLowerCase()}
+                    </span>
                   )}
                 </div>
               )}

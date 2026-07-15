@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Lightbulb, Palette, Clock, Users, Pencil, Trash2 } from "lucide-react";
+import { Clock, Users, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ShotEditor } from "./ShotEditor";
 import { useDeleteShot } from "@/hooks/useStoryboard";
@@ -200,16 +200,9 @@ export function ShotCard({ shot }: { shot: Shot }) {
           </p>
         )}
 
-        {/* one quiet metadata row */}
+        {/* one quiet metadata row — lighting + colour_mood are scene-wide, so
+            they live once on the SceneSection header, not on every shot */}
         <div className="flex items-center gap-3 pt-1 pb-1 text-[11px] text-muted-foreground flex-wrap">
-          {shot.lighting && (
-            <Meta icon={Lightbulb}>
-              {shot.lighting.toLowerCase().replace(/_/g, " ")}
-            </Meta>
-          )}
-          {shot.colour_mood && (
-            <Meta icon={Palette}>{shot.colour_mood.toLowerCase()}</Meta>
-          )}
           <Meta icon={Clock}>{shot.estimated_duration_seconds}s</Meta>
           {shot.characters_in_frame && shot.characters_in_frame.length > 0 && (
             <Meta icon={Users}>{shot.characters_in_frame.join(", ")}</Meta>
