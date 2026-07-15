@@ -4,7 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { BlockingDiagram } from "@/components/storyboard/BlockingDiagram";
 import { explainFilmTerm, fullShotType } from "@/lib/filmTerms";
-import { tierLabel, isFullTier } from "@/lib/qualityTier";
+import { tierLabel, isFullTier, modelLabel } from "@/lib/qualityTier";
 import type {
   GraphScene,
   GraphCharacterInfo,
@@ -167,6 +167,9 @@ export function SceneGraph({
             {open.shots.map((shot) => {
               const isFull = isFullTier(shot.quality_tier);
               const isDeferred = shot.quality_tier === "deferred";
+              const model = shot.render_plan?.model
+                ? modelLabel(shot.render_plan.model)
+                : null;
               return (
                 <div
                   key={shot.id}
@@ -262,7 +265,20 @@ export function SceneGraph({
                           {shot.emotional_beat}
                         </span>
                       )}
-                      {shot.quality_tier && (
+                      {model ? (
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 font-medium ${
+                            model === "Wan" ? "bg-wan/15 text-wan" : "bg-hh/15 text-hh"
+                          }`}
+                          title={
+                            model === "Wan"
+                              ? "Wan · visuals / continuity"
+                              : "HappyHorse · face + dialogue"
+                          }
+                        >
+                          {model}
+                        </span>
+                      ) : shot.quality_tier ? (
                         <span
                           className={`rounded-full px-1.5 py-0.5 font-medium ${
                             isDeferred
@@ -274,7 +290,7 @@ export function SceneGraph({
                         >
                           {tierLabel(shot.quality_tier)}
                         </span>
-                      )}
+                      ) : null}
                     </span>
                   </div>
                 </div>

@@ -148,3 +148,61 @@ def test_allocator_model_matches_dispatched_model():
     optimizer = TokenOptimizer()
     result = optimizer.allocate([_hero("s1")], budget_usd=40.0)
     assert result["scored_shots"][0]["model"] == "happyhorse-1.1-t2v"
+
+
+def _silent(shot_id, scene=2, dur=5):
+    return {"shot_id": shot_id, "shot_type": "EWS", "scene_number": scene,
+            "emotional_beat": "establishing", "characters_in_frame": [],
+            "dialogue": None, "estimated_duration_seconds": dur}
+
+
+def _talker(shot_id, scene=2, dur=5):
+    return {"shot_id": shot_id, "shot_type": "CU", "scene_number": scene,
+            "emotional_beat": "confrontation", "characters_in_frame": ["A"],
+            "dialogue": "who are you?", "estimated_duration_seconds": dur}
+
+
+def test_wan_primary_dialogue_shot_is_happyhorse_at_hh_rate():
+    optimizer = TokenOptimizer()
+    result = optimizer.allocate([_talker("talk", dur=5)], budget_usd=40.0, wan_primary=True)
+    s = result["scored_shots"][0]
+    assert s["quality_tier"] == "happyhorse"
+    assert s["estimated_cost_usd"] == round(0.108 * 5, 3)
+
+
+def test_wan_primary_silent_shot_is_wan_at_wan_rate():
+    optimizer = TokenOptimizer()
+    result = optimizer.allocate([_silent("scenery", dur=5)], budget_usd=40.0, wan_primary=True)
+    s = result["scored_shots"][0]
+    assert s["quality_tier"] == "wan"
+    assert s["estimated_cost_usd"] == round(0.15 * 5, 3)
+
+
+def test_wan_primary_emits_model_split_counts():
+    optimizer = TokenOptimizer()
+    shots = [_talker("t1"), _silent("s1"), _silent("s2")]
+    result = optimizer.allocate(shots, budget_usd=40.0, wan_primary=True)
+    assert result["wan_shots"] == 2
+    assert result["happyhorse_shots"] == 1
+    # legacy quality counts still present, and the frontend ignores them here
+    assert "full_shots" in result and "fast_shots" in result
+    assert "on Wan (visuals)" in result["optimisation_summary"]
+
+
+def test_wan_primary_never_downgrades_to_fast():
+    # a tight cap defers, but never eases a Wan/HappyHorse shot to happyhorse_fast
+    optimizer = TokenOptimizer()
+    shots = [_talker(f"t{i}", dur=10) for i in range(10)]
+    result = optimizer.allocate(shots, budget_usd=5.0, wan_primary=True)
+    assert result["downgraded_shots"] == 0
+    assert result["fits_budget"] is True
+    tiers = {s["quality_tier"] for s in result["scored_shots"]}
+    assert "happyhorse_fast" not in tiers
+
+
+def test_legacy_allocate_reports_zero_model_split():
+    # wan_primary OFF: the model-split counts are 0 so the frontend falls back
+    optimizer = TokenOptimizer()
+    result = optimizer.allocate([_hero("s1"), _hero("s2")], budget_usd=40.0)
+    assert result["wan_shots"] == 0
+    assert result["happyhorse_shots"] == 0

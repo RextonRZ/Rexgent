@@ -7,6 +7,7 @@ from app.models.shot import Shot
 from app.mcp_tools.token_optimizer import TokenOptimizer
 from app.services.usage_tracker import global_usage
 from app.services.cost_ledger import aggregate
+from app.config import get_settings
 
 from app.deps import get_current_user
 
@@ -58,9 +59,14 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
     from app.websocket.tool_events import tool_run
     optimizer = TokenOptimizer()
     with tool_run(project_id, "generate", "budget_allocate", "Producer") as tb:
-        result = optimizer.allocate(shots_data, budget)
-        tb["artifact"] = (f"{result.get('full_shots', 0)} full / "
-                          f"{result.get('fast_shots', 0)} fast")
+        result = optimizer.allocate(shots_data, budget,
+                                    wan_primary=get_settings().wan_primary)
+        if result.get("wan_shots") or result.get("happyhorse_shots"):
+            tb["artifact"] = (f"{result.get('wan_shots', 0)} Wan / "
+                              f"{result.get('happyhorse_shots', 0)} HappyHorse")
+        else:
+            tb["artifact"] = (f"{result.get('full_shots', 0)} full / "
+                              f"{result.get('fast_shots', 0)} fast")
 
     # Persist the assigned tier back onto each shot.
     tier_by_id = {s["shot_id"]: s["quality_tier"] for s in result["scored_shots"]}

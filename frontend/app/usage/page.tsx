@@ -81,7 +81,8 @@ const ROSTER: {
     icon: Film,
     tint: "text-fuchsia-300/60",
     models: [
-      { name: "happyhorse-1.1-t2v / i2v / r2v", role: "Every shot renders on this video model", match: ["happyhorse-1.1", "wan2.7"] },
+      { name: "wan2.7-t2v / i2v / r2v", role: "Wan · visuals, continuity, scenery", match: ["wan2.7"] },
+      { name: "happyhorse-1.1-t2v / i2v / r2v", role: "HappyHorse · faces, dialogue, lip-sync", match: ["happyhorse-1.1"] },
       { name: "happyhorse-1.0-video-edit", role: "Fix a take, the regen loop", match: ["happyhorse-1.0-video-edit"] },
     ],
   },
@@ -464,15 +465,11 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
   const totalClips = data.dramas.reduce((s, d) => s + d.clips, 0);
 
   const rel = data.reliability;
-  // One video model now: fold any legacy Wan clips into a single video bucket.
+  // Two video models: Wan renders the visuals, HappyHorse the characters. Each
+  // keeps its own retry bucket; a drama may be all one model, so a card shows
+  // only when its bucket has clips.
   const wan = rel.by_tier["wan"];
   const hh = rel.by_tier["happyhorse"];
-  const videoClips = (wan?.clips ?? 0) + (hh?.clips ?? 0);
-  const videoRetried = (wan?.retried ?? 0) + (hh?.retried ?? 0);
-  const video =
-    videoClips > 0
-      ? { clips: videoClips, retried: videoRetried, retry_rate: videoRetried / videoClips }
-      : null;
   const passHealth: Health | null =
     rel.continuity_pass_rate == null
       ? null
@@ -649,10 +646,14 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
                       </div>
                     );
                   })}
-                  {group.group === "Video" && video && (
+                  {group.group === "Video" && (wan || hh) && (
                     <p className="py-3 text-[10px] text-zinc-500">
-                      {video.clips} clip{video.clips === 1 ? "" : "s"} rendered on
-                      the video model in this range.
+                      {(wan?.clips ?? 0) + (hh?.clips ?? 0)} clip
+                      {(wan?.clips ?? 0) + (hh?.clips ?? 0) === 1 ? "" : "s"}{" "}
+                      rendered in this range
+                      {wan && hh
+                        ? `: ${wan.clips} on Wan, ${hh.clips} on HappyHorse`
+                        : "."}
                     </p>
                   )}
                 </div>
@@ -728,13 +729,23 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
             }
             evidence={<EvidenceStrip samples={rel.flagged_samples} />}
           />
-          <HealthCard
-            label="Video retries"
-            value={video ? fmtPct(video.retry_rate) : null}
-            health={retryHealth(video ?? undefined)}
-            note={video ? `${video.retried} of ${video.clips} clips retried` : undefined}
-            evidence={<EvidenceStrip samples={rel.retried_samples} />}
-          />
+          {wan && (
+            <HealthCard
+              label="Wan retries"
+              value={fmtPct(wan.retry_rate)}
+              health={retryHealth(wan)}
+              note={`${wan.retried} of ${wan.clips} clips retried`}
+              evidence={<EvidenceStrip samples={rel.retried_samples} />}
+            />
+          )}
+          {hh && (
+            <HealthCard
+              label="HappyHorse retries"
+              value={fmtPct(hh.retry_rate)}
+              health={retryHealth(hh)}
+              note={`${hh.retried} of ${hh.clips} clips retried`}
+            />
+          )}
           <HealthCard
             label="Face lock"
             value={rel.avg_face_score != null ? String(Math.round(rel.avg_face_score)) : null}

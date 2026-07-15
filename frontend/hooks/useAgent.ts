@@ -20,6 +20,9 @@ export interface AutoRunResult {
     grand_total_cost?: number;
     full_shots?: number;
     fast_shots?: number;
+    /** wan_primary model split (0/absent under legacy routing). */
+    wan_shots?: number;
+    happyhorse_shots?: number;
   } | null;
   job_id: string | null;
   dispatched: boolean;

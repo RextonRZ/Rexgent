@@ -112,3 +112,42 @@ def test_continuation_routes_to_happyhorse_when_flagged():
                             route_continuation_to_happyhorse=True)
     assert off[1]["model"] == "wan"
     assert on[1]["model"] == "happyhorse"
+
+
+def test_wan_primary_dialogue_shot_is_happyhorse():
+    # a SILENT continuation would be Wan, but this shot speaks -> HappyHorse (characters)
+    shots = [_shot(1, ["A"], dialogue=""),
+             _shot(2, ["A"], dialogue="who are you?")]
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True,
+                              wan_primary=True)
+    assert plan[1]["model"] == "happyhorse"
+
+
+def test_wan_primary_silent_continuation_is_wan():
+    # same cast, same framing, no dialogue -> continue_hold visual -> Wan
+    shots = [_shot(1, ["A"], dialogue=""),
+             _shot(2, ["A"], dialogue="")]
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True,
+                              wan_primary=True)
+    assert plan[1]["model"] == "wan"
+
+
+def test_wan_primary_silent_scenery_no_faces_is_wan():
+    # a silent continuation with no faces (pure scenery) -> Wan
+    shots = [_shot(1, ["A"], dialogue=""),
+             _shot(2, [], dialogue="")]
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True,
+                              wan_primary=True)
+    assert plan[1]["model"] == "wan"
+
+
+def test_wan_primary_off_is_unchanged():
+    # OFF: routing falls back to the identity_routing_v2 rule (anchor -> happyhorse)
+    shots = [_shot(1, ["A"], dialogue=""), _shot(2, ["A"], dialogue="")]
+    off = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                             anchor_ref_model="happyhorse", lipsync_enabled=True)
+    assert off[0]["model"] == "happyhorse"   # anchor via ref-native, not the wan_primary rule
+    assert off[1]["model"] == "wan"

@@ -17,6 +17,9 @@ export interface BudgetPlan {
   scored_shots: ScoredShot[];
   full_shots: number;
   fast_shots: number;
+  /** wan_primary model split (0/absent under legacy routing). */
+  wan_shots?: number;
+  happyhorse_shots?: number;
   total_estimated_cost: number;
   budget_remaining: number;
   optimisation_summary: string;

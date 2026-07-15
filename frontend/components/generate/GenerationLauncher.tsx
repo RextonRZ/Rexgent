@@ -24,30 +24,50 @@ export function GenerationLauncher({ projectId }: { projectId: string }) {
     startGeneration.mutate(projectId);
   };
 
-  /** The receipt from the Producer's REAL fitted plan, per model tier. */
+  /** The receipt from the Producer's REAL fitted plan. Under wan_primary the
+   * shots split by MODEL (Wan visuals, HappyHorse characters); otherwise by
+   * quality level (full / fast). */
   const receipt = (b: BudgetResult): SpendRequest => {
     const tierCost = (tiers: string[]) =>
       b.scored_shots
         .filter((s) => tiers.includes(s.quality_tier))
         .reduce((sum, s) => sum + (s.estimated_cost_usd || 0), 0);
-    const fullCount = b.scored_shots.filter((s) =>
-      ["happyhorse", "wan"].includes(s.quality_tier)
-    ).length;
-    const fastCount = b.scored_shots.filter((s) => s.quality_tier === "happyhorse_fast").length;
+    const count = (tiers: string[]) =>
+      b.scored_shots.filter((s) => tiers.includes(s.quality_tier)).length;
     const deferred = b.deferred_shots ?? 0;
+    const wanPrimary = Boolean(b.wan_shots || b.happyhorse_shots);
     const breakdown: SpendItem[] = [];
-    if (fullCount > 0)
-      breakdown.push({
-        label: `Full-quality shots × ${fullCount}`,
-        detail: "the hook and the shots that carry the story, full pass at 1080P",
-        amount: tierCost(["happyhorse", "wan"]),
-      });
-    if (fastCount > 0)
-      breakdown.push({
-        label: `Fast-pass shots × ${fastCount}`,
-        detail: "supporting shots on a lighter, cheaper pass",
-        amount: tierCost(["happyhorse_fast"]),
-      });
+    if (wanPrimary) {
+      const wanCount = count(["wan"]);
+      const hhCount = count(["happyhorse"]);
+      if (wanCount > 0)
+        breakdown.push({
+          label: `Wan shots × ${wanCount}`,
+          detail: "the silent visual shots: continuity, scenery, action",
+          amount: tierCost(["wan"]),
+        });
+      if (hhCount > 0)
+        breakdown.push({
+          label: `HappyHorse shots × ${hhCount}`,
+          detail: "the character shots that talk or lock a new face",
+          amount: tierCost(["happyhorse"]),
+        });
+    } else {
+      const fullCount = count(["happyhorse", "wan"]);
+      const fastCount = count(["happyhorse_fast"]);
+      if (fullCount > 0)
+        breakdown.push({
+          label: `Full-quality shots × ${fullCount}`,
+          detail: "the hook and the shots that carry the story, full pass at 1080P",
+          amount: tierCost(["happyhorse", "wan"]),
+        });
+      if (fastCount > 0)
+        breakdown.push({
+          label: `Fast-pass shots × ${fastCount}`,
+          detail: "supporting shots on a lighter, cheaper pass",
+          amount: tierCost(["happyhorse_fast"]),
+        });
+    }
     if (deferred > 0)
       breakdown.push({
         label: `Deferred shots × ${deferred}`,
@@ -56,7 +76,9 @@ export function GenerationLauncher({ projectId }: { projectId: string }) {
       });
     return {
       title: "Start video generation",
-      costLine: `The Producer fitted the plan under your $${cap.toFixed(0)} cap. Every shot below is priced by its quality level.`,
+      costLine: wanPrimary
+        ? `The Producer fitted the plan under your $${cap.toFixed(0)} cap. Each shot below is priced by the model that renders it.`
+        : `The Producer fitted the plan under your $${cap.toFixed(0)} cap. Every shot below is priced by its quality level.`,
       note: "Flagged takes can be fixed individually afterwards instead of re-running everything.",
       confirmLabel: "Start generation",
       breakdown,

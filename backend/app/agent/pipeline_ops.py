@@ -337,7 +337,8 @@ def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_u
         project = db.query(Project).filter(Project.id == uuid.UUID(str(project_id))).first()
         budget_usd = float(project.credit_budget) if project and project.credit_budget else 40.0
     with tool_run(project_id, "generate", "budget_allocate", "Producer") as t:
-        result = TokenOptimizer().allocate(shots, budget_usd)
+        result = TokenOptimizer().allocate(
+            shots, budget_usd, wan_primary=getattr(get_settings(), "wan_primary", False))
         tier_by_id = {s["shot_id"]: s["quality_tier"] for s in result["scored_shots"]}
         for sid, tier in tier_by_id.items():
             shot = db.query(Shot).filter(Shot.id == uuid.UUID(sid)).first()
