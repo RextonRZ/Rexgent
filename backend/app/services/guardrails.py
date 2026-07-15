@@ -28,6 +28,18 @@ def strip_character_names(text: str, names) -> str:
     return result.strip(" ,")
 
 
+def mask_offscreen_names(action: str, in_frame_names, all_cast_names) -> str:
+    """Strip cast names that are NOT in this shot's frame from the action text, so
+    a line like "glancing back at Anna" in a shot that doesn't include Anna cannot
+    make the video model hallucinate her (a real problem on Wan, which renders the
+    name literally). In-frame names are kept — the prompt compiler resolves those
+    to visual descriptions. Only OFF-frame names are removed."""
+    in_set = {str(n).strip() for n in (in_frame_names or []) if str(n).strip()}
+    off = [n for n in (all_cast_names or [])
+           if str(n).strip() and str(n).strip() not in in_set]
+    return strip_character_names(action or "", off)
+
+
 def repair_grammar_holes(text: str) -> str:
     """Close the wounds name-stripping leaves behind: 'photo of and Kerry'
     reads as broken; 'photo of Kerry' is what was meant."""

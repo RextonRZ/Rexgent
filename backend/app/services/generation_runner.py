@@ -488,7 +488,7 @@ class GenerationRunner:
                             outfits=None, blocking=None, lipsync=False,
                             native_talk=False, speaker="", image_legend="",
                             to_wan=False) -> str:
-        from app.services.guardrails import canonical_character
+        from app.services.guardrails import canonical_character, mask_offscreen_names
         in_frame = [canonical_character(n, char_by_name)
                     for n in (shot.characters_in_frame or [])]
         fg = set(foreground or [])
@@ -499,9 +499,14 @@ class GenerationRunner:
                         if outfits and c.name in outfits else {})}
             for c in shot_chars
         }
+        # An action naming a character NOT in this shot's frame ("glancing back at
+        # Anna" in a Deok-hyun-only shot) makes the model hallucinate them — worst
+        # on Wan. Strip off-frame cast names so only in-frame people can render.
+        all_cast = list({c.name for c in char_by_name.values() if getattr(c, "name", None)})
+        clean_action = mask_offscreen_names(shot.action, in_frame, all_cast)
         result = await self.prompt_crafter.craft(
             shot={"shot_type": shot.shot_type, "camera_movement": shot.camera_movement,
-                  "action": shot.action, "lighting": shot.lighting,
+                  "action": clean_action, "lighting": shot.lighting,
                   "colour_mood": shot.colour_mood, "emotional_beat": shot.emotional_beat,
                   "dialogue": shot.dialogue, "notes": getattr(shot, "notes", None),
                   "director_json": getattr(shot, "director_json", None),
