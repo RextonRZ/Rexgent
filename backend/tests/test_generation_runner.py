@@ -928,13 +928,24 @@ async def test_wan_primary_off_uses_existing_routing(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_wan_primary_silent_reangle_goes_happyhorse(monkeypatch):
-    # doctrine: an angle change must never ride Wan continuation — even a
-    # SILENT reangle re-locks identity on HappyHorse r2v
+    # doctrine: an angle change on a FACE must never ride Wan continuation —
+    # even a SILENT reangle re-locks identity on HappyHorse r2v
     monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
     r = _make_dispatch_runner(); _hh_wan(r)
-    tier, _ = await _dispatch(r, role="continue_reangle", speaks=False)
+    tier, _ = await _dispatch(r, role="continue_reangle", speaks=False, has_faces=True)
     assert tier == "happyhorse"
     r.qwen.generate_video_wan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_wan_primary_faceless_reangle_goes_wan(monkeypatch):
+    # a FACELESS cutaway has no identity to lock, so a reangle routes to Wan,
+    # not HappyHorse
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
+    r = _make_dispatch_runner(); _hh_wan(r)
+    tier, _ = await _dispatch(r, role="continue_reangle", speaks=False, has_faces=False)
+    assert tier == "wan"
+    r.qwen.generate_video_wan.assert_awaited()
 
 
 # --- native talk + [Image N] legend follow the REAL dispatch target ---

@@ -173,6 +173,10 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
     _progress(script.project_id, "storyboard", "started", "Director",
               "Breaking the script into shots")
     dressed = 0
+    # drama-level atmosphere budget for wan_beats: a few faceless cutaways,
+    # scaled by length so they stay rare on short pieces (0 under ~45s, 1 up to
+    # ~90s, capped at 2). Decremented as scenes consume it.
+    atmo_budget = min(2, max(0, (target_length or 0) // 45))
     with track_project(script.project_id, db):
         for scene_index, scene in enumerate(scenes, start=1):
             _progress(script.project_id, "storyboard", "update", "Director",
@@ -225,25 +229,41 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             else:
                 shots = await gen.generate_for_scene(
                     scene_json, scene_chars, max_shots=shots_per_scene, shot_seconds=shot_seconds)
-            # Guarantee a Wan visual: if the drama's FIRST scene doesn't already
-            # open on a people-free shot, prepend a short scenery establishing
-            # shot (empty cast, no dialogue). As the scene's silent faceless
-            # anchor it routes to Wan, so every drama gets at least one Wan clip
-            # (cinematic scenery breathing room). OFF by default -> byte-identical.
+            # Wan enrichment (all deterministic, flag-gated; OFF -> byte-identical).
+            # A helper renumbers the scene only when a shot was actually inserted.
+            enriched = False
+            _look_of = lambda key: next((sd.get(key) for sd in shots if sd.get(key)), None)
+            # (1) Guarantee a Wan visual: the drama's FIRST scene opens on a
+            # people-free establishing shot (empty cast) when it doesn't already,
+            # so every drama gets at least one Wan clip.
             if (scene_index == 1
                     and getattr(get_settings(), "ensure_establishing_shot", False)):
                 from app.services.storyboard_generator import (
                     scene_opens_on_scenery, make_establishing_shot)
                 if not scene_opens_on_scenery(shots):
-                    lighting = next((sd.get("lighting") for sd in shots
-                                     if sd.get("lighting")), None)
-                    colour = next((sd.get("colour_mood") for sd in shots
-                                   if sd.get("colour_mood")), None)
-                    est = make_establishing_shot(scene.location, scene.description,
-                                                 lighting, colour)
-                    for sd in shots:
-                        sd["shot_number"] = (sd.get("shot_number") or 1) + 1
-                    shots = [est] + shots
+                    shots = [make_establishing_shot(scene.location, scene.description,
+                                                    _look_of("lighting"),
+                                                    _look_of("colour_mood"))] + shots
+                    enriched = True
+            # (2) Weave silent Wan beats: held two-shots between dialogue (same
+            # framing + cast, no line -> Wan continuation), and a few faceless
+            # atmosphere cutaways drawn from the drama-level budget.
+            if getattr(get_settings(), "wan_beats", False):
+                from app.services.storyboard_generator import (
+                    insert_silent_holds, insert_atmosphere)
+                held = insert_silent_holds(shots, max_holds=2)
+                if len(held) != len(shots):
+                    shots, enriched = held, True
+                if atmo_budget > 0:
+                    with_atmo = insert_atmosphere(shots, 1, scene.location,
+                                                  scene.description, _look_of("lighting"),
+                                                  _look_of("colour_mood"))
+                    if len(with_atmo) != len(shots):
+                        shots, enriched = with_atmo, True
+                        atmo_budget -= 1
+            if enriched:
+                for idx, sd in enumerate(shots, start=1):
+                    sd["shot_number"] = idx
             # the 180-degree rule, enforced not requested: first placement
             # establishes each character's screen side; drift snaps back,
             # a flagged reverse angle re-establishes the line of action.

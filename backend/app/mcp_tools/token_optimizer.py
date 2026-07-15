@@ -117,7 +117,11 @@ class TokenOptimizer:
                 reangle = (id(shot) in prev_type
                            and angle_changed(prev_type[id(shot)],
                                              shot.get("shot_type"), False))
-                if shot.get("dialogue") or (is_anchor and has_faces) or newcomer or reangle:
+                # a faceless shot has no identity to lock, so scenery/atmosphere
+                # goes to Wan even on an angle change; reangle only forces HH
+                # when there are faces
+                if (shot.get("dialogue") or (is_anchor and has_faces)
+                        or newcomer or (reangle and has_faces)):
                     tier, model = "happyhorse", self.HH_MODEL
                 else:
                     tier, model = "wan", self.WAN_MODEL

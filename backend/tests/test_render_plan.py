@@ -79,14 +79,25 @@ def test_reangle_always_routes_to_happyhorse():
 
 
 def test_wan_primary_silent_reangle_is_happyhorse():
-    # even under wan_primary, a SILENT framing change re-locks identity on
-    # HappyHorse — only a same-angle continuation stays a Wan visual
+    # even under wan_primary, a SILENT framing change on a FACE re-locks identity
+    # on HappyHorse — only a same-angle continuation stays a Wan visual
     shots = [_shot(1, ["A"], stype="MS", dialogue=""),
              _shot(2, ["A"], stype="OTS", dialogue="")]
     plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
                               anchor_ref_model="happyhorse", lipsync_enabled=True,
                               wan_primary=True)
     assert plan[1]["model"] == "happyhorse"
+
+
+def test_wan_primary_faceless_reangle_is_wan():
+    # a FACELESS scenery/atmosphere shot has no identity to lock, so even an
+    # angle change routes to Wan, not HappyHorse
+    shots = [_shot(1, ["A"], dialogue=""),
+             _shot(2, [], stype="OTS", dialogue="")]
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True,
+                              wan_primary=True)
+    assert plan[1]["model"] == "wan"
 
 
 def test_wan_primary_dialogue_continuation_badges_native_talk():

@@ -68,6 +68,18 @@ def test_silent_reangle_is_happyhorse_same_framing_stays_wan():
     assert by["c"] == "happyhorse"
 
 
+def test_faceless_reangle_is_wan():
+    # a faceless cutaway (empty cast) has no identity to lock, so it routes to
+    # Wan even though its framing differs from the previous shot (a reangle)
+    shots = [
+        _shot("a", 1, 1, stype="MS"),               # anchor with faces -> HH
+        _shot("cut", 1, 2, faces=(), stype="EWS"),  # faceless, framing change -> Wan
+    ]
+    res = TokenOptimizer().allocate(shots, budget_usd=40.0, wan_primary=True)
+    by = {s["shot_id"]: s["quality_tier"] for s in res["scored_shots"]}
+    assert by["cut"] == "wan"
+
+
 def test_silent_non_anchor_goes_to_wan_and_faceless_anchor_too():
     shots = [
         _shot("anchor", 1, 1),                       # silent anchor + faces -> HH

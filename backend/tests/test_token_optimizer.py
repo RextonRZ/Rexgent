@@ -182,10 +182,11 @@ def test_wan_primary_emits_model_split_counts():
     optimizer = TokenOptimizer()
     shots = [_talker("t1"), _silent("s1"), _silent("s2")]
     result = optimizer.allocate(shots, budget_usd=40.0, wan_primary=True)
-    # t1 talks -> HH; s1 is a silent REANGLE (CU -> EWS framing change, never
-    # rides Wan continuation) -> HH; s2 continues EWS -> EWS -> Wan
-    assert result["wan_shots"] == 1
-    assert result["happyhorse_shots"] == 2
+    # t1 talks -> HH; s1 and s2 are FACELESS silent shots (empty cast) -> Wan.
+    # A reangle only forces HappyHorse when there are faces to lock; scenery has
+    # none, so both go to Wan.
+    assert result["wan_shots"] == 2
+    assert result["happyhorse_shots"] == 1
     # legacy quality counts still present, and the frontend ignores them here
     assert "full_shots" in result and "fast_shots" in result
     assert "on Wan (visuals)" in result["optimisation_summary"]

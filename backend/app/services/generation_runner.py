@@ -562,11 +562,13 @@ class GenerationRunner:
 
         if getattr(get_settings(), "wan_primary", False):
             # Wan-primary: HappyHorse = talking shots, shots that must LOCK a
-            # new/establishing face, AND reangles — an angle change must never
-            # ride Wan continuation (it copies the previous frame and fights the
-            # new framing; shot_roles doctrine). Wan = silent same-angle
-            # continuation or scenery. Wan errors chain to happyhorse.
-            if (speaks or has_newcomers or role == "continue_reangle"
+            # new/establishing face, and reangles WITH faces — an angle change on
+            # a real face must not ride Wan continuation (it fights the new
+            # framing; shot_roles doctrine). But a FACELESS shot has no identity
+            # to lock, so scenery/atmosphere always goes to Wan even on an angle
+            # change. Wan = silent same-angle continuation, or any faceless shot.
+            if (speaks or has_newcomers
+                    or (role == "continue_reangle" and has_faces)
                     or (role == "anchor" and has_faces)):
                 return ("happyhorse", await _happyhorse())
             media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor)
@@ -824,7 +826,8 @@ class GenerationRunner:
         # can't be honored by a silent Wan visual. Computed once, mirrored from
         # the dispatch branches, so the prompt and the payload can't drift.
         if settings_v2 and wan_primary_on:
-            to_happyhorse = (speaks or bool(newcomers) or role == "continue_reangle"
+            to_happyhorse = (speaks or bool(newcomers)
+                             or (role == "continue_reangle" and bool(in_frame))
                              or (role == "anchor" and bool(in_frame)))
             refs_attached = to_happyhorse
         elif settings_v2:

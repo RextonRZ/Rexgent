@@ -51,7 +51,8 @@ def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
         if wan_primary:
             has_faces = bool(_chars(shot))
             model = ("happyhorse"
-                     if (has_dialogue or bool(newcomer) or role == "continue_reangle"
+                     if (has_dialogue or bool(newcomer)
+                         or (role == "continue_reangle" and has_faces)
                          or (role == "anchor" and has_faces))
                      else "wan")
         # native talk makes HappyHorse SPEAK the line itself; the badge follows

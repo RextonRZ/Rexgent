@@ -112,6 +112,90 @@ def make_establishing_shot(location, description, lighting, colour_mood) -> dict
     }
 
 
+def _held_beat(prev: dict) -> dict:
+    """A silent held beat that copies the PRECEDING shot's framing, cast and
+    blocking with NO dialogue, so it routes to Wan (a silent same-angle
+    continuation of established faces — two people holding the moment between
+    lines). Same shot_type as prev -> not a reangle; same cast -> not a
+    newcomer; silent -> continue_hold -> Wan."""
+    cast = list(prev.get("characters_in_frame") or [])
+    return {
+        "shot_number": 0,        # caller renumbers
+        "shot_type": prev.get("shot_type") or "MS",
+        "camera_movement": "STATIC",
+        "characters_in_frame": cast,
+        "subject": prev.get("subject"),
+        "foreground_characters": list(prev.get("foreground_characters") or []),
+        "subjects": [dict(s) for s in (prev.get("subjects") or []) if isinstance(s, dict)],
+        "reverse_angle": False,
+        "action": "They hold still in the silence between words, the moment resting unspoken.",
+        "dialogue": None,
+        "lighting": prev.get("lighting"),
+        "colour_mood": prev.get("colour_mood"),
+        "emotional_beat": "a held silence between them",
+        "estimated_duration_seconds": 3,
+        "notes": "silent held beat (Wan continuation)",
+    }
+
+
+def insert_silent_holds(shots: list[dict], max_holds: int = 2) -> list[dict]:
+    """Weave silent held beats between consecutive DIALOGUE shots that share a
+    stable 2+ person cast: the held beat keeps the preceding shot's framing and
+    cast with no dialogue, so it routes to Wan. Bounded to max_holds per scene,
+    and spaced (never two in a row). Returns a new list; NOT renumbered."""
+    if max_holds <= 0 or len(shots) < 2:
+        return list(shots)
+    out: list[dict] = []
+    holds = 0
+    i, n = 0, len(shots)
+    while i < n:
+        s = shots[i]
+        out.append(s)
+        nxt = shots[i + 1] if i + 1 < n else None
+        cast_a = [str(c) for c in (s.get("characters_in_frame") or [])]
+        if (holds < max_holds and nxt is not None and len(cast_a) >= 2
+                and str(s.get("dialogue") or "").strip()
+                and str(nxt.get("dialogue") or "").strip()
+                and set(cast_a) <= {str(c) for c in (nxt.get("characters_in_frame") or [])}):
+            out.append(_held_beat(s))
+            out.append(nxt)           # keep the next line, and space the holds out
+            holds += 1
+            i += 2
+            continue
+        i += 1
+    return out
+
+
+def make_atmosphere_shot(location, description, lighting, colour_mood) -> dict:
+    """A faceless atmosphere cutaway (empty cast, no dialogue) — a breath of the
+    place mid-scene. Routes to Wan (no identity to lock, even on an angle cut)."""
+    est = make_establishing_shot(location, description, lighting, colour_mood)
+    est["shot_number"] = 0
+    est["camera_movement"] = "STATIC"
+    est["emotional_beat"] = "a breath of the place"
+    est["notes"] = "atmosphere cutaway (Wan visual)"
+    return est
+
+
+def insert_atmosphere(shots: list[dict], count: int, location, description,
+                      lighting, colour_mood) -> list[dict]:
+    """Insert a faceless atmosphere cutaway (when count > 0) just before a
+    DIALOGUE shot near the middle of the scene. The following shot must be a
+    talking shot (HappyHorse regardless) — never a silent held beat, whose Wan
+    routing depends on continuing DIRECTLY from its dialogue anchor; a cutaway
+    wedged in front of a held beat would make its cast read as re-entering
+    newcomers and bounce it to HappyHorse. Returns a new list; NOT renumbered."""
+    out = list(shots)
+    if count <= 0 or not out:
+        return out
+    candidates = [i for i, s in enumerate(out)
+                  if i >= 1 and str(s.get("dialogue") or "").strip()]
+    at = (min(candidates, key=lambda i: abs(i - len(out) // 2)) if candidates
+          else max(1, len(out) // 2))
+    out.insert(at, make_atmosphere_shot(location, description, lighting, colour_mood))
+    return out
+
+
 class StoryboardGenerator:
     # Never balloon a single scene past this many shots, even if it is very
     # dialogue-heavy — keeps cost and length sane.
