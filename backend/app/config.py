@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     # Two-pass Director->Stager shot planning (purpose/variety/pacing/action).
     # OFF by default: flag off leaves storyboard boarding byte-identical to today.
     director_engine: bool = False
+    # Guarantee a Wan visual: when the first scene doesn't already open on a
+    # people-free shot, prepend a short scenery establishing shot (empty cast,
+    # no dialogue) that routes to Wan. OFF by default -> boarding unchanged.
+    ensure_establishing_shot: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

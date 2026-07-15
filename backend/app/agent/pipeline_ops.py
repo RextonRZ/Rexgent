@@ -225,6 +225,25 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             else:
                 shots = await gen.generate_for_scene(
                     scene_json, scene_chars, max_shots=shots_per_scene, shot_seconds=shot_seconds)
+            # Guarantee a Wan visual: if the drama's FIRST scene doesn't already
+            # open on a people-free shot, prepend a short scenery establishing
+            # shot (empty cast, no dialogue). As the scene's silent faceless
+            # anchor it routes to Wan, so every drama gets at least one Wan clip
+            # (cinematic scenery breathing room). OFF by default -> byte-identical.
+            if (scene_index == 1
+                    and getattr(get_settings(), "ensure_establishing_shot", False)):
+                from app.services.storyboard_generator import (
+                    scene_opens_on_scenery, make_establishing_shot)
+                if not scene_opens_on_scenery(shots):
+                    lighting = next((sd.get("lighting") for sd in shots
+                                     if sd.get("lighting")), None)
+                    colour = next((sd.get("colour_mood") for sd in shots
+                                   if sd.get("colour_mood")), None)
+                    est = make_establishing_shot(scene.location, scene.description,
+                                                 lighting, colour)
+                    for sd in shots:
+                        sd["shot_number"] = (sd.get("shot_number") or 1) + 1
+                    shots = [est] + shots
             # the 180-degree rule, enforced not requested: first placement
             # establishes each character's screen side; drift snaps back,
             # a flagged reverse angle re-establishes the line of action.

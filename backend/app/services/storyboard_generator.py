@@ -71,6 +71,47 @@ def _ensure_speakers_in_frame(cast, speakers) -> list:
     return out
 
 
+def scene_opens_on_scenery(shots: list[dict]) -> bool:
+    """True when the scene already has a people-free silent shot — empty
+    characters_in_frame AND no dialogue — the shot the router sends to Wan. When
+    absent, an establishing shot can be prepended to guarantee a Wan visual."""
+    for s in (shots or []):
+        if (not (s.get("characters_in_frame") or [])
+                and not str(s.get("dialogue") or "").strip()):
+            return True
+    return False
+
+
+def make_establishing_shot(location, description, lighting, colour_mood) -> dict:
+    """A people-free establishing wide: empty cast + no dialogue, so the router
+    sends it to Wan — its real strength is cinematic scenery with no identity to
+    lock. Placed as a scene's FIRST shot (the anchor, no previous frame), it is
+    a silent faceless anchor, which routes to Wan; mid-scene it could read as a
+    reangle and go to HappyHorse, so it belongs at the top of the scene."""
+    where = str(location or "the location").strip()
+    desc = str(description or "").strip()
+    action = (f"Establishing wide of {where}. "
+              + (f"{desc} " if desc else "")
+              + "No people in frame - only the empty environment, its light and atmosphere.")
+    return {
+        "shot_number": 1,
+        "shot_type": "EWS",
+        "camera_movement": "DOLLY_IN",
+        "characters_in_frame": [],
+        "subject": None,
+        "foreground_characters": [],
+        "subjects": [],
+        "reverse_angle": False,
+        "action": action,
+        "dialogue": None,
+        "lighting": lighting,
+        "colour_mood": colour_mood,
+        "emotional_beat": "the world before anyone arrives",
+        "estimated_duration_seconds": 3,
+        "notes": "people-free establishing shot (Wan visual)",
+    }
+
+
 class StoryboardGenerator:
     # Never balloon a single scene past this many shots, even if it is very
     # dialogue-heavy — keeps cost and length sane.
