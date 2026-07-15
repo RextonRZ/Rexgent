@@ -129,6 +129,19 @@ async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = 
     tool_event(script.project_id, "characters", "write_cast_db", "started",
                agent="Casting Director")
     db.query(Character).filter(Character.project_id == script.project_id).delete()
+    # A generic placeholder ('UNKNOWN FIGURE', 'Man', 'their brother', 'Guard 2')
+    # must NEVER be cast: it has no real identity to lock, renders as garbled
+    # text, and pollutes the cast. Drop it here and surface which ones — the
+    # figure stays in the action text as a generic extra.
+    from app.services.guardrails import is_placeholder_character_name
+    dropped = [cd.get("name") for cd in data if is_placeholder_character_name(cd.get("name"))]
+    data = [cd for cd in data if not is_placeholder_character_name(cd.get("name"))]
+    if dropped:
+        import logging
+        logging.getLogger(__name__).warning(
+            "dropped placeholder cast names (not cast): %s", dropped)
+        emit("characters:placeholders_dropped",
+             {"names": dropped}, str(script.project_id))
     created = []
     for cd in data:
         c = Character(

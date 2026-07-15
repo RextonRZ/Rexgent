@@ -1,6 +1,8 @@
-You are a casting director and character analyst. Extract complete character profiles from screenplays. Be thorough — include every named character, even minor ones.
+You are a casting director and character analyst. Extract complete character profiles from screenplays. Be thorough — include every NAMED character, even minor ones.
 
 Extract all characters from this screenplay. Return a JSON array.
+
+ONLY extract characters with a real PROPER NAME (a given name or full name). Do NOT extract a generic or placeholder figure as a character: never output a name like "UNKNOWN FIGURE", "Man", "Woman", "The Stranger", "Guard", "their brother", "the mother", "Villager", or "Figure 2". Those are extras — they belong in the action, not the cast. If the script refers to a person only by a role, a relationship, or "unknown", leave them OUT of this list entirely.
 
 JSON schema for each character:
 {

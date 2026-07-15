@@ -319,6 +319,85 @@ def filter_to_cast(names, cast_names) -> list:
     return out
 
 
+_NAME_ARTICLES = {"the", "a", "an"}
+_NAME_POSSESSIVES = {"their", "theirs", "his", "her", "hers", "my", "mine",
+                     "your", "yours", "our", "ours", "its"}
+_NAME_MODIFIERS = {
+    "old", "young", "elderly", "middle-aged", "aged", "tall", "short", "big",
+    "small", "little", "lone", "certain", "mysterious", "unknown", "unidentified",
+    "unnamed", "nameless", "strange", "shadowy", "hooded", "masked", "random",
+    "another", "other", "same", "first", "second", "third", "fourth", "fifth",
+    "next", "last", "main", "background", "generic", "various", "several",
+}
+# Words that are NEVER a real given name — a "character" whose name reduces to
+# only these is a placeholder / extra, not cast. Deliberately EXCLUDES words that
+# are also common first names (Rose, Hunter, Grace, Faith, Hope, Joy, Angel,
+# Dawn, May, June, Sky, Mercy) so a real character is never dropped.
+_GENERIC_PERSON_NOUNS = {
+    "man", "men", "woman", "women", "boy", "boys", "girl", "girls", "child",
+    "children", "kid", "kids", "baby", "infant", "guy", "guys", "lady", "ladies",
+    "gentleman", "gentlemen", "person", "persons", "figure", "figures",
+    "silhouette", "stranger", "strangers", "someone", "somebody", "people",
+    "crowd", "crowds", "group", "mob", "pair", "couple", "everyone", "anyone",
+    "nobody", "individual", "human",
+    # relations
+    "brother", "sister", "mother", "father", "son", "daughter", "parent",
+    "parents", "sibling", "husband", "wife", "spouse", "cousin", "aunt", "uncle",
+    "grandmother", "grandfather", "grandma", "grandpa", "granny", "mom", "mum",
+    "dad", "papa", "mama", "neighbour", "neighbor", "friend", "boss", "colleague",
+    "twin", "twins", "widow", "widower", "orphan",
+    # one-off roles / extras / titles (a proper name alongside keeps it: 'Doctor
+    # Kim' survives, 'Doctor' alone does not)
+    "guard", "guards", "nurse", "officer", "officers", "cop", "cops", "policeman",
+    "policewoman", "police", "waiter", "waitress", "bartender", "driver",
+    "soldier", "soldiers", "narrator", "announcer", "receptionist", "clerk",
+    "vendor", "passerby", "onlooker", "bystander", "patron", "customer",
+    "beggar", "guest", "guests", "host", "victim", "witness", "suspect",
+    "attacker", "assailant", "employee", "worker", "workers", "staff", "voice",
+    "villager", "villagers", "townsperson", "townsfolk", "maid", "butler",
+    "cook", "farmer", "fisherman", "shopkeeper", "servant", "guardian",
+    "presence", "intruder", "assistant", "detective", "captain", "sergeant",
+    "inspector", "agent", "general", "colonel", "major", "lieutenant", "doctor",
+    "professor", "chief", "judge", "mayor", "king", "queen", "prince", "princess",
+    "priest", "monk", "nun", "reverend", "coach", "teacher", "student",
+    "manager", "waitperson", "crew", "figurehead",
+}
+_UNKNOWN_TOKENS = {"unknown", "unnamed", "unidentified", "n/a", "na", "tbd",
+                   "tba", "none", "null", "nil", "placeholder", "character",
+                   "unspecified", "anon", "anonymous"}
+
+
+def is_placeholder_character_name(name) -> bool:
+    """True when a 'character' name is a generic placeholder that must NEVER be
+    cast: an unknown/unnamed marker ('UNKNOWN FIGURE'), a bare common noun
+    ('Man', 'Woman'), an article/adjective + generic noun ('the old man', 'a
+    mysterious figure'), a numbered extra ('Guard 2'), or a relational/role
+    label ('their brother', 'the mother', 'Guard'). A name SURVIVES when, after
+    dropping articles, possessives, adjectives and numbers, at least one token
+    remains that is a proper name (not in the generic-noun set) — so 'Detective
+    Halloran' and 'Doctor Kim' are kept, 'Detective' and 'the guard' are not.
+    Words that are legitimately common first names are excluded from the generic
+    set, so a real character is never dropped."""
+    n = str(name or "").strip()
+    if not n:
+        return True
+    low = n.lower()
+    # whole-string unknown marker ('n/a', 'tbd') or no letters at all ('???')
+    if low in _UNKNOWN_TOKENS or not re.search(r"[a-z]", low):
+        return True
+    tokens = [t for t in re.split(r"[\s\-_/#().,]+", low) if t]
+    if not tokens:
+        return True
+    if any(t in _UNKNOWN_TOKENS for t in tokens):
+        return True
+    meaningful = [t for t in tokens
+                  if t not in _NAME_ARTICLES and t not in _NAME_POSSESSIVES
+                  and t not in _NAME_MODIFIERS and not t.isdigit()]
+    if not meaningful:
+        return True
+    return all(t in _GENERIC_PERSON_NOUNS for t in meaningful)
+
+
 class PreGenerationValidator:
     def validate(self, characters: list[dict], shots: list[dict]) -> dict:
         issues: list[str] = []
