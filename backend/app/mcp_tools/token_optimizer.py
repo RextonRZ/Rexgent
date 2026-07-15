@@ -1,5 +1,7 @@
 import math
 
+from app.services.shot_roles import angle_changed
+
 
 class TokenOptimizer:
     """Adaptive video-budget allocator.
@@ -81,27 +83,41 @@ class TokenOptimizer:
             if sn is not None and (scn not in min_shot_by_scene or sn < min_shot_by_scene[scn]):
                 min_shot_by_scene[scn] = sn
         prev_cast: dict = {}
+        # previous shot's framing per scene: an angle change routes to HappyHorse
+        # (reangles never ride Wan continuation), so the budget must mirror it.
+        # Entries exist only when a previous shot exists — the scene opener is an
+        # anchor, never a reangle. The blocking reverse_angle flag isn't in the
+        # planner's shot dicts; the shot_type diff is the shared signal.
+        prev_type: dict = {}
         by_scene: dict = {}
         for s in shots:
             by_scene.setdefault(s.get("scene_number"), []).append(s)
         for grp in by_scene.values():
             seen: set = set()
+            prior = None
             for s in sorted(grp, key=lambda x: x.get("shot_number") or 0):
                 prev_cast[id(s)] = set(seen)
+                if prior is not None:
+                    prev_type[id(s)] = prior.get("shot_type")
                 seen = {str(c) for c in (s.get("characters_in_frame") or [])}
+                prior = s
         scored = []
         for i, shot in enumerate(shots):
             importance = self.score_shot(shot)
             if wan_primary:
                 # HappyHorse renders the CHARACTERS — a shot that speaks, the
-                # scene's opening anchor with faces, or a shot bringing back a face
-                # absent from the previous shot; Wan renders the other silent
-                # visuals (scenery, or a continuation of an already-shown face).
+                # scene's opening anchor with faces, a shot bringing back a face
+                # absent from the previous shot, or a REANGLE (an angle change
+                # never rides Wan continuation); Wan renders the other silent
+                # visuals (scenery, or a same-angle continuation of a shown face).
                 cast = [str(c) for c in (shot.get("characters_in_frame") or [])]
                 has_faces = bool(cast)
                 is_anchor = shot.get("shot_number") == min_shot_by_scene.get(shot.get("scene_number"))
                 newcomer = any(c not in prev_cast.get(id(shot), set()) for c in cast)
-                if shot.get("dialogue") or (is_anchor and has_faces) or newcomer:
+                reangle = (id(shot) in prev_type
+                           and angle_changed(prev_type[id(shot)],
+                                             shot.get("shot_type"), False))
+                if shot.get("dialogue") or (is_anchor and has_faces) or newcomer or reangle:
                     tier, model = "happyhorse", self.HH_MODEL
                 else:
                     tier, model = "wan", self.WAN_MODEL

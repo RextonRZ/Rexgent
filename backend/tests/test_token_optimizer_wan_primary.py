@@ -5,10 +5,10 @@ under-counted HappyHorse (the "2 Wan / 4 HappyHorse vs 6 HappyHorse" mismatch)."
 from app.mcp_tools.token_optimizer import TokenOptimizer
 
 
-def _shot(sid, scene, shot, dialogue="", faces=("X",)):
+def _shot(sid, scene, shot, dialogue="", faces=("X",), stype=None):
     return {"shot_id": sid, "scene_number": scene, "shot_number": shot,
             "dialogue": dialogue, "characters_in_frame": list(faces),
-            "estimated_duration_seconds": 5}
+            "shot_type": stype, "estimated_duration_seconds": 5}
 
 
 def test_silent_scene_anchor_with_faces_is_happyhorse_not_wan():
@@ -50,6 +50,22 @@ def test_true_silent_continuation_of_same_face_is_wan():
     res = TokenOptimizer().allocate(shots, budget_usd=40.0, wan_primary=True)
     by = {s["shot_id"]: s["quality_tier"] for s in res["scored_shots"]}
     assert by["a"] == "happyhorse" and by["b"] == "wan"
+
+
+def test_silent_reangle_is_happyhorse_same_framing_stays_wan():
+    # doctrine mirror: an angle change never rides Wan continuation, so the
+    # budget must price a silent REANGLE as HappyHorse; only the same-framing
+    # silent continuation stays a Wan visual
+    shots = [
+        _shot("a", 1, 1, stype="MS"),     # anchor with faces -> HH
+        _shot("b", 1, 2, stype="MS"),     # silent, same framing -> Wan
+        _shot("c", 1, 3, stype="OTS"),    # silent, framing CHANGE -> HH
+    ]
+    res = TokenOptimizer().allocate(shots, budget_usd=40.0, wan_primary=True)
+    by = {s["shot_id"]: s["quality_tier"] for s in res["scored_shots"]}
+    assert by["a"] == "happyhorse"
+    assert by["b"] == "wan"
+    assert by["c"] == "happyhorse"
 
 
 def test_silent_non_anchor_goes_to_wan_and_faceless_anchor_too():

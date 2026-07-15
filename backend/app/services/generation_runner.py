@@ -168,6 +168,13 @@ class GenerationRunner:
                 for s in shots
             ],
         )
+        if preflight.get("warnings"):
+            # extras with no plate, and similar soft findings: surfaced, never
+            # blocking — a missing extra identity must not stop generation
+            logger.warning("preflight warnings for job %s: %s",
+                           job.id, preflight["warnings"])
+            emit("job:warnings", {"job_id": str(job.id),
+                 "warnings": preflight["warnings"]}, str(job.project_id))
         if not preflight["pass"]:
             job.status = "BLOCKED"
             self.db.commit()
@@ -554,10 +561,13 @@ class GenerationRunner:
                 seed=seed, ratio=ratio, negative_prompt=negative)
 
         if getattr(get_settings(), "wan_primary", False):
-            # Wan-primary: HappyHorse = talking shots + shots that must LOCK a
-            # new/establishing face; Wan = every silent visual shot (continuation
-            # of established faces, or scenery). Wan errors chain to happyhorse.
-            if speaks or has_newcomers or (role == "anchor" and has_faces):
+            # Wan-primary: HappyHorse = talking shots, shots that must LOCK a
+            # new/establishing face, AND reangles — an angle change must never
+            # ride Wan continuation (it copies the previous frame and fights the
+            # new framing; shot_roles doctrine). Wan = silent same-angle
+            # continuation or scenery. Wan errors chain to happyhorse.
+            if (speaks or has_newcomers or role == "continue_reangle"
+                    or (role == "anchor" and has_faces)):
                 return ("happyhorse", await _happyhorse())
             media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor)
             try:
@@ -801,14 +811,34 @@ class GenerationRunner:
                 is_angle_change=angle_changed(
                     prev_shot_type, shot.shot_type,
                     bool((getattr(shot, "blocking_json", None) or {}).get("reverse_angle"))))
-            # "same cast -> wan": a reangle keeps the same cast, so route it to
-            # wan continuation (it continues from the previous frame) rather than
-            # the HappyHorse reference model. Only a NEW character (entrance) or
-            # the opening shot (anchor) forces HappyHorse. OFF -> unchanged.
-            if role == "continue_reangle" and getattr(get_settings(), "wan_on_same_cast", False):
-                role = "continue_hold"
-            # continue_hold is the only role that stays on wan i2v
+            # continue_hold is the only role that stays on wan i2v — reangles
+            # always go to the reference model (angle changes must not ride
+            # continuation), so there is no same-cast demotion here.
             is_wan = role == "continue_hold"
+        speaks = bool((shot.dialogue or "").strip())
+        wan_primary_on = getattr(get_settings(), "wan_primary", False)
+        # Where will _dispatch_by_role ACTUALLY send this shot? The [Image N]
+        # legend and native talk must track the real target, not the role: wan
+        # i2v/t2v attaches no reference images (a legend there describes phantom
+        # pictures the model never receives), and a "says the line aloud" clause
+        # can't be honored by a silent Wan visual. Computed once, mirrored from
+        # the dispatch branches, so the prompt and the payload can't drift.
+        if settings_v2 and wan_primary_on:
+            to_happyhorse = (speaks or bool(newcomers) or role == "continue_reangle"
+                             or (role == "anchor" and bool(in_frame)))
+            refs_attached = to_happyhorse
+        elif settings_v2:
+            ref_native = role in ("anchor", "entrance", "continue_reangle")
+            wan_r2v_native = (ref_native and getattr(
+                get_settings(), "anchor_ref_model", "happyhorse") == "wan")
+            to_happyhorse = ((ref_native and not wan_r2v_native)
+                             or (role == "continue_hold" and getattr(
+                                 get_settings(), "route_continuation_to_happyhorse", True)))
+            # wan r2v still carries the plate stack, so the legend stays valid there
+            refs_attached = ref_native or to_happyhorse
+        else:
+            to_happyhorse = not is_wan
+            refs_attached = False   # the legend is v2-only
         model_cap = 5 if is_wan else 9
         if settings_v2 and role in ("anchor", "entrance", "continue_reangle"):
             # r2v takes <=5 media total; entrance/reangle also spend one slot on
@@ -831,11 +861,12 @@ class GenerationRunner:
             suppress_location=suppress_location, foreground_characters=foreground)
         seed = stable_seed(pid, shot.id)
         # [Image N] guide: tie each reference plate to its person so the model
-        # never swaps faces/outfits across a multi-character shot. r2v-only (wan
-        # i2v takes no reference_image), behind image_ref_labels. OFF -> "".
+        # never swaps faces/outfits across a multi-character shot. Only when the
+        # dispatch target actually ATTACHES the stack (r2v paths) — a Wan i2v/t2v
+        # shot must never carry a legend for images it is not sent. OFF -> "".
         image_legend = ""
         if (getattr(get_settings(), "image_ref_labels", False) and ref_stack
-                and settings_v2 and role in ("anchor", "entrance", "continue_reangle")):
+                and settings_v2 and refs_attached):
             from app.services.reference_stack import image_ref_legend
             image_legend = image_ref_legend(ref_provenance)
 
@@ -859,14 +890,21 @@ class GenerationRunner:
                 # HappyHorse native-talk: the model SPEAKS the line itself and
                 # syncs its own mouth, so it works on MULTI-person shots too — we
                 # NAME the speaker in the prompt so the right mouth moves and the
-                # others stay closed. Only needs the speaker to be IN FRAME (the
-                # line supplies who is speaking). OFF by default -> byte-identical.
+                # others stay closed. Fires on ANY shot that renders on
+                # HappyHorse (to_happyhorse), not just ref-native roles — a
+                # dialogue continuation routed there must still voice its line.
+                # OFF by default -> byte-identical.
                 # The model's own voice IS the delivered audio (no TTS overlay).
-                native_speaker = str((lipsync_line or {}).get("character_name") or "").strip()
+                # The script writes speaker names with stage qualifiers
+                # ("DEOK-HYUN (O.S.)") — canonicalize BEFORE the in-frame check,
+                # or the qualifier silently kills the line's voice.
+                native_speaker = canonical_character(
+                    str((lipsync_line or {}).get("character_name") or "").strip(),
+                    bible["characters"])
                 native_talk = (
                     getattr(get_settings(), "happyhorse_native_talk", False)
                     and settings_v2
-                    and role in ("anchor", "entrance", "continue_reangle")
+                    and to_happyhorse
                     and attempt == 0
                     and get_settings().lipsync_enabled
                     and lipsync_line
@@ -874,14 +912,11 @@ class GenerationRunner:
                     and native_speaker.upper() in {str(c).strip().upper() for c in in_frame})
                 tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
                            index=job.completed_shots + 1, total=job.total_shots)
-                # Wan visual shot? Same routing test as _dispatch_by_role's
-                # wan_primary branch: a silent continuation/scenery shot with no
-                # newcomer and no establishing anchor renders on Wan, so the
-                # crafter appends Wan's SFX/ambience + no-dialogue/no-BGM tail.
-                # OFF (wan_primary/v2 off) -> False -> byte-identical prompt.
-                to_wan = (getattr(get_settings(), "wan_primary", False) and settings_v2
-                          and not (bool((shot.dialogue or "").strip()) or bool(newcomers)
-                                   or (role == "anchor" and bool(in_frame))))
+                # Wan visual shot? The shared dispatch-target predicate: a shot
+                # NOT bound for HappyHorse under wan_primary renders on Wan, so
+                # the crafter appends Wan's SFX/ambience + no-dialogue/no-BGM
+                # tail. OFF (wan_primary/v2 off) -> False -> byte-identical.
+                to_wan = settings_v2 and wan_primary_on and not to_happyhorse
                 crafted = await self._craft_prompt(
                     shot, char_by_name, scene_setting, prev_action, next_action,
                     foreground=foreground, outfits=outfits,

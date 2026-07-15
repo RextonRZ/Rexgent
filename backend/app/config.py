@@ -42,9 +42,6 @@ class Settings(BaseSettings):
     # Prepend an [Image N] legend to r2v prompts so the model ties each person to
     # their OWN reference plate (face/outfit) instead of guessing. OFF by default.
     image_ref_labels: bool = False
-    # Route same-cast continuation shots to Wan even on an angle change (only a
-    # NEW character forces the HappyHorse reference model). OFF by default.
-    wan_on_same_cast: bool = False
     # Render continuation (continue_hold) shots on HappyHorse r2v instead of Wan
     # i2v. Wan i2v continuation hard-fails when the previous clip is >= the
     # requested duration and can't lip-sync 2-face shots; HappyHorse r2v continues

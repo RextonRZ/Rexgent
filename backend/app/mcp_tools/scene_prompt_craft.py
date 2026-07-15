@@ -126,18 +126,18 @@ class ScenePromptCraft:
             if character_visuals else ""
         )
         # Per-shot dialogue treatment. A native-talk shot (HappyHorse speaks the
-        # line itself) is framed openly talking; every other spoken line hides
+        # line itself — that generated voice IS the delivered audio, there is no
+        # TTS overlay) is framed openly talking; every other spoken line hides
         # the mouth (coverage) so an unsynced flapping mouth is never
-        # front-and-center. Audio itself stays export's job (native voice muted,
-        # real TTS overlaid there); this shapes only the picture. (`lipsync` is a
-        # retained-but-inert parameter — the old wan driving-audio path it framed
-        # for has been removed.)
+        # front-and-center, and its words reach the audience through the burned
+        # captions. (`lipsync` is a retained-but-inert parameter — the old wan
+        # driving-audio path it framed for has been removed.)
         has_line = bool(str(shot.get("dialogue") or "").strip())
         if has_line and native_talk:
             # HappyHorse native lip-sync: the model speaks the line itself and
-            # syncs the mouth to its own generated speech. Export mutes that
-            # generated voice and overlays the real TTS, so the picture is a
-            # natural talking take with the correct words. Opposite of coverage.
+            # syncs the mouth to its own generated speech. That voice ships as
+            # the clip's real audio (no TTS overlay exists), so the words must
+            # be the exact scripted line. Opposite of coverage.
             dialogue_block = (
                 "Dialogue delivery (the speaker says THIS line ALOUD on camera: the "
                 "character audibly speaks it with natural mouth movement precisely "
@@ -224,9 +224,9 @@ class ScenePromptCraft:
         # Native-talk shots must SPEAK the exact scripted line, but the text
         # sanitizer above strips quoted words (to keep on-screen text out) and
         # eats the dialogue with them. Re-append the verbatim line AFTER all
-        # stripping so HappyHorse lip-syncs the real words. Export mutes the
-        # model's own generated voice and overlays the TTS, so this only shapes
-        # the mouth, not the final audio.
+        # stripping so HappyHorse speaks the real words — its generated voice
+        # ships as the clip's delivered audio (no TTS overlay), so a wrong or
+        # mangled line here is audible in the final cut.
         if native_talk and has_line:
             import re as _re
             raw = str(shot.get("dialogue") or "").strip()

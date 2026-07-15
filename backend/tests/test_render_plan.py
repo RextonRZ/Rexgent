@@ -69,25 +69,46 @@ def test_anchor_ref_model_wan_uses_wan_for_anchors():
     assert plan[0]["model"] == "wan"
 
 
-def test_wan_on_same_cast_routes_reangle_to_wan():
-    # shot 2: same cast as shot 1 but a framing change -> continue_reangle
+def test_reangle_always_routes_to_happyhorse():
+    # shot 2: same cast as shot 1 but a framing change -> continue_reangle.
+    # Doctrine: an angle change must never ride Wan continuation.
     shots = [_shot(1, ["A"], stype="MS"), _shot(2, ["A"], stype="OTS")]
-    off = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
-                             anchor_ref_model="happyhorse", lipsync_enabled=True)
-    on = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
-                            anchor_ref_model="happyhorse",
-                            lipsync_enabled=True, wan_on_same_cast=True)
-    assert off[1]["model"] == "happyhorse"   # reangle -> HappyHorse by default
-    assert on[1]["model"] == "wan"           # same cast -> wan continuation
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True)
+    assert plan[1]["model"] == "happyhorse"
 
 
-def test_wan_on_same_cast_still_happyhorse_for_new_character():
-    # a NEW character (entrance) must stay HappyHorse even with the flag on
-    shots = [_shot(1, ["A"]), _shot(2, ["A", "B"])]
-    on = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
-                            anchor_ref_model="happyhorse",
-                            lipsync_enabled=True, wan_on_same_cast=True)
-    assert on[1]["model"] == "happyhorse"
+def test_wan_primary_silent_reangle_is_happyhorse():
+    # even under wan_primary, a SILENT framing change re-locks identity on
+    # HappyHorse — only a same-angle continuation stays a Wan visual
+    shots = [_shot(1, ["A"], stype="MS", dialogue=""),
+             _shot(2, ["A"], stype="OTS", dialogue="")]
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True,
+                              wan_primary=True)
+    assert plan[1]["model"] == "happyhorse"
+
+
+def test_wan_primary_dialogue_continuation_badges_native_talk():
+    # a same-framing dialogue shot routes to HappyHorse under wan_primary and
+    # TALKS: the badge follows the real render target, not the identity role
+    shots = [_shot(1, ["A"], dialogue=""), _shot(2, ["A"], dialogue="hello")]
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True,
+                              wan_primary=True, happyhorse_native_talk=True)
+    assert plan[1]["model"] == "happyhorse"
+    assert plan[1]["lipsync"] is True
+
+
+def test_wan_r2v_anchor_never_badges_native_talk():
+    # anchor_ref_model="wan" renders the anchor on wan r2v, which cannot speak —
+    # the badge must not promise talk the render target can't deliver
+    shots = [_shot(1, ["A"], dialogue="hi")]
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="wan", lipsync_enabled=True,
+                              happyhorse_native_talk=True)
+    assert plan[0]["model"] == "wan"
+    assert plan[0]["lipsync"] is False
 
 
 def test_native_talk_badges_a_multi_person_happyhorse_shot():

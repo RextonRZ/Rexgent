@@ -192,7 +192,6 @@ def shots_with_render_plan(shots: list[Shot], bible: dict) -> list[dict]:
         identity_routing_v2=settings.identity_routing_v2,
         anchor_ref_model=settings.anchor_ref_model,
         lipsync_enabled=settings.lipsync_enabled,
-        wan_on_same_cast=settings.wan_on_same_cast,
         happyhorse_native_talk=settings.happyhorse_native_talk,
         route_continuation_to_happyhorse=settings.route_continuation_to_happyhorse,
         wan_primary=settings.wan_primary,

@@ -43,7 +43,7 @@ def _no_ws(monkeypatch):
     # can't flip a legacy-path test. Tests that need a flag on monkeypatch it True.
     for _flag in ("identity_routing_v2", "repair_enabled", "multishot_enabled",
                   "happyhorse_native_talk",
-                  "wan_on_same_cast", "image_ref_labels", "wan_primary",
+                  "image_ref_labels", "wan_primary",
                   "route_continuation_to_happyhorse", "cinematic_prompt"):
         monkeypatch.setattr(gr.get_settings(), _flag, False, raising=False)
 
@@ -924,4 +924,87 @@ async def test_wan_primary_off_uses_existing_routing(monkeypatch):
     tier, _ = await _dispatch(r, role="continue_hold", speaks=True)
     assert tier == "happyhorse"
     r.qwen.generate_video_wan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_wan_primary_silent_reangle_goes_happyhorse(monkeypatch):
+    # doctrine: an angle change must never ride Wan continuation — even a
+    # SILENT reangle re-locks identity on HappyHorse r2v
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
+    r = _make_dispatch_runner(); _hh_wan(r)
+    tier, _ = await _dispatch(r, role="continue_reangle", speaks=False)
+    assert tier == "happyhorse"
+    r.qwen.generate_video_wan.assert_not_awaited()
+
+
+# --- native talk + [Image N] legend follow the REAL dispatch target ---
+
+def _talk_settings(monkeypatch):
+    for flag in ("identity_routing_v2", "wan_primary", "happyhorse_native_talk",
+                 "image_ref_labels"):
+        monkeypatch.setattr(gr.get_settings(), flag, True, raising=False)
+    monkeypatch.setattr(gr.get_settings(), "lipsync_enabled", True, raising=False)
+
+
+@pytest.mark.asyncio
+async def test_native_talk_survives_speaker_stage_qualifier(monkeypatch):
+    """The script writes speakers with qualifiers ('YUKI (O.S.)'); the in-frame
+    check must canonicalize first or the qualifier silently kills the line's
+    voice — with no TTS overlay, that line would ship SILENT."""
+    _talk_settings(monkeypatch)
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    await runner._process_shot(
+        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe", prev_in_frame=["Yuki"], prev_shot_type="CU",
+        lipsync_line={"character_name": "YUKI (O.S.)", "text": "We need to move."})
+    kwargs = runner.prompt_crafter.craft.await_args.kwargs
+    assert kwargs["native_talk"] is True
+    assert kwargs["speaker"] == "Yuki"          # canonical name, qualifier gone
+
+
+@pytest.mark.asyncio
+async def test_native_talk_fires_on_dialogue_continuation_under_wan_primary(monkeypatch):
+    """A same-framing dialogue shot classifies continue_hold but DISPATCHES to
+    HappyHorse under wan_primary — native talk must follow the real target,
+    not the identity role, or the line ships voiceless."""
+    _talk_settings(monkeypatch)
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    await runner._process_shot(
+        job, make_shot(), {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe", prev_in_frame=["Yuki"], prev_shot_type="CU",
+        lipsync_line={"character_name": "Yuki", "text": "We need to move."})
+    kwargs = runner.prompt_crafter.craft.await_args.kwargs
+    assert kwargs["native_talk"] is True        # continue_hold role, HH target
+    assert kwargs["image_legend"]               # refs attached -> legend present
+
+
+@pytest.mark.asyncio
+async def test_no_phantom_legend_on_wan_visual_shot(monkeypatch):
+    """A silent same-framing continuation dispatches to Wan i2v, which gets NO
+    reference images — the prompt must not carry an [Image N] legend describing
+    pictures the model never receives."""
+    _talk_settings(monkeypatch)
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+    shot = make_shot(); shot.dialogue = None      # silent -> Wan visual
+    await runner._process_shot(
+        job, shot, {"Yuki": make_char()}, BIBLE, 1,
+        prev_last_frame_url="prevframe", prev_in_frame=["Yuki"], prev_shot_type="CU")
+    kwargs = runner.prompt_crafter.craft.await_args.kwargs
+    assert kwargs["image_legend"] == ""
+    assert kwargs["to_wan"] is True
 
