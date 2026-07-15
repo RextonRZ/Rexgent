@@ -82,17 +82,19 @@ def scene_opens_on_scenery(shots: list[dict]) -> bool:
     return False
 
 
-def make_establishing_shot(location, description, lighting, colour_mood) -> dict:
+def make_establishing_shot(location, lighting, colour_mood) -> dict:
     """A people-free establishing wide: empty cast + no dialogue, so the router
     sends it to Wan — its real strength is cinematic scenery with no identity to
     lock. Placed as a scene's FIRST shot (the anchor, no previous frame), it is
-    a silent faceless anchor, which routes to Wan; mid-scene it could read as a
-    reangle and go to HappyHorse, so it belongs at the top of the scene."""
+    a silent faceless anchor, which routes to Wan.
+
+    The action describes ONLY the environment — NEVER the scene's character
+    action. The scene description is all about the cast (who cries, who enters);
+    pasting it into a 'people-free' shot both contradicts itself and makes the
+    model render those people. The set dresser enriches the room at craft time."""
     where = str(location or "the location").strip()
-    desc = str(description or "").strip()
-    action = (f"Establishing wide of {where}. "
-              + (f"{desc} " if desc else "")
-              + "No people in frame - only the empty environment, its light and atmosphere.")
+    action = (f"Establishing wide of {where}. No people in frame - only the "
+              "empty environment, its light and atmosphere.")
     return {
         "shot_number": 1,
         "shot_type": "EWS",
@@ -166,38 +168,74 @@ def insert_silent_holds(shots: list[dict], max_holds: int = 2) -> list[dict]:
     return out
 
 
-def make_atmosphere_shot(location, description, lighting, colour_mood) -> dict:
+# Distinct looks so multiple cutaways (and the establishing wide) never render
+# as the same repeating shot: different framing, camera and phrasing. Each is
+# environment-only, never the scene's character action.
+_ATMOSPHERE_LOOKS = [
+    ("A still, unpeopled view of {where} - its light, texture and empty space, "
+     "not a soul in frame.", "LS", "STATIC"),
+    ("A quiet detail of {where} - surfaces, shadows and stillness, no people "
+     "present.", "MS", "PAN_RIGHT"),
+    ("The empty {where} holding its silence - atmosphere and light only, no one "
+     "in frame.", "FS", "TILT_DOWN"),
+]
+
+
+def make_atmosphere_shot(location, lighting, colour_mood, variant: int = 0) -> dict:
     """A faceless atmosphere cutaway (empty cast, no dialogue) — a breath of the
-    place mid-scene. Routes to Wan (no identity to lock, even on an angle cut)."""
-    est = make_establishing_shot(location, description, lighting, colour_mood)
-    est["shot_number"] = 0
-    est["camera_movement"] = "STATIC"
-    est["emotional_beat"] = "a breath of the place"
-    est["notes"] = "atmosphere cutaway (Wan visual)"
-    return est
+    place mid-scene. Routes to Wan (no identity to lock, even on an angle cut).
+    `variant` picks a distinct framing/phrasing so it never repeats the
+    establishing wide or another cutaway. Environment only, never the cast."""
+    where = str(location or "the location").strip()
+    text, stype, cam = _ATMOSPHERE_LOOKS[variant % len(_ATMOSPHERE_LOOKS)]
+    return {
+        "shot_number": 0,
+        "shot_type": stype,
+        "camera_movement": cam,
+        "characters_in_frame": [],
+        "subject": None,
+        "foreground_characters": [],
+        "subjects": [],
+        "reverse_angle": False,
+        "action": text.format(where=where),
+        "dialogue": None,
+        "lighting": lighting,
+        "colour_mood": colour_mood,
+        "emotional_beat": "a breath of the place",
+        "estimated_duration_seconds": 3,
+        "notes": "atmosphere cutaway (Wan visual)",
+    }
 
 
-def insert_atmosphere(shots: list[dict], count: int, location, description,
+def insert_atmosphere(shots: list[dict], count: int, location,
                       lighting, colour_mood) -> list[dict]:
     """Insert up to `count` faceless atmosphere cutaways, spaced across the
-    scene, each just before a DIALOGUE shot. The shot after a cutaway must be a
-    talking shot (HappyHorse regardless) — never a silent held beat, whose Wan
-    routing depends on continuing DIRECTLY from its dialogue anchor; a cutaway
-    wedged in front of a held beat would make its cast read as re-entering
-    newcomers and bounce it to HappyHorse. Returns a new list; NOT renumbered."""
+    scene, each just before a DIALOGUE shot AND at least 2 shots from any
+    existing people-free shot (the establishing wide or another cutaway) — so
+    two scenery shots never bunch up and look repeating. The shot after a cutaway
+    must be a talking shot (HappyHorse regardless), never a silent held beat,
+    whose Wan routing depends on continuing DIRECTLY from its dialogue anchor.
+    Each cutaway gets a distinct look. Returns a new list; NOT renumbered."""
     out = list(shots)
     if count <= 0 or not out:
         return out
+    empty_idx = [i for i, s in enumerate(out) if not (s.get("characters_in_frame") or [])]
     slots = [i for i, s in enumerate(out)
-             if i >= 1 and str(s.get("dialogue") or "").strip()]
+             if i >= 1 and str(s.get("dialogue") or "").strip()
+             and all(abs(i - e) > 2 for e in empty_idx)]
     if not slots:
-        slots = [max(1, len(out) // 2)]
+        return out   # nowhere safe -> skip rather than bunch scenery together
     k = min(count, len(slots))
-    stride = max(1, len(slots) // k)
-    chosen = slots[::stride][:k]
-    # insert from the back so earlier indices stay valid as the list grows
-    for at in sorted(set(chosen), reverse=True):
-        out.insert(at, make_atmosphere_shot(location, description, lighting, colour_mood))
+    # spread the chosen slots EVENLY across what's available (not the first k),
+    # so multiple cutaways don't cluster and end up adjacent after insertion
+    if k == 1:
+        chosen = [slots[len(slots) // 2]]
+    else:
+        chosen = sorted({slots[round(j * (len(slots) - 1) / (k - 1))] for j in range(k)})
+    # insert from the back so earlier indices stay valid as the list grows;
+    # variant index gives each a distinct framing/phrasing
+    for n, at in enumerate(reversed(chosen)):
+        out.insert(at, make_atmosphere_shot(location, lighting, colour_mood, variant=n))
     return out
 
 

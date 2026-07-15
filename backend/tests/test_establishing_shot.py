@@ -47,7 +47,7 @@ class TestSilentHolds:
 class TestAtmosphere:
     def test_inserts_a_faceless_cutaway_in_the_middle(self):
         shots = [_talk(["A", "B"]) for _ in range(4)]
-        out = insert_atmosphere(shots, 1, "a cliff", "waves", "NIGHT", "COOL")
+        out = insert_atmosphere(shots, 1, "a cliff", "NIGHT", "COOL")
         assert len(out) == 5
         cut = next(s for s in out if not s["characters_in_frame"])
         assert cut["dialogue"] is None
@@ -57,25 +57,44 @@ class TestAtmosphere:
 
     def test_zero_count_is_noop(self):
         shots = [_talk(["A"])]
-        assert insert_atmosphere(shots, 0, "x", "y", "NIGHT", "COOL") == shots
+        assert insert_atmosphere(shots, 0, "x", "NIGHT", "COOL") == shots
 
     def test_multiple_cutaways_are_spaced(self):
         shots = [_talk(["A", "B"]) for _ in range(6)]
-        out = insert_atmosphere(shots, 3, "a cliff", "waves", "NIGHT", "COOL")
+        out = insert_atmosphere(shots, 3, "a cliff", "NIGHT", "COOL")
         cuts = [i for i, s in enumerate(out) if not s["characters_in_frame"]]
         assert len(cuts) == 3
         # spaced, not bunched together
         assert all(b - a >= 2 for a, b in zip(cuts, cuts[1:]))
 
+    def test_not_placed_next_to_an_existing_scenery_shot(self):
+        # the S1 bug: an establishing wide already at index 0 plus a cutaway two
+        # shots later read as repeating. A cutaway must stay >2 shots from any
+        # people-free shot, so scenery never bunches up.
+        est = make_establishing_shot("a cliff", "NIGHT", "COOL")
+        shots = [est] + [_talk(["A", "B"]) for _ in range(5)]
+        out = insert_atmosphere(shots, 2, "a cliff", "NIGHT", "COOL")
+        empties = [i for i, s in enumerate(out) if not s["characters_in_frame"]]
+        assert all(b - a > 2 for a, b in zip(empties, empties[1:]))
+
+    def test_cutaways_have_distinct_looks(self):
+        shots = [_talk(["A", "B"]) for _ in range(6)]
+        out = insert_atmosphere(shots, 3, "a cliff", "NIGHT", "COOL")
+        cuts = [s for s in out if not s["characters_in_frame"]]
+        actions = {c["action"] for c in cuts}
+        types = {c["shot_type"] for c in cuts}
+        assert len(actions) == len(cuts)   # every cutaway reads differently
+        assert len(types) > 1
+
     def test_count_capped_by_available_slots(self):
         # only 2 dialogue slots (index >= 1) -> at most 2 cutaways even if asked 3
         shots = [_talk(["A", "B"]), _talk(["A", "B"]), _talk(["A", "B"])]
-        out = insert_atmosphere(shots, 3, "x", "y", "NIGHT", "COOL")
+        out = insert_atmosphere(shots, 3, "x", "NIGHT", "COOL")
         cuts = [s for s in out if not s["characters_in_frame"]]
         assert len(cuts) == 2
 
     def test_atmosphere_shot_is_faceless_silent(self):
-        a = make_atmosphere_shot("a harbour", "boats knock together", "OVERCAST", "DESATURATED")
+        a = make_atmosphere_shot("a harbour", "OVERCAST", "DESATURATED")
         assert a["characters_in_frame"] == []
         assert a["dialogue"] is None
         assert "harbour" in a["action"]
@@ -102,8 +121,7 @@ def test_empty_shot_list_needs_one():
 
 
 def test_establishing_shot_is_faceless_and_silent():
-    est = make_establishing_shot("a remote cliff", "waves crash below",
-                                 "GOLDEN_HOUR", "WARM")
+    est = make_establishing_shot("a remote cliff", "GOLDEN_HOUR", "WARM")
     assert est["characters_in_frame"] == []
     assert est["subjects"] == []
     assert est["dialogue"] is None
@@ -112,14 +130,22 @@ def test_establishing_shot_is_faceless_and_silent():
     # inherits the scene's look so it cuts with the rest
     assert est["lighting"] == "GOLDEN_HOUR"
     assert est["colour_mood"] == "WARM"
-    # the location and description ride into the action, no people
+    # ONLY the location + no-people clause — never the scene's character action
     assert "remote cliff" in est["action"]
-    assert "waves crash below" in est["action"]
     assert "No people" in est["action"]
 
 
-def test_establishing_shot_handles_missing_location_and_description():
-    est = make_establishing_shot(None, None, None, None)
+def test_establishing_action_carries_no_character_prose():
+    # regression: the action must NOT paste the scene's character description
+    # (which names the cast and made the 'people-free' shot render them)
+    est = make_establishing_shot("Anna's cabin", "NIGHT", "COOL")
+    # the only sentence besides the location line is the 'no people' clause
+    assert est["action"].strip().endswith("light and atmosphere.")
+    assert "sits" not in est["action"] and "crying" not in est["action"]
+
+
+def test_establishing_shot_handles_missing_location():
+    est = make_establishing_shot(None, None, None)
     assert est["characters_in_frame"] == []
     assert "the location" in est["action"]
     assert est["dialogue"] is None

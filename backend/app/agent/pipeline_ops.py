@@ -255,10 +255,13 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 from app.services.storyboard_generator import (
                     scene_opens_on_scenery, make_establishing_shot)
                 if not scene_opens_on_scenery(shots):
-                    shots = [make_establishing_shot(scene.location, scene.description,
+                    shots = [make_establishing_shot(scene.location,
                                                     _look_of("lighting"),
                                                     _look_of("colour_mood"))] + shots
                     enriched = True
+                    # the establishing wide IS one scenery beat — count it against
+                    # the atmosphere budget so scene 1 doesn't pile up cutaways
+                    atmo_budget = max(0, atmo_budget - 1)
             # (2) Weave silent Wan beats: held two-shots between dialogue (same
             # framing + cast, no line -> Wan continuation), and a few faceless
             # atmosphere cutaways drawn from the drama-level budget.
@@ -271,7 +274,7 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 if atmo_budget > 0:
                     before = len(shots)
                     with_atmo = insert_atmosphere(shots, atmo_budget, scene.location,
-                                                  scene.description, _look_of("lighting"),
+                                                  _look_of("lighting"),
                                                   _look_of("colour_mood"))
                     inserted = len(with_atmo) - before
                     if inserted > 0:
