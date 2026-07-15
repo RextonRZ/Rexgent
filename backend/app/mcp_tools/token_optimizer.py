@@ -71,28 +71,37 @@ class TokenOptimizer:
             key=lambda i: shots[i].get("shot_number") or 10 ** 9,
         )
         hook_indices = set(scene1[:self.HOOK_MAX_SHOTS])
-        # A scene's opening shot (its lowest shot_number) is the identity ANCHOR;
-        # under wan_primary it renders on HappyHorse to lock the faces. Precompute
-        # per scene so this projection matches render_plan / the storyboard badge
-        # instead of keying on dialogue alone.
+        # Match render_plan / _dispatch_by_role so the budget split agrees with the
+        # storyboard badge. A scene's opening shot (lowest shot_number) is the
+        # identity ANCHOR; a shot that brings in a character absent from the
+        # previous shot of the same scene re-locks a face (NEWCOMER).
         min_shot_by_scene: dict = {}
         for s in shots:
             scn, sn = s.get("scene_number"), s.get("shot_number")
             if sn is not None and (scn not in min_shot_by_scene or sn < min_shot_by_scene[scn]):
                 min_shot_by_scene[scn] = sn
+        prev_cast: dict = {}
+        by_scene: dict = {}
+        for s in shots:
+            by_scene.setdefault(s.get("scene_number"), []).append(s)
+        for grp in by_scene.values():
+            seen: set = set()
+            for s in sorted(grp, key=lambda x: x.get("shot_number") or 0):
+                prev_cast[id(s)] = set(seen)
+                seen = {str(c) for c in (s.get("characters_in_frame") or [])}
         scored = []
         for i, shot in enumerate(shots):
             importance = self.score_shot(shot)
             if wan_primary:
-                # Mirror render_plan / _dispatch_by_role: HappyHorse renders the
-                # CHARACTERS — a shot that speaks, or the scene's opening anchor
-                # that has faces to lock — and Wan renders the other silent
-                # visuals. (A mid-scene silent NEWCOMER also routes to HappyHorse
-                # at runtime; detecting that needs the reference bible, which the
-                # budget path does not load, so it is the one residual gap.)
-                has_faces = bool(shot.get("characters_in_frame"))
+                # HappyHorse renders the CHARACTERS — a shot that speaks, the
+                # scene's opening anchor with faces, or a shot bringing back a face
+                # absent from the previous shot; Wan renders the other silent
+                # visuals (scenery, or a continuation of an already-shown face).
+                cast = [str(c) for c in (shot.get("characters_in_frame") or [])]
+                has_faces = bool(cast)
                 is_anchor = shot.get("shot_number") == min_shot_by_scene.get(shot.get("scene_number"))
-                if shot.get("dialogue") or (is_anchor and has_faces):
+                newcomer = any(c not in prev_cast.get(id(shot), set()) for c in cast)
+                if shot.get("dialogue") or (is_anchor and has_faces) or newcomer:
                     tier, model = "happyhorse", self.HH_MODEL
                 else:
                     tier, model = "wan", self.WAN_MODEL

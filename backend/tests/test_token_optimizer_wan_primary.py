@@ -28,6 +28,30 @@ def test_silent_scene_anchor_with_faces_is_happyhorse_not_wan():
     assert res["happyhorse_shots"] == 6
 
 
+def test_silent_reentering_character_is_newcomer_happyhorse():
+    # the real drama: shot1 both, shot2 Deok only, shot3 Anna re-enters SILENT.
+    # Anna was absent in shot2 -> newcomer -> HappyHorse (matches the storyboard).
+    shots = [
+        _shot("s1", 1, 1, faces=("Deok", "Anna")),          # anchor
+        _shot("s2", 1, 2, dialogue="hi", faces=("Deok",)),  # talking
+        _shot("s3", 1, 3, faces=("Anna",)),                 # silent, Anna re-enters
+    ]
+    res = TokenOptimizer().allocate(shots, budget_usd=40.0, wan_primary=True)
+    by = {s["shot_id"]: s["quality_tier"] for s in res["scored_shots"]}
+    assert by["s3"] == "happyhorse"
+    assert res["wan_shots"] == 0 and res["happyhorse_shots"] == 3
+
+
+def test_true_silent_continuation_of_same_face_is_wan():
+    shots = [
+        _shot("a", 1, 1, faces=("Deok",)),   # anchor with face -> HH
+        _shot("b", 1, 2, faces=("Deok",)),   # silent, same face continues -> Wan
+    ]
+    res = TokenOptimizer().allocate(shots, budget_usd=40.0, wan_primary=True)
+    by = {s["shot_id"]: s["quality_tier"] for s in res["scored_shots"]}
+    assert by["a"] == "happyhorse" and by["b"] == "wan"
+
+
 def test_silent_non_anchor_goes_to_wan_and_faceless_anchor_too():
     shots = [
         _shot("anchor", 1, 1),                       # silent anchor + faces -> HH
