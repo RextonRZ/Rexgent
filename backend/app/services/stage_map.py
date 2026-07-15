@@ -15,7 +15,7 @@ never a violation and never re-establishes a side.
 import re
 
 _FLAT_KEY_RE = re.compile(
-    r"\b(character_name|frame_position|screen_side|facing|posture|eyeline|action)\s*:",
+    r"\b(character_name|frame_position|screen_side|facing|posture|eyeline|action)\s*[:=]",
     re.IGNORECASE)
 _GEOMETRY_KEYS = ("frame_position", "screen_side", "facing", "posture", "eyeline", "action")
 
@@ -44,7 +44,9 @@ def _parse_flat_subject(text: str) -> dict | None:
     if not marks:
         return None
     out: dict = {}
-    lead = text[: marks[0].start()].strip(" ,;")
+    # the character name leads (e.g. "ANNA: frame_position=..."); drop its
+    # trailing colon along with separators
+    lead = text[: marks[0].start()].strip(" ,;:")
     if lead:
         out["character"] = lead
     for mark, nxt in zip(marks, list(marks[1:]) + [None]):
