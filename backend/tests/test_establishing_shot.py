@@ -59,6 +59,21 @@ class TestAtmosphere:
         shots = [_talk(["A"])]
         assert insert_atmosphere(shots, 0, "x", "y", "NIGHT", "COOL") == shots
 
+    def test_multiple_cutaways_are_spaced(self):
+        shots = [_talk(["A", "B"]) for _ in range(6)]
+        out = insert_atmosphere(shots, 3, "a cliff", "waves", "NIGHT", "COOL")
+        cuts = [i for i, s in enumerate(out) if not s["characters_in_frame"]]
+        assert len(cuts) == 3
+        # spaced, not bunched together
+        assert all(b - a >= 2 for a, b in zip(cuts, cuts[1:]))
+
+    def test_count_capped_by_available_slots(self):
+        # only 2 dialogue slots (index >= 1) -> at most 2 cutaways even if asked 3
+        shots = [_talk(["A", "B"]), _talk(["A", "B"]), _talk(["A", "B"])]
+        out = insert_atmosphere(shots, 3, "x", "y", "NIGHT", "COOL")
+        cuts = [s for s in out if not s["characters_in_frame"]]
+        assert len(cuts) == 2
+
     def test_atmosphere_shot_is_faceless_silent(self):
         a = make_atmosphere_shot("a harbour", "boats knock together", "OVERCAST", "DESATURATED")
         assert a["characters_in_frame"] == []

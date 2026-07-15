@@ -179,8 +179,8 @@ def make_atmosphere_shot(location, description, lighting, colour_mood) -> dict:
 
 def insert_atmosphere(shots: list[dict], count: int, location, description,
                       lighting, colour_mood) -> list[dict]:
-    """Insert a faceless atmosphere cutaway (when count > 0) just before a
-    DIALOGUE shot near the middle of the scene. The following shot must be a
+    """Insert up to `count` faceless atmosphere cutaways, spaced across the
+    scene, each just before a DIALOGUE shot. The shot after a cutaway must be a
     talking shot (HappyHorse regardless) — never a silent held beat, whose Wan
     routing depends on continuing DIRECTLY from its dialogue anchor; a cutaway
     wedged in front of a held beat would make its cast read as re-entering
@@ -188,11 +188,16 @@ def insert_atmosphere(shots: list[dict], count: int, location, description,
     out = list(shots)
     if count <= 0 or not out:
         return out
-    candidates = [i for i, s in enumerate(out)
-                  if i >= 1 and str(s.get("dialogue") or "").strip()]
-    at = (min(candidates, key=lambda i: abs(i - len(out) // 2)) if candidates
-          else max(1, len(out) // 2))
-    out.insert(at, make_atmosphere_shot(location, description, lighting, colour_mood))
+    slots = [i for i, s in enumerate(out)
+             if i >= 1 and str(s.get("dialogue") or "").strip()]
+    if not slots:
+        slots = [max(1, len(out) // 2)]
+    k = min(count, len(slots))
+    stride = max(1, len(slots) // k)
+    chosen = slots[::stride][:k]
+    # insert from the back so earlier indices stay valid as the list grows
+    for at in sorted(set(chosen), reverse=True):
+        out.insert(at, make_atmosphere_shot(location, description, lighting, colour_mood))
     return out
 
 

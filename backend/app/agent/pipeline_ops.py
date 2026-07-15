@@ -173,10 +173,11 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
     _progress(script.project_id, "storyboard", "started", "Director",
               "Breaking the script into shots")
     dressed = 0
-    # drama-level atmosphere budget for wan_beats: a few faceless cutaways,
-    # scaled by length so they stay rare on short pieces (0 under ~45s, 1 up to
-    # ~90s, capped at 2). Decremented as scenes consume it.
-    atmo_budget = min(2, max(0, (target_length or 0) // 45))
+    # drama-level atmosphere budget for wan_beats: faceless scenery cutaways,
+    # ~1 per 35s with a floor of 1 (even a short piece gets a breath) and a cap
+    # of 3. Decremented as scenes consume it — a single-scene drama spends the
+    # whole budget in that scene (spaced out).
+    atmo_budget = min(3, max(1, round((target_length or 0) / 35)))
     with track_project(script.project_id, db):
         for scene_index, scene in enumerate(scenes, start=1):
             _progress(script.project_id, "storyboard", "update", "Director",
@@ -255,12 +256,14 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 if len(held) != len(shots):
                     shots, enriched = held, True
                 if atmo_budget > 0:
-                    with_atmo = insert_atmosphere(shots, 1, scene.location,
+                    before = len(shots)
+                    with_atmo = insert_atmosphere(shots, atmo_budget, scene.location,
                                                   scene.description, _look_of("lighting"),
                                                   _look_of("colour_mood"))
-                    if len(with_atmo) != len(shots):
+                    inserted = len(with_atmo) - before
+                    if inserted > 0:
                         shots, enriched = with_atmo, True
-                        atmo_budget -= 1
+                        atmo_budget -= inserted
             if enriched:
                 for idx, sd in enumerate(shots, start=1):
                     sd["shot_number"] = idx
