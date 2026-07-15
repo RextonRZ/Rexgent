@@ -216,6 +216,7 @@ export function SceneGraph({
                         blocking={shot.blocking_json}
                         cameraMovement={shot.camera_movement}
                         shotType={shot.shot_type}
+                        faceByName={faceByName}
                       />
                     ) : (
                       <p className="text-[11px] text-muted-foreground/70">

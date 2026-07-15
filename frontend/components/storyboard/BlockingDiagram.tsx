@@ -160,10 +160,16 @@ export function BlockingDiagram({
   blocking,
   cameraMovement,
   shotType,
+  faceByName,
 }: {
   blocking: ShotBlocking;
   cameraMovement?: string | null;
   shotType?: string | null;
+  /** Optional map of UPPER-CASED character name -> plate/face image URL. When a
+   * token's character has a plate, it renders the photo inside the circle (the
+   * identity colour becomes the ring); without one it falls back to the colour
+   * fill. */
+  faceByName?: Map<string, string | null | undefined>;
 }) {
   const gradientId = useId();
   const [focusIdx, setFocusIdx] = useState<number | null>(null);
@@ -396,6 +402,8 @@ export function BlockingDiagram({
           const halfBelow = lying ? r * 0.62 : seated ? r * 0.95 + 0.8 : r;
           const isActive = active === i;
           const dimmed = active != null && !isActive;
+          const face = faceByName?.get(String(s.character || "").toUpperCase());
+          const clipId = `${gradientId}-face-${i}`;
           return (
             <g
               key={`${s.character}-${i}`}
@@ -406,27 +414,71 @@ export function BlockingDiagram({
             >
               {lying ? (
                 // a horizontal pill: someone lying in a bed or on the floor
-                <rect
-                  x={x - r * 1.5}
-                  y={y - r * 0.62}
-                  width={r * 3}
-                  height={r * 1.24}
-                  rx={r * 0.62}
-                  fill={color}
-                  fillOpacity={isActive ? 0.32 : 0.18}
-                  stroke={color}
-                  strokeWidth={isActive ? 1.8 : 1.3}
-                />
+                <>
+                  {face && (
+                    <>
+                      <clipPath id={clipId}>
+                        <rect
+                          x={x - r * 1.5}
+                          y={y - r * 0.62}
+                          width={r * 3}
+                          height={r * 1.24}
+                          rx={r * 0.62}
+                        />
+                      </clipPath>
+                      <image
+                        href={face}
+                        x={x - r * 1.5}
+                        y={y - r * 0.62}
+                        width={r * 3}
+                        height={r * 1.24}
+                        preserveAspectRatio="xMidYMid slice"
+                        clipPath={`url(#${clipId})`}
+                        opacity={isActive ? 1 : 0.9}
+                      />
+                    </>
+                  )}
+                  <rect
+                    x={x - r * 1.5}
+                    y={y - r * 0.62}
+                    width={r * 3}
+                    height={r * 1.24}
+                    rx={r * 0.62}
+                    fill={face ? "none" : color}
+                    fillOpacity={isActive ? 0.32 : 0.18}
+                    stroke={color}
+                    strokeWidth={isActive ? 1.8 : 1.3}
+                  />
+                </>
               ) : (
-                <circle
-                  cx={x}
-                  cy={y}
-                  r={bodyR}
-                  fill={color}
-                  fillOpacity={isActive ? 0.32 : 0.18}
-                  stroke={color}
-                  strokeWidth={isActive ? 1.8 : 1.3}
-                />
+                <>
+                  {face && (
+                    <>
+                      <clipPath id={clipId}>
+                        <circle cx={x} cy={y} r={bodyR} />
+                      </clipPath>
+                      <image
+                        href={face}
+                        x={x - bodyR}
+                        y={y - bodyR}
+                        width={bodyR * 2}
+                        height={bodyR * 2}
+                        preserveAspectRatio="xMidYMid slice"
+                        clipPath={`url(#${clipId})`}
+                        opacity={isActive ? 1 : 0.9}
+                      />
+                    </>
+                  )}
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r={bodyR}
+                    fill={face ? "none" : color}
+                    fillOpacity={isActive ? 0.32 : 0.18}
+                    stroke={color}
+                    strokeWidth={isActive ? 1.8 : 1.3}
+                  />
+                </>
               )}
               {seated && (
                 // the seat bar under a sitting character
