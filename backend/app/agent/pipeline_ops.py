@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy.orm import Session
 from app.models.script import Script, Scene
 from app.models.character import Character
-from app.models.shot import Shot
+from app.models.shot import Shot, clamp_bounded_strings
 from app.models.generation_job import GenerationJob
 from app.services.script_generator import ScriptGenerator
 from app.services.script_structurer import ScriptStructurer
@@ -278,21 +278,23 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 for subj in (sd.get("subjects") or []):
                     if isinstance(subj, dict) and subj.get("character"):
                         subj["character"] = canonical_character(subj["character"], known_names)
-                shot = Shot(
-                    scene_id=scene.id, number=sd.get("shot_number", 1),
-                    shot_type=sd.get("shot_type"), camera_movement=sd.get("camera_movement"),
-                    lighting=sd.get("lighting"), colour_mood=sd.get("colour_mood"),
-                    action=sd.get("action"), dialogue=sd.get("dialogue"),
-                    emotional_beat=sd.get("emotional_beat"),
-                    estimated_duration_seconds=sd.get("estimated_duration_seconds", 5),
-                    characters_in_frame=in_frame,
-                    foreground_characters=foreground,
-                    blocking_json=({"subjects": sd.get("subjects"),
-                                    "reverse_angle": bool(sd.get("reverse_angle"))}
-                                   if sd.get("subjects") else None),
-                    notes=sd.get("notes"),
-                    director_json=sd.get("director_json"),
-                )
+                # clamp bounded enum columns (shot_type, camera_movement) so one
+                # over-long LLM value can't fail the whole scene's batch insert
+                shot = Shot(**clamp_bounded_strings({
+                    "scene_id": scene.id, "number": sd.get("shot_number", 1),
+                    "shot_type": sd.get("shot_type"), "camera_movement": sd.get("camera_movement"),
+                    "lighting": sd.get("lighting"), "colour_mood": sd.get("colour_mood"),
+                    "action": sd.get("action"), "dialogue": sd.get("dialogue"),
+                    "emotional_beat": sd.get("emotional_beat"),
+                    "estimated_duration_seconds": sd.get("estimated_duration_seconds", 5),
+                    "characters_in_frame": in_frame,
+                    "foreground_characters": foreground,
+                    "blocking_json": ({"subjects": sd.get("subjects"),
+                                       "reverse_angle": bool(sd.get("reverse_angle"))}
+                                      if sd.get("subjects") else None),
+                    "notes": sd.get("notes"),
+                    "director_json": sd.get("director_json"),
+                }))
                 db.add(shot)
                 created.append((shot, scene.number))
     tool_event(script.project_id, "storyboard", "shot_breakdown", "succeeded",

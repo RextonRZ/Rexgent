@@ -13,11 +13,15 @@ class Shot(Base):
     number = Column(Integer, nullable=False)
     shot_type = Column(String(20), nullable=True)
     camera_movement = Column(String(50), nullable=True)
-    lighting = Column(String(50), nullable=True)
-    colour_mood = Column(String(50), nullable=True)
+    # lighting/colour_mood/emotional_beat hold the Director/cinematic Stager's
+    # descriptions (full sentences: "Natural daylight, slightly overcast..."),
+    # not the old short enums — so they're unbounded Text. A VARCHAR(50) here
+    # overflowed the scene's batch insert and silently produced zero shots.
+    lighting = Column(Text, nullable=True)
+    colour_mood = Column(Text, nullable=True)
     action = Column(Text, nullable=True)
     dialogue = Column(Text, nullable=True)
-    emotional_beat = Column(String(255), nullable=True)
+    emotional_beat = Column(Text, nullable=True)
     estimated_duration_seconds = Column(Integer, default=5)
     quality_tier = Column(String(20), nullable=True)
     characters_in_frame = Column(JSONB, nullable=True)
@@ -41,3 +45,16 @@ class Shot(Base):
 
     scene = relationship("Scene", back_populates="shots")
     generated_clips = relationship("GeneratedClip", back_populates="shot", cascade="all, delete-orphan")
+
+
+def clamp_bounded_strings(values: dict) -> dict:
+    """Truncate string values to their column's max length before a Shot is
+    built, so one over-long LLM-authored value (e.g. a wordy camera_movement)
+    can never fail the whole scene's batch insert. Unbounded Text columns pass
+    through untouched. Mutates and returns the same dict."""
+    for col in Shot.__table__.columns:
+        limit = getattr(col.type, "length", None)
+        val = values.get(col.name)
+        if limit and isinstance(val, str) and len(val) > limit:
+            values[col.name] = val[:limit]
+    return values
