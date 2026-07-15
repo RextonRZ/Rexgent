@@ -78,7 +78,10 @@ async def test_character_plate_edits_face_when_reference_given():
 
 
 @pytest.mark.asyncio
-async def test_character_plate_falls_back_to_text_when_edit_fails():
+async def test_character_plate_reuses_reference_when_edit_refused():
+    # When the edit model refuses the reference (e.g. DataInspectionFailed), do NOT
+    # spend on a text-to-image fallback that ships a stranger's face — reuse the
+    # already-valid reference plate instead so the user isn't billed for junk.
     gen = PlateGenerator.__new__(PlateGenerator)
     gen.qwen = MagicMock()
     gen.qwen.edit_image = AsyncMock(side_effect=RuntimeError("edit model 400"))
@@ -93,9 +96,9 @@ async def test_character_plate_falls_back_to_text_when_edit_fails():
     url, _ = await gen.generate_and_store_plate(
         project_id="p1", kind="character", key="Mia:uniform",
         prompt="same person, navy uniform", base_image_url="https://oss/face.png")
-    assert url == "https://oss/x.png"
-    gen.qwen.generate_image.assert_awaited_once()  # fell back
-    # the silent stranger is no longer silent: callers badge the plate
+    assert url == "https://oss/face.png"          # reused the reference plate
+    gen.qwen.generate_image.assert_not_awaited()  # NO wasted text-to-image render
+    # the edit was refused, so callers badge the plate ref_rejected
     assert gen.last_face_preserved is False
 
 
