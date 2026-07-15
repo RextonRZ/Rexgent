@@ -14,6 +14,8 @@ class PlannedShot:
     blocking_delta: str | None = None
     transition_in: str | None = None
     light_quality: str = "soft"    # scene-wide light quality from the look
+    special_effect: str | None = None   # per-shot Wan effect (tilt_shift/time_lapse/…); LLM may set it
+    stylization: str = "cinematic"      # scene-wide aesthetic from the look (same pattern as light_quality)
 
 
 @dataclass
@@ -28,5 +30,6 @@ class LookProfile:
     lens_bias: str
     camera_pace: str        # "slow" | "measured" | "kinetic"
     light_quality: str = "soft"    # "soft"|"hard"|"side"|"rim"|"backlight"|"top"|"practical"
+    stylization: str = "cinematic"  # scene-wide aesthetic treatment from the genre look
     bgm_hint: str | None = None
     ambience_hint: str | None = None

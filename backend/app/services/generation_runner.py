@@ -485,7 +485,8 @@ class GenerationRunner:
                             prev_action=None, next_action=None, foreground=None,
                             environment=None,
                             outfits=None, blocking=None, lipsync=False,
-                            native_talk=False, speaker="", image_legend="") -> str:
+                            native_talk=False, speaker="", image_legend="",
+                            to_wan=False) -> str:
         from app.services.guardrails import canonical_character
         in_frame = [canonical_character(n, char_by_name)
                     for n in (shot.characters_in_frame or [])]
@@ -516,6 +517,7 @@ class GenerationRunner:
             speaker=speaker,
             image_legend=image_legend,
             environment=environment,
+            to_wan=to_wan,
         )
         return result
 
@@ -866,13 +868,22 @@ class GenerationRunner:
                     and native_speaker.upper() in {str(c).strip().upper() for c in in_frame})
                 tool_event(pid, "generate", "prompt_craft", "started", agent="Director",
                            index=job.completed_shots + 1, total=job.total_shots)
+                # Wan visual shot? Same routing test as _dispatch_by_role's
+                # wan_primary branch: a silent continuation/scenery shot with no
+                # newcomer and no establishing anchor renders on Wan, so the
+                # crafter appends Wan's SFX/ambience + no-dialogue/no-BGM tail.
+                # OFF (wan_primary/v2 off) -> False -> byte-identical prompt.
+                to_wan = (getattr(get_settings(), "wan_primary", False) and settings_v2
+                          and not (bool((shot.dialogue or "").strip()) or bool(newcomers)
+                                   or (role == "anchor" and bool(in_frame))))
                 crafted = await self._craft_prompt(
                     shot, char_by_name, scene_setting, prev_action, next_action,
                     foreground=foreground, outfits=outfits,
                     blocking=getattr(shot, "blocking_json", None),
                     native_talk=native_talk,
                     speaker=(native_speaker if native_talk else ""),
-                    image_legend=image_legend, environment=environment)
+                    image_legend=image_legend, environment=environment,
+                    to_wan=to_wan)
                 prompt = crafted.get("prompt", "")
                 # the crafter has ALWAYS produced a negative prompt; until now
                 # it was dropped on the floor before dispatch

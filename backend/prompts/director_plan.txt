@@ -11,7 +11,8 @@ Return ONLY a JSON array of shot objects, in scene order, each:
   "intended_duration": 2.0,
   "covers_lines": [0],
   "action_beat": "the PHYSICAL/VISUAL thing shown this shot; never 'speaks'",
-  "blocking_delta": "how staging moves from the previous shot, or null"
+  "blocking_delta": "how staging moves from the previous shot, or null",
+  "special_effect": "optional: tilt_shift|time_lapse|slow_motion|macro|drone_flythrough, or null"
 }
 
 RULES:
@@ -26,4 +27,6 @@ RULES:
 - NEVER invent plot: action_beat is the physical PERFORMANCE of what the scene already contains — no new
   events (no hug, punch, death, reconciliation) that the scene text does not state.
 - Match the look you are given (lighting/colour/lens bias/pace).
+- Set special_effect ONLY on non-dialogue visual shots (an establishing, insert, transition or held beat — a
+  tilt-shift establishing, a time-lapse); leave it null on any shot that carries a line.
 - Produce AT MOST the shot budget you are given.

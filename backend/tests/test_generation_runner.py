@@ -523,6 +523,39 @@ async def test_v2_process_shot_routes_continue_hold_when_flag_on(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_wan_primary_silent_continuation_threads_to_wan_into_craft(monkeypatch):
+    """wan_primary + v2 ON: a silent same-cast continuation is a Wan visual shot,
+    so the runner computes to_wan=True and threads it into the crafter (which
+    appends the Wan SFX/no-dialogue/no-BGM tail). A speaking shot -> to_wan=False."""
+    monkeypatch.setattr(gr, "extract_last_frame", lambda url: b"f")
+    monkeypatch.setattr(gr.get_settings(), "identity_routing_v2", True, raising=False)
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
+    job = SimpleNamespace(id="job1", project_id="p1", actual_cost=0.0, completed_shots=0, total_shots=1)
+
+    # silent continuation -> to_wan True
+    runner = make_runner()
+    runner.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    shot = make_shot(); shot.dialogue = None
+    await runner._process_shot(job, shot, {"Yuki": make_char()}, BIBLE, 1,
+                               prev_last_frame_url="prevframe", prev_in_frame=["Yuki"],
+                               prev_shot_type="CU")
+    assert runner.prompt_crafter.craft.await_args.kwargs["to_wan"] is True
+
+    # a speaking shot is never a Wan visual shot -> to_wan False
+    runner2 = make_runner()
+    runner2.continuity.validate = AsyncMock(return_value={
+        "continuity_score": 82, "overall_pass": True,
+        "face_score": 0.8, "outfit_score": 0.7, "background_score": 0.6})
+    shot2 = make_shot()  # carries dialogue
+    await runner2._process_shot(job, shot2, {"Yuki": make_char()}, BIBLE, 1,
+                                prev_last_frame_url="prevframe", prev_in_frame=["Yuki"],
+                                prev_shot_type="CU")
+    assert runner2.prompt_crafter.craft.await_args.kwargs["to_wan"] is False
+
+
+@pytest.mark.asyncio
 async def test_v2_entrance_on_nonwan_tier_routes_to_r2v(monkeypatch):
     """Flag ON: a face-locked NEWCOMER entering on a NON-wan (happyhorse) shot
     classifies as entrance and must render on wan r2v with a face reference —

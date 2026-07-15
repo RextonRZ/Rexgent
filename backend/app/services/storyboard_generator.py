@@ -135,6 +135,8 @@ class StoryboardGenerator:
                 "purpose": planned.purpose, "lens": planned.lens,
                 "composition": planned.composition,
                 "light_quality": planned.light_quality,
+                "stylization": planned.stylization,
+                "special_effect": planned.special_effect,
                 "intended_duration": planned.intended_duration,
                 "transition_in": planned.transition_in,
                 "blocking_delta": planned.blocking_delta,

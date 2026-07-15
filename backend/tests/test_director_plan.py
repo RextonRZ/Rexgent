@@ -33,6 +33,33 @@ async def test_plan_scene_covers_all_lines_and_varies():
     assert len(out.shots) <= 4
     # scene-wide light quality flows from the look onto every shot
     assert all(s.light_quality == "side" for s in out.shots)
+    # scene-wide stylization flows the same way (thriller -> noir)
+    assert all(s.stylization == "noir" for s in out.shots)
+
+
+@pytest.mark.asyncio
+async def test_plan_scene_honors_valid_special_effect_and_drops_invalid():
+    scene = {"scene_number": 1, "description": "a quiet street at dawn",
+             "dialogue": [{"character": "A", "line": "It's over."}]}
+    plan = [
+        {"purpose": "establishing", "shot_size": "EWS", "camera_movement": "DRONE",
+         "lens": "24mm", "composition": "leading_lines", "intended_duration": 3.0,
+         "covers_lines": [], "action_beat": "light creeps over rooftops",
+         "special_effect": "time_lapse"},
+        {"purpose": "insert", "shot_size": "INSERT", "camera_movement": "STATIC",
+         "lens": "85mm", "composition": "centered", "intended_duration": 2.0,
+         "covers_lines": [], "action_beat": "a hand on a rail",
+         "special_effect": "not_a_real_effect"},
+        {"purpose": "dialogue", "shot_size": "MS", "camera_movement": "STATIC",
+         "lens": "50mm", "composition": "rule_of_thirds", "intended_duration": 4.0,
+         "covers_lines": [0], "action_beat": "a slow exhale"},
+    ]
+    out = await plan_scene(scene, cast=[{"name": "A"}], look=recommend_look("drama"),
+                           budget=5, qwen=_qwen(plan))
+    by_purpose = {s.purpose: s for s in out.shots}
+    assert by_purpose["establishing"].special_effect == "time_lapse"   # valid term honored
+    assert by_purpose["insert"].special_effect is None                 # invalid term dropped
+    assert by_purpose["dialogue"].special_effect is None               # default None
 
 
 @pytest.mark.asyncio
