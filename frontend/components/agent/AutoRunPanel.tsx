@@ -280,10 +280,12 @@ export function AutoRunPanel({
             value={premise}
             onChange={(e) => {
               setTouched(true);
-              setPremise(e.target.value.slice(0, 300));
+              // generous cap: a rich, scenery-forward premise runs a few hundred
+              // words; the guard only stops an accidental novel-length paste
+              setPremise(e.target.value.slice(0, 2000));
             }}
             placeholder="A detective in 2047 Tokyo discovers her partner is an AI."
-            rows={2}
+            rows={6}
           />
         </div>
 
