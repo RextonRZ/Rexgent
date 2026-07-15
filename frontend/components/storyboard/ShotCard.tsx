@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ShotEditor } from "./ShotEditor";
 import { useDeleteShot } from "@/hooks/useStoryboard";
 import { explainFilmTerm, fullShotType } from "@/lib/filmTerms";
-import { tierLabel, isFullTier } from "@/lib/qualityTier";
+import { tierLabel, isFullTier, modelLabel } from "@/lib/qualityTier";
 import type { Shot, ShotPromptEngineering } from "@/lib/types";
 
 /** The beat expander's paper trail: what the model was actually told, what it
@@ -106,11 +106,13 @@ export function ShotCard({ shot }: { shot: Shot }) {
     }
   };
 
-  // Every shot renders on the one video model, so the tag shows the quality
-  // LEVEL the Producer assigned (full vs fast), not a model name.
+  // Under wan_primary routing each shot names the MODEL it renders on (Wan for
+  // visuals, HappyHorse for characters). When there is no model split the tag
+  // falls back to the quality LEVEL the Producer assigned (full vs fast).
   const renderPlan = shot.render_plan;
   const tier = shot.quality_tier;
   const isFull = isFullTier(tier);
+  const model = renderPlan?.model ? modelLabel(renderPlan.model) : null;
   const showTierTag = Boolean(tier);
 
   return (
@@ -154,18 +156,33 @@ export function ShotCard({ shot }: { shot: Shot }) {
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-            {showTierTag && (
+            {model ? (
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  tier === "deferred"
-                    ? "bg-warn/15 text-warn"
-                    : isFull
-                      ? "bg-wan/15 text-wan"
-                      : "bg-hh/15 text-hh"
+                  model === "Wan" ? "bg-wan/15 text-wan" : "bg-hh/15 text-hh"
                 }`}
+                title={
+                  model === "Wan"
+                    ? "Wan · visuals / continuity"
+                    : "HappyHorse · face + dialogue"
+                }
               >
-                {tierLabel(tier)}
+                {model}
               </span>
+            ) : (
+              showTierTag && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    tier === "deferred"
+                      ? "bg-warn/15 text-warn"
+                      : isFull
+                        ? "bg-wan/15 text-wan"
+                        : "bg-hh/15 text-hh"
+                  }`}
+                >
+                  {tierLabel(tier)}
+                </span>
+              )
             )}
             {renderPlan?.lipsync && (
               <span className="rounded-full bg-primary/10 text-primary/90 px-2 py-0.5 text-[10px] font-medium">

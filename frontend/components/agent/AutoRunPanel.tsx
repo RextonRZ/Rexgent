@@ -438,8 +438,10 @@ export function AutoRunPanel({
                     result.budget.total_estimated_cost ??
                     0).toFixed(2)}
                 </span>{" "}
-                / ${cap.toFixed(0)} · {result.budget.full_shots} full /{" "}
-                {result.budget.fast_shots} fast
+                / ${cap.toFixed(0)} ·{" "}
+                {result.budget.wan_shots || result.budget.happyhorse_shots
+                  ? `${result.budget.wan_shots ?? 0} Wan / ${result.budget.happyhorse_shots ?? 0} HappyHorse`
+                  : `${result.budget.full_shots} full / ${result.budget.fast_shots} fast`}
               </p>
             )}
             {fullAuto ? (

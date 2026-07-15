@@ -21,6 +21,11 @@ export interface BudgetResult {
   scored_shots: ScoredShot[];
   full_shots: number;
   fast_shots: number;
+  /** wan_primary model split — Wan renders the visuals, HappyHorse the
+   * characters. 0/absent under legacy routing (frontend falls back to
+   * full/fast). */
+  wan_shots?: number;
+  happyhorse_shots?: number;
   hook_shots?: number;
   downgraded_shots?: number;
   deferred_shots?: number;

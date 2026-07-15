@@ -15,7 +15,8 @@ def _has_plate(bible, name):
 def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
                        lipsync_enabled, wan_on_same_cast=False,
                        happyhorse_native_talk=False,
-                       route_continuation_to_happyhorse=False):
+                       route_continuation_to_happyhorse=False,
+                       wan_primary=False):
     """Per-shot {model, lipsync} for one scene's ordered shots. Mirrors runtime routing."""
     out = []
     prev = None
@@ -45,6 +46,15 @@ def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
         if route_continuation_to_happyhorse and role == "continue_hold":
             model = "happyhorse"
         has_dialogue = bool((getattr(shot, "dialogue", None) or "").strip())
+        # Wan-primary OVERRIDES the model to mirror _dispatch_by_role's wan_primary
+        # branch: HappyHorse renders the CHARACTERS (a shot that speaks, locks a
+        # newcomer, or is an establishing anchor with faces); Wan renders every
+        # other silent visual. OFF -> the routing above is left untouched.
+        if wan_primary:
+            has_faces = bool(_chars(shot))
+            model = ("happyhorse"
+                     if (has_dialogue or bool(newcomer) or (role == "anchor" and has_faces))
+                     else "wan")
         # native talk makes HappyHorse SPEAK the line itself, so a ref-native shot
         # with dialogue talks even with several people in frame (the speaker is
         # named at render). The badge tracks native-talk only; it is gated by the

@@ -24,6 +24,8 @@ export function BudgetDashboard({
   const deferredN = budget.deferred_shots ?? 0;
   const downgradedN = budget.downgraded_shots ?? 0;
   const rec = budget.recommended_budget_usd;
+  // wan_primary plan: two real models. 0/absent under legacy -> full/fast view.
+  const wanPrimary = Boolean(budget.wan_shots || budget.happyhorse_shots);
   const [raising, setRaising] = useState(false);
 
   const raiseCap = async () => {
@@ -129,20 +131,41 @@ export function BudgetDashboard({
       {/* the quality split, decoded for non-filmmakers */}
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full bg-wan/15 text-wan px-2 py-0.5"
-            title="Full quality: the shots that carry the story get the full generation pass"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-wan" />
-            {budget.full_shots} full quality
-          </span>
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full bg-hh/15 text-hh px-2 py-0.5"
-            title="Fast pass: supporting shots render on a lighter, cheaper pass to protect the cap"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-hh" />
-            {budget.fast_shots} fast pass
-          </span>
+          {wanPrimary ? (
+            <>
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full bg-wan/15 text-wan px-2 py-0.5"
+                title="Wan renders the silent visual shots — continuity, scenery, action"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-wan" />
+                {budget.wan_shots ?? 0} Wan · visuals
+              </span>
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full bg-hh/15 text-hh px-2 py-0.5"
+                title="HappyHorse renders the character shots — faces, dialogue, lip-sync"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-hh" />
+                {budget.happyhorse_shots ?? 0} HappyHorse · characters
+              </span>
+            </>
+          ) : (
+            <>
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full bg-wan/15 text-wan px-2 py-0.5"
+                title="Full quality: the shots that carry the story get the full generation pass"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-wan" />
+                {budget.full_shots} full quality
+              </span>
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full bg-hh/15 text-hh px-2 py-0.5"
+                title="Fast pass: supporting shots render on a lighter, cheaper pass to protect the cap"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-hh" />
+                {budget.fast_shots} fast pass
+              </span>
+            </>
+          )}
           {(budget.hook_shots ?? 0) > 0 && (
             <span
               className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 text-primary px-2 py-0.5"
@@ -160,9 +183,9 @@ export function BudgetDashboard({
           )}
         </div>
         <p className="text-[11px] text-zinc-400">
-          Every shot renders on the same video model. The Producer keeps the
-          shots that carry the story at full quality and eases the rest to a
-          faster pass to fit your cap; the opening hook stays full first.
+          {wanPrimary
+            ? "Wan renders the visuals and continuity; HappyHorse renders the talking and new character shots. The opening hook is protected first."
+            : "The Producer keeps the shots that carry the story at full quality and eases the rest to a faster pass to fit your cap; the opening hook stays full first."}
         </p>
       </div>
     </div>

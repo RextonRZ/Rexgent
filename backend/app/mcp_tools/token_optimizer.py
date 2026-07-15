@@ -13,15 +13,18 @@ class TokenOptimizer:
     """
     # Real Qwen Cloud catalog pricing (conservative high end):
     # HappyHorse-1.1 $0.084-0.108/sec. Fast pass runs at 0.8x the full rate.
+    # Wan2.7 renders at $0.15/sec (matches cost_rates.video_cost).
     HH_COST_PER_SEC = 0.108
+    WAN_COST_PER_SEC = 0.15
     RESERVE_PCT = 0.15
     HOOK_SCENE = 1
     # The hook is the OPENING BEATS, not the whole first scene — a one-scene
     # drama would otherwise protect every shot and make the cap unfittable.
     HOOK_MAX_SHOTS = 2
 
-    # Model id the generation runner actually dispatches (qwen_client).
+    # Model ids the generation runner actually dispatches (qwen_client).
     HH_MODEL = "happyhorse-1.1-t2v"
+    WAN_MODEL = "wan2.7-t2v"
 
     CLIMAX_WORDS = {
         "climax", "revelation", "confrontation", "betrayal",
@@ -54,9 +57,12 @@ class TokenOptimizer:
             return self.HH_COST_PER_SEC * 0.8 * duration
         if tier == "deferred":
             return 0.0
+        if tier == "wan":  # wan_primary silent-visual tier — real Wan rate
+            return self.WAN_COST_PER_SEC * duration
         return self.HH_COST_PER_SEC * duration
 
-    def allocate(self, shots: list[dict], budget_usd: float = 40.0) -> dict:
+    def allocate(self, shots: list[dict], budget_usd: float = 40.0,
+                 wan_primary: bool = False) -> dict:
         available = budget_usd * (1 - self.RESERVE_PCT)
         # Hook = the first HOOK_MAX_SHOTS shots of scene 1 (by shot_number when
         # given, else list order) — the seconds that stop the scroll.
@@ -68,7 +74,16 @@ class TokenOptimizer:
         scored = []
         for i, shot in enumerate(shots):
             importance = self.score_shot(shot)
-            if importance >= 4:
+            if wan_primary:
+                # Two-model split (mirrors runtime routing, dialogue-dominant
+                # projection): a talking shot renders on HappyHorse (characters),
+                # every silent visual on Wan. This is a budget PROJECTION, so it
+                # keys on dialogue rather than the full role classifier.
+                if shot.get("dialogue"):
+                    tier, model = "happyhorse", self.HH_MODEL
+                else:
+                    tier, model = "wan", self.WAN_MODEL
+            elif importance >= 4:
                 tier, model = "happyhorse", self.HH_MODEL
             else:
                 tier, model = "happyhorse_fast", self.HH_MODEL
@@ -94,8 +109,11 @@ class TokenOptimizer:
         # Fit to the cap. Pass 1: ease the least important non-hook full shots
         # to fast. Pass 2: defer the least important non-hook shots entirely
         # (the runner skips tier == "deferred").
+        # The ease pass is a QUALITY lever (full -> fast) that does not exist
+        # under wan_primary — Wan is never downgraded to HappyHorse — so it is
+        # skipped; only the deferral pass fits a wan_primary plan.
         downgraded = deferred = 0
-        if total() > available:
+        if not wan_primary and total() > available:
             for s in sorted((x for x in scored if x["quality_tier"] == "happyhorse" and not x["is_hook"]),
                             key=lambda x: x["importance_score"]):
                 s["quality_tier"], s["model"] = "happyhorse_fast", self.HH_MODEL
@@ -117,8 +135,16 @@ class TokenOptimizer:
         video_cost = total()
         active = [s for s in scored if s["quality_tier"] != "deferred"]
         total_seconds = sum(s["duration"] for s in active)
+        # Legacy quality split (0 under wan_primary — no happyhorse_fast tier).
         fast_count = sum(1 for s in active if s["quality_tier"] == "happyhorse_fast")
-        full_count = len(active) - fast_count
+        full_count = sum(1 for s in active if s["quality_tier"] == "happyhorse")
+        # Wan-primary model split (0 under legacy — gated so the legacy return
+        # is unchanged and the frontend falls back to the full/fast view).
+        if wan_primary:
+            wan_count = sum(1 for s in active if s["quality_tier"] == "wan")
+            happyhorse_count = sum(1 for s in active if s["quality_tier"] == "happyhorse")
+        else:
+            wan_count = happyhorse_count = 0
         hook_count = sum(1 for s in scored if s["is_hook"])
 
         # When the plan had to shrink, name the cap that would NOT shrink it:
@@ -128,7 +154,11 @@ class TokenOptimizer:
         if downgraded or deferred:
             recommended = int(math.ceil(unfitted_cost / (1 - self.RESERVE_PCT)))
 
-        summary = f"{full_count} shots at full quality, {fast_count} lighter"
+        if wan_primary:
+            summary = (f"{wan_count} on Wan (visuals), "
+                       f"{happyhorse_count} on HappyHorse (characters)")
+        else:
+            summary = f"{full_count} shots at full quality, {fast_count} lighter"
         if hook_count:
             summary += f"; {hook_count} hook shot(s) protected"
         if downgraded:
@@ -150,6 +180,8 @@ class TokenOptimizer:
             "scored_shots": scored,
             "full_shots": full_count,
             "fast_shots": fast_count,
+            "wan_shots": wan_count,
+            "happyhorse_shots": happyhorse_count,
             "hook_shots": hook_count,
             "downgraded_shots": downgraded,
             "deferred_shots": deferred,
