@@ -78,6 +78,47 @@ def normalize_subjects(raw) -> list | None:
     return out or None
 
 
+_NAME_STOPWORDS = {"THE", "AND", "HIS", "HER", "VON", "VAN", "DER", "MAN", "WOMAN"}
+
+
+def _name_in_text(name: str, text: str) -> bool:
+    """Is this character named in the text? Full name on a word boundary, else
+    any distinctive name token (>=3 chars, not a stopword). A name that is ITSELF
+    a single common noun ('Man', 'Woman') can never be matched in prose without
+    false positives, so only a real subject entry keeps such a character in
+    frame — the word 'man' in the action does not."""
+    up = (text or "").upper()
+    full = str(name or "").strip().upper()
+    if not full or not up:
+        return False
+    toks = re.split(r"[\s-]+", full)
+    if len(toks) == 1 and full in _NAME_STOPWORDS:
+        return False
+    if re.search(r"\b" + re.escape(full) + r"\b", up):
+        return True
+    distinctive = [t for t in toks if len(t) >= 3 and t not in _NAME_STOPWORDS]
+    return any(re.search(r"\b" + re.escape(t) + r"\b", up) for t in distinctive)
+
+
+def reconcile_frame_with_subjects(in_frame: list, subjects, action: str) -> list:
+    """Drop a character listed in `characters_in_frame` who has NO blocking
+    subject AND is not named in the `action` — a spurious inclusion the stager
+    never placed (the antagonist literally named 'Man' appearing in a two-person
+    beat he is not part of). Such a character has no position, yet the render
+    would still send their plate as a face reference and the model floats them
+    in at random. Order preserved.
+
+    Only applies when SOME subjects exist: a shot with no blocking at all is a
+    different case (the diagram shows 'no geometry'), so its cast is left intact.
+    A character is kept when they have a subject OR are named in the action."""
+    subs = [s for s in (subjects or []) if isinstance(s, dict)]
+    if not subs:
+        return list(in_frame or [])
+    subj_names = {str(s.get("character") or "").strip().upper() for s in subs}
+    return [n for n in (in_frame or [])
+            if str(n).strip().upper() in subj_names or _name_in_text(n, action)]
+
+
 def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
     """shots_blocking: per shot, {"subjects": [...], "reverse_angle": bool}
     or None for shots without blocking. Mutates screen_side in place on

@@ -280,10 +280,6 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     n for n in (canonical_character(x, known_names)
                                 for x in (sd.get("characters_in_frame", []) or []))
                     if str(n).upper() in real_cast))
-                # foreground names must be a subset of who is actually in frame
-                foreground = [n for n in (canonical_character(x, known_names)
-                                          for x in (sd.get("foreground_characters") or []))
-                              if n in in_frame]
                 # blocking subjects carry names too — canonicalize, then drop any
                 # extra so the camera plan and the prompt's blocking rows never
                 # reference a non-cast figure
@@ -295,6 +291,18 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                             continue
                     kept_subjects.append(subj)
                 sd["subjects"] = kept_subjects or None
+                # reconcile the frame with the blocking: a character listed
+                # in-frame but never given a subject AND not named in the action
+                # is a spurious inclusion the stager left unplaced (the antagonist
+                # 'Man' in a two-person beat). Drop them so their plate isn't sent
+                # as a floating face reference the model places at random.
+                from app.services.stage_map import reconcile_frame_with_subjects
+                in_frame = reconcile_frame_with_subjects(
+                    in_frame, kept_subjects, sd.get("action"))
+                # foreground names must be a subset of who is actually in frame
+                foreground = [n for n in (canonical_character(x, known_names)
+                                          for x in (sd.get("foreground_characters") or []))
+                              if n in in_frame]
                 # clamp bounded enum columns (shot_type, camera_movement) so one
                 # over-long LLM value can't fail the whole scene's batch insert
                 shot = Shot(**clamp_bounded_strings({
