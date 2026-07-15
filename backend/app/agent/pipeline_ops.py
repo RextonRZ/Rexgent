@@ -205,11 +205,13 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             if getattr(get_settings(), "director_engine", False):
                 try:
                     # genre lives on Project (Script has none); safe on a detached
-                    # Script. Budget = the legacy cap so coverage never forces an
-                    # over-budget plan: at least one shot per line, capped at 12.
+                    # Script. Budget = one shot per line PLUS room for a couple of
+                    # non-verbal beats (establishing/insert/reaction) so a dialogue
+                    # scene isn't wall-to-wall talking heads and the visual model
+                    # (Wan) gets silent shots to render. Capped at 12.
                     genre = getattr(getattr(script, "project", None), "genre", None)
                     n_lines = len(scene.dialogue_json or [])
-                    budget = min(max(shots_per_scene, n_lines), gen._HARD_CAP)
+                    budget = min(max(shots_per_scene, n_lines) + 2, gen._HARD_CAP)
                     look = recommend_look(genre)
                     plan = await plan_scene(scene_json, scene_chars, look,
                                             budget=budget, qwen=gen.qwen)
