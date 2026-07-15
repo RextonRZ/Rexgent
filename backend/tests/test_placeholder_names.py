@@ -14,6 +14,9 @@ from app.services.guardrails import is_placeholder_character_name as ph
     "their brother", "The Mother", "her son", "his father", "the neighbour",
     "Guard", "Guard 2", "Guard #1", "Villager", "Nurse", "the doctor",
     "Detective", "Officer", "Voice", "Narrator", "Bystander", "Waiter",
+    # occupation-only figures
+    "Reporter", "Journalist", "Chef", "Lawyer", "Thief", "Dancer", "Singer",
+    "Photographer", "Pilot", "Sheriff", "the reporter", "Reporter 2",
     "", "   ", "???",
 ])
 def test_placeholders_are_flagged(name):
@@ -23,9 +26,11 @@ def test_placeholders_are_flagged(name):
 @pytest.mark.parametrize("name", [
     "Anna", "Deok-hyun", "Myung-joon", "Detective Halloran", "Doctor Kim",
     "Captain Reyes", "King Aeryn", "Father Moon", "Jae-won", "Marco Reyes",
-    # legitimately common-word first names must survive
+    "Reporter Kim",   # a role with a real name attached survives
+    # legitimately common-word first names / surnames must survive
     "Rose", "Hunter", "Grace", "Faith", "Hope", "Joy", "Angel", "Dawn",
-    "Sky", "May", "June", "Mercy", "Sunny",
+    "Sky", "May", "June", "Mercy", "Sunny", "Baker", "Mason", "Cooper",
+    "Carter", "Fisher", "Archer",
 ])
 def test_real_names_survive(name):
     assert ph(name) is False, name

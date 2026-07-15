@@ -361,6 +361,24 @@ _GENERIC_PERSON_NOUNS = {
     "professor", "chief", "judge", "mayor", "king", "queen", "prince", "princess",
     "priest", "monk", "nun", "reverend", "coach", "teacher", "student",
     "manager", "waitperson", "crew", "figurehead",
+    # occupations that turn up as UNNAMED figures (a proper name alongside keeps
+    # them: 'Reporter Kim' survives, 'Reporter' does not). Deliberately excludes
+    # occupation words that double as real names/surnames — Baker, Mason, Cooper,
+    # Carter, Hunter, Fisher, Smith, Archer, Knight, Page — so those survive.
+    "reporter", "journalist", "photographer", "cameraman", "pilot", "chef",
+    "lawyer", "attorney", "banker", "engineer", "thief", "thieves", "robber",
+    "burglar", "dancer", "singer", "actor", "actress", "sculptor", "musician",
+    "sailor", "secretary", "bodyguard", "salesman", "saleswoman", "cashier",
+    "mechanic", "plumber", "electrician", "carpenter", "janitor", "cleaner",
+    "chauffeur", "bouncer", "gambler", "boxer", "referee", "umpire", "pastor",
+    "sheriff", "deputy", "spy", "hacker", "assassin", "mercenary", "warden",
+    "jailer", "executioner", "prosecutor", "editor", "poet", "comedian",
+    "magician", "clown", "stewardess", "conductor", "tourist", "prisoner",
+    "inmate", "patient", "dentist", "surgeon", "therapist", "scientist",
+    "principal", "librarian", "accountant", "broker", "operator", "technician",
+    "laborer", "labourer", "foreman", "miner", "rancher", "cowboy", "warrior",
+    "sentry", "scout", "messenger", "courier", "postman", "mailman", "trucker",
+    "cabbie", "admiral", "commander", "medic", "gangster", "mobster", "crook",
 }
 _UNKNOWN_TOKENS = {"unknown", "unnamed", "unidentified", "n/a", "na", "tbd",
                    "tba", "none", "null", "nil", "placeholder", "character",
