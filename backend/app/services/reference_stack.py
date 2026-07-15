@@ -95,13 +95,23 @@ def image_ref_legend(provenance) -> str:
         "style": "the visual style",
     }
     parts = []
+    has_person = False
     for i, p in enumerate(provenance or [], start=1):
+        if p.get("role") in ("identity", "costume"):
+            has_person = True
         tmpl = role_label.get(p.get("role"), "a reference")
         parts.append(f"[Image {i}] is " + tmpl.format(c=p.get("character") or "the subject"))
     if not parts:
         return ""
-    return ("Reference image guide (match each person to their OWN image, never "
-            "swap faces or outfits between people): " + "; ".join(parts) + ".")
+    # a scenery shot references only location/style/frame — DON'T mention people
+    # or the model invents them into an empty landscape; the person-matching guide
+    # applies only when a real face/outfit plate is in the stack.
+    preamble = (
+        "Reference image guide (match each person to their OWN image, never "
+        "swap faces or outfits between people): " if has_person
+        else "Reference images (match the location and visual style only, no people): "
+    )
+    return preamble + "; ".join(parts) + "."
 
 
 def build_reference_stack(characters_in_frame, scene_number, bible,
