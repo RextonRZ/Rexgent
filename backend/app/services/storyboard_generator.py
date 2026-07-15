@@ -170,14 +170,16 @@ def insert_silent_holds(shots: list[dict], max_holds: int = 2) -> list[dict]:
 
 # Distinct looks so multiple cutaways (and the establishing wide) never render
 # as the same repeating shot: different framing, camera and phrasing. Each is
-# environment-only, never the scene's character action.
+# environment-only, never the scene's character action. Framings are WIDE only
+# (EWS/WS/LS): a scenery shot has no body to frame, so a person framing like MS
+# or CU on an empty environment reads as a broken, awkward shot.
 _ATMOSPHERE_LOOKS = [
-    ("A still, unpeopled view of {where} - its light, texture and empty space, "
-     "not a soul in frame.", "LS", "STATIC"),
-    ("A quiet detail of {where} - surfaces, shadows and stillness, no people "
-     "present.", "MS", "PAN_RIGHT"),
-    ("The empty {where} holding its silence - atmosphere and light only, no one "
-     "in frame.", "FS", "TILT_DOWN"),
+    ("A still, unpeopled wide of {where} - its light, texture and empty space, "
+     "not a soul in frame.", "WS", "STATIC"),
+    ("A slow drift across the empty {where} - atmosphere and light only, no "
+     "people present.", "LS", "PAN_RIGHT"),
+    ("A high, sweeping view of {where} holding its silence - no one in frame.",
+     "EWS", "DRONE"),
 ]
 
 
@@ -237,6 +239,23 @@ def insert_atmosphere(shots: list[dict], count: int, location,
     for n, at in enumerate(reversed(chosen)):
         out.insert(at, make_atmosphere_shot(location, lighting, colour_mood, variant=n))
     return out
+
+
+# A person framing implies a body in the frame; on a scenery shot with no cast
+# it renders as an awkward, subjectless shot ("a medium shot of nothing").
+_PERSON_FRAMINGS = {"CU", "ECU", "MCU", "MS", "FS", "OTS", "POV"}
+
+
+def widen_faceless_framings(shots: list[dict]) -> list[dict]:
+    """Any shot with NO characters in frame must use a WIDE scenery framing —
+    snap a person framing (CU/MCU/MS/FS/OTS/POV) to LS so an empty-cast Wan shot
+    doesn't render as a broken close-up of nothing. EWS/WS/LS (already wide) and
+    INSERT (a deliberate detail) are left alone. Mutates in place, returns it."""
+    for s in (shots or []):
+        if not (s.get("characters_in_frame") or []):
+            if str(s.get("shot_type") or "").upper() in _PERSON_FRAMINGS:
+                s["shot_type"] = "LS"
+    return shots
 
 
 class StoryboardGenerator:

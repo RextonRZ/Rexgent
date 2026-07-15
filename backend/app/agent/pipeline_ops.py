@@ -283,6 +283,13 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             if enriched:
                 for idx, sd in enumerate(shots, start=1):
                     sd["shot_number"] = idx
+            # (3) any faceless scenery shot (inserted OR the LLM's own) must use a
+            # WIDE framing — a person framing on empty scenery renders as an
+            # awkward subjectless shot. Runs when the Wan features are on.
+            if (getattr(get_settings(), "wan_beats", False)
+                    or getattr(get_settings(), "ensure_establishing_shot", False)):
+                from app.services.storyboard_generator import widen_faceless_framings
+                widen_faceless_framings(shots)
             # the 180-degree rule, enforced not requested: first placement
             # establishes each character's screen side; drift snaps back,
             # a flagged reverse angle re-establishes the line of action.

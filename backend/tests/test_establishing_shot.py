@@ -4,7 +4,32 @@ no dialogue) that the router sends to Wan. These cover the pure helpers."""
 from app.services.storyboard_generator import (
     scene_opens_on_scenery, make_establishing_shot,
     insert_silent_holds, insert_atmosphere, make_atmosphere_shot,
+    widen_faceless_framings,
 )
+
+
+class TestWidenFaceless:
+    def test_person_framing_on_empty_shot_is_widened(self):
+        shots = [{"characters_in_frame": [], "shot_type": "MS"},
+                 {"characters_in_frame": [], "shot_type": "CU"}]
+        widen_faceless_framings(shots)
+        assert shots[0]["shot_type"] == "LS"
+        assert shots[1]["shot_type"] == "LS"
+
+    def test_wide_and_insert_faceless_are_left_alone(self):
+        shots = [{"characters_in_frame": [], "shot_type": "EWS"},
+                 {"characters_in_frame": [], "shot_type": "WS"},
+                 {"characters_in_frame": [], "shot_type": "INSERT"}]
+        widen_faceless_framings(shots)
+        assert [s["shot_type"] for s in shots] == ["EWS", "WS", "INSERT"]
+
+    def test_peopled_shots_keep_their_framing(self):
+        # a real MS with a person in frame must NOT be widened
+        shots = [{"characters_in_frame": ["Anna"], "shot_type": "MS"},
+                 {"characters_in_frame": ["Anna", "Deok"], "shot_type": "CU"}]
+        widen_faceless_framings(shots)
+        assert shots[0]["shot_type"] == "MS"
+        assert shots[1]["shot_type"] == "CU"
 
 
 def _talk(cast, stype="MS", line="Hi."):
