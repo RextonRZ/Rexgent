@@ -71,15 +71,28 @@ class TokenOptimizer:
             key=lambda i: shots[i].get("shot_number") or 10 ** 9,
         )
         hook_indices = set(scene1[:self.HOOK_MAX_SHOTS])
+        # A scene's opening shot (its lowest shot_number) is the identity ANCHOR;
+        # under wan_primary it renders on HappyHorse to lock the faces. Precompute
+        # per scene so this projection matches render_plan / the storyboard badge
+        # instead of keying on dialogue alone.
+        min_shot_by_scene: dict = {}
+        for s in shots:
+            scn, sn = s.get("scene_number"), s.get("shot_number")
+            if sn is not None and (scn not in min_shot_by_scene or sn < min_shot_by_scene[scn]):
+                min_shot_by_scene[scn] = sn
         scored = []
         for i, shot in enumerate(shots):
             importance = self.score_shot(shot)
             if wan_primary:
-                # Two-model split (mirrors runtime routing, dialogue-dominant
-                # projection): a talking shot renders on HappyHorse (characters),
-                # every silent visual on Wan. This is a budget PROJECTION, so it
-                # keys on dialogue rather than the full role classifier.
-                if shot.get("dialogue"):
+                # Mirror render_plan / _dispatch_by_role: HappyHorse renders the
+                # CHARACTERS — a shot that speaks, or the scene's opening anchor
+                # that has faces to lock — and Wan renders the other silent
+                # visuals. (A mid-scene silent NEWCOMER also routes to HappyHorse
+                # at runtime; detecting that needs the reference bible, which the
+                # budget path does not load, so it is the one residual gap.)
+                has_faces = bool(shot.get("characters_in_frame"))
+                is_anchor = shot.get("shot_number") == min_shot_by_scene.get(shot.get("scene_number"))
+                if shot.get("dialogue") or (is_anchor and has_faces):
                     tier, model = "happyhorse", self.HH_MODEL
                 else:
                     tier, model = "wan", self.WAN_MODEL
