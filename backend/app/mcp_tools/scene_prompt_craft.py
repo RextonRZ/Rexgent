@@ -133,6 +133,13 @@ class ScenePromptCraft:
         # captions. (`lipsync` is a retained-but-inert parameter — the old wan
         # driving-audio path it framed for has been removed.)
         has_line = bool(str(shot.get("dialogue") or "").strip())
+        # Mode type tag (Wan's official samples lead with it): a spoken shot is
+        # "Single speaker." with one person in frame, "Group conversation." with
+        # two or more. A silent / scenery shot leads with no tag.
+        type_tag = ""
+        if has_line:
+            type_tag = ("Single speaker." if len(character_visuals) <= 1
+                        else "Group conversation.")
         if has_line and native_talk:
             # HappyHorse native lip-sync: the model speaks the line itself and
             # syncs the mouth to its own generated speech. That voice ships as
@@ -208,76 +215,107 @@ class ScenePromptCraft:
         result["prompt"] = sanitizer.sanitize(
             result.get("prompt", ""), character_names=list(character_visuals.keys())
         )
-        # the anti-text number-stripper eats the duration digit ("Duration:
-        # seconds."); restate it AFTER sanitization so the pacing hint survives
+        # ── Deterministic assembly, in ONE fixed order, DURATION LAST ─────────
+        # The model body already leads with the controls (rules 3-4) and now
+        # establishes the environment before the characters. Around it we add,
+        # in order: front matter (type tag + director TREATMENTS + [Image N]
+        # legend), then the model body, then the deterministic clauses (speech,
+        # eyelines, setting backstop, Wan sound), then ONE duration sentence at
+        # the very end. Every clause is added AFTER sanitization so the [Image N]
+        # tokens and the verbatim line survive the text stripper.
         import re as _re
-        cleaned = _re.sub(r"\s*Duration:?\s*(\d+\s*)?seconds?\.?\s*$", "",
-                          result["prompt"], flags=_re.IGNORECASE).rstrip()
-        result["prompt"] = (
-            f"{cleaned} Duration: {shot.get('estimated_duration_seconds', 5)} seconds."
-        )
-        # the last gate: repair interpolation holes, wardrobe contradictions,
-        # replacement chars — and say so LOUDLY instead of shipping quietly
+        # strip any duration the model wrote — we own the single final one
+        body = _re.sub(r"\s*Duration:?\s*(\d+\s*)?seconds?\.?\s*$", "",
+                       result["prompt"], flags=_re.IGNORECASE).rstrip()
+        # repair interpolation holes / wardrobe contradictions / mojibake and say
+        # so LOUDLY. duration=None: the duration is appended once at the very end,
+        # so the repairer must not re-insert its own.
         from app.services.guardrails import validate_and_repair_prompt
-        result["prompt"], repairs = validate_and_repair_prompt(
-            result["prompt"], shot.get("estimated_duration_seconds", 5))
-        # Native-talk shots must SPEAK the exact scripted line, but the text
-        # sanitizer above strips quoted words (to keep on-screen text out) and
-        # eats the dialogue with them. Re-append the verbatim line AFTER all
-        # stripping so HappyHorse speaks the real words — its generated voice
-        # ships as the clip's delivered audio (no TTS overlay), so a wrong or
-        # mangled line here is audible in the final cut.
+        body, repairs = validate_and_repair_prompt(body, None)
+
+        # (1) Native-talk speech: the sanitizer strips quoted words, so re-add the
+        # verbatim line here. HappyHorse's generated voice IS the delivered audio
+        # (no TTS overlay), so a wrong or mangled line is audible in the final cut.
+        speech = ""
         if native_talk and has_line:
-            import re as _re
             raw = str(shot.get("dialogue") or "").strip()
-            # words said ALOUD: strip any (parenthetical) so the model does not read
+            # words said ALOUD: strip any (parenthetical) so the model doesn't read
             # the stage direction out loud; the parenthetical becomes the delivery TONE
             spoken = _re.sub(r"\s{2,}", " ", _re.sub(r"\([^)]*\)", " ", raw)).strip() or raw
             tone = ", ".join(p.strip() for p in _re.findall(r"\(([^)]+)\)", raw) if p.strip())
             if spoken:
                 who = (speaker or "").strip()
-                # a distinct TONE label (Alibaba's multi-character principle 3) so the
-                # native voice is delivered WITH emotion, not flat
                 tone_clause = f", {tone}," if tone else ""
                 if who:
-                    # name the speaker (ties to their [Image N] in the legend) and
-                    # keep everyone else's mouth still, so HappyHorse animates the
-                    # RIGHT person in a multi-character shot
-                    result["prompt"] = (
-                        result["prompt"].rstrip()
-                        + f" {who} is the one speaking{tone_clause}: {who} clearly says these "
-                          f"exact words aloud with natural lip movement while everyone else "
-                          f'keeps a closed, still mouth and listens: "{spoken}"'
-                    )
+                    # name the speaker (ties to their [Image N]) and keep everyone
+                    # else's mouth still, so the RIGHT person animates in a group shot
+                    speech = (f" {who} is the one speaking{tone_clause}: {who} clearly says "
+                              f"these exact words aloud with natural lip movement while "
+                              f'everyone else keeps a closed, still mouth and listens: "{spoken}"')
                 else:
-                    result["prompt"] = (
-                        result["prompt"].rstrip()
-                        + " The character clearly speaks these exact words aloud"
-                        + (f" {tone}" if tone else "")
-                        + f': "{spoken}"'
-                    )
-        # Eyeline: the blocking's eyelines are authoritative — append them so
-        # faces look where the shot staged them instead of at the camera.
+                    speech = (" The character clearly speaks these exact words aloud"
+                              + (f" {tone}" if tone else "") + f': "{spoken}"')
+
+        # (2) Eyelines — ONLY for characters actually in this frame. Gating to the
+        # in-frame cast is what stops a scenery/Wan shot (no in-frame cast) from
+        # leaking a named person into the prompt via a stray blocking subject.
         subs = (blocking or {}).get("subjects") if isinstance(blocking, dict) else None
+        in_frame_upper = {str(k).strip().upper() for k in character_visuals.keys()}
         eye = [f"{s.get('character')} looks {s.get('eyeline')}"
-               for s in (subs or []) if isinstance(s, dict) and s.get('character') and s.get('eyeline')]
-        if eye:
-            result["prompt"] = result["prompt"].rstrip() + " Eyelines: " + "; ".join(eye) + "."
-        # Environment: never render a blank background — if the crafted prompt
-        # names none of the scene's setting, append a concise setting clause
-        # (matters most when the location plate was trimmed from the ref stack).
+               for s in (subs or [])
+               if isinstance(s, dict) and s.get('character') and s.get('eyeline')
+               and str(s.get('character')).strip().upper() in in_frame_upper]
+        eyelines = (" Eyelines: " + "; ".join(eye) + ".") if eye else ""
+
+        # (3) Setting backstop: never a blank background — if the body names none
+        # of the scene's setting, add a concise clause (the location plate may
+        # have been trimmed from the ref stack).
+        setting_clause = ""
         if scene_setting:
             items = [str(i) for i in (scene_setting.get("set_items") or [])][:4]
             loc = str(scene_setting.get("location") or "").strip()
-            hay = result["prompt"].lower()
+            hay = body.lower()
             named = (loc and loc.lower() in hay) or any(it.lower()[:15] in hay for it in items)
             if not named and (loc or items):
                 clause = ", ".join([p for p in [loc] + items if p])
-                result["prompt"] = result["prompt"].rstrip() + f" Setting: {clause}."
+                setting_clause = f" Setting: {clause}."
+
+        # (4) Wan sound formula (visual shots only): Wan makes its own diegetic
+        # SFX + ambience, but never VOICE (dialogue -> HappyHorse) and never
+        # per-clip MUSIC (one episode track owns BGM). Skipped on HappyHorse
+        # shots and any shot that carries a line.
+        wan_sound = ""
+        if to_wan and not has_line:
+            wan_sound = (" Ambient sound and diegetic sound effects. "
+                         "No dialogue. No background music.")
+
+        # Front matter: the ONE controls statement lives in the model body; here
+        # we prepend only the mode TYPE TAG (Wan keys off "Single speaker," /
+        # "Group conversation,") and the director TREATMENTS the body won't state
+        # (a tilt-shift/time-lapse look, an overall stylization), then the image
+        # legend so the model reads the [Image N] map first. lens/composition/
+        # light are NOT restated here — the body already carries them from the
+        # shot data (they were the duplicate controls statement).
+        lead: list[str] = []
+        if type_tag:
+            lead.append(type_tag)
+        dj = shot.get("director_json") if isinstance(shot, dict) else None
+        if isinstance(dj, dict):
+            treatments = [str(dj[k]).replace("_", "-")
+                          for k in ("special_effect", "stylization") if dj.get(k)]
+            if treatments:
+                t = ", ".join(treatments)
+                lead.append(t[:1].upper() + t[1:] + ".")
+        front = " ".join(lead)
         if image_legend:
-            # prepend AFTER sanitization so the [Image N] tokens survive the text
-            # stripper; leads the prompt so the model reads the mapping first
-            result["prompt"] = image_legend + " " + result["prompt"].lstrip()
+            front = (front + " " + image_legend).strip() if front else image_legend
+
+        # assemble: front matter, model body, deterministic clauses, DURATION last
+        dur = int(shot.get("estimated_duration_seconds", 5))
+        assembled = ((front + " ") if front else "") + body.lstrip()
+        assembled = (assembled.rstrip() + speech + eyelines + setting_clause + wan_sound)
+        result["prompt"] = assembled.rstrip().rstrip(",") + f" Duration: {dur} seconds."
+
         if repairs:
             import logging
             logging.getLogger(__name__).warning(
@@ -297,43 +335,6 @@ class ScenePromptCraft:
             sup = environment["suppressed"]
             if sup.lower() not in (result.get("negative_prompt") or "").lower():
                 result["negative_prompt"] += ", " + sup
-        # Director controls-first (Alibaba pattern): PREPEND a model-honored
-        # comma-list of technical controls (light quality, lens, composition)
-        # ahead of the scene, so the model reads the optics before the action.
-        # Placed after sanitization, before the typographic normalizer, so the
-        # clause survives the text stripper — same idiom as the image_legend prefix.
-        dj = shot.get("director_json") if isinstance(shot, dict) else None
-        if isinstance(dj, dict):
-            ctrl = []
-            # special_effect leads (a tilt-shift/time-lapse treatment frames the whole shot)
-            if dj.get("special_effect"):
-                ctrl.append(str(dj["special_effect"]).replace("_", "-"))
-            lq = dj.get("light_quality")
-            if lq:
-                ctrl.append(f"{lq} light")
-            if dj.get("lens"):
-                ctrl.append(f"{dj['lens']} lens")
-            if dj.get("composition"):
-                ctrl.append(dj["composition"].replace("_", "-") + " composition")
-            # stylization closes the control list (the overall aesthetic treatment)
-            if dj.get("stylization"):
-                ctrl.append(str(dj["stylization"]).replace("_", "-"))
-            if ctrl:
-                prefix = ", ".join(ctrl)
-                prefix = prefix[:1].upper() + prefix[1:] + ". "
-                result["prompt"] = prefix + result["prompt"].lstrip()
-        # Wan sound formula (visual shots only): Wan generates its OWN diegetic
-        # SFX + ambience, but never VOICE (dialogue routes to HappyHorse — resolved
-        # decision 3) and never per-clip MUSIC (one episode track owns BGM —
-        # resolved decision 1). Appended at the tail, after sanitization, so it
-        # survives the text stripper and lands deterministically before dispatch.
-        # Skipped for HappyHorse shots and for any shot that carries a line.
-        if to_wan and not has_line:
-            result["prompt"] = (
-                result["prompt"].rstrip()
-                + " Ambient sound and diegetic sound effects. "
-                  "No dialogue. No background music."
-            )
         # Final gate (rule A5): the crafted prompt still carries typographic
         # gremlins — em/en dashes, smart quotes, and the replacement char (mojibake)
         # — which corrupt adjacent words and confuse the video model. Fold them to

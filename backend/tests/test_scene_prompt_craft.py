@@ -499,7 +499,11 @@ async def test_cinematic_flag_off_no_injection(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_craft_weaves_lens_and_composition_from_director_json(monkeypatch):
+async def test_craft_optics_not_duplicated_in_prefix(monkeypatch):
+    # consolidation (one controls statement): lens/composition/light_quality are
+    # NOT re-prepended as a second controls clause — the model body states them
+    # once (it sees director_json in the shot data). Only director TREATMENTS
+    # (special_effect/stylization) lead; here there are none, so nothing prepends.
     from app.mcp_tools.scene_prompt_craft import ScenePromptCraft
     crafter = ScenePromptCraft.__new__(ScenePromptCraft)
     crafter.qwen = MagicMock()
@@ -510,11 +514,10 @@ async def test_craft_weaves_lens_and_composition_from_director_json(monkeypatch)
             "director_json": {"light_quality": "soft", "lens": "85mm",
                               "composition": "rule_of_thirds"}}
     out = await crafter.craft(shot, character_visuals={}, target_model="happyhorse")
-    # controls-first: the technical controls PREPEND, then the scene text
-    assert out["prompt"].startswith("Soft light, 85mm lens, rule-of-thirds composition.")
-    assert "85mm" in out["prompt"]
-    assert "rule-of-thirds" in out["prompt"] or "rule of thirds" in out["prompt"]
-    assert "woman stands in a doorway" in out["prompt"]     # scene survives
+    assert not out["prompt"].startswith("Soft light")      # no duplicate controls prefix
+    assert "85mm lens" not in out["prompt"]                # optics not re-injected
+    assert "woman stands in a doorway" in out["prompt"]    # scene survives
+    assert out["prompt"].rstrip().endswith("Duration: 5 seconds.")  # duration LAST
 
 
 @pytest.mark.asyncio
@@ -541,29 +544,33 @@ def _spc():
 
 
 @pytest.mark.asyncio
-async def test_craft_prefix_includes_special_effect_and_stylization():
+async def test_craft_prefix_is_treatments_only():
+    # the treatments prefix carries ONLY special_effect + stylization (a look
+    # the model body won't state); the optical controls (light/lens/composition)
+    # are NOT duplicated here — they live once in the body.
     crafter = _spc()
     shot = {"shot_type": "EWS", "action": "light creeps in",
             "director_json": {"stylization": "cinematic", "special_effect": "tilt_shift",
                               "light_quality": "side", "lens": "24mm",
                               "composition": "leading_lines"}}
     out = await crafter.craft(shot, character_visuals={}, target_model="wan")
-    # controls-first prefix: special_effect leads, stylization closes
-    assert out["prompt"].startswith(
-        "Tilt-shift, side light, 24mm lens, leading-lines composition, cinematic.")
-    assert "Tilt-shift" in out["prompt"]
-    assert "cinematic" in out["prompt"]
+    assert out["prompt"].startswith("Tilt-shift, cinematic.")
+    assert "24mm" not in out["prompt"]          # optics not duplicated in the prefix
+    assert "leading-lines" not in out["prompt"]
 
 
 @pytest.mark.asyncio
-async def test_craft_to_wan_silent_shot_appends_sound_and_suppression_tail():
+async def test_craft_to_wan_silent_shot_sound_tail_before_duration():
     crafter = _spc()
     out = await crafter.craft(
         {"shot_type": "EWS", "action": "wind on an empty street",
          "estimated_duration_seconds": 5},
         character_visuals={}, target_model="wan", to_wan=True)
-    assert out["prompt"].endswith(
-        "Ambient sound and diegetic sound effects. No dialogue. No background music.")
+    p = out["prompt"]
+    assert "Ambient sound and diegetic sound effects. No dialogue. No background music." in p
+    # duration is LAST; the sound tail sits just before it
+    assert p.rstrip().endswith("Duration: 5 seconds.")
+    assert p.index("Ambient sound") < p.index("Duration:")
 
 
 @pytest.mark.asyncio
@@ -591,3 +598,66 @@ async def test_craft_to_wan_dialogue_shot_never_gets_no_dialogue_clause():
         character_visuals={}, target_model="wan", to_wan=True)
     assert "No dialogue." not in out["prompt"]
     assert "No background music." not in out["prompt"]
+
+
+# ── prompt-formula rework: type tag, env-first, appendages before duration ──
+
+@pytest.mark.asyncio
+async def test_craft_type_tag_single_speaker():
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MCU", "action": "she speaks", "dialogue": "Hello.",
+         "estimated_duration_seconds": 5},
+        character_visuals={"Anna": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse")
+    assert out["prompt"].startswith("Single speaker.")
+
+
+@pytest.mark.asyncio
+async def test_craft_type_tag_group_conversation():
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MS", "action": "they talk", "dialogue": "Hello.",
+         "estimated_duration_seconds": 5},
+        character_visuals={"Anna": {"video_prompt_fragment": "a woman"},
+                           "Deok": {"video_prompt_fragment": "a man"}},
+        target_model="happyhorse")
+    assert out["prompt"].startswith("Group conversation.")
+
+
+@pytest.mark.asyncio
+async def test_craft_silent_shot_has_no_type_tag():
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "EWS", "action": "an empty cliff", "estimated_duration_seconds": 5},
+        character_visuals={}, target_model="wan")
+    assert not out["prompt"].startswith("Single speaker.")
+    assert not out["prompt"].startswith("Group conversation.")
+
+
+@pytest.mark.asyncio
+async def test_craft_eyeline_gated_to_in_frame_cast():
+    # the S1-1 scenery leak: a stray blocking subject on a no-cast shot must NOT
+    # put a named person into a Wan prompt via the eyeline appendage
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "EWS", "action": "empty cliff at dusk", "estimated_duration_seconds": 5},
+        character_visuals={},                      # scenery: NO in-frame cast
+        target_model="wan",
+        blocking={"subjects": [{"character": "Anna", "eyeline": "toward the sea"}]})
+    assert "Anna" not in out["prompt"]
+    assert "Eyelines" not in out["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_craft_native_talk_line_sits_before_duration():
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MCU", "action": "she speaks", "dialogue": "Who are you?",
+         "estimated_duration_seconds": 5},
+        character_visuals={"Anna": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse", native_talk=True, speaker="Anna")
+    p = out["prompt"]
+    assert "Who are you?" in p
+    assert p.rstrip().endswith("Duration: 5 seconds.")     # duration LAST
+    assert p.index("Who are you?") < p.index("Duration:")  # speech before it
