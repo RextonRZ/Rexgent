@@ -717,7 +717,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
       {/* ── 4 · reliability ── */}
       <Rise index={3}>
         <SectionTitle>Reliability</SectionTitle>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <HealthCard
             label="Continuity pass"
             value={rel.continuity_pass_rate != null ? fmtPct(rel.continuity_pass_rate) : null}
