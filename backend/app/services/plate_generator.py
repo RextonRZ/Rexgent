@@ -10,6 +10,13 @@ logger = logging.getLogger(__name__)
 # Fallback outfit when no wardrobe plan exists (never feed the face description in).
 DEFAULT_OUTFIT = "a simple, well-fitted everyday outfit"
 
+
+class ReferenceEditRefused(Exception):
+    """The image-edit service refused the reference face (commonly DataInspectionFailed,
+    when it reads the face as a recognizable public figure). Falling back to
+    text-to-image would bill the user for a plate showing a stranger, so the caller
+    reuses the already-valid reference plate instead of spending on a fresh render."""
+
 # Identity gate for face-referenced plates: raw ArcFace cosine at or above the
 # genuine-pair threshold (same scale the continuity agent verifies with) counts
 # as the same person. Below it, the render is re-rolled and the best attempt
@@ -144,12 +151,14 @@ class PlateGenerator:
                 raw_url = await self.qwen.edit_image(
                     prompt, base_image_url, negative_prompt=negative_prompt, prompt_extend=prompt_extend)
                 image_model = "qwen-image-edit-max"
-            except Exception as e:  # noqa: BLE001 — degrade gracefully to text-to-image
+            except Exception as e:  # noqa: BLE001
+                # Do NOT fall back to text-to-image: a fresh render ships a stranger's
+                # face (the reference already passed identity), and it bills the user
+                # for an unusable plate. Signal the caller to reuse the reference.
                 logger.warning(
-                    "edit_image failed for %s/%s (%s) — falling back to text-to-image; "
-                    "the face will NOT be preserved for this plate.", kind, key, e)
-                raw_url = await self.qwen.generate_image(
-                    prompt=prompt, negative_prompt=negative_prompt, prompt_extend=prompt_extend)
+                    "edit_image refused for %s/%s (%s) — reusing the reference plate "
+                    "instead of spending on a text-to-image fallback.", kind, key, e)
+                raise ReferenceEditRefused(str(e)) from e
         else:
             raw_url = await self.qwen.generate_image(
                 prompt=prompt, negative_prompt=negative_prompt, prompt_extend=prompt_extend)
@@ -179,8 +188,15 @@ class PlateGenerator:
         best_sim = -1.0
         models_used: list[str] = []
         for attempt in range(attempts):
-            rendered, image_model = await self._render_once(
-                kind, key, prompt, negative_prompt, base_image_url, prompt_extend)
+            try:
+                rendered, image_model = await self._render_once(
+                    kind, key, prompt, negative_prompt, base_image_url, prompt_extend)
+            except ReferenceEditRefused:
+                # The edit was refused. Reuse the already-valid reference plate (the
+                # face passed identity) instead of billing for a text-to-image
+                # stranger. last_face_preserved=False -> the caller flags ref_rejected.
+                self.last_face_preserved = False
+                return base_image_url, (list(match_vector) if has_ref_vector else None)
             models_used.append(image_model)
             if not verify:
                 content = rendered
