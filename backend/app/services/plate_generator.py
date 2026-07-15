@@ -82,8 +82,11 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "") -> st
     clothing instead of imposing a generic outfit — so each character keeps their real
     look (and a dog/child isn't forced into an adult t-shirt)."""
     frame = ("Solo studio costume-reference photo of ONE subject alone, no other people, "
-             "waist-up medium shot facing forward, plain seamless neutral backdrop, "
-             "soft even lighting. Ignore any location, action or scene — plain background only.")
+             "waist-up medium shot facing forward, neutral relaxed expression (calm and "
+             "natural, mouth closed, not emoting), plain seamless neutral backdrop, "
+             "soft even lighting. Ignore any location, action or scene — plain background only. "
+             "This is an identity and wardrobe reference, not a performance — the emotion of "
+             "each shot is set later at generation time.")
     outfit = (outfit or "").strip()
     if has_face:
         anchor = ("Keep the same age and body proportions as the reference — do not make "

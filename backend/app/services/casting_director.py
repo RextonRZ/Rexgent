@@ -13,6 +13,7 @@ from app.services.plate_generator import (PlateGenerator, character_plate_prompt
                                           char_plate_negative)
 from app.services.prompt_loader import load_prompt
 from app.services.guardrails import strip_character_names
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 from app.websocket.emitter import emit
@@ -30,6 +31,16 @@ def distinct_locations(scenes: list[dict]) -> list[dict]:
         g = grouped.setdefault(k, {"location_key": k, "description": sc.get("location", ""), "scene_numbers": []})
         g["scene_numbers"].append(sc.get("number"))
     return list(grouped.values())
+
+
+def style_look_clause(genre: str | None) -> str:
+    """A style-director hint that pins the style plate to the Director's genre
+    look (the same LookProfile the per-shot stylization reads), so the style
+    plate image and the per-shot look don't diverge."""
+    from app.director.recommender import recommend_look
+    look = recommend_look(genre)
+    return (f"Consistent with a {look.stylization} look: {look.lighting}, "
+            f"{look.colour_mood}, {look.light_quality} light.")
 
 
 async def style_from_request(qwen, prompt_template: str, free_text: str) -> dict:
@@ -282,7 +293,13 @@ class CastingDirector:
 
     def _style_input(self, project_id) -> str:
         existing = self.db.query(StylePreset).filter(StylePreset.project_id == project_id).first()
-        return (existing.free_text if existing else "") or "cinematic realistic drama"
+        base = (existing.free_text if existing else "") or "cinematic realistic drama"
+        # Under the Director engine, align the style plate with the genre look so
+        # the two style channels (plate image + per-shot stylization) agree.
+        if getattr(get_settings(), "director_engine", False):
+            proj = self.db.query(Project).filter(Project.id == project_id).first()
+            base = f"{base}. {style_look_clause(getattr(proj, 'genre', None))}"
+        return base
 
     def _upsert_style(self, project_id, style: dict, url: str) -> None:
         row = self.db.query(StylePreset).filter(StylePreset.project_id == project_id).first()
