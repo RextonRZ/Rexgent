@@ -5,7 +5,26 @@ from app.services.guardrails import (
     InputSanitizer,
     PreGenerationValidator,
     strip_character_names,
+    filter_to_cast,
 )
+
+
+class TestFilterToCast:
+    def test_keeps_cast_drops_extras(self):
+        assert filter_to_cast(["Anna", "VILLAGER", "Deok-hyun"],
+                              ["Anna", "Deok-hyun"]) == ["Anna", "Deok-hyun"]
+
+    def test_canonicalizes_qualifiers_and_first_names(self):
+        # "DEOK-HYUN (O.S.)" -> "Deok-hyun"; a unique first name resolves
+        assert filter_to_cast(["DEOK-HYUN (O.S.)", "ANNA"],
+                              ["Anna", "Deok-hyun"]) == ["Deok-hyun", "Anna"]
+
+    def test_dedupes_preserving_order(self):
+        assert filter_to_cast(["Anna", "ANNA", "Anna"], ["Anna"]) == ["Anna"]
+
+    def test_empty_inputs(self):
+        assert filter_to_cast([], ["Anna"]) == []
+        assert filter_to_cast(["Anna"], []) == []
 
 
 class TestStripCharacterNames:
@@ -208,6 +227,19 @@ class TestPreGenerationValidator:
                     "estimated_duration_seconds": 5}],
         )
         assert result["pass"] is True
+
+    def test_non_cast_name_warns_but_does_not_block(self):
+        # an EXTRA that leaked into characters_in_frame has no plate by design;
+        # a missing extra identity must WARN, never stop the whole job
+        v = PreGenerationValidator()
+        result = v.validate(
+            characters=[{"name": "KERRY", "visual_description": "a lawyer"}],
+            shots=[{"characters_in_frame": ["KERRY", "VILLAGER"],
+                    "estimated_duration_seconds": 5}],
+        )
+        assert result["pass"] is True
+        assert any("VILLAGER" in w for w in result["warnings"])
+        assert result["missing_visuals"] == []
 
 
 class TestCanonicalCharacter:

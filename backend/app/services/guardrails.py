@@ -302,14 +302,32 @@ def canonical_character(name: str, known) -> str:
     return n
 
 
+def filter_to_cast(names, cast_names) -> list:
+    """Canonicalize each name against the cast and keep ONLY real cast members,
+    deduped, order preserved. Extras (background people, animals, one-time
+    figures) must never enter characters_in_frame: they have no plate to lock,
+    so the router and the reference stack would chase an identity that cannot
+    exist — or the preflight would refuse the whole job. An extra stays in the
+    action text and renders as a generic figure."""
+    cast = [str(n) for n in (cast_names or []) if str(n).strip()]
+    cast_upper = {n.upper() for n in cast}
+    out: list = []
+    for n in (names or []):
+        c = canonical_character(str(n), cast)
+        if str(c).upper() in cast_upper and c not in out:
+            out.append(c)
+    return out
+
+
 class PreGenerationValidator:
     def validate(self, characters: list[dict], shots: list[dict]) -> dict:
         issues: list[str] = []
         missing_visuals: list[str] = []
+        warnings: list[str] = []
 
         if not shots:
             return {"pass": False, "issues": ["No shots in storyboard"], "missing_visuals": [],
-                    "total_shots": 0, "total_duration": 0}
+                    "warnings": [], "total_shots": 0, "total_duration": 0}
 
         names_in_shots = set()
         for shot in shots:
@@ -320,7 +338,12 @@ class PreGenerationValidator:
         for name in names_in_shots:
             c = char_map.get(canonical_character(name, char_map.keys()))
             if not c:
-                missing_visuals.append(f"{name}: not found in database")
+                # a non-cast name is an EXTRA that leaked into characters_in_frame:
+                # it has no plate by design, so a missing plate must WARN, never
+                # block the whole job — the shot still renders, the figure is
+                # simply not identity-locked.
+                warnings.append(f"{name}: not in the cast — renders as an extra "
+                                "with no identity lock")
             elif not c.get("video_prompt_fragment") and not c.get("visual_description"):
                 missing_visuals.append(f"{name}: no visual description")
 
@@ -335,6 +358,7 @@ class PreGenerationValidator:
             "pass": len(issues) == 0,
             "issues": issues,
             "missing_visuals": missing_visuals,
+            "warnings": warnings,
             "total_shots": len(shots),
             "total_duration": total_duration,
         }

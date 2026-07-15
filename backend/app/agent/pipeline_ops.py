@@ -262,24 +262,39 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     [c.get("name") for c in scene_chars if c.get("name")])
             except Exception:  # noqa: BLE001
                 pass
+            # real cast = the plated Characters. An EXTRA (background figure,
+            # animal, one-time unnamed person) has no plate, so it must never
+            # enter characters_in_frame / subjects: the router and reference
+            # stack would chase an identity that cannot exist. A dropped extra
+            # stays in the action text and renders as a generic figure.
+            real_cast = {str(c.name).upper() for c in characters}
             for sd in shots:
                 # resolve name variants the LLM invents ("KERRY (ON SCREEN)")
                 # back to real cast members, or identity references and the
                 # pre-generation check never find them
                 from app.services.guardrails import canonical_character
                 known_names = [c.get("name") for c in scene_chars if c.get("name")]
+                # canonicalize against the SCENE cast (disambiguates bare first
+                # names / stage qualifiers), then keep only real cast members
                 in_frame = list(dict.fromkeys(
-                    canonical_character(n, known_names)
-                    for n in (sd.get("characters_in_frame", []) or [])))
+                    n for n in (canonical_character(x, known_names)
+                                for x in (sd.get("characters_in_frame", []) or []))
+                    if str(n).upper() in real_cast))
                 # foreground names must be a subset of who is actually in frame
                 foreground = [n for n in (canonical_character(x, known_names)
                                           for x in (sd.get("foreground_characters") or []))
                               if n in in_frame]
-                # blocking subjects carry names too — the camera plan and the
-                # prompt's blocking rows must show the same cast the shot lists
+                # blocking subjects carry names too — canonicalize, then drop any
+                # extra so the camera plan and the prompt's blocking rows never
+                # reference a non-cast figure
+                kept_subjects = []
                 for subj in (sd.get("subjects") or []):
                     if isinstance(subj, dict) and subj.get("character"):
                         subj["character"] = canonical_character(subj["character"], known_names)
+                        if str(subj["character"]).upper() not in real_cast:
+                            continue
+                    kept_subjects.append(subj)
+                sd["subjects"] = kept_subjects or None
                 # clamp bounded enum columns (shot_type, camera_movement) so one
                 # over-long LLM value can't fail the whole scene's batch insert
                 shot = Shot(**clamp_bounded_strings({
@@ -303,6 +318,27 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                agent="Director", artifact=f"{len(created)} shots")
     tool_event(script.project_id, "storyboard", "set_design", "succeeded",
                agent="Director", artifact=f"{dressed} scenes dressed")
+    # recurring-extras check (pure, no I/O): script_generate's rule about naming
+    # a recurring unnamed figure is enforced NOWHERE downstream — this catches
+    # when it was broken so a shape-shifting extra is flagged, not silently
+    # shipped. A WARNING only, like the stage-map corrections above.
+    try:
+        from app.services.extras_monitor import detect_recurring_extras
+        extra_findings = detect_recurring_extras(
+            [{"scene_number": scene_no, "shot_number": s.number,
+              "action": s.action, "notes": s.notes,
+              "characters_in_frame": s.characters_in_frame}
+             for s, scene_no in created],
+            [c.name for c in characters])
+        if extra_findings:
+            import logging
+            logging.getLogger(__name__).warning(
+                "recurring extras in storyboard: %s",
+                "; ".join(f["warning"] for f in extra_findings))
+            emit("storyboard:extras_warning", {"findings": extra_findings},
+                 str(script.project_id))
+    except Exception:  # noqa: BLE001 — detection is best-effort, never blocks
+        pass
     with tool_run(script.project_id, "storyboard", "write_shots_db", "Director") as t:
         db.commit()
         t["artifact"] = f"{len(created)} rows"
