@@ -59,6 +59,18 @@ def _default_subjects(names) -> list[dict]:
     return out
 
 
+def _ensure_speakers_in_frame(cast, speakers) -> list:
+    """A talking shot MUST show its speaker: native-talk animates the on-screen
+    mouth, so a line assigned to an empty frame renders nobody 'speaking'. Force
+    each covered line's speaker into the cast (deduped, order preserved)."""
+    out = [str(c) for c in (cast or []) if str(c).strip()]
+    for spk in speakers or []:
+        spk = str(spk or "").strip()
+        if spk and not any(c.strip().upper() == spk.upper() for c in out):
+            out.append(spk)
+    return out
+
+
 class StoryboardGenerator:
     # Never balloon a single scene past this many shots, even if it is very
     # dialogue-heavy — keeps cost and length sane.
@@ -171,6 +183,12 @@ class StoryboardGenerator:
             from app.services.storyboard_generator import fit_duration_to_dialogue
             sd["estimated_duration_seconds"] = (fit_duration_to_dialogue(sd["dialogue"])
                                                 if covered else round(planned.intended_duration))
+            # a talking shot must show its speaker, or native-talk renders an empty
+            # frame "speaking": force each covered line's speaker into the cast
+            line_speakers = [lines[j].get("character") for j in planned.covers_lines
+                             if 0 <= j < len(lines)]
+            sd["characters_in_frame"] = _ensure_speakers_in_frame(
+                sd.get("characters_in_frame"), line_speakers)
             # the interactive camera plan draws from blocking `subjects`; the Stager
             # LLM often omits them, so backfill a deterministic default from who is
             # in frame (the stage map then enforces the 180-degree rule across shots)

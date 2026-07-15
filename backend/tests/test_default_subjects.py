@@ -1,7 +1,24 @@
 """The Director Stager's LLM often omits blocking `subjects`, so every shot ended
 up with null blocking and the interactive top-down camera plan drew nothing.
 _default_subjects backfills deterministic geometry so the plan always renders."""
-from app.services.storyboard_generator import _default_subjects
+from app.services.storyboard_generator import _default_subjects, _ensure_speakers_in_frame
+
+
+def test_speaker_forced_into_empty_talking_frame():
+    # shots 7/8: a line assigned to a shot with nobody in frame -> add the speaker
+    assert _ensure_speakers_in_frame([], ["ANNA"]) == ["ANNA"]
+    assert _ensure_speakers_in_frame([], ["Anna", "Deok-hyun"]) == ["Anna", "Deok-hyun"]
+
+
+def test_speaker_not_duplicated_when_already_present():
+    assert _ensure_speakers_in_frame(["Anna"], ["ANNA"]) == ["Anna"]
+    assert _ensure_speakers_in_frame(["Deok-hyun", "Anna"], ["Anna"]) == ["Deok-hyun", "Anna"]
+
+
+def test_silent_shot_stays_empty():
+    # no speakers -> a genuine silent visual keeps its (possibly empty) cast
+    assert _ensure_speakers_in_frame([], []) == []
+    assert _ensure_speakers_in_frame(["Anna"], []) == ["Anna"]
 
 
 def test_two_hander_faces_each_other():
