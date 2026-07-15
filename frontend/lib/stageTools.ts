@@ -18,7 +18,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
-  Timer,
   Type,
   Upload,
   UserRound,
@@ -29,12 +28,13 @@ import {
 import type { StageKey } from "@/hooks/useLiveRun";
 
 /** ── the crew workflow topology ──────────────────────────────────────────
- * The FIXED set of tools each stage orchestrates, in the ORDER the backend
- * actually runs them (app/websocket/tool_events.py call sites). Idle nodes
- * render faint from this list before any event arrives; live `tools` state
- * from useLiveRunStore overlays running/done/failed per node. A tool the
- * backend emits that isn't listed here still renders (appended dynamically),
- * so the graph can never hide real machinery.
+ * The FIXED set of tools each stage orchestrates. Required (auto) nodes come
+ * FIRST, in run order; conditional/on-demand nodes sit at the BACK (they fire
+ * only when their trigger holds, so an idle one is healthy). Idle nodes render
+ * faint from this list before any event arrives; live `tools` state from
+ * useLiveRunStore overlays running/done/failed per node. A tool the backend
+ * emits that isn't listed here still renders (appended dynamically), so the
+ * graph can never hide real machinery.
  */
 export interface ToolSpec {
   key: string;
@@ -91,6 +91,7 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
   characters: [
     { key: "extract_cast", icon: Users, kind: "llm" },
     { key: "write_cast_db", icon: Database, kind: "db" },
+    { key: "generate_plates", icon: Image, kind: "media" },
     {
       key: "map_relationships", icon: Share2, kind: "llm",
       run: "conditional",
@@ -101,7 +102,6 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
       run: "conditional",
       trigger: "runs by itself inside Generate Plates for any character still missing a look; Generate Appearance (no photo) on a character card re-runs it for one character",
     },
-    { key: "generate_plates", icon: Image, kind: "media" },
     {
       key: "face_lock", icon: ScanFace, kind: "validator",
       run: "conditional",
@@ -119,7 +119,6 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
   // broken — when it does run, the graph appends it dynamically with its
   // artifact, so the Producer still shows up the moment money gets fitted.
   generate: [
-    { key: "fit_durations", icon: Timer, kind: "service" },
     { key: "prompt_craft", icon: Wand2, kind: "llm" },
     { key: "dispatch_video", icon: Film, kind: "media" },
     { key: "verify_face", icon: ShieldCheck, kind: "validator" },
@@ -137,6 +136,8 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
   ],
   export: [
     { key: "stitch_clips", icon: Film, kind: "media" },
+    { key: "render_mp4", icon: Upload, kind: "media" },
+    { key: "write_export_db", icon: Database, kind: "db" },
     {
       key: "burn_captions", icon: Type, kind: "media",
       run: "conditional",
@@ -147,8 +148,6 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
       run: "conditional",
       trigger: "when there are voices or music to mix under the picture",
     },
-    { key: "render_mp4", icon: Upload, kind: "media" },
-    { key: "write_export_db", icon: Database, kind: "db" },
   ],
 };
 
