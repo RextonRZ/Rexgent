@@ -36,6 +36,10 @@ def char_plate_negative(*texts) -> str:
 CHAR_PLATE_NEGATIVE = (
     "two people, second person, multiple people, another person, crowd, background people, "
     "different person, different face, altered facial features, distorted face, deformed, "
+    # a plate is an identity + wardrobe reference, not a performance: a strong
+    # expression on it bleeds into every shot that references the plate.
+    "crying, tears, teary eyes, angry, frowning, scowling, grimacing, laughing, shouting, "
+    "exaggerated expression, emotional expression, "
     "full body, wide shot, room interior, doorway, scene, busy background, cluttered, text, watermark"
 )
 
