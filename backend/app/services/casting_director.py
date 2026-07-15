@@ -10,7 +10,7 @@ from app.models.style_preset import StylePreset
 from app.services.wardrobe_planner import WardrobePlanner
 from app.services.plate_generator import (PlateGenerator, character_plate_prompt,
                                           subject_descriptor, CHAR_PLATE_NEGATIVE,
-                                          char_plate_negative)
+                                          char_plate_negative, clean_appearance)
 from app.services.prompt_loader import load_prompt
 from app.services.guardrails import strip_character_names
 from app.config import get_settings
@@ -232,8 +232,12 @@ class CastingDirector:
                 # character's default clothing so they're never rendered naked
                 outfit = resolve_outfit(v.get("outfit_description"), default_clothing.get(c.name))
                 # identity plate: waist-up, plain background, no style-tag scene drift
-                subject = subject_descriptor(c.gender, c.estimated_age,
-                                             c.physical_description or c.visual_description)
+                # physical_description sometimes carries a SCENE moment ("clutching
+                # a photo, crying, soaked"); clean it and fall back to the structural
+                # visual_description so the plate stays a static identity look.
+                subject = subject_descriptor(
+                    c.gender, c.estimated_age,
+                    clean_appearance(c.physical_description) or clean_appearance(c.visual_description))
                 prompt = character_plate_prompt(bool(c.reference_image_url), subject, outfit)
                 url, vector = await self.plates.generate_and_store_plate(
                     pid, "character", f"{c.name}_{v['label']}", prompt,

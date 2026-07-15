@@ -47,8 +47,36 @@ CHAR_PLATE_NEGATIVE = (
     # expression on it bleeds into every shot that references the plate.
     "crying, tears, teary eyes, angry, frowning, scowling, grimacing, laughing, shouting, "
     "exaggerated expression, emotional expression, "
+    # a plate must not render the character mid-scene: no props or hand-held items
+    "holding a photo, photograph, picture frame, holding an object, holding anything, phone, letter, "
+    # and no invented hair accessories (stray strings, clips, tiaras on top of the hair)
+    "hair accessory, hairpin, hair clip, tiara, headband, strings in hair, "
     "full body, wide shot, room interior, doorway, scene, busy background, cluttered, text, watermark"
 )
+
+
+# Words that mark a clause as a SCENE MOMENT (an action, a prop, an emotion or a
+# transient state) rather than the character's STATIC appearance. A plate is a
+# neutral identity + wardrobe reference, so these clauses are dropped before the
+# prompt — otherwise the model renders "clutching a photo, crying, soaked" as the
+# character's permanent look.
+_NON_APPEARANCE = _re.compile(
+    r"\b(hold(ing)?|clutch(ing)?|carry(ing)?|grasp(ing)?|grip(ping)?|"
+    r"photo|photograph|picture|frame|phone|letter|note|"
+    r"cry(ing)?|cried|tears?|teary|sob(bing)?|weep(ing)?|"
+    r"soaked?|soaking|wet|drenched|dripping|damp|"
+    r"tremb(le|ling)|shak(e|ing)|shiver(ing)?|puffy)\b", _re.I)
+
+
+def clean_appearance(text: str | None) -> str:
+    """Drop clauses that describe a scene moment (an action, a prop, an emotion or
+    a transient state) rather than static looks, so a plate never renders the
+    character mid-scene (holding a photo, crying, soaked) as their reference look."""
+    if not text:
+        return ""
+    clauses = [c.strip() for c in _re.split(r"[.;,]", text)]
+    kept = [c for c in clauses if c and not _NON_APPEARANCE.search(c)]
+    return ", ".join(kept)
 
 
 def gender_bucket(gender: str | None) -> str | None:
@@ -78,7 +106,7 @@ def subject_descriptor(gender: str | None = None, age: str | None = None,
         lead = "a person"
     if lead and age:
         lead = f"{lead} around {age}"
-    appearance = (appearance or "").strip()
+    appearance = clean_appearance(appearance)
     if len(appearance) > 220:  # keep the face from being drowned by a paragraph
         appearance = appearance[:220].rsplit(" ", 1)[0] + "…"
     if appearance:
