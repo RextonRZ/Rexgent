@@ -560,17 +560,37 @@ async def test_craft_prefix_is_treatments_only():
 
 
 @pytest.mark.asyncio
-async def test_craft_to_wan_silent_shot_sound_tail_before_duration():
+async def test_craft_to_wan_scenery_gets_ambience_and_score():
+    # a faceless scenery beat (establishing / atmosphere) carries its OWN
+    # suitable sound: rich ambience, SFX and a subtle mood-matched score —
+    # these are exactly the moments music belongs
     crafter = _spc()
     out = await crafter.craft(
         {"shot_type": "EWS", "action": "wind on an empty street",
-         "estimated_duration_seconds": 5},
+         "estimated_duration_seconds": 5, "emotional_beat": "lonely calm"},
         character_visuals={}, target_model="wan", to_wan=True)
     p = out["prompt"]
-    assert "Ambient sound and diegetic sound effects. No dialogue. No background music." in p
+    assert "atmospheric musical score" in p
+    assert "lonely calm" in p
+    assert "No dialogue" in p
     # duration is LAST; the sound tail sits just before it
     assert p.rstrip().endswith("Duration: 5 seconds.")
-    assert p.index("Ambient sound") < p.index("Duration:")
+    assert p.index("ambient sound") < p.index("Duration:")
+
+
+@pytest.mark.asyncio
+async def test_craft_to_wan_peopled_hold_keeps_music_out():
+    # a silent held beat sits BETWEEN two spoken lines — a 3s score swell
+    # mid-conversation jars against the talking clips around it
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MS", "action": "they hold the silence",
+         "estimated_duration_seconds": 3},
+        character_visuals={"ANNA": "a woman in a navy sweater"},
+        target_model="wan", to_wan=True)
+    p = out["prompt"]
+    assert "Ambient sound and diegetic sound effects. No dialogue. No background music." in p
+    assert "musical score" not in p
 
 
 @pytest.mark.asyncio

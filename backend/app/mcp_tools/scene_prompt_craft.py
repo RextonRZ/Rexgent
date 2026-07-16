@@ -281,13 +281,23 @@ class ScenePromptCraft:
                 setting_clause = f" Setting: {clause}."
 
         # (4) Wan sound formula (visual shots only): Wan makes its own diegetic
-        # SFX + ambience, but never VOICE (dialogue -> HappyHorse) and never
-        # per-clip MUSIC (one episode track owns BGM). Skipped on HappyHorse
-        # shots and any shot that carries a line.
+        # SFX + ambience, never VOICE (dialogue -> HappyHorse). Music splits by
+        # what the shot is: a faceless SCENERY beat (establishing/atmosphere)
+        # carries its own subtle mood score — that IS where music belongs — but
+        # a silent HOLD sits between two spoken lines, where a 3s score swell
+        # jars against the talking clips around it.
         wan_sound = ""
         if to_wan and not has_line:
-            wan_sound = (" Ambient sound and diegetic sound effects. "
-                         "No dialogue. No background music.")
+            if character_visuals:
+                wan_sound = (" Ambient sound and diegetic sound effects. "
+                             "No dialogue. No background music.")
+            else:
+                mood = str((shot.get("emotional_beat") if isinstance(shot, dict)
+                            else None) or "").strip()
+                score = ("a subtle atmospheric musical score matching the mood "
+                         f"({mood})" if mood else "a subtle atmospheric musical score")
+                wan_sound = (f" Rich ambient sound, diegetic sound effects and {score}. "
+                             "No dialogue, no voices.")
 
         # Front matter: the ONE controls statement lives in the model body; here
         # we prepend only the mode TYPE TAG (Wan keys off "Single speaker," /
