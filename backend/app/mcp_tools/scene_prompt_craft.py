@@ -71,6 +71,14 @@ class ScenePromptCraft:
         if prev_action:
             continuity_parts.append(
                 f"Previous shot (already shown — do NOT replay this): {prev_action}")
+            # each clip renders independently and no frame is chained, so the
+            # OPENING pose must be stated or she teleports from sitting to
+            # mid-stride between cuts
+            continuity_parts.append(
+                "OPENING STATE: this shot begins exactly where the previous "
+                "shot ended — same positions and postures (someone seated is "
+                "STILL seated at frame one). Any change of pose or position "
+                "happens ON CAMERA during this shot, never before it.")
         if next_action:
             continuity_parts.append(
                 f"Next shot (end this shot where that begins): {next_action}")
