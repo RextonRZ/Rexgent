@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useGenerationStore } from "@/stores/generationStore";
 import { useStoryboard, type SceneShots } from "@/hooks/useStoryboard";
 import { useLatestJobClips } from "@/hooks/useClips";
@@ -54,6 +54,12 @@ interface SceneBlock {
 
 export function GenerationQueue({ projectId }: { projectId: string }) {
   const live = useGenerationStore((s) => s.clips);
+  const reset = useGenerationStore((s) => s.reset);
+  // the live-progress store is GLOBAL and keyed by shot id only — switching
+  // dramas kept the previous drama's clips on screen until a hard refresh
+  useEffect(() => {
+    reset();
+  }, [projectId, reset]);
   const { data: storyboard } = useStoryboard(projectId);
   const { data: persisted } = useLatestJobClips(projectId);
   const { data: latestJob } = useLatestJobLive(projectId);
@@ -258,12 +264,6 @@ const renderTile = (shot: Shot) => {
 
   return (
     <div className="space-y-6">
-      <p className="text-[11px] text-muted-foreground">
-        Previews play muted: raw takes carry the video model&apos;s own
-        placeholder sound, sometimes fake chatter in another language. It is
-        replaced at export, where your cast&apos;s real voices and captions go
-        on. Unmute a tile only to check ambience.
-      </p>
       {rows.map((row, i) =>
         row.length > 1 ? (
           <div key={`row-${i}`} className="grid gap-6 md:grid-cols-2 items-start">

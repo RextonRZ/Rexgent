@@ -46,8 +46,13 @@ def _default_subjects(names) -> list[dict]:
     if not names:
         return []
     if len(names) == 1:
+        # eyeline is OFF-camera by default: a solo subject staring into the
+        # lens breaks the fourth wall (she looked at the screen instead of at
+        # the artifact she was speaking to)
         return [{"character": names[0], "frame_position": "MG", "screen_side": "center",
-                 "facing": "camera", "eyeline": "camera", "posture": "standing"}]
+                 "facing": "camera",
+                 "eyeline": "just off-camera, on what the action focuses on",
+                 "posture": "standing"}]
     sides = ["left", "right", "center"]
     facings = {"left": "right", "right": "left", "center": "camera"}
     out = []

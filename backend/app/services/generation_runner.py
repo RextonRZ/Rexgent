@@ -833,7 +833,16 @@ class GenerationRunner:
         if (prev_last_frame_url
                 and getattr(get_settings(), "frame_handoff", False)
                 and getattr(self, "frame_reader", None)):
+            tool_event(pid, "generate", "frame_handoff", "started", agent="Continuity",
+                       index=job.completed_shots + 1, total=job.total_shots)
             prev_frame_report = await self.frame_reader.describe(prev_last_frame_url)
+            tool_event(pid, "generate", "frame_handoff",
+                       "succeeded" if prev_frame_report else "failed",
+                       agent="Continuity",
+                       artifact=(f"read the previous frame: "
+                                 f"{prev_frame_report[:60]}…" if prev_frame_report
+                                 else None),
+                       error=None if prev_frame_report else "frame unreadable, board text used")
         # Compute newcomers for EVERY tier, not just wan: under the v2 flag the
         # role block below runs for every shot, so a face-locked newcomer
         # entering on a non-wan shot must still be detected as an entrance.

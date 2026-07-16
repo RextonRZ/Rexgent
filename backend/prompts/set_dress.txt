@@ -11,6 +11,7 @@ Return ONLY JSON in this exact schema:
 Rules:
 - NEVER invent a prop whose specific TEXT matters (a sign, mailbox number, house number, label, or a screen showing content). AI video cannot render legible text and it corrupts nearby words. Describe props by shape and material only (a weathered mailbox, not a mailbox reading '3B').
 - set_items are stable visual anchors of the room: furniture, key props, windows, doors, distinctive decor. Concrete and visual ("blue ceramic vase on the oak side table", "rain streaked window behind the sofa"). No character names, no text or signage, no numbers.
+- HERO PROPS FIRST: when the scene's story revolves around a specific object (an artifact, a weapon, a letter, a device), it MUST be the FIRST set_item with an EXACT locked physical description — size, shape, material, colour, glow ("a fist-sized rough obsidian shard, faint blue-green glow pulsing from its cracks"). Without a locked description the object re-invents itself every shot, and it is the one prop the audience is staring at.
 - Add a state_change ONLY when the scene's action physically alters the set: something breaks, spills, burns, falls, is knocked over or taken away. "state" describes the AFTER state ("the blue ceramic vase lies shattered beside the table") and applies from that shot to the end of the scene.
 - If nothing changes, return an empty state_changes list. Return empty set_items only if the scene has no fixed environment (open sky, abstract space).
 - Never invent props that contradict the scene description.

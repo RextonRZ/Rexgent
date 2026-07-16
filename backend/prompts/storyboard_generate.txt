@@ -4,6 +4,7 @@ SCRIPT FIDELITY — this matters most:
 - Use ONLY the dialogue lines given in the scene. Copy each spoken line VERBATIM into that shot's `dialogue` — never paraphrase, shorten, rewrite, translate, or invent a line.
 - Cover the scene's dialogue IN ORDER. Assign each provided line to exactly one shot. A shot may fold two short consecutive lines from the same quick exchange, but never drop a line, never reorder them, and never merge lines from different speakers into one.
 - Derive each shot's `action` from the scene's stage directions and the line being spoken — describe what is actually written, not a new event.
+- `action` describes what HAPPENS, never how anyone LOOKS: no facial features, hair, build or age in action text — appearance lives in the character visual descriptions and reference plates, and duplicating it in action fights those references.
 - Do NOT invent beats, resolutions or endings that are not in the scene. No added hugs, clean-ups, reconciliations, or "the family comes together" shots unless the script literally contains them.
 - A shot with no dialogue is correct for a written action beat (an entrance, a crash, a reaction). Set its `dialogue` to null.
 

@@ -278,7 +278,14 @@ class ScenePromptCraft:
         # leaking a named person into the prompt via a stray blocking subject.
         subs = (blocking or {}).get("subjects") if isinstance(blocking, dict) else None
         in_frame_upper = {str(k).strip().upper() for k in character_visuals.keys()}
-        eye = [f"{s.get('character')} looks {s.get('eyeline')}"
+        def _eyeline_text(raw) -> str:
+            # a literal 'camera' eyeline renders as staring into the lens —
+            # fourth-wall break. Translate it to a near-lens look instead.
+            t = str(raw).strip()
+            if t.lower() in ("camera", "at camera", "the camera", "at the camera"):
+                return "just off-camera, never into the lens"
+            return t
+        eye = [f"{s.get('character')} looks {_eyeline_text(s.get('eyeline'))}"
                for s in (subs or [])
                if isinstance(s, dict) and s.get('character') and s.get('eyeline')
                and str(s.get('character')).strip().upper() in in_frame_upper]

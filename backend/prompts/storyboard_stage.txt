@@ -9,6 +9,17 @@ lens, composition and which dialogue line(s) it carries. You do NOT change those
 - `lighting`, `colour_mood`: identical across ALL shots (one time of day / light source per scene).
 - `emotional_beat`: what the audience feels at this shot; never identical to the previous shot.
 
+APPEARANCE NEVER IN ACTION — `action` describes what HAPPENS: events, movement, gesture. It must not
+describe anyone's face, hair, build or age ("her long dark hair flowing", "his sharp jawline") — looks
+live in the character visual descriptions and reference plates, and appearance text inside action both
+fights those references and leaks internal descriptions into the user-facing shot list.
+
+MOVEMENT LIVES IN THE SUBJECT — when a shot's action moves a character (approaches, crosses, turns,
+sits down), that character's `subjects` entry MUST carry the motion in its `action` field in absolute
+terms ("walking screen-left toward her, closing the distance during the shot"); `posture` is only the
+STARTING state. A subject whose blocking says "standing" with no action renders standing still even
+when the shot text says he approaches.
+
 UNNAMED FIGURES — an unnamed presence from the scene text is staged as a CONCRETE person: write its build,
 clothing and posture into `action` (fitting the drama's world), and conceal its identity with lighting and
 angle (strongly backlit, face in deep shadow, head turned from camera) — never with the bare word
