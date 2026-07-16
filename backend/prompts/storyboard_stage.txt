@@ -9,6 +9,11 @@ lens, composition and which dialogue line(s) it carries. You do NOT change those
 - `lighting`, `colour_mood`: identical across ALL shots (one time of day / light source per scene).
 - `emotional_beat`: what the audience feels at this shot; never identical to the previous shot.
 
+UNNAMED FIGURES — an unnamed presence from the scene text is staged as a CONCRETE person: write its build,
+clothing and posture into `action` (fitting the drama's world), and conceal its identity with lighting and
+angle (strongly backlit, face in deep shadow, head turned from camera) — never with the bare word
+"silhouette", which renders as a random invented person. It is never listed in `characters_in_frame`.
+
 STATE THREAD — the shots render as one continuous sequence: write each shot's `action` to OPEN in the
 previous shot's end state (same positions, postures, held objects, door/prop states) and to end where the
 next shot picks up. When the plan's action_beat changes a state, write the transition itself ("rises and

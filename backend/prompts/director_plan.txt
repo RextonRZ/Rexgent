@@ -41,6 +41,10 @@ RULES:
   and it is SEEN before any shot depends on it (the monitors are discovered before anyone reacts to them).
 - ARRIVALS ARE SHOWN: a character not present at the top of the scene gets an arrival beat (the door, the
   threshold, stepping into frame) before they speak.
+- UNNAMED FIGURES ARE REAL PEOPLE ON CAMERA: an unnamed one-time presence (the doorway figure) is planned
+  as a concrete person — readable build, clothing and posture that fit the drama's world — whose IDENTITY
+  is hidden by the cinematography you plan (backlit from the doorway, face in deep shadow or turned away,
+  no clear frontal view), never by leaving them undescribed as a bare "silhouette".
 - EMOTIONS STEP, NEVER LEAP: consecutive emotional states move one notch at a time (confusion ->
   understanding -> shock), carried by visible reactions (a hesitation, a look away, a silence) — never an
   instant jump to tears.
