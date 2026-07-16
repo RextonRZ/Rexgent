@@ -123,6 +123,7 @@ export function TokenDashboard({ projectId }: { projectId: string }) {
               [
                 ["video", "bg-violet-400", (q: number) => `${Math.round(q)}s`],
                 ["image", "bg-indigo-300", (q: number) => `${Math.round(q)} img`],
+                ["tts", "bg-sky-300", (q: number) => `${fmtTokens(q)} ch`],
               ] as const
             ).flatMap(([cat, dot, fmt]) =>
               Object.entries(ledger.media_models?.[cat] ?? {})

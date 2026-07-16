@@ -29,6 +29,7 @@ const CATEGORIES = [
   { key: "llm", label: "LLM", unit: "" },
   { key: "image", label: "Image", unit: "img" },
   { key: "video", label: "Video", unit: "s" },
+  { key: "tts", label: "Voice", unit: "ch" },
 ];
 
 function fmtQty(q: number, unit: string): string {
@@ -37,6 +38,7 @@ function fmtQty(q: number, unit: string): string {
 }
 const STAGES = [
   { key: "casting", label: "Casting" },
+  { key: "audio", label: "Audio" },
   { key: "generation", label: "Generation" },
   { key: "export", label: "Export" },
 ];
@@ -51,6 +53,7 @@ function eventToStage(e: string): string | null {
   if (e.startsWith("casting.")) return "casting";
   if (e.startsWith("generation.")) return "generation";
   if (e.startsWith("export.") || e.startsWith("audio.mix.")) return "export";
+  if (e.startsWith("audio.")) return "audio";
   return null;
 }
 function eventToStatus(e: string): StageStatus | null {

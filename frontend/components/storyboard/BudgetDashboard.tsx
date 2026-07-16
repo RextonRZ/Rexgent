@@ -123,6 +123,7 @@ export function BudgetDashboard({
       <div className="grid grid-cols-3 gap-3 text-sm">
         <Stat label="Video" value={`$${videoCost.toFixed(2)}`} />
         <Stat label="Images (plates)" value={`$${(budget.image_cost_usd ?? 0).toFixed(2)}`} />
+        <Stat label="Voice" value={`$${(budget.tts_cost_usd ?? 0).toFixed(2)}`} />
         <Stat label="Shots" value={`${budget.total_shots}`} />
         <Stat label="Seconds" value={`${budget.total_estimated_seconds}s`} />
         <Stat label="Deferred" value={`${budget.deferred_shots ?? 0}`} />

@@ -89,14 +89,16 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
         result["llm_by_model"] = ledger_llm.get("by_model", {})
     else:
         llm = global_usage().snapshot()
-    # Plates (image) are already-spent ledger costs — the projection must
-    # include them or the total understates the drama.
+    # Plates (image) and voice (tts) are already-spent ledger costs — the
+    # projection must include them or the total understates the drama.
     image_usd = round(agg["by_category"].get("image", 0.0), 4)
+    tts_usd = round(agg["by_category"].get("tts", 0.0), 4)
     video_cost = result["video_cost_usd"]
-    grand_total = round(video_cost + llm["cost_usd"] + image_usd, 2)
+    grand_total = round(video_cost + llm["cost_usd"] + image_usd + tts_usd, 2)
     result["llm"] = llm
     result["llm_cost_usd"] = llm["cost_usd"]
     result["image_cost_usd"] = image_usd
+    result["tts_cost_usd"] = tts_usd
     result["grand_total_cost"] = grand_total
     result["within_budget"] = grand_total <= budget
 
