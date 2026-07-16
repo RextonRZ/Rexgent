@@ -196,8 +196,11 @@ export function SceneGraph({
                         </span>
                       )}
                     </span>
-                    <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
-                      {shot.estimated_duration_seconds}s
+                    <span
+                      className="ml-auto shrink-0 tabular-nums text-muted-foreground"
+                      title="Estimated planning duration. The rendered clip can differ."
+                    >
+                      est. {shot.estimated_duration_seconds}s
                     </span>
                   </div>
 

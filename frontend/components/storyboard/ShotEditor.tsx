@@ -56,7 +56,7 @@ export function ShotEditor({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>Duration (s)</Label>
+            <Label>Estimated duration (s)</Label>
             <Input
               type="number"
               min={1}

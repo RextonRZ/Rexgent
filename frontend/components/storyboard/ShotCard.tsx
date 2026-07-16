@@ -203,7 +203,11 @@ export function ShotCard({ shot }: { shot: Shot }) {
         {/* one quiet metadata row — lighting + colour_mood are scene-wide, so
             they live once on the SceneSection header, not on every shot */}
         <div className="flex items-center gap-3 pt-1 pb-1 text-[11px] text-muted-foreground flex-wrap">
-          <Meta icon={Clock}>{shot.estimated_duration_seconds}s</Meta>
+          <Meta icon={Clock}>
+            <span title="Estimated planning duration. The rendered clip can differ.">
+              est. {shot.estimated_duration_seconds}s
+            </span>
+          </Meta>
           {shot.characters_in_frame && shot.characters_in_frame.length > 0 && (
             <Meta icon={Users}>{shot.characters_in_frame.join(", ")}</Meta>
           )}
