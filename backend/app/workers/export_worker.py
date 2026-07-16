@@ -83,6 +83,16 @@ def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers,
     return stale | missing
 
 
+def overlay_enabled(voice: str | None) -> bool:
+    """Whether THIS export runs the TTS overlay (muted clips + designed/cloned
+    voices on the lips). The flag gates the capability; the per-export `voice`
+    choice picks the track: "original" keeps the clips' own native audio even
+    with the flag on, anything else follows the flag."""
+    if not getattr(get_settings(), "tts_overlay", False):
+        return False
+    return (voice or "").strip().lower() != "original"
+
+
 def _ensure_voice_lines(db, project_id: str) -> None:
     """Make the dialogue audio match casting before the mix.
     - No lines at all (manual Generate never synthesizes) -> synthesize everything.
@@ -179,7 +189,10 @@ def assign_episodes(cut_entries: list, episode_by_scene: dict) -> list[int]:
 
 @celery_app.task(bind=True, name="run_export")
 def run_export(self, project_id: str, job_id: str, clips: list | None = None,
-               audio: dict | None = None):
+               audio: dict | None = None, voice: str | None = None):
+    # one decision for the whole export: overlay (muted clips + TTS voices)
+    # vs original (the clips' own native audio) — the user picks per export
+    use_overlay = overlay_enabled(voice)
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
@@ -314,7 +327,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 resp.raise_for_status()
                 with open(local, "wb") as fh:
                     fh.write(resp.content)
-                if getattr(get_settings(), "tts_overlay", False):
+                if use_overlay:
                     # TTS overlay: the clip's own audio is fully MUTED — the
                     # synthesized voice layer replaces it (the user's design:
                     # video mute, TTS on top)
@@ -334,8 +347,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 else:  # probe failed — fall back to the storyboard estimate
                     eff = duration_by_clip.get(str(seg["clip"].id), 5) if seg["clip"] else 5
                 onset, mouth = None, None
-                if (getattr(get_settings(), "tts_overlay", False)
-                        and meta and meta["dialogue"]):
+                if use_overlay and meta and meta["dialogue"]:
                     # overlay: measure where the on-screen mouth actually
                     # speaks (fun-asr) so the TTS line lands ON the lips and
                     # paces itself to them — best-effort, line places at the
@@ -422,7 +434,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         # can only land in the cut that contains its scene). Native mode keeps
         # line_rows empty and the clips' own audio plays. ──
         line_rows: list = []
-        if getattr(get_settings(), "tts_overlay", False):
+        if use_overlay:
             try:
                 from app.websocket.tool_events import tool_event
                 tool_event(project_id, "export", "synth_voices", "started", agent="Audio Mixer")

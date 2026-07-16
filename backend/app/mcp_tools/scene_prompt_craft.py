@@ -1,8 +1,18 @@
 import json
+import re
 from app.services.qwen_client import QwenClient
 from app.services.prompt_loader import load_prompt
 from app.services.guardrails import PromptSanitizer, strip_character_names
 from app.config import get_settings
+
+# Identity-pin vocabularies (rule 22): what a character wears on the face and
+# hair must be stated in EVERY shot's prompt, or the render coin-flips it.
+_EYEWEAR_RE = re.compile(r"glasses|spectacles|eyewear|sunglasses", re.I)
+_ACCESSORY_RE = re.compile(
+    r"headband|hairpin|hair\s*clip|hair\s*bow|bow\s+headband|ribbon|tiara|"
+    r"hair accessor", re.I)
+_FACIAL_HAIR_RE = re.compile(
+    r"clean-shaven|beard|moustache|mustache|stubble|goatee|facial hair", re.I)
 
 
 class ScenePromptCraft:
@@ -362,6 +372,65 @@ class ScenePromptCraft:
                 wan_sound = (f" Rich ambient sound, diegetic sound effects and {score}. "
                              "No dialogue, no voices.")
 
+        # (5) Identity lock (deterministic): the LLM body sometimes paraphrases
+        # a character's description and DROPS the identity pins ("no eyewear",
+        # "clean-shaven") — the render then follows the reference plate or a
+        # trope instead, and glasses/headbands flicker in and out between
+        # shots. Re-state per character whatever the body dropped; whatever
+        # nobody wears is banned in the negative below.
+        def _pin_segments(text: str) -> list[str]:
+            segs = [t.strip() for t in _re.split(r"[,;.]", text) if t.strip()]
+            pins: list[str] = []
+            hair = next((t for t in segs if _re.search(r"\bhair\b", t, _re.I)
+                         and not _ACCESSORY_RE.search(t)), None)
+            if hair:
+                pins.append(hair)
+            eye = next((t for t in segs if _EYEWEAR_RE.search(t)), None)
+            pins.append(eye or "no eyewear")
+            face = next((t for t in segs if _FACIAL_HAIR_RE.search(t)), None)
+            if face:
+                pins.append(face)
+            acc = next((t for t in segs if _ACCESSORY_RE.search(t)), None)
+            pins.append(acc or "no hair accessories")
+            return pins
+
+        identity_clause = ""
+        if character_visuals:
+            body_low = body.lower()
+            # a name may only ride the lock when something else in the prompt
+            # already names the character (the [Image N] legend, the speech or
+            # eyeline clauses) — a solo shot without those stays nameless
+            named_ctx = " ".join([body, image_legend or "", speech, eyelines]).upper()
+            locks = []
+            for cname, cdesc in character_visuals.items():
+                frag = (cdesc.get("video_prompt_fragment")
+                        if isinstance(cdesc, dict) else None)
+                text = str(frag or cdesc or "").strip()
+                if not text:
+                    continue
+                missing = [p for p in _pin_segments(text)
+                           if p.lower() not in body_low]
+                if not missing:
+                    continue
+                use_name = (len(character_visuals) > 1
+                            or str(cname).strip().upper() in named_ctx)
+                locks.append((f"{cname}: " if use_name else "")
+                             + ", ".join(missing))
+            if locks:
+                identity_clause = (" Identity lock (IDENTICAL in every shot of "
+                                   "this drama): " + "; ".join(locks) + ".")
+
+        # (6) Emotional register: the storyboard's beat ("confusion and hurt")
+        # kept dying between the board and the screen — faces rendered neutral.
+        # The beat is restated as an ON-FACE instruction, never left implicit.
+        emotion_clause = ""
+        beat = (str(shot.get("emotional_beat") or "").strip()
+                if isinstance(shot, dict) else "")
+        if beat and character_visuals:
+            emotion_clause = (f" Emotional register: {beat} - clearly visible in "
+                              "the cast's facial expressions and posture, never "
+                              "neutral or blank faces.")
+
         # Front matter: the ONE controls statement lives in the model body; here
         # we prepend only the mode TYPE TAG (Wan keys off "Single speaker," /
         # "Group conversation,") and the director TREATMENTS the body won't state
@@ -387,6 +456,7 @@ class ScenePromptCraft:
         dur = int(shot.get("estimated_duration_seconds", 5))
         assembled = ((front + " ") if front else "") + body.lstrip()
         assembled = (assembled.rstrip() + speech + eyelines + back_clause
+                     + identity_clause + emotion_clause
                      + setting_clause + wan_sound)
         result["prompt"] = assembled.rstrip().rstrip(",") + f" Duration: {dur} seconds."
 
@@ -414,13 +484,20 @@ class ScenePromptCraft:
                 ", turning around to face the camera, revealing the face")
         if character_visuals:
             # invented-feature bans (peopled shots): models grow beards on
-            # clean-shaven men and blemishes in close-ups. Facial hair is
-            # banned ONLY when no cast description wears any (like eyewear);
-            # skin artifacts are never a wardrobe choice, always banned.
+            # clean-shaven men, glasses and headbands on children, blemishes
+            # in close-ups. Each is banned ONLY when no cast description
+            # wears it; skin artifacts are never a wardrobe choice, always banned.
             visuals_text = " ".join(str(v) for v in character_visuals.values()).lower()
             if not _re.search(r"beard|moustache|mustache|stubble|facial hair|goatee",
                               visuals_text):
                 result["negative_prompt"] += ", beard, mustache, stubble, facial hair"
+            if not _re.search(r"\bglasses|spectacles|sunglasses", visuals_text):
+                result["negative_prompt"] += (
+                    ", eyeglasses, spectacles, glasses on face, sunglasses")
+            if not _ACCESSORY_RE.search(visuals_text):
+                result["negative_prompt"] += (
+                    ", headband, hair accessory, hairpin, hair clip, "
+                    "bow in hair, ribbon in hair")
             result["negative_prompt"] += (
                 ", acne, pimples, skin blemishes, dark spots on face")
         # Final gate (rule A5): the crafted prompt still carries typographic

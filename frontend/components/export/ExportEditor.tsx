@@ -21,6 +21,7 @@ import { useLatestJob } from "@/hooks/useGeneration";
 import { useLatestJobClips } from "@/hooks/useClips";
 import { useProject } from "@/hooks/useProjects";
 import { useStoryboard } from "@/hooks/useStoryboard";
+import { useBible } from "@/hooks/useCasting";
 import {
   useRenderExport,
   useExportDownload,
@@ -59,6 +60,10 @@ export function ExportEditor({ projectId }: { projectId: string }) {
   const download = useExportDownload(projectId);
   const uploadAudio = useUploadAudio(projectId);
   const uploadMedia = useUploadMedia(projectId);
+  const { data: bible } = useBible(projectId);
+  // per-export voice track (TTS overlay mode only): designed voices on the
+  // lips, or the clips' own original speech
+  const [voiceTrack, setVoiceTrack] = useState<"designed" | "original">("designed");
 
   // useLatestJob is enabled:false — pull it once on mount to get the job id.
   const refetchJob = latestJob.refetch;
@@ -417,6 +422,7 @@ export function ExportEditor({ projectId }: { projectId: string }) {
         audioVolume: audio.volume,
         audioFadeIn: audio.fadeIn,
         audioDuck: audio.duck,
+        voice: bible?.tts_overlay ? voiceTrack : undefined,
       });
       let landed = false;
       // keep polling for up to 15 minutes: the old 3 minute window expired
@@ -609,6 +615,36 @@ export function ExportEditor({ projectId }: { projectId: string }) {
               ? `Renders episode ${currentEp}'s ${timeline.length} clips above into its own MP4.`
               : `Renders the ${timeline.length} clips above, in this order, into one MP4.`}
           </p>
+          {Boolean(bible?.tts_overlay) && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Voice</span>
+              <div className="flex rounded-lg border hairline p-0.5">
+                {(
+                  [
+                    ["designed", "Designed voices"],
+                    ["original", "Original sound"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setVoiceTrack(key)}
+                    className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
+                      voiceTrack === key
+                        ? "bg-primary/20 text-primary"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                {voiceTrack === "designed"
+                  ? "Each character speaks in their designed or cloned voice, placed on the lips."
+                  : "Keeps each clip's own recorded speech and ambience."}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {(result?.report_json?.episodes?.length ?? 0) > 1 ? (

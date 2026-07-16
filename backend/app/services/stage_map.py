@@ -144,6 +144,7 @@ def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
         if blocking.get("reverse_angle"):
             # a deliberate reverse crosses the line: everyone re-establishes
             established = {}
+        proposed: dict[str, str] = {}
         for s in blocking["subjects"]:
             if not isinstance(s, dict):
                 continue  # defense in depth — normalize_subjects upstream
@@ -152,6 +153,7 @@ def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
                 continue
             side = s.get("screen_side")
             if side in ("left", "center", "right"):
+                proposed[name] = side
                 held = established.get(name)
                 if held and {side, held} == {"left", "right"}:
                     s["screen_side"] = held
@@ -170,4 +172,30 @@ def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
                         f"movement written, snapped back to {held_pos}")
                 else:
                     depths[name] = pos
+        # Two subjects can never share a lateral side in ONE shot (they render
+        # stacked on each other and the eyelines stop making sense). The usual
+        # cause: a side established beside one scene partner, then the pairing
+        # CHANGED and the snap dragged the character on top of the new partner.
+        # The fresh pairing wins: the snapped character re-establishes on the
+        # side this shot's board actually asked for.
+        for side in ("left", "right"):
+            group = [s for s in blocking["subjects"] if isinstance(s, dict)
+                     and s.get("screen_side") == side
+                     and str(s.get("character") or "").strip()]
+            if len(group) < 2:
+                continue
+            other = "right" if side == "left" else "left"
+            other_taken = any(isinstance(s, dict) and s.get("screen_side") == other
+                              for s in blocking["subjects"])
+            if other_taken:
+                continue
+            mover = next((s for s in group
+                          if proposed.get(str(s.get("character")).strip().upper()) == other),
+                         group[-1])
+            name = str(mover.get("character")).strip().upper()
+            mover["screen_side"] = other
+            established[name] = other
+            notes.append(
+                f"shot {i + 1}: two subjects shared screen-{side}; "
+                f"{name} re-established at screen-{other}")
     return shots_blocking, notes

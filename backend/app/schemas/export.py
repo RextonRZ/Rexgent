@@ -23,6 +23,10 @@ class ExportRequest(BaseModel):
     audio_fade_in: float = 0.0     # seconds
     audio_fade_out: float = 0.0    # seconds
     audio_duck: bool = True        # duck BGM under dialogue (sidechain compression)
+    # Voice choice for THIS export (TTS overlay mode only): "designed" mutes the
+    # clips and lays the designed/cloned voices on the lips; "original" keeps the
+    # clips' own native audio. None follows the TTS_OVERLAY flag.
+    voice: Optional[str] = None
 
 
 class ExportResult(BaseModel):

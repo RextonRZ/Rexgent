@@ -24,3 +24,18 @@ def test_cut_plan_keeps_imported_media_as_silent_time():
     assert plan[0]["scene_number"] is None
     assert plan[0]["shots"][0]["duration"] == 3.0
     assert plan[1]["scene_number"] == 1
+
+
+def test_overlay_enabled_respects_per_export_voice_choice(monkeypatch):
+    # the flag gates the capability; the per-export choice picks the track —
+    # "original" ships the clips' own native audio even with the flag on
+    from types import SimpleNamespace
+    import app.workers.export_worker as ew
+    monkeypatch.setattr(ew, "get_settings", lambda: SimpleNamespace(tts_overlay=True))
+    assert ew.overlay_enabled(None) is True
+    assert ew.overlay_enabled("designed") is True
+    assert ew.overlay_enabled("original") is False
+    assert ew.overlay_enabled("ORIGINAL") is False
+    monkeypatch.setattr(ew, "get_settings", lambda: SimpleNamespace(tts_overlay=False))
+    assert ew.overlay_enabled(None) is False
+    assert ew.overlay_enabled("designed") is False

@@ -169,3 +169,27 @@ def test_normalize_subjects_coerces_and_filters():
     assert normalize_subjects("IM SOL") is None
     assert normalize_subjects([]) is None
     assert normalize_subjects(None) is None
+
+
+def test_new_pairing_side_collision_re_establishes():
+    # the Snowy bug: THEO established screen-left beside MRS. JONES (shot 3),
+    # then paired with ANGELINE (shot 5) the storyboard put him right — the
+    # snap dragged him back left ON TOP of Angeline. Two subjects cannot share
+    # a lateral side in one shot: the fresh pairing wins and re-establishes.
+    shots = [blocking(("THEO", "left"), ("MRS. JONES", "right")),
+             blocking(("ANGELINE", "left"), ("THEO", "right")),
+             blocking(("ANGELINE", "left"), ("THEO", "right"))]
+    fixed, notes = enforce_scene_sides(shots)
+    s5 = {s["character"]: s["screen_side"] for s in fixed[1]["subjects"]}
+    s6 = {s["character"]: s["screen_side"] for s in fixed[2]["subjects"]}
+    assert s5 == {"ANGELINE": "left", "THEO": "right"}
+    assert s6 == {"ANGELINE": "left", "THEO": "right"}
+
+
+def test_storyboard_giving_both_the_same_side_still_splits():
+    # even a genuinely bad board (both subjects left) must not reach the
+    # renderer as two people on one side
+    shots = [blocking(("A", "left"), ("B", "left"))]
+    fixed, _ = enforce_scene_sides(shots)
+    sides = sorted(s["screen_side"] for s in fixed[0]["subjects"])
+    assert sides == ["left", "right"]

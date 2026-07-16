@@ -765,3 +765,70 @@ async def test_craft_native_talk_line_sits_before_duration():
     assert "Who are you?" in p
     assert p.rstrip().endswith("Duration: 5 seconds.")     # duration LAST
     assert p.index("Who are you?") < p.index("Duration:")  # speech before it
+
+
+@pytest.mark.asyncio
+async def test_identity_pins_survive_a_paraphrasing_body():
+    # the Snowy bug: the crafter LLM paraphrased Angeline and DROPPED the
+    # "no eyewear" pin — the render invented glasses and a headband. The pins
+    # must be re-stated deterministically and the unworn items banned.
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "CU, a young girl points excitedly at the fence, warm daylight",
+        "negative_prompt": "blurry", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "CU", "dialogue": "There he is!",
+              "estimated_duration_seconds": 5},
+        character_visuals={"ANGELINE": {"video_prompt_fragment":
+            "8-year-old girl, shoulder-length straight black hair center-parted "
+            "and loose, clean-shaven, no eyewear"}},
+        target_model="happyhorse", native_talk=True, speaker="ANGELINE")
+    p = result["prompt"].lower()
+    assert "no eyewear" in p
+    assert "no hair accessories" in p
+    neg = result["negative_prompt"].lower()
+    assert "eyeglasses" in neg
+    assert "headband" in neg
+
+
+@pytest.mark.asyncio
+async def test_worn_eyewear_and_accessories_are_never_banned():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "MCU, a teenage boy hesitates in the doorway",
+        "negative_prompt": "blurry", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MCU", "estimated_duration_seconds": 5},
+        character_visuals={"THEO": {"video_prompt_fragment":
+            "teenage boy wearing black rectangular glasses, short wavy hair "
+            "with a blue headband, clean-shaven"}},
+        target_model="happyhorse")
+    p = result["prompt"].lower()
+    assert "black rectangular glasses" in p     # the pin is re-stated
+    neg = result["negative_prompt"].lower()
+    assert "eyeglasses" not in neg
+    assert "headband" not in neg
+
+
+@pytest.mark.asyncio
+async def test_emotional_beat_lands_as_visible_expression():
+    # scene 2 shot 5: beat said "confusion and hurt" but the render came out
+    # neutral — the beat must reach the prompt as an on-face instruction
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "MS, a girl faces a boy near the garden fence",
+        "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "estimated_duration_seconds": 5,
+              "emotional_beat": "Confusion and hurt, with a hint of betrayal"},
+        character_visuals={"ANGELINE": {"video_prompt_fragment": "8-year-old girl"}},
+        target_model="happyhorse")
+    p = result["prompt"]
+    assert "Confusion and hurt" in p
+    assert "facial expressions" in p

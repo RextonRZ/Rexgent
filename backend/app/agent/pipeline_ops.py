@@ -417,6 +417,18 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     or getattr(get_settings(), "ensure_establishing_shot", False)):
                 from app.services.storyboard_generator import widen_faceless_framings
                 widen_faceless_framings(shots)
+            # a sentence staging a NON-cast character makes the model render
+            # them anyway ('Theo quickly stands up too' in an Angeline-only
+            # MCU produced a second person) — dropped before the Shot persists
+            # so the board display and the prompt both read sane
+            from app.services.storyboard_generator import (
+                strip_noncast_action, widen_tight_two_shots)
+            for sd in shots:
+                sd["action"] = strip_noncast_action(
+                    sd.get("action"), sd.get("characters_in_frame"), known_names)
+            # a CU/MCU cannot hold two people: tight two-shots widen to MS so
+            # the render matches the stage diagram instead of dropping a face
+            widen_tight_two_shots(shots)
             for sd in shots:
                 # clamp bounded enum columns (shot_type, camera_movement) so one
                 # over-long LLM value can't fail the whole scene's batch insert

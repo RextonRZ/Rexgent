@@ -78,7 +78,8 @@ async def render_export(request: ExportRequest, db: Session = Depends(get_db)):
     emit("stage:progress", {"stage": "export", "status": "started",
          "agent": "Editor", "label": "Queueing the final cut"},
          str(request.project_id))
-    run_export.delay(str(request.project_id), str(request.job_id), clips, audio)
+    run_export.delay(str(request.project_id), str(request.job_id), clips, audio,
+                     request.voice)
     return {"status": "rendering", "message": "Export job started"}
 
 

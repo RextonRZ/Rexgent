@@ -172,3 +172,48 @@ def test_template_stages_reveals_as_two_shots():
     assert "eyeline OFF-camera toward" in t
     # the old single-shot reveal instruction must be gone
     assert "never make the reveal a two-shot that splits attention" not in t
+
+
+def test_strip_noncast_action_drops_the_offscreen_sentence():
+    # scene 1 shot 3 cast only ANGELINE, but the action kept "Theo quickly
+    # stands up too" — the model rendered a second person from that sentence
+    from app.services.storyboard_generator import strip_noncast_action
+    action = ("Angeline, determined, wipes her tears and stands up, holding "
+              "the hutch. Theo quickly stands up too, nodding in agreement.")
+    out = strip_noncast_action(action, ["ANGELINE"], ["ANGELINE", "THEO"])
+    assert "Theo" not in out
+    assert "wipes her tears" in out
+
+
+def test_strip_noncast_action_keeps_offscreen_addressees():
+    # a cast member ADDRESSING an off-screen character is fine — only
+    # sentences that stage the non-cast person themselves are dropped
+    from app.services.storyboard_generator import strip_noncast_action
+    action = "Mrs. Jones smiles and confirms she saw Theo earlier, looking at both Angeline and Theo."
+    out = strip_noncast_action(action, ["MRS. JONES"], ["MRS. JONES", "ANGELINE", "THEO"])
+    assert out == action
+
+
+def test_strip_noncast_action_never_returns_empty():
+    from app.services.storyboard_generator import strip_noncast_action
+    action = "Theo stands in the doorway."
+    out = strip_noncast_action(action, ["ANGELINE"], ["ANGELINE", "THEO"])
+    assert out  # a fully-dropped action falls back to the original
+
+
+def test_tight_two_shot_widens_to_ms():
+    # an MCU cannot hold two people: the render showed one while the stage
+    # diagram promised both — tight framings with 2+ cast widen to MS
+    from app.services.storyboard_generator import widen_tight_two_shots
+    shots = [
+        {"shot_type": "MCU", "characters_in_frame": ["ANGELINE", "THEO"]},
+        {"shot_type": "MCU", "characters_in_frame": ["ANGELINE"]},
+        {"shot_type": "CU", "characters_in_frame": ["A", "B"]},
+        {"shot_type": "OTS", "characters_in_frame": ["A", "B"]},
+    ]
+    notes = widen_tight_two_shots(shots)
+    assert shots[0]["shot_type"] == "MS"
+    assert shots[1]["shot_type"] == "MCU"   # a single stays tight
+    assert shots[2]["shot_type"] == "MS"
+    assert shots[3]["shot_type"] == "OTS"   # OTS is BUILT for two people
+    assert len(notes) == 2

@@ -1,4 +1,5 @@
 import json
+import re
 from app.services.qwen_client import QwenClient
 from app.services.prompt_loader import load_prompt
 from app.config import get_settings
@@ -395,6 +396,54 @@ def widen_faceless_framings(shots: list[dict]) -> list[dict]:
             elif stype in _DETAIL_FRAMINGS:
                 s["shot_type"] = "INSERT"
     return shots
+
+
+_TIGHT_FRAMINGS = {"CU", "ECU", "MCU"}
+
+
+def widen_tight_two_shots(shots: list[dict]) -> list[str]:
+    """A close-up cannot hold two people: an MCU listing two cast rendered
+    only ONE of them while the stage diagram promised both. Tight framings
+    with 2+ in-frame characters widen to MS. OTS is left alone — it is BUILT
+    for two people (one of them a foreground shoulder). Mutates in place,
+    returns correction notes."""
+    notes: list[str] = []
+    for i, s in enumerate(shots or []):
+        cast = s.get("characters_in_frame") or []
+        stype = str(s.get("shot_type") or "").upper()
+        if len(cast) >= 2 and stype in _TIGHT_FRAMINGS:
+            s["shot_type"] = "MS"
+            notes.append(f"shot {i + 1}: {stype} with {len(cast)} cast widened to MS")
+    return notes
+
+
+def strip_noncast_action(action: str | None, cast: list | None,
+                         known_names: list | None) -> str:
+    """An action sentence staging a character who is NOT in the shot's cast
+    makes the model render them anyway ('Theo quickly stands up too' in an
+    Angeline-only MCU produced a second person). Sentences mentioning ONLY
+    non-cast named characters are dropped; a sentence that also names a cast
+    member stays, since addressing someone off-screen is legitimate. Never
+    returns empty: a fully-dropped action falls back to the original."""
+    text = (action or "").strip()
+    cast_up = [str(c).strip().upper() for c in (cast or []) if str(c).strip()]
+    others = [str(n).strip().upper() for n in (known_names or [])
+              if str(n).strip() and str(n).strip().upper() not in cast_up]
+    if not text or not others:
+        return text
+    def _mentions(name_up: str, sentence_up: str) -> bool:
+        return bool(re.search(r"\b" + re.escape(name_up) + r"\b", sentence_up))
+    kept = []
+    # honorific periods (Mrs. Jones) are not sentence ends — splitting there
+    # orphaned the title from the name and broke the cast match
+    splitter = re.compile(r"(?<!Mr\.)(?<!Mrs\.)(?<!Ms\.)(?<!Dr\.)(?<!Jr\.)(?<!Sr\.)(?<=[.!?])\s+")
+    for sentence in splitter.split(text):
+        up = sentence.upper()
+        if any(_mentions(o, up) for o in others) and not any(
+                _mentions(c, up) for c in cast_up):
+            continue
+        kept.append(sentence)
+    return " ".join(kept).strip() or text
 
 
 def board_over_target(boarded_seconds: int, target_length: int | None,
