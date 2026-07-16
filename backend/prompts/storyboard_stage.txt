@@ -9,6 +9,12 @@ lens, composition and which dialogue line(s) it carries. You do NOT change those
 - `lighting`, `colour_mood`: identical across ALL shots (one time of day / light source per scene).
 - `emotional_beat`: what the audience feels at this shot; never identical to the previous shot.
 
+STATE THREAD — the shots render as one continuous sequence: write each shot's `action` to OPEN in the
+previous shot's end state (same positions, postures, held objects, door/prop states) and to end where the
+next shot picks up. When the plan's action_beat changes a state, write the transition itself ("rises and
+crosses to the door"), never the result alone. Objects exist only if the scene text contains them; once
+held, an object stays in hand until the text releases it.
+
 NEVER invent plot beats, endings, or events not in the scene. NEVER paraphrase a dialogue line.
 Return ONLY a JSON array, one object per planned shot, in the given order, echoing back
 shot_number, shot_type, camera_movement, lens, composition (unchanged from the plan) plus the fields above.

@@ -18,6 +18,7 @@ Structure requirements:
 - DIALOGUE BUDGET — screen time is spoken time: one line of dialogue plays about 5 seconds on screen, and every silent action beat adds a few more. Each episode holds AT MOST {line_budget} lines of dialogue TOTAL across all of its scenes, each line under 15 words. When the story wants more, cut or merge lines instead of exceeding the budget — a short drama says less and shows more. An episode that overshoots its budget runs long and gets cut off.
 - Every character introduced must serve the plot
 - Dialogue should sound natural, not expository
+- When the story moves between locations, WRITE THE MOVE as a brief stage direction (they leave the cabin; the path through the trees; the door at the entrance) — the storyboard can only show a journey the script wrote, otherwise characters teleport between places.
 
 VERTICAL MICRO-DRAMA FORMAT — this is a phone-screen short drama fighting a scroll, not a film:
 - THE HOOK (first 3 seconds): Scene 1 must open MID-TENSION — a confrontation already underway, a dangerous act in progress, a shocking line, or a charged question. NEVER open with waking up, arriving somewhere, scenery, or characters introducing themselves. A viewer who sees only the first 3 seconds must need to know what happens next.

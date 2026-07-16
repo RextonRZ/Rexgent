@@ -220,6 +220,30 @@ class TestAtmosphere:
         assert a["dialogue"] is None
         assert "harbour" in a["action"]
 
+    def test_cutaway_never_splits_a_question_from_its_answer(self):
+        # conversation continuity: a scenery cutaway between "What happened?"
+        # and the answer breaks the exchange. Only a completed statement may
+        # precede a cutaway — never a question or a trailing, unfinished line.
+        shots = [_talk(["A", "B"], line="I found the place."),
+                 _talk(["A", "B"], line="What happened here?"),
+                 _talk(["A", "B"], line="I made a mistake..."),
+                 _talk(["A", "B"], line="Tell me everything."),
+                 _talk(["A", "B"], line="It started last winter."),
+                 _talk(["A", "B"], line="Go on.")]
+        out = insert_atmosphere(shots, 3, "a cliff", "NIGHT", "COOL")
+        for j, s in enumerate(out):
+            if not s["characters_in_frame"]:
+                prev_line = str(out[j - 1].get("dialogue") or "").rstrip()
+                assert not prev_line.endswith(("?", "...", "…"))
+
+    def test_cutaway_still_lands_after_a_completed_statement(self):
+        shots = [_talk(["A", "B"], line="I found the place."),
+                 _talk(["A", "B"], line="We should go inside."),
+                 _talk(["A", "B"], line="After you."),
+                 _talk(["A", "B"], line="Fine.")]
+        out = insert_atmosphere(shots, 1, "a cliff", "NIGHT", "COOL")
+        assert any(not s["characters_in_frame"] for s in out)
+
 
 def test_scene_with_only_peopled_or_talking_shots_needs_one():
     shots = [

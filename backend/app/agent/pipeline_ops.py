@@ -445,6 +445,35 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                  str(script.project_id))
     except Exception:  # noqa: BLE001 — detection is best-effort, never blocks
         pass
+    # continuity check (pure, no I/O): the reliably detectable breaks — a
+    # question answered by scenery, a re-staged instant, a frozen emotional
+    # beat. The fuzzy continuity rules (state threading, introduce-before-use,
+    # arrival beats) are enforced prompt-side; this catches what slipped.
+    # A WARNING only, like the extras check above.
+    try:
+        from app.services.continuity_monitor import detect_continuity_breaks
+        by_scene: dict[int, list] = {}
+        for s, scene_no in created:
+            by_scene.setdefault(scene_no, []).append(s)
+        cont_findings = []
+        for scene_no, rows in sorted(by_scene.items()):
+            rows.sort(key=lambda r: r.number or 0)
+            found = detect_continuity_breaks(
+                [{"shot_number": r.number, "action": r.action, "dialogue": r.dialogue,
+                  "characters_in_frame": r.characters_in_frame,
+                  "emotional_beat": r.emotional_beat} for r in rows])
+            for f in found:
+                f["scene_number"] = scene_no
+            cont_findings.extend(found)
+        if cont_findings:
+            import logging
+            logging.getLogger(__name__).warning(
+                "continuity breaks in storyboard: %s",
+                "; ".join(f"s{f['scene_number']}: {f['warning']}" for f in cont_findings))
+            emit("storyboard:continuity_warning", {"findings": cont_findings},
+                 str(script.project_id))
+    except Exception:  # noqa: BLE001 — detection is best-effort, never blocks
+        pass
     # over-target check: warn BEFORE render money is spent when the board runs
     # long (the 30s ask that boarded 97s — the script wrote past its budget and
     # every line must still be covered). A WARNING, never a block.

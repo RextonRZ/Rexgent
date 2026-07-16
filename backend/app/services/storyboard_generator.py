@@ -271,8 +271,17 @@ def insert_atmosphere(shots: list[dict], count: int, location,
     if count <= 0 or not out:
         return out
     empty_idx = [i for i, s in enumerate(out) if not (s.get("characters_in_frame") or [])]
+
+    def _pausable(prev: dict) -> bool:
+        # conversation continuity: a cutaway may only follow a COMPLETED
+        # statement — never split a question from its answer or a trailing,
+        # unfinished line from its continuation
+        line = str(prev.get("dialogue") or "").rstrip()
+        return not line.endswith(("?", "...", "…"))
+
     slots = [i for i, s in enumerate(out)
              if i >= 1 and str(s.get("dialogue") or "").strip()
+             and _pausable(out[i - 1])
              and all(abs(i - e) > 2 for e in empty_idx)]
     if not slots:
         return out   # nowhere safe -> skip rather than bunch scenery together

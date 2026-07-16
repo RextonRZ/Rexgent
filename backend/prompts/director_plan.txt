@@ -26,6 +26,22 @@ RULES:
   closes, a weapon raises, someone turns away.
 - NEVER invent plot: action_beat is the physical PERFORMANCE of what the scene already contains — no new
   events (no hug, punch, death, reconciliation) that the scene text does not state.
+- CONTINUITY CHAIN: every shot OPENS in the previous shot's end state — same positions, postures, held
+  objects and door/prop states. When a state must change (someone stands, crosses the room, opens a door,
+  picks something up), the change is its own beat or is written INTO the action_beat as the transition
+  ("rises from the table and crosses to the door") — a character never teleports between states.
+- SHOW THE SCRIPTED ACTIONS: every physical action the scene text states (a knock answered, a door opened,
+  an object picked up, a move to another spot) appears in some shot's action_beat BEFORE its result is
+  shown; once picked up, an object stays in hand until the text puts it down.
+- INTRODUCE BEFORE USE: no object, prop or environmental feature appears unless the scene text contains it,
+  and it is SEEN before any shot depends on it (the monitors are discovered before anyone reacts to them).
+- ARRIVALS ARE SHOWN: a character not present at the top of the scene gets an arrival beat (the door, the
+  threshold, stepping into frame) before they speak.
+- EMOTIONS STEP, NEVER LEAP: consecutive emotional states move one notch at a time (confusion ->
+  understanding -> shock), carried by visible reactions (a hesitation, a look away, a silence) — never an
+  instant jump to tears.
+- CONVERSATION FLOW: while an exchange is live, hold the two-way coverage (OTS / reverse / reaction); an
+  environment cutaway may land only at a natural pause — never between a question and its answer.
 - Match the look you are given (lighting/colour/lens bias/pace).
 - Set special_effect ONLY on non-dialogue visual shots (an establishing, insert, transition or held beat — a
   tilt-shift establishing, a time-lapse); leave it null on any shot that carries a line.
