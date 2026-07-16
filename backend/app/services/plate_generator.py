@@ -51,7 +51,9 @@ CHAR_PLATE_NEGATIVE = (
     "holding a photo, photograph, picture frame, holding an object, holding anything, phone, letter, "
     # and no invented hair accessories (stray strings, clips, tiaras on top of the hair)
     "hair accessory, hairpin, hair clip, tiara, headband, strings in hair, "
-    "full body, wide shot, room interior, doorway, scene, busy background, cluttered, text, watermark"
+    # the plate pose is FIXED: standing, facing camera — never a scene posture
+    "sitting, seated, chair, stool, bench, cross-legged, kneeling, crouching, lying down, leaning, "
+    "room interior, doorway, window, scenery background, scene, busy background, cluttered, text, watermark"
 )
 
 
@@ -65,7 +67,13 @@ _NON_APPEARANCE = _re.compile(
     r"photo|photograph|picture|frame|phone|letter|note|"
     r"cry(ing)?|cried|tears?|teary|sob(bing)?|weep(ing)?|"
     r"soaked?|soaking|wet|drenched|dripping|damp|"
-    r"tremb(le|ling)|shak(e|ing)|shiver(ing)?|puffy)\b", _re.I)
+    r"tremb(le|ling)|shak(e|ing)|shiver(ing)?|puffy|"
+    # postures and scene surroundings: 'sitting by the window, staring at the
+    # sea' leaked from wardrobe text and got rendered INTO a costume plate
+    r"sit(s|ting)?|seated|cross-legged|kneel(s|ing)?|crouch(ing)?|"
+    r"lean(s|ing)?|lying|stand(s|ing)?|"
+    r"star(e|es|ed|ing)|gaz(e|es|ed|ing)|"
+    r"window|doorway|balcony|sea|ocean|beach|shore|cliff|sunset|sunrise)\b", _re.I)
 
 
 def clean_appearance(text: str | None) -> str:
@@ -115,18 +123,25 @@ def subject_descriptor(gender: str | None = None, age: str | None = None,
 
 
 def character_plate_prompt(has_face: bool, subject: str, outfit: str = "") -> str:
-    """A costume-plate prompt tuned for identity + a single subject: a waist-up studio
-    shot (face stays large) of ONE subject on a plain backdrop. `subject` is who they
-    are (gender/age/appearance). When `outfit` is empty we KEEP the reference's own
-    clothing instead of imposing a generic outfit — so each character keeps their real
-    look (and a dog/child isn't forced into an adult t-shirt)."""
+    """A costume-plate prompt for identity + wardrobe: ONE subject in a FIXED
+    standing pose on a plain backdrop — face clearly visible, the whole outfit
+    readable from head to shoes. `subject` is who they are (gender/age/
+    appearance). When `outfit` is empty we KEEP the reference's own clothing
+    instead of imposing a generic outfit — so each character keeps their real
+    look (and a dog/child isn't forced into an adult t-shirt). The outfit text
+    is scene-cleaned: wardrobe descriptions leak postures and surroundings
+    ('sitting by the window, staring at the sea') that would get rendered into
+    the plate."""
     frame = ("Solo studio costume-reference photo of ONE subject alone, no other people, "
-             "waist-up medium shot facing forward, neutral relaxed expression (calm and "
-             "natural, mouth closed, not emoting), plain seamless neutral backdrop, "
-             "soft even lighting. Ignore any location, action or scene — plain background only. "
-             "This is an identity and wardrobe reference, not a performance — the emotion of "
-             "each shot is set later at generation time.")
-    outfit = (outfit or "").strip()
+             "standing straight facing the camera in a fixed reference pose, the whole "
+             "outfit visible from head to shoes, arms relaxed at the sides, face clearly "
+             "visible, neutral relaxed expression (calm and natural, mouth closed, not "
+             "emoting), plain seamless neutral backdrop, soft even lighting. Never "
+             "sitting, kneeling or leaning; no chair, no furniture, no scenery. Ignore "
+             "any location, action or scene — plain background only. This is an identity "
+             "and wardrobe reference, not a performance — the emotion of each shot is "
+             "set later at generation time.")
+    outfit = clean_appearance((outfit or "").strip())
     if has_face:
         anchor = ("Keep the same age and body proportions as the reference — do not make "
                   "them younger or older.")

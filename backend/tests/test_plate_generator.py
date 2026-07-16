@@ -187,6 +187,38 @@ async def test_match_vector_from_pgvector_is_a_numpy_array():
     gen.qwen.edit_image.assert_awaited_once()
 
 
+def test_costume_plate_is_full_body_standing():
+    # the plate standard: a fixed standing pose, face clearly visible, the
+    # whole costume readable down to the shoes — never a scene performance
+    from app.services.plate_generator import character_plate_prompt
+    p = character_plate_prompt(True, "a woman around 20s", "navy sweater, jeans")
+    assert "standing" in p
+    assert "head to shoes" in p
+    assert "waist-up" not in p
+
+
+def test_outfit_scene_fluff_is_cleaned_from_the_plate():
+    # the wardrobe text leaked scene context ("sitting by the window, staring
+    # at the sea") and the model rendered the pose into the costume plate
+    from app.services.plate_generator import character_plate_prompt
+    p = character_plate_prompt(
+        True, "a woman",
+        "navy sweater and slim trousers, sitting by the window, staring at the sea")
+    # the outfit clause of the prompt carries only wardrobe (the frame text
+    # legitimately says 'Never sitting...' as an instruction)
+    wearing = p.split("Wearing ", 1)[1].split(". Render")[0]
+    assert "navy sweater" in wearing
+    assert "sitting" not in wearing
+    assert "window" not in wearing
+    assert "sea" not in wearing
+
+
+def test_negative_bans_sitting_not_full_body():
+    from app.services.plate_generator import CHAR_PLATE_NEGATIVE
+    assert "sitting" in CHAR_PLATE_NEGATIVE
+    assert "full body" not in CHAR_PLATE_NEGATIVE
+
+
 def test_eyewear_banned_unless_the_character_asks_for_it():
     from app.services.plate_generator import char_plate_negative, CHAR_PLATE_NEGATIVE
     # invented glasses were getting locked into seeded identities — ban by default
