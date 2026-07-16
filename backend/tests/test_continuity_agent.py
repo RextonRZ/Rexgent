@@ -29,6 +29,28 @@ class TestExpectedFaces:
         assert expected_faces(None, None, None) == []
 
 
+class TestOutfitScoringApplies:
+    """The VL outfit check compares the frame against a costume plate — on a
+    framing that hides the outfit by design, a low score means the FRAMING,
+    not a wardrobe error (an OTS scored outfit 0.1 and dragged a good shot
+    to 40; a people-free scenery shot scored outfit 0.0)."""
+
+    def test_ots_and_closeups_skip_outfit(self):
+        from app.mcp_tools.continuity_agent import outfit_scoring_applies
+        assert outfit_scoring_applies("OTS", ["Anna"]) is False
+        assert outfit_scoring_applies("CU", ["Anna"]) is False
+        assert outfit_scoring_applies("ECU", ["Anna"]) is False
+
+    def test_body_framings_keep_outfit(self):
+        from app.mcp_tools.continuity_agent import outfit_scoring_applies
+        for st in ("MCU", "MS", "FS", "LS", "WS", "EWS", None):
+            assert outfit_scoring_applies(st, ["Anna"]) is True
+
+    def test_faceless_shots_never_score_outfit(self):
+        from app.mcp_tools.continuity_agent import outfit_scoring_applies
+        assert outfit_scoring_applies("EWS", []) is False
+
+
 class TestUnseenTolerantAverage:
     """When fewer faces are detectable than characters expected (a profile
     turned away, a face cropped by the framing), the lowest scores are hidden

@@ -61,10 +61,14 @@ def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
                           if v.get("is_default") and v.get("plate_image_url")), None))
         if plate:
             entries.append((plate, "costume" if name in fg else "character", name))
-    if prev_last_frame_url:
-        entries.append((prev_last_frame_url, "prev_frame", None))
-    if scene_anchor_url:
-        entries.append((scene_anchor_url, "scene_anchor", None))
+    # prev_frame / scene_anchor are NOT attached: those frames CONTAIN the
+    # cast in-picture, and sent as reference images beside the identity plates
+    # they render as EXTRA COPIES of the characters (two Deok-hyuns in one
+    # shot). Frame continuity belongs ONLY to Wan's typed first_frame /
+    # first_clip continuation; r2v set continuity rides on the people-free
+    # location plate + style plate + the scene's locked lighting instead.
+    # (params stay accepted so callers need no change; they are ignored here)
+    _ = (prev_last_frame_url, scene_anchor_url)
     # location plate on any framing that shows the room (or when unknown)
     include_location = ((shot_type is None or str(shot_type).upper() in ROOM_FRAMINGS)
                         and not suppress_location)

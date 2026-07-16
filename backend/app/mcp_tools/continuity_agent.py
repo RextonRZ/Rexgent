@@ -56,6 +56,20 @@ def unseen_tolerant_average(scores: list[float], visible_slots: int) -> float | 
     return round(sum(keep) / len(keep), 4)
 
 
+# framings where the OUTFIT is hidden by design: a close-up shows a face, an
+# over-the-shoulder shows a back — a low outfit score there means the framing,
+# not a wardrobe error (an OTS scored outfit 0.1 and dragged a good shot to 40)
+_OUTFIT_HIDDEN_FRAMINGS = {"CU", "ECU", "OTS"}
+
+
+def outfit_scoring_applies(shot_type, face_names) -> bool:
+    """Whether the VL outfit check is meaningful for this shot: someone must
+    be dressed in frame, on a framing that actually shows clothing."""
+    if not face_names:
+        return False
+    return str(shot_type or "").upper() not in _OUTFIT_HIDDEN_FRAMINGS
+
+
 def combine_scores(face, outfit, background) -> int:
     parts, weights = [], []
     if face is not None:
@@ -82,7 +96,7 @@ class ContinuityAgent:
         return sample_frames(clip_url, duration, count=3)
 
     async def validate(self, clip_url, duration, characters_in_frame, bible, scene_number,
-                       foreground_characters=None, subjects=None) -> dict:
+                       foreground_characters=None, subjects=None, shot_type=None) -> dict:
         frames = self._sample(clip_url, duration)
         # Only score faces the STAGING says are visible: a foreground occluder
         # (back/shoulder to camera) and an away-facing blocking subject have no
@@ -133,7 +147,11 @@ class ContinuityAgent:
             vl = await self.qwen.chat_vision_json(messages=[{"role": "user", "content": content}],
                                                   model=self.vl_model, task="continuity")
             if isinstance(vl, dict):
-                outfit = vl.get("outfit_score")
+                # outfit only counts on framings that actually show clothing —
+                # a low outfit score on an OTS/CU (or a people-free shot) means
+                # the framing, never a wardrobe error
+                if outfit_scoring_applies(shot_type, face_names):
+                    outfit = vl.get("outfit_score")
                 background = vl.get("background_score")
         score = combine_scores(face, outfit, background)
         return {"continuity_score": score, "overall_pass": score >= PASS_THRESHOLD,

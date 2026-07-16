@@ -411,7 +411,10 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     "lighting": sd.get("lighting"), "colour_mood": sd.get("colour_mood"),
                     "action": sd.get("action"), "dialogue": sd.get("dialogue"),
                     "emotional_beat": sd.get("emotional_beat"),
-                    "estimated_duration_seconds": sd.get("estimated_duration_seconds", 5),
+                    # floor 3s: the video APIs reject shorter requests, and the
+                    # Director likes planning 2s beats — those shots hard-failed
+                    "estimated_duration_seconds": max(
+                        3, int(sd.get("estimated_duration_seconds") or 5)),
                     "characters_in_frame": sd.get("characters_in_frame") or [],
                     "foreground_characters": sd.get("foreground_characters") or [],
                     "blocking_json": ({"subjects": sd.get("subjects"),

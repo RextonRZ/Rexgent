@@ -16,10 +16,10 @@ def test_one_plate_carries_face_and_scene_outfit():
         characters_in_frame=["Mia"], scene_number=2, bible=_bible(),
         prev_last_frame_url="prev", model_cap=9)
     urls = [m["url"] for m in stack]
-    # ONE plate per character: the scene-2 dress plate (face + outfit), then the
-    # continuity frame, location, style. The default uniform is NOT also sent —
-    # two plates of the same person in different outfits drifted the face.
-    assert urls == ["mia_dress", "prev", "loc2", "style"]
+    # ONE plate per character: the scene-2 dress plate (face + outfit), then
+    # location and style. The default uniform is NOT also sent — two plates of
+    # the same person in different outfits drifted the face. Frames never ride.
+    assert urls == ["mia_dress", "loc2", "style"]
     assert "mia_uniform" not in urls
 
 
@@ -38,8 +38,8 @@ def test_cap_trims_from_bottom_keeps_continuity():
         characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
         prev_last_frame_url="prev", model_cap=2)
     urls = [m["url"] for m in stack]
-    # a tight cap keeps character identity + continuity frame; location + style dropped
-    assert urls == ["mia_uniform", "prev"]
+    # a tight cap keeps character identity + the location; style dropped
+    assert urls == ["mia_uniform", "loc1"]
 
 
 def test_no_chain_entry_when_prev_none():
@@ -64,8 +64,8 @@ def test_tight_shot_drops_location_plate():
         prev_last_frame_url="prev", model_cap=9, shot_type="MCU")
     urls = [m["url"] for m in stack]
     assert "loc1" not in urls
-    # identity, outfit-continuity and the last-frame chain still anchor it
-    assert urls == ["mia_uniform", "prev", "style"]
+    # identity and style anchor it; frames never ride as references
+    assert urls == ["mia_uniform", "style"]
 
 
 def test_unknown_shot_type_keeps_location_for_backcompat():
@@ -84,7 +84,7 @@ def test_labeled_provenance_matches_media_and_carries_roles():
     assert by_url["mia_dress"]["role"] == "character"   # one plate: face + outfit
     assert by_url["mia_dress"]["character"] == "Mia"
     assert "mia_uniform" not in by_url                  # no separate identity plate
-    assert by_url["prev"]["role"] == "prev_frame"
+    assert "prev" not in by_url                         # frames never ride as refs
     assert by_url["loc2"]["role"] == "location"
     assert by_url["style"]["role"] == "style"
 
@@ -106,23 +106,19 @@ def test_labeled_cap_trims_provenance_too():
     assert len(media) == len(prov) == 2
 
 
-def test_scene_anchor_rides_after_prev_frame():
+def test_frames_never_ride_as_references():
+    # prev_frame / scene_anchor CONTAIN the cast in-picture: attached beside
+    # the identity plates they render as EXTRA COPIES of the characters (two
+    # Deok-hyuns in one shot). Frame continuity belongs ONLY to Wan's typed
+    # first_frame / first_clip continuation — never to the r2v stack.
     media, prov = build_reference_stack_labeled(
         characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
         prev_last_frame_url="prev", model_cap=9, shot_type="CU",
         scene_anchor_url="anchor")
     urls = [m["url"] for m in media]
-    # a close-up keeps the room via the anchor even though location is dropped
-    assert urls == ["mia_uniform", "prev", "anchor", "style"]
-    assert next(p for p in prov if p["url"] == "anchor")["role"] == "scene_anchor"
-
-
-def test_scene_anchor_dedupes_against_prev_frame():
-    # second shot of the scene: the anchor IS the previous frame — no duplicate
-    media, _ = build_reference_stack_labeled(
-        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
-        prev_last_frame_url="frame1", model_cap=9, scene_anchor_url="frame1")
-    assert [m["url"] for m in media].count("frame1") == 1
+    assert "prev" not in urls
+    assert "anchor" not in urls
+    assert all(p["role"] not in ("prev_frame", "scene_anchor") for p in prov)
 
 
 def test_state_change_suppresses_location_plate():

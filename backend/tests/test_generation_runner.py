@@ -125,8 +125,9 @@ async def test_clip_records_reference_provenance_and_seed(monkeypatch):
     await runner._process_shot(job, make_shot(), {"Yuki": make_char()}, BIBLE, 1, "prevframe")
     added = runner.db.add.call_args[0][0]
     roles = {p["role"] for p in added.references_json}
-    # CU shot: ONE character plate (face + outfit) + last-frame chain + style; NO location
-    assert roles == {"character", "prev_frame", "style"}
+    # CU shot: ONE character plate (face + outfit) + style; NO location, and
+    # NO frames (peopled frames render as extra copies of the cast)
+    assert roles == {"character", "style"}
     ident = next(p for p in added.references_json if p["role"] == "character")
     assert ident["character"] == "Yuki"
     # deterministic seed, stored AND sent to the video model
@@ -166,7 +167,10 @@ async def test_scene_anchor_and_setting_flow_into_shot(monkeypatch):
                                scene_setting=setting)
     added = runner.db.add.call_args[0][0]
     roles = {p["role"] for p in added.references_json}
-    assert "scene_anchor" in roles
+    # peopled frames never ride as references (they render as extra copies of
+    # the cast) — the anchor is accepted but must not reach the stack
+    assert "scene_anchor" not in roles
+    assert "prev_frame" not in roles
     # the crafted prompt received the scene setting (rule 13 injection)
     craft_kwargs = runner.prompt_crafter.craft.await_args.kwargs
     assert craft_kwargs["scene_setting"] == setting
@@ -426,6 +430,18 @@ async def test_v2_continue_hold_short_request_seeds_from_frame(monkeypatch):
         prev_clip_seconds=5)
     media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
     assert media == [{"type": "first_frame", "url": "prev.png"}]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_floors_two_second_shots_to_three(monkeypatch):
+    # the Director plans 2s beats; the video APIs reject them (both 2s shots
+    # of a run hard-failed while every 3s+ shot rendered)
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_happyhorse = AsyncMock(return_value="task-hh")
+    await runner._dispatch_by_role(
+        role="anchor", prompt="p", duration=2, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor=None, prev_clip_url=None)
+    assert runner.qwen.generate_video_happyhorse.await_args.kwargs["duration"] == 3
 
 
 @pytest.mark.asyncio
