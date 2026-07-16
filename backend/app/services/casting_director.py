@@ -24,13 +24,92 @@ def _key(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", (name or "").strip().lower()).strip("_")
 
 
+# View/position qualifiers the structurer prepends to a place name. Longest
+# first so "in front of" wins over "front of", "outside of" over "outside".
+_VIEW_QUALIFIERS = (
+    "in front of", "entrance to", "entrance of", "interior of", "exterior of",
+    "outside of", "inside of", "front of", "back of", "next to",
+    "outside", "inside", "behind", "beside", "near",
+)
+
+
+def location_family(name: str) -> str:
+    """One PLACE, one plate: collapse view/position qualifiers and articles so
+    'Front of Anna's Cabin', 'inside the cabin' and 'Anna's Cabin' key the
+    same family. Two independently painted images of one place never look
+    like the same place — grouping them is the only reliable consistency."""
+    low = re.sub(r"\s+", " ", str(name or "").strip().lower())
+    while True:
+        trimmed = re.sub(r"^(?:the|a|an)\s+", "", low)
+        for q in _VIEW_QUALIFIERS:
+            if trimmed.startswith(q + " "):
+                trimmed = trimmed[len(q):].strip()
+                break
+        if trimmed == low:
+            break
+        low = trimmed
+    return _key(low)
+
+
 def distinct_locations(scenes: list[dict]) -> list[dict]:
+    """Group scenes into location FAMILIES so one place paints exactly one
+    plate. The shortest raw name in a family (the base place, not a view of
+    it) becomes the plate's description; the first heading provides its
+    interior/exterior and time hints."""
     grouped: dict[str, dict] = {}
     for sc in scenes:
-        k = _key(sc.get("location", "")) or "unknown"
-        g = grouped.setdefault(k, {"location_key": k, "description": sc.get("location", ""), "scene_numbers": []})
+        raw = str(sc.get("location", "") or "")
+        k = location_family(raw) or "unknown"
+        g = grouped.setdefault(k, {"location_key": k, "description": raw,
+                                   "heading": sc.get("heading"),
+                                   "scene_numbers": []})
         g["scene_numbers"].append(sc.get("number"))
+        if raw and (not g["description"] or len(raw) < len(g["description"])):
+            g["description"] = raw
+        if not g.get("heading"):
+            g["heading"] = sc.get("heading")
     return list(grouped.values())
+
+
+_HEADING_TIMES = {"night", "day", "morning", "evening", "dusk", "dawn",
+                  "sunset", "sunrise", "afternoon", "noon", "midnight",
+                  "golden hour"}
+
+# a plate is the EMPTY stage the cast renders onto — a person baked into it
+# comes back in every shot of that location
+LOCATION_PLATE_NEGATIVE = "people, person, faces, figures, crowd, text, watermark"
+
+
+def _heading_hints(heading) -> tuple[str | None, str | None]:
+    """(interior/exterior, time of day) parsed from a screenplay heading like
+    'INT. ANNA'S CABIN - NIGHT'. 'LATER'/'CONTINUOUS' are not lighting."""
+    up = str(heading or "").strip().upper()
+    place = ("interior" if up.startswith("INT")
+             else "exterior" if up.startswith("EXT") else None)
+    time = None
+    if "-" in up:
+        t = up.rsplit("-", 1)[-1].strip().lower()
+        if t in _HEADING_TIMES:
+            time = t
+    return place, time
+
+
+def location_plate_prompt(desc: str, heading=None, tags=None) -> str:
+    """The location plate's image prompt. A bare '{name} background plate'
+    painted a different-looking place every run; the heading's interior/
+    exterior and time of day pin the plate to the scenes it backs, and the
+    plate is explicitly unpopulated."""
+    place, time = _heading_hints(heading)
+    bits = [str(desc or "").strip() or "interior room",
+            (f"empty {place} establishing background plate" if place
+             else "empty establishing background plate")]
+    if time:
+        bits.append(f"{time} lighting")
+    bits.append("no people, no characters in view")
+    prompt = ", ".join(bits)
+    if tags:
+        prompt += f". {', '.join(tags)}"
+    return prompt
 
 
 def style_look_clause(genre: str | None) -> str:
@@ -61,7 +140,8 @@ async def ensure_location_plates(db: Session, project_id) -> int:
         return 0
     scenes = (db.query(Scene).filter(Scene.script_id == script.id)
               .order_by(Scene.number).all())
-    scene_dicts = [{"number": s.number, "location": s.location} for s in scenes]
+    scene_dicts = [{"number": s.number, "location": s.location,
+                    "heading": s.heading} for s in scenes]
 
     existing = {p.location_key for p in db.query(LocationPlate)
                 .filter(LocationPlate.project_id == project_id).all()}
@@ -86,10 +166,10 @@ async def ensure_location_plates(db: Session, project_id) -> int:
         tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
                    index=idx, total=len(missing))
         desc = strip_character_names(loc["description"], char_names) or "interior room"
-        prompt = f"{desc} background plate"
-        if tags:
-            prompt += f". {', '.join(tags)}"
-        url, _ = await plates.generate_and_store_plate(pid, "location", loc["location_key"], prompt)
+        prompt = location_plate_prompt(desc, heading=loc.get("heading"), tags=tags)
+        url, _ = await plates.generate_and_store_plate(
+            pid, "location", loc["location_key"], prompt,
+            negative_prompt=LOCATION_PLATE_NEGATIVE)
         db.add(LocationPlate(project_id=project_id, location_key=loc["location_key"],
                              description=loc["description"], plate_image_url=url,
                              scene_numbers=loc["scene_numbers"]))
@@ -144,7 +224,8 @@ class CastingDirector:
                   .order_by(Script.created_at.desc()).first())
         scenes = self.db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
         characters = self.db.query(Character).filter(Character.project_id == project_id).all()
-        scene_dicts = [{"number": s.number, "location": s.location} for s in scenes]
+        scene_dicts = [{"number": s.number, "location": s.location,
+                        "heading": s.heading} for s in scenes]
 
         from app.services.usage_tracker import track_project
         with track_project(pid, self.db):
@@ -212,8 +293,11 @@ class CastingDirector:
             tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
                        index=idx, total=total)
             desc = strip_character_names(loc["description"], char_names) or "interior room"
-            prompt = f"{desc} background plate. {', '.join(style.get('style_tags', []))}"
-            url, _ = await self.plates.generate_and_store_plate(pid, "location", loc["location_key"], prompt)
+            prompt = location_plate_prompt(desc, heading=loc.get("heading"),
+                                           tags=style.get("style_tags", []))
+            url, _ = await self.plates.generate_and_store_plate(
+                pid, "location", loc["location_key"], prompt,
+                negative_prompt=LOCATION_PLATE_NEGATIVE)
             self.db.add(LocationPlate(project_id=project_id, location_key=loc["location_key"],
                                       description=loc["description"], plate_image_url=url,
                                       scene_numbers=loc["scene_numbers"]))

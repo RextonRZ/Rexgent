@@ -1,7 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from app.services.casting_director import (distinct_locations, style_from_request,
-                                           resolve_outfit, _strip_face_obscuring_eyewear)
+                                           resolve_outfit, _strip_face_obscuring_eyewear,
+                                           location_plate_prompt)
 
 
 def test_strips_face_obscuring_eyewear():
@@ -24,6 +25,57 @@ def test_distinct_locations_groups_by_key():
     keys = {l["location_key"]: l["scene_numbers"] for l in locs}
     assert keys["coffee_shop"] == [1, 2]
     assert keys["rooftop"] == [3]
+
+
+def test_view_qualifiers_collapse_into_one_location_family():
+    # the 'Shattered Tides' bug: "Anna's Cabin" and "Front of Anna's Cabin"
+    # keyed separately, painting two unrelated cabins for the same place
+    scenes = [{"number": 1, "location": "Anna's Cabin",
+               "heading": "INT. ANNA'S CABIN - NIGHT"},
+              {"number": 2, "location": "Front of Anna's Cabin",
+               "heading": "INT. ANNA'S CABIN - NIGHT"}]
+    locs = distinct_locations(scenes)
+    assert len(locs) == 1
+    assert locs[0]["scene_numbers"] == [1, 2]
+    assert locs[0]["description"] == "Anna's Cabin"   # the base name paints the plate
+    assert locs[0]["heading"] == "INT. ANNA'S CABIN - NIGHT"
+
+
+def test_inside_outside_of_the_same_place_share_a_plate():
+    scenes = [{"number": 1, "location": "the courtroom"},
+              {"number": 2, "location": "outside the courtroom"},
+              {"number": 3, "location": "Inside the Courtroom"}]
+    locs = distinct_locations(scenes)
+    assert len(locs) == 1
+    assert locs[0]["scene_numbers"] == [1, 2, 3]
+
+
+def test_genuinely_different_places_stay_separate():
+    scenes = [{"number": 1, "location": "beach"},
+              {"number": 2, "location": "Anna's Cabin"}]
+    assert len(distinct_locations(scenes)) == 2
+
+
+def test_location_plate_prompt_carries_scene_hints():
+    p = location_plate_prompt("Anna's Cabin",
+                              heading="INT. ANNA'S CABIN - NIGHT", tags=["moody"])
+    assert "Anna's Cabin" in p
+    assert "interior" in p
+    assert "night" in p
+    assert "no people" in p.lower()
+    assert "moody" in p
+
+
+def test_location_plate_prompt_survives_missing_heading():
+    p = location_plate_prompt("beach", heading=None, tags=[])
+    assert "beach" in p
+    assert "no people" in p.lower()
+
+
+def test_heading_time_words_like_later_are_not_lighting():
+    p = location_plate_prompt("beach", heading="EXT. BEACH - LATER", tags=[])
+    assert "exterior" in p
+    assert "later" not in p.lower()
 
 
 @pytest.mark.asyncio
@@ -91,9 +143,9 @@ async def test_ensure_location_plates_fills_only_missing(monkeypatch):
 
     script = SimpleNamespace(id=uuid.uuid4())
     scenes = [
-        SimpleNamespace(number=1, location="Coffee Shop"),
-        SimpleNamespace(number=2, location="Rooftop"),
-        SimpleNamespace(number=3, location="coffee shop"),
+        SimpleNamespace(number=1, location="Coffee Shop", heading="INT. COFFEE SHOP - DAY"),
+        SimpleNamespace(number=2, location="Rooftop", heading="EXT. ROOFTOP - NIGHT"),
+        SimpleNamespace(number=3, location="coffee shop", heading="INT. COFFEE SHOP - DAY"),
     ]
     existing = [SimpleNamespace(location_key="rooftop")]
     db = _FakeDB(script=script, scenes=scenes, plates=existing)
@@ -122,7 +174,7 @@ async def test_ensure_location_plates_noop_when_covered(monkeypatch):
     import app.services.casting_director as cd
 
     script = SimpleNamespace(id=uuid.uuid4())
-    scenes = [SimpleNamespace(number=1, location="Lab")]
+    scenes = [SimpleNamespace(number=1, location="Lab", heading="INT. LAB - NIGHT")]
     db = _FakeDB(script=script, scenes=scenes,
                  plates=[SimpleNamespace(location_key="lab")])
 
