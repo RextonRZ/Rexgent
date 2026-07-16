@@ -130,13 +130,23 @@ export function useRegenerateVariant() {
   });
 }
 
-/** Generate/regenerate ONE character's costume plates on their current face. */
+/** Generate/regenerate ONE character's costume plates on their current face.
+ *  designVoice buys a bespoke designed voice when the character has none yet
+ *  (TTS overlay mode); untick takes a free preset instead. */
 export function useGenerateCharacterPlates() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ characterId }: { characterId: string }) => {
+    mutationFn: async ({
+      characterId,
+      designVoice = true,
+    }: {
+      characterId: string;
+      designVoice?: boolean;
+    }) => {
       const { data } = await api.post(
-        `/api/casting/character/${characterId}/plates`
+        `/api/casting/character/${characterId}/plates`,
+        null,
+        { params: { design_voice: designVoice } }
       );
       return data;
     },
@@ -150,8 +160,10 @@ export function useGenerateCharacterPlates() {
 export function useRunCasting(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post(`/api/casting/${projectId}/run`);
+    mutationFn: async (opts?: { designVoice?: boolean }) => {
+      const { data } = await api.post(`/api/casting/${projectId}/run`, null, {
+        params: { design_voice: opts?.designVoice ?? true },
+      });
       return data;
     },
     onSuccess: () => {

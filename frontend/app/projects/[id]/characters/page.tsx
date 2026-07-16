@@ -76,6 +76,13 @@ export default function CharactersPage({
     return map;
   }, [bible]);
 
+  // TTS overlay mode: voices are part of the bible, so the spend dialog
+  // prices them; in native mode the clips speak for themselves
+  const voiceEnabled = Boolean(bible?.tts_overlay);
+  const voicelessCount = characters.filter(
+    (c) => !castingByCharId[c.id]?.voice_id
+  ).length;
+
   const characterById = useMemo(() => {
     const map: Record<string, { name: string; image?: string | null }> = {};
     (graph?.characters || []).forEach(
@@ -107,13 +114,33 @@ export default function CharactersPage({
                   detail: `${characters.length} character${characters.length === 1 ? "" : "s"} × 2 plates each on wan2.6-t2i and qwen-image-edit-max, at $0.075 per image`,
                   amount: characters.length * 2 * 0.075,
                 },
-                {
-                  label: "Location plates and the style frame",
-                  detail: "about 3 frames on wan2.6-t2i, at $0.075 per image",
-                  amount: 3 * 0.075,
-                },
+                // location plates and the style frame render at storyboard
+                // time now, so this run no longer charges for them
+                ...(voiceEnabled && voicelessCount === 0 && characters.length > 0
+                  ? [
+                      {
+                        label: "Voices",
+                        detail: "every character already has a voice, nothing to charge",
+                        amount: 0,
+                      },
+                    ]
+                  : []),
               ],
-              run: () => runCasting.mutate(),
+              options:
+                voiceEnabled && voicelessCount > 0
+                  ? [
+                      {
+                        key: "designVoice",
+                        label: `Designed voices for ${voicelessCount} character${voicelessCount === 1 ? "" : "s"}`,
+                        priceLine: `$${(voicelessCount * 0.2).toFixed(2)}`,
+                        note: "qwen-voice-design writes each voice from the character's age and personality, spoken by qwen3-tts-vd. Untick for free presets, and any character can still clone your own voice from the Voice panel on their card.",
+                        defaultOn: true,
+                        amount: voicelessCount * 0.2,
+                      },
+                    ]
+                  : undefined,
+              run: (choices) =>
+                runCasting.mutate({ designVoice: choices?.designVoice ?? true }),
             })
           }
           disabled={runCasting.isPending}
@@ -148,9 +175,9 @@ export default function CharactersPage({
       )}
       {runCasting.isSuccess && (
         <p className="text-xs text-muted-foreground">
-          Plate generation started — costume plates will appear on each
-          card as they finish. Review locations, style, and approve on the{" "}
-          <span className="text-primary">Generate</span> step.
+          Plate generation started. Costume plates{voiceEnabled ? " and voices" : ""} will
+          appear on each card as they finish. Review locations, style, and
+          approve on the <span className="text-primary">Generate</span> step.
         </p>
       )}
 
@@ -178,7 +205,7 @@ export default function CharactersPage({
             <CharacterList
               characters={characters}
               castingByCharId={castingByCharId}
-              voiceEnabled={Boolean(bible?.tts_overlay)}
+              voiceEnabled={voiceEnabled}
             />
           )}
         </TabsContent>

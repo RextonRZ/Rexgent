@@ -95,7 +95,8 @@ def approve_casting(project_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{project_id}/run")
-def run_casting(project_id: str, db: Session = Depends(get_db)):
+def run_casting(project_id: str, design_voice: bool = True,
+                db: Session = Depends(get_db)):
     if not db.query(Project).filter(Project.id == uuid.UUID(project_id)).first():
         raise HTTPException(status_code=404, detail="Project not found")
     # announce BEFORE dispatching: the worker takes seconds to pick the job
@@ -106,7 +107,7 @@ def run_casting(project_id: str, db: Session = Depends(get_db)):
          "agent": "Casting Director", "label": "Casting the production bible"},
          project_id)
     from app.workers.casting_worker import run_casting_job
-    run_casting_job.delay(project_id)
+    run_casting_job.delay(project_id, design_voice)
     return {"status": "started"}
 
 
@@ -285,12 +286,14 @@ async def swap_variant_outfit(variant_id: str, file: UploadFile = File(...),
 
 
 @router.post("/character/{character_id}/plates")
-async def generate_character_plates(character_id: str,
+async def generate_character_plates(character_id: str, design_voice: bool = True,
                                     db: Session = Depends(get_db)):
     """Generate (or regenerate) one character's costume plates on their CURRENT face.
     - No face set  -> text-to-image invents a face and seeds it as the identity.
     - Face set     -> plates are image-edited onto that exact face.
-    Call it again after changing the face to re-match."""
+    Call it again after changing the face to re-match. In TTS overlay mode a
+    voiceless character also gets a voice: design_voice=True buys a bespoke
+    designed one ($0.20), False takes a free preset."""
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c:
         raise HTTPException(status_code=404, detail="Character not found")
@@ -347,10 +350,13 @@ async def generate_character_plates(character_id: str,
     tool_event(project_id, "characters", "generate_plates", "succeeded",
                agent="Casting", artifact=f"{len(variants)} plates on {c.name}")
     if not c.voice_id and getattr(get_settings(), "tts_overlay", False):
-        # TTS overlay mode: the character needs a voice — a designed one when
-        # the db can ledger the $0.20, otherwise a gender-matched preset
+        # TTS overlay mode: the character needs a voice — the spend dialog's
+        # tick decides designed ($0.20, db to ledger it) vs free preset
         from app.services.casting_director import assign_voice
-        assign_voice(c, 0, db=db, project_id=str(c.project_id))
+        if design_voice:
+            assign_voice(c, 0, db=db, project_id=str(c.project_id))
+        else:
+            assign_voice(c, 0)
     db.commit()
     emit("stage:progress", {"stage": "casting", "status": "completed",
          "agent": "Casting Director",

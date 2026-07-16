@@ -245,6 +245,27 @@ def assign_voice(char, index: int = 0, db=None, project_id=None) -> None:
     char.voice_source = "preset"
 
 
+def assign_cast_voices(db, project_id, characters, design_voice: bool = True) -> int:
+    """Voices for the whole cast at bible time, TTS overlay mode only (native
+    clips speak for themselves, so nothing is assigned there). Ticked, every
+    voiceless character gets a designed voice ($0.20 each, ledgered); unticked,
+    free gender-matched presets — the untick must genuinely never spend."""
+    if not getattr(get_settings(), "tts_overlay", False):
+        return 0
+    pid = str(project_id)
+    with tool_run(pid, "characters", "voice_assign", "Casting",
+                  total=len(characters)) as t:
+        for idx, c in enumerate(characters):
+            emit("casting.voice.started", {"character": c.name}, pid)
+            if design_voice:
+                assign_voice(c, idx, db=db, project_id=pid)
+            else:  # the user unticked the paid design — free presets
+                assign_voice(c, idx)
+            emit("casting.voice.completed", {"character": c.name}, pid)
+        t["artifact"] = f"{len(characters)} voices"
+    return len(characters)
+
+
 async def ensure_location_plates(db: Session, project_id) -> int:
     """Generate background plates for scene locations that don't have one
     yet. Idempotent — existing plates are never touched — so the storyboard
@@ -374,7 +395,7 @@ class CastingDirector:
         self.plates = PlateGenerator(self.db)
         self.style_prompt = load_prompt("style_plate.txt")
 
-    async def cast_bible(self, project_id) -> dict:
+    async def cast_bible(self, project_id, design_voice: bool = True) -> dict:
         pid = str(project_id)
         emit("casting.started", {}, pid)
         script = (self.db.query(Script).filter(Script.project_id == project_id)
@@ -503,6 +524,10 @@ class CastingDirector:
         if faces_locked:
             tool_event(pid, "characters", "face_lock", "succeeded", agent="Casting",
                        artifact=f"{faces_locked} identities locked")
+
+        # TTS overlay mode gives every character a voice here; design_voice
+        # carries the spend dialog's tick (unticked = free presets)
+        assign_cast_voices(self.db, pid, characters, design_voice=design_voice)
 
         self.db.commit()
         from app.agents.reporter import report_agent

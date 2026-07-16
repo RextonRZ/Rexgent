@@ -84,8 +84,8 @@ export function AutoRunPanel({
 
   const { data: bible } = useBible(projectId);
   const hasCast = Boolean(
-    bible?.characters?.some((c) =>
-      c.variants?.some((v) => v.plate_image_url)
+    bible?.characters?.some(
+      (c) => c.voice_id || c.variants?.some((v) => v.plate_image_url)
     )
   );
 

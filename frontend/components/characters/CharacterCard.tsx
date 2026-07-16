@@ -224,8 +224,24 @@ export function CharacterCard({
                           amount: Math.max(casting?.variants.length ?? 0, 1) * 0.075,
                         },
                       ],
-                      run: () =>
-                        generatePlates.mutate({ characterId: character.id }),
+                      options:
+                        voiceEnabled && !casting?.voice_id
+                          ? [
+                              {
+                                key: "designVoice",
+                                label: "Design a bespoke voice",
+                                priceLine: "$0.20 once",
+                                note: "qwen-voice-design writes a voice from this character's age and personality. Untick to take a free preset instead, or record your own audio in the Voice panel below to clone a voice.",
+                                defaultOn: true,
+                                amount: 0.2,
+                              },
+                            ]
+                          : undefined,
+                      run: (choices) =>
+                        generatePlates.mutate({
+                          characterId: character.id,
+                          designVoice: choices?.designVoice ?? true,
+                        }),
                     })
                   }
                   title={

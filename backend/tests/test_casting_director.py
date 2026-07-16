@@ -28,6 +28,74 @@ def test_assign_voice_defaults_to_preset_without_overlay():
     assert c.voice_source == "preset"
 
 
+def _fake_settings(overlay=True):
+    from types import SimpleNamespace
+    return SimpleNamespace(tts_overlay=overlay, qwen_tts_designed_model="qwen3-tts-flash")
+
+
+def _voice_chars():
+    from types import SimpleNamespace
+    return [SimpleNamespace(name="Mia", voice_id=None, voice_model=None,
+                            voice_source=None, gender="female"),
+            SimpleNamespace(name="Rex", voice_id=None, voice_model=None,
+                            voice_source=None, gender="male")]
+
+
+def _quiet_ws(monkeypatch, cd):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_tool_run(*a, **k):
+        yield {}
+
+    monkeypatch.setattr(cd, "emit", lambda *a, **k: None)
+    monkeypatch.setattr(cd, "tool_run", fake_tool_run)
+
+
+def test_assign_cast_voices_native_mode_assigns_nothing(monkeypatch):
+    # no TTS overlay -> voices are pointless (clips speak natively): untouched
+    import app.services.casting_director as cd
+    monkeypatch.setattr(cd, "get_settings", lambda: _fake_settings(overlay=False))
+    chars = _voice_chars()
+    assert cd.assign_cast_voices(MagicMock(), "pid", chars) == 0
+    assert all(c.voice_id is None for c in chars)
+
+
+def test_assign_cast_voices_unticked_takes_free_presets(monkeypatch):
+    # the user unticked the paid design -> free presets, never the $0.20 path
+    import app.services.casting_director as cd
+    import app.config as config
+    monkeypatch.setattr(cd, "get_settings", lambda: _fake_settings())
+    monkeypatch.setattr(config, "get_settings", lambda: _fake_settings())
+    _quiet_ws(monkeypatch, cd)
+    designed = MagicMock()
+    monkeypatch.setattr(cd, "design_voice", designed)
+    chars = _voice_chars()
+    n = cd.assign_cast_voices(MagicMock(), "pid", chars, design_voice=False)
+    assert n == 2
+    designed.assert_not_called()
+    assert all(c.voice_source == "preset" and c.voice_id for c in chars)
+    assert chars[0].voice_id != chars[1].voice_id
+
+
+def test_assign_cast_voices_ticked_designs_each_voice(monkeypatch):
+    import app.services.casting_director as cd
+    import app.config as config
+    monkeypatch.setattr(cd, "get_settings", lambda: _fake_settings())
+    monkeypatch.setattr(config, "get_settings", lambda: _fake_settings())
+    _quiet_ws(monkeypatch, cd)
+
+    def fake_design(char, db=None, project_id=None):
+        char.voice_id, char.voice_source = f"designed-{char.name}", "designed"
+        return True
+
+    monkeypatch.setattr(cd, "design_voice", fake_design)
+    chars = _voice_chars()
+    n = cd.assign_cast_voices(MagicMock(), "pid", chars, design_voice=True)
+    assert n == 2
+    assert all(c.voice_source == "designed" for c in chars)
+
+
 def test_voice_design_prompt_folds_the_character_sheet():
     from types import SimpleNamespace
     from app.services.casting_director import voice_design_prompt
