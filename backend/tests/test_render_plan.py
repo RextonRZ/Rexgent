@@ -183,3 +183,29 @@ def test_wan_primary_off_is_unchanged():
                              anchor_ref_model="happyhorse", lipsync_enabled=True)
     assert off[0]["model"] == "happyhorse"   # anchor via ref-native, not the wan_primary rule
     assert off[1]["model"] == "wan"
+
+
+def test_prediction_before_plates_still_detects_the_entrance():
+    # the storyboard is reviewed BEFORE casting paints plates. An unplated cast
+    # member is still real cast — by render time casting has run and the runner
+    # locks the entrance on HappyHorse. The badge must say the same, not demote
+    # a silent two-person entrance to a Wan continuation (the s1·2 badge bug).
+    unplated = {"characters": {"A": {"variants": []}, "B": {"variants": []}}}
+    shots = [_shot(1, [], stype="EWS", dialogue=""),           # scenery opener
+             _shot(2, ["A", "B"], stype="EWS", dialogue="")]   # silent entrance
+    plan = predict_scene_plan(shots, unplated, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True,
+                              wan_primary=True)
+    assert plan[0]["model"] == "wan"
+    assert plan[1]["model"] == "happyhorse"
+
+
+def test_name_outside_the_bible_is_still_not_a_newcomer():
+    # a figure that is not cast at all (a leaked extra) can never be face-locked,
+    # so it must not turn a continuation into an entrance
+    shots = [_shot(1, ["A"], dialogue=""),
+             _shot(2, ["A", "SEAGULL"], dialogue="")]
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True,
+                              wan_primary=True)
+    assert plan[1]["model"] == "wan"

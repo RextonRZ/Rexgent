@@ -7,9 +7,13 @@ def _chars(shot):
     return [str(c) for c in (getattr(shot, "characters_in_frame", None) or [])]
 
 
-def _has_plate(bible, name):
-    return any(v.get("plate_image_url")
-               for v in (bible.get("characters", {}).get(name) or {}).get("variants", []))
+def _castable(bible, name):
+    """A real cast member the runner can face-lock. Membership in the bible is
+    the test, NOT a plate URL: plates are painted by casting AFTER boarding,
+    and by the time the shot actually renders they exist. Requiring the plate
+    here made every entrance in the review window (boarded, not yet cast) read
+    as a Wan continuation on the storyboard badge."""
+    return str(name) in (bible.get("characters") or {})
 
 
 def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
@@ -29,7 +33,7 @@ def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
         fg = {str(c) for c in (getattr(shot, "foreground_characters", None) or [])}
         has_anchor = prev is not None
         newcomer = has_anchor and any(
-            c not in _chars(prev) and c not in fg and _has_plate(bible, c)
+            c not in _chars(prev) and c not in fg and _castable(bible, c)
             for c in _chars(shot))
         chg = angle_changed(getattr(prev, "shot_type", None) if prev else None,
                             getattr(shot, "shot_type", None),
