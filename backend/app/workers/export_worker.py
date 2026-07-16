@@ -256,6 +256,33 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         ratio = (getattr(project, "video_ratio", None) or "9:16")
         stitcher = VideoStitcher()
 
+        # ── No user-chosen track (the full-auto export): pick one from the
+        # drama's mood — the same genre/beat mapping the export page's music
+        # picker suggests — so an untouched episode never ships silent-scored.
+        # Best-effort: any hiccup just exports without BGM, like before. ──
+        if not (audio and audio.get("url")):
+            try:
+                from app.services.asset_manager import AssetManager
+                from app.services.music_suggest import derive_mood
+                from app.models.script import Script, Scene
+                script = (db.query(Script).filter(Script.project_id == job.project_id)
+                          .order_by(Script.created_at.desc()).first())
+                beats = ([s.emotional_beat for s in db.query(Scene)
+                          .filter(Scene.script_id == script.id).all()
+                          if s.emotional_beat] if script else [])
+                mood = derive_mood(genre=getattr(project, "genre", None), beats=beats)
+                mgr = AssetManager()
+                mgr.scan()
+                tracks = mgr.find_music(mood=mood)
+                if tracks:
+                    url = mgr.resolve_url(tracks[0])
+                    if url:
+                        # quiet bed under the native dialogue, gentle tail-out
+                        audio = {"url": url, "volume": 0.18, "fade_out": 1.5}
+                        logger.info("Export: auto-picked %s music (%s)", mood, tracks[0].id)
+            except Exception as e:  # noqa: BLE001 — silence beats a failed export
+                logger.warning(f"Export: music auto-pick skipped: {e}")
+
         # ── User-chosen music: downloaded on its OWN so a dialogue-prep hiccup
         # can never silently drop the track the user set ──
         bgm_local = None

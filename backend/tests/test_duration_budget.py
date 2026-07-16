@@ -84,9 +84,22 @@ class TestFitSilentBeats:
 
     def test_clamps_silent_shots_when_over_target(self):
         from app.services.storyboard_generator import fit_silent_beats_to_target
-        shots = self._board()   # 28s against a 20s target
+        shots = self._board()   # 28s against a 20s target (all faceless silents)
         assert fit_silent_beats_to_target(shots, 20) is True
         assert [s["estimated_duration_seconds"] for s in shots] == [5, 3, 3, 3, 10]
+
+    def test_peopled_silent_shots_floor_at_five(self):
+        # a PEOPLED silent shot can render on HappyHorse whose clips start at
+        # 5s, and a 3s request also breaks first_clip continuation against a
+        # ~5s previous clip — only faceless scenery clamps to 3s
+        from app.services.storyboard_generator import fit_silent_beats_to_target
+        shots = [{"estimated_duration_seconds": 10, "dialogue": "Talk to me now please."},
+                 {"estimated_duration_seconds": 10, "dialogue": None,
+                  "characters_in_frame": ["Anna", "Deok"]},
+                 {"estimated_duration_seconds": 10, "dialogue": None,
+                  "characters_in_frame": []}]
+        assert fit_silent_beats_to_target(shots, 15) is True
+        assert [s["estimated_duration_seconds"] for s in shots] == [10, 5, 3]
 
     def test_noop_when_board_fits(self):
         from app.services.storyboard_generator import fit_silent_beats_to_target

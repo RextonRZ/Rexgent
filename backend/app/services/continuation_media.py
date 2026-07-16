@@ -7,13 +7,25 @@ confirmed request-shape rules so a wrong shape can't leak into dispatch:
 """
 
 
-def hold_media(*, first_clip_url=None, first_frame_url=None):
+def hold_media(*, first_clip_url=None, first_frame_url=None,
+               want_seconds=None, first_clip_seconds=None):
     """Continue-Hold media for wan2.7-i2v.
 
-    Silent continuation: first_clip if available (best motion), else first_frame.
-    Returns None when there is nothing to continue from."""
+    Silent continuation: first_clip if available (best motion), else
+    first_frame. Returns None when there is nothing to continue from.
+
+    first_clip carries a DashScope hard constraint: the REQUESTED duration
+    must exceed the seed clip's length or the task fails server-side
+    ('first_clip duration must be less than the requested duration') — a 3s
+    beat can never continue a 5s clip. When durations are supplied, first_clip
+    is used only when want_seconds > first_clip_seconds; a known-short request
+    with an unknown seed length falls back to first_frame (which has no
+    duration constraint). Legacy calls without durations keep old behavior."""
     if first_clip_url:
-        return [{"type": "first_clip", "url": first_clip_url}]
+        if want_seconds is None:
+            return [{"type": "first_clip", "url": first_clip_url}]
+        if first_clip_seconds is not None and want_seconds > first_clip_seconds:
+            return [{"type": "first_clip", "url": first_clip_url}]
     if first_frame_url:
         return [{"type": "first_frame", "url": first_frame_url}]
     return None

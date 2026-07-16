@@ -281,6 +281,9 @@ class GenerationRunner:
         db2 = SessionLocal()
         prev_last_frame = incoming_last_frame
         prev_clip = None
+        # the seed clip's length rides with its URL: first_clip continuation
+        # is only legal when the next request is LONGER than the seed
+        prev_clip_secs = None
         try:
             # A scene-local runner sharing the stateless services but bound to db2,
             # so concurrent scenes never share a SQLAlchemy Session.
@@ -348,6 +351,7 @@ class GenerationRunner:
                             # a resumed shot has no fresh clip URL to continue
                             # from — do not let a stale clip carry over
                             prev_clip = None
+                            prev_clip_secs = None
                             if (scene_anchor is None
                                     and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
                                 scene_anchor = prev_last_frame
@@ -372,7 +376,9 @@ class GenerationRunner:
                         lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines, shot_dialogue=shot.dialogue),
                         environment=environment, prev_in_frame=prev_in_frame,
                         prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
-                        prev_clip_url=prev_clip)
+                        prev_clip_url=prev_clip, prev_clip_seconds=prev_clip_secs)
+                    prev_clip_secs = (int(shot.estimated_duration_seconds or 0)
+                                      if prev_clip else None)
                     # the first wide shot's closing frame anchors the room for the
                     # rest of the scene — a run of close-ups can't erase the set
                     if (scene_anchor is None and prev_last_frame
@@ -394,7 +400,7 @@ class GenerationRunner:
                 # rendered through the exact same _process_shot call as the
                 # flag-off path above.
                 async def _render_singleton(i, shot):
-                    nonlocal prev_last_frame, prev_clip, scene_anchor
+                    nonlocal prev_last_frame, prev_clip, prev_clip_secs, scene_anchor
                     if shot.id in already_good:
                         # resume: this shot keeps its approved clip, but its stored
                         # poster IS its last frame — seed the chain with it so the
@@ -410,6 +416,7 @@ class GenerationRunner:
                             # a resumed shot has no fresh clip URL to continue
                             # from — do not let a stale clip carry over
                             prev_clip = None
+                            prev_clip_secs = None
                             if (scene_anchor is None
                                     and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
                                 scene_anchor = prev_last_frame
@@ -431,7 +438,9 @@ class GenerationRunner:
                         lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines, shot_dialogue=shot.dialogue),
                         environment=environment, prev_in_frame=prev_in_frame,
                         prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
-                        prev_clip_url=prev_clip)
+                        prev_clip_url=prev_clip, prev_clip_seconds=prev_clip_secs)
+                    prev_clip_secs = (int(shot.estimated_duration_seconds or 0)
+                                      if prev_clip else None)
                     if (scene_anchor is None and prev_last_frame
                             and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
                         scene_anchor = prev_last_frame
@@ -480,6 +489,8 @@ class GenerationRunner:
                     else:
                         prev_last_frame = new_frame
                         prev_clip = new_clip
+                        prev_clip_secs = sum(int(s.estimated_duration_seconds or 0)
+                                             for s in unit) or None
                         last_shot = unit[-1]
                         if (scene_anchor is None
                                 and str(last_shot.shot_type or "").upper() in WIDE_FRAMINGS):
@@ -547,7 +558,8 @@ class GenerationRunner:
 
     async def _dispatch_by_role(self, *, role, prompt, duration, seed, ratio,
                                 negative, ref_stack, frame_anchor, prev_clip_url,
-                                speaks=False, has_newcomers=False, has_faces=False):
+                                speaks=False, has_newcomers=False, has_faces=False,
+                                prev_clip_seconds=None, scenery_frame=None):
         """Route a shot to a model by its identity role. Never-blocking: every
         path degrades to happyhorse r2v so a model surprise can't fail the shot.
         Returns (used_tier, task_id)."""
@@ -571,7 +583,18 @@ class GenerationRunner:
                     or (role == "continue_reangle" and has_faces)
                     or (role == "anchor" and has_faces)):
                 return ("happyhorse", await _happyhorse())
-            media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor)
+            if not has_faces and scenery_frame:
+                # a people-free scenery shot must NEVER seed from the previous
+                # clip or the scene anchor — those frames CONTAIN the cast, and
+                # Wan keeps whoever is in its seed regardless of the "no people"
+                # prompt (the establishing wide rendered the couple). The
+                # location plate IS the empty stage.
+                media = hold_media(first_frame_url=scenery_frame)
+            else:
+                media = hold_media(first_clip_url=prev_clip_url,
+                                   first_frame_url=frame_anchor,
+                                   want_seconds=duration,
+                                   first_clip_seconds=prev_clip_seconds)
             try:
                 task = await self.qwen.generate_video_wan(
                     prompt=prompt, duration=duration, reference_media=media,
@@ -610,7 +633,8 @@ class GenerationRunner:
             # (which already carries the prev frame) and does multi-person
             # native-talk. Flag OFF -> old wan i2v continuation path.
             return ("happyhorse", await _happyhorse())
-        media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor)
+        media = hold_media(first_clip_url=prev_clip_url, first_frame_url=frame_anchor,
+                           want_seconds=duration, first_clip_seconds=prev_clip_seconds)
         if media:
             try:
                 task = await self.qwen.generate_video_wan(
@@ -759,7 +783,7 @@ class GenerationRunner:
                             prev_action=None, next_action=None,
                             lipsync_line=None, environment=None,
                             prev_in_frame=None, prev_shot_type=None,
-                            prev_clip_url=None):
+                            prev_clip_url=None, prev_clip_seconds=None):
         spent_usd = 0.0
         pid = str(job.project_id)
         # shots boarded before name normalization store raw variants ("Eirik"
@@ -952,7 +976,9 @@ class GenerationRunner:
                         prev_clip_url=prev_clip_url,
                         speaks=bool((shot.dialogue or "").strip()),
                         has_newcomers=bool(newcomers),
-                        has_faces=bool(in_frame))
+                        has_faces=bool(in_frame),
+                        prev_clip_seconds=prev_clip_seconds,
+                        scenery_frame=(bible.get("location_by_scene") or {}).get(scene_number))
                 elif is_wan:
                     # wan2.7-i2v does NOT take identity references — its media
                     # schema is first_frame / last_frame / first_clip only. wan's

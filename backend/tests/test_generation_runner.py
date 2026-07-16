@@ -401,13 +401,50 @@ async def test_v2_entrance_shot_adds_first_frame_to_r2v(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_v2_continue_hold_silent_uses_first_clip(monkeypatch):
+    # first_clip is legal ONLY when the request outlasts the seed clip
+    # (DashScope hard-fails otherwise) — the caller passes the seed length
     runner = _make_dispatch_runner()
     runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
     tier, task = await runner._dispatch_by_role(
-        role="continue_hold", prompt="p", duration=5, seed=1, ratio="9:16", negative=None,
-        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4")
+        role="continue_hold", prompt="p", duration=10, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4",
+        prev_clip_seconds=5)
     media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
     assert media == [{"type": "first_clip", "url": "clip.mp4"}]
+
+
+@pytest.mark.asyncio
+async def test_v2_continue_hold_short_request_seeds_from_frame(monkeypatch):
+    # the production failure: a 3s beat after a ~5s clip must NOT use
+    # first_clip ('first_clip duration must be less than the requested
+    # duration') — it seeds from the frame instead
+    runner = _make_dispatch_runner()
+    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_hold", prompt="p", duration=3, seed=1, ratio="9:16", negative=None,
+        ref_stack=None, frame_anchor="prev.png", prev_clip_url="clip.mp4",
+        prev_clip_seconds=5)
+    media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
+    assert media == [{"type": "first_frame", "url": "prev.png"}]
+
+
+@pytest.mark.asyncio
+async def test_wan_primary_faceless_shot_seeds_from_location_plate(monkeypatch):
+    # a people-free scenery shot must never seed from the prev clip or the
+    # scene anchor — those frames CONTAIN the cast, and Wan keeps whoever is
+    # in its seed (the 'establishing wide rendered the couple' bug). The
+    # location plate is the empty stage.
+    runner = _make_dispatch_runner()
+    monkeypatch.setattr(gr.get_settings(), "wan_primary", True, raising=False)
+    runner.qwen.generate_video_wan = AsyncMock(return_value="task-wan")
+    tier, task = await runner._dispatch_by_role(
+        role="continue_reangle", prompt="empty cabin", duration=3, seed=1,
+        ratio="9:16", negative=None, ref_stack=None,
+        frame_anchor="peopled_anchor.png", prev_clip_url="peopled_clip.mp4",
+        has_faces=False, scenery_frame="location_plate.png")
+    assert tier == "wan"
+    media = runner.qwen.generate_video_wan.await_args.kwargs["reference_media"]
+    assert media == [{"type": "first_frame", "url": "location_plate.png"}]
 
 
 @pytest.mark.asyncio

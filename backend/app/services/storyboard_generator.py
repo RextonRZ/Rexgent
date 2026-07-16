@@ -392,15 +392,18 @@ def plan_scene_shot_budget(shots_per_scene: int, n_lines: int, hard_cap: int) ->
     return min(max(shots_per_scene, n_lines + 1), hard_cap)
 
 
-_SILENT_BEAT_MAX = 3
+# A faceless scenery beat renders standalone on Wan and reads fine at 3s. A
+# PEOPLED silent beat may render on HappyHorse (5s minimum tier) or continue a
+# previous ~5s clip via first_clip (which requires requested > seed length),
+# so it never drops below 5s — a 3s clamp hard-failed those renders.
+_SCENERY_BEAT_MAX = 3
+_PEOPLED_BEAT_MAX = 5
 
 
 def fit_silent_beats_to_target(shots: list[dict], target_length: int | None) -> bool:
-    """When the boarded total overshoots the target, clamp SILENT shots to
-    _SILENT_BEAT_MAX seconds — a reaction, insert or held beat reads fine at
-    2-3s, and the 5s default made silent beats cost more than the dialogue.
-    Dialogue shots keep the time their lines need. Mutates in place; True
-    when anything changed."""
+    """When the boarded total overshoots the target, clamp SILENT shots to the
+    shortest duration their render path accepts — dialogue shots keep the time
+    their lines need. Mutates in place; True when anything changed."""
     total = sum(int(s.get("estimated_duration_seconds") or 0) for s in (shots or []))
     if not board_over_target(total, target_length, tolerance=0.15):
         return False
@@ -408,8 +411,10 @@ def fit_silent_beats_to_target(shots: list[dict], target_length: int | None) -> 
     for s in shots:
         if str(s.get("dialogue") or "").strip():
             continue
-        if int(s.get("estimated_duration_seconds") or 0) > _SILENT_BEAT_MAX:
-            s["estimated_duration_seconds"] = _SILENT_BEAT_MAX
+        cap = (_SCENERY_BEAT_MAX if not (s.get("characters_in_frame") or [])
+               else _PEOPLED_BEAT_MAX)
+        if int(s.get("estimated_duration_seconds") or 0) > cap:
+            s["estimated_duration_seconds"] = cap
             changed = True
     return changed
 
