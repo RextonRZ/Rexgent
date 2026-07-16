@@ -129,6 +129,25 @@ class Settings(BaseSettings):
     # image-generation endpoint rejects it with InvalidParameter "url error".
     qwen_image_edit_path: str = "/services/aigc/multimodal-generation/generation"
 
+    # Production Bible: TTS synthesis (restored for the TTS_OVERLAY mode).
+    # qwen3-tts-flash is the OFFLINE model (simple SDK call, preset voices) — the DEFAULT
+    # for dialogue + previews. Cloning is an EXTRA option: the user uploads a voice sample,
+    # we enrol a custom voice via qwen-voice-enrollment, then synthesize it through the
+    # qwen3-tts-vc-realtime WebSocket. A voice_model containing "realtime" routes to that path.
+    qwen_tts_designed_model: str = "qwen3-tts-flash"
+    # instruct variant: honors natural-language delivery directions
+    # ("whispering, tearful") — same timbres, near-identical price
+    qwen_tts_instruct_model: str = "qwen3-tts-instruct-flash"
+    # voice design: a bespoke timbre from a text description ($0.2/voice),
+    # synthesized with the vd snapshot model
+    qwen_voice_design_model: str = "qwen-voice-design"
+    qwen_tts_vd_model: str = "qwen3-tts-vd-2026-01-26"
+    qwen_tts_preview_model: str = "qwen3-tts-flash"
+    qwen_tts_cloned_model: str = "qwen3-tts-vc-realtime-2026-01-15"
+    qwen_voice_enroll_model: str = "qwen-voice-enrollment"
+    qwen_voice_enroll_path: str = "/services/audio/tts/customization"
+    qwen_tts_realtime_url: str = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

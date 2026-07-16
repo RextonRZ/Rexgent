@@ -29,6 +29,13 @@ class Character(Base):
     visual_description = Column(Text, nullable=True)
     video_prompt_fragment = Column(Text, nullable=True)
     face_keywords = Column(JSONB, nullable=True)
+    # TTS overlay voice assignment (restored): a preset timbre name, an
+    # enrolled clone id, or a designed voice id — with the model that speaks
+    # it, where it came from (preset|designed|cloned) and the clone sample
+    voice_id = Column(String(255), nullable=True)
+    voice_model = Column(String(100), nullable=True)
+    voice_source = Column(String(50), nullable=True)
+    voice_sample_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     project = relationship("Project", back_populates="characters")
