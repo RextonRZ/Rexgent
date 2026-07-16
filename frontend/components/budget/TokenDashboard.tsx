@@ -9,6 +9,11 @@ function fmtTokens(n: number): string {
   return String(n);
 }
 
+/** Tiny real spends must not read as $0.00 (a short voice pass is ~$0.003). */
+function fmtUsd(v: number): string {
+  return v > 0 && v < 0.005 ? `$${parseFloat(v.toFixed(4))}` : `$${v.toFixed(2)}`;
+}
+
 // Cheap tiers first so the savings story reads left to right.
 const TIER_STYLE: Record<string, { dot: string; text: string; order: number }> = {
   flash: { dot: "bg-emerald-400", text: "text-emerald-300", order: 0 },
@@ -143,7 +148,7 @@ export function TokenDashboard({ projectId }: { projectId: string }) {
                       {fmt(v.qty, model)}
                     </span>
                     <span className="w-12 shrink-0 text-right tabular-nums text-muted-foreground">
-                      ${v.usd.toFixed(2)}
+                      {fmtUsd(v.usd)}
                     </span>
                   </div>
                 ))

@@ -96,6 +96,49 @@ def test_assign_cast_voices_ticked_designs_each_voice(monkeypatch):
     assert all(c.voice_source == "designed" for c in chars)
 
 
+def test_assign_cast_voices_voiced_stay_untouched_without_redesign(monkeypatch):
+    # a second casting run must not silently replace voices the user has
+    import app.services.casting_director as cd
+    import app.config as config
+    from types import SimpleNamespace
+    monkeypatch.setattr(cd, "get_settings", lambda: _fake_settings())
+    monkeypatch.setattr(config, "get_settings", lambda: _fake_settings())
+    _quiet_ws(monkeypatch, cd)
+    monkeypatch.setattr(cd, "design_voice", MagicMock())
+    c = SimpleNamespace(name="Mia", voice_id="kept", voice_model="m",
+                        voice_source="designed", gender="female")
+    cd.assign_cast_voices(MagicMock(), "pid", [c], design_voice=True)
+    assert c.voice_id == "kept"
+
+
+def test_assign_cast_voices_redesign_replaces_but_never_cloned(monkeypatch):
+    # Redesign writes fresh designed voices over designed/preset ones, but a
+    # clone is the user's own recording — replacing it would destroy it
+    import app.services.casting_director as cd
+    import app.config as config
+    from types import SimpleNamespace
+    monkeypatch.setattr(cd, "get_settings", lambda: _fake_settings())
+    monkeypatch.setattr(config, "get_settings", lambda: _fake_settings())
+    _quiet_ws(monkeypatch, cd)
+
+    def fake_design(char, db=None, project_id=None):
+        char.voice_id, char.voice_source = f"designed-{char.name}", "designed"
+        return True
+
+    monkeypatch.setattr(cd, "design_voice", fake_design)
+    designed = SimpleNamespace(name="Mia", voice_id="old-design", voice_model="m",
+                               voice_source="designed", gender="female")
+    cloned = SimpleNamespace(name="Aiden", voice_id="my-clone", voice_model="vc",
+                             voice_source="cloned", gender="male")
+    preset = SimpleNamespace(name="Rex", voice_id="Cherry", voice_model="m",
+                             voice_source="preset", gender="male")
+    cd.assign_cast_voices(MagicMock(), "pid", [designed, cloned, preset],
+                          design_voice=True, redesign_voice=True)
+    assert designed.voice_id == "designed-Mia"
+    assert cloned.voice_id == "my-clone"
+    assert preset.voice_id == "designed-Rex"
+
+
 def test_voice_design_prompt_folds_the_character_sheet():
     from types import SimpleNamespace
     from app.services.casting_director import voice_design_prompt

@@ -245,11 +245,14 @@ def assign_voice(char, index: int = 0, db=None, project_id=None) -> None:
     char.voice_source = "preset"
 
 
-def assign_cast_voices(db, project_id, characters, design_voice: bool = True) -> int:
+def assign_cast_voices(db, project_id, characters, design_voice: bool = True,
+                       redesign_voice: bool = False) -> int:
     """Voices for the whole cast at bible time, TTS overlay mode only (native
     clips speak for themselves, so nothing is assigned there). Ticked, every
     voiceless character gets a designed voice ($0.20 each, ledgered); unticked,
-    free gender-matched presets — the untick must genuinely never spend."""
+    free gender-matched presets — the untick must genuinely never spend.
+    redesign_voice writes fresh designed voices over existing designed/preset
+    ones; a clone is the user's own recording and is never replaced."""
     if not getattr(get_settings(), "tts_overlay", False):
         return 0
     pid = str(project_id)
@@ -257,7 +260,11 @@ def assign_cast_voices(db, project_id, characters, design_voice: bool = True) ->
                   total=len(characters)) as t:
         for idx, c in enumerate(characters):
             emit("casting.voice.started", {"character": c.name}, pid)
-            if design_voice:
+            if (redesign_voice and c.voice_id
+                    and (c.voice_source or "") != "cloned"):
+                c.voice_id = None  # a fresh design replaces the old voice
+                assign_voice(c, idx, db=db, project_id=pid)
+            elif design_voice:
                 assign_voice(c, idx, db=db, project_id=pid)
             else:  # the user unticked the paid design — free presets
                 assign_voice(c, idx)
@@ -395,7 +402,8 @@ class CastingDirector:
         self.plates = PlateGenerator(self.db)
         self.style_prompt = load_prompt("style_plate.txt")
 
-    async def cast_bible(self, project_id, design_voice: bool = True) -> dict:
+    async def cast_bible(self, project_id, design_voice: bool = True,
+                         redesign_voice: bool = False) -> dict:
         pid = str(project_id)
         emit("casting.started", {}, pid)
         script = (self.db.query(Script).filter(Script.project_id == project_id)
@@ -526,8 +534,10 @@ class CastingDirector:
                        artifact=f"{faces_locked} identities locked")
 
         # TTS overlay mode gives every character a voice here; design_voice
-        # carries the spend dialog's tick (unticked = free presets)
-        assign_cast_voices(self.db, pid, characters, design_voice=design_voice)
+        # carries the spend dialog's tick (unticked = free presets), and
+        # redesign_voice replaces existing designed/preset voices
+        assign_cast_voices(self.db, pid, characters, design_voice=design_voice,
+                           redesign_voice=redesign_voice)
 
         self.db.commit()
         from app.agents.reporter import report_agent

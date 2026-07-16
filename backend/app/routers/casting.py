@@ -96,6 +96,7 @@ def approve_casting(project_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{project_id}/run")
 def run_casting(project_id: str, design_voice: bool = True,
+                redesign_voice: bool = False,
                 db: Session = Depends(get_db)):
     if not db.query(Project).filter(Project.id == uuid.UUID(project_id)).first():
         raise HTTPException(status_code=404, detail="Project not found")
@@ -107,7 +108,7 @@ def run_casting(project_id: str, design_voice: bool = True,
          "agent": "Casting Director", "label": "Casting the production bible"},
          project_id)
     from app.workers.casting_worker import run_casting_job
-    run_casting_job.delay(project_id, design_voice)
+    run_casting_job.delay(project_id, design_voice, redesign_voice)
     return {"status": "started"}
 
 
@@ -287,20 +288,25 @@ async def swap_variant_outfit(variant_id: str, file: UploadFile = File(...),
 
 @router.post("/character/{character_id}/plates")
 async def generate_character_plates(character_id: str, design_voice: bool = True,
+                                    regen_plates: bool = True,
+                                    redesign_voice: bool = False,
                                     db: Session = Depends(get_db)):
     """Generate (or regenerate) one character's costume plates on their CURRENT face.
     - No face set  -> text-to-image invents a face and seeds it as the identity.
     - Face set     -> plates are image-edited onto that exact face.
-    Call it again after changing the face to re-match. In TTS overlay mode a
-    voiceless character also gets a voice: design_voice=True buys a bespoke
-    designed one ($0.20), False takes a free preset."""
+    Call it again after changing the face to re-match. regen_plates=False skips
+    the plates entirely (a voice-only run for a character whose costumes are
+    already good). In TTS overlay mode a voiceless character also gets a voice:
+    design_voice=True buys a bespoke designed one ($0.20), False takes a free
+    preset; redesign_voice=True writes a fresh design over an existing
+    designed/preset voice (a clone is never replaced)."""
     c = db.query(Character).filter(Character.id == uuid.UUID(character_id)).first()
     if not c:
         raise HTTPException(status_code=404, detail="Character not found")
     project_id = str(c.project_id)
     variants = (db.query(CostumeVariant).filter(CostumeVariant.character_id == c.id)
                 .order_by(CostumeVariant.is_default.desc()).all())
-    if not variants:
+    if not variants and regen_plates:
         v = CostumeVariant(character_id=c.id, label="default",
                            outfit_description="",
                            is_default=True, plate_status="ai_pending", scene_numbers=[])
@@ -309,58 +315,65 @@ async def generate_character_plates(character_id: str, design_voice: bool = True
         variants = [v]
 
     from app.websocket.emitter import emit
-    emit("stage:progress", {"stage": "casting", "status": "started",
-         "agent": "Casting Director",
-         "label": f"Casting {c.name}'s plates"}, project_id)
     from app.websocket.tool_events import tool_event
-    tool_event(project_id, "characters", "generate_plates", "started",
-               agent="Casting", total=len(variants))
-    # no face uploaded must never block generation later — write a look
-    if not (c.visual_description or "").strip() or not (c.video_prompt_fragment or "").strip():
-        try:
-            from app.services.appearance_generator import AppearanceGenerator
-            from app.services.usage_tracker import track_project
-            with track_project(project_id, db):
-                look = await AppearanceGenerator().generate(
-                    character_name=c.name, role=c.role or "SUPPORTING",
-                    personality=c.personality_summary or "",
-                    mbti=getattr(c, "mbti", "") or "",
-                    physical_desc=c.physical_description or "")
-            c.visual_description = (c.visual_description or "").strip() or look.get("full_description", "")
-            c.video_prompt_fragment = (c.video_prompt_fragment or "").strip() or look.get("video_prompt_fragment", "")
-        except Exception:  # noqa: BLE001
-            pass
-    pg = PlateGenerator(db)
-    for v in variants:
-        prompt = _char_plate_prompt(c, v.outfit_description or "")
-        url, vector = await pg.generate_and_store_plate(
-            project_id, "character", f"{c.name}_{v.label}", prompt,
-            negative_prompt=char_plate_negative(
-                c.visual_description, c.physical_description,
-                c.video_prompt_fragment, v.outfit_description),
-            base_image_url=c.reference_image_url, prompt_extend=False,
-            match_vector=c.face_vector if c.reference_image_url else None)
-        v.plate_image_url, v.face_vector = url, vector
-        # a rejected reference (content filter) must not masquerade as a lock
-        v.plate_status = ("ref_rejected" if pg.last_face_preserved is False
-                          else "ai_generated")
-        # seed identity from the default plate only when no face exists yet
-        if v.is_default and not c.reference_image_url:
-            c.reference_image_url, c.face_vector, c.plate_status = url, vector, "ai_generated"
-    tool_event(project_id, "characters", "generate_plates", "succeeded",
-               agent="Casting", artifact=f"{len(variants)} plates on {c.name}")
-    if not c.voice_id and getattr(get_settings(), "tts_overlay", False):
-        # TTS overlay mode: the character needs a voice — the spend dialog's
-        # tick decides designed ($0.20, db to ledger it) vs free preset
+    if regen_plates:
+        emit("stage:progress", {"stage": "casting", "status": "started",
+             "agent": "Casting Director",
+             "label": f"Casting {c.name}'s plates"}, project_id)
+        tool_event(project_id, "characters", "generate_plates", "started",
+                   agent="Casting", total=len(variants))
+        # no face uploaded must never block generation later — write a look
+        if not (c.visual_description or "").strip() or not (c.video_prompt_fragment or "").strip():
+            try:
+                from app.services.appearance_generator import AppearanceGenerator
+                from app.services.usage_tracker import track_project
+                with track_project(project_id, db):
+                    look = await AppearanceGenerator().generate(
+                        character_name=c.name, role=c.role or "SUPPORTING",
+                        personality=c.personality_summary or "",
+                        mbti=getattr(c, "mbti", "") or "",
+                        physical_desc=c.physical_description or "")
+                c.visual_description = (c.visual_description or "").strip() or look.get("full_description", "")
+                c.video_prompt_fragment = (c.video_prompt_fragment or "").strip() or look.get("video_prompt_fragment", "")
+            except Exception:  # noqa: BLE001
+                pass
+        pg = PlateGenerator(db)
+        for v in variants:
+            prompt = _char_plate_prompt(c, v.outfit_description or "")
+            url, vector = await pg.generate_and_store_plate(
+                project_id, "character", f"{c.name}_{v.label}", prompt,
+                negative_prompt=char_plate_negative(
+                    c.visual_description, c.physical_description,
+                    c.video_prompt_fragment, v.outfit_description),
+                base_image_url=c.reference_image_url, prompt_extend=False,
+                match_vector=c.face_vector if c.reference_image_url else None)
+            v.plate_image_url, v.face_vector = url, vector
+            # a rejected reference (content filter) must not masquerade as a lock
+            v.plate_status = ("ref_rejected" if pg.last_face_preserved is False
+                              else "ai_generated")
+            # seed identity from the default plate only when no face exists yet
+            if v.is_default and not c.reference_image_url:
+                c.reference_image_url, c.face_vector, c.plate_status = url, vector, "ai_generated"
+        tool_event(project_id, "characters", "generate_plates", "succeeded",
+                   agent="Casting", artifact=f"{len(variants)} plates on {c.name}")
+    if getattr(get_settings(), "tts_overlay", False):
+        # TTS overlay mode: the spend dialog's ticks decide the voice —
+        # designed ($0.20, db to ledger it) vs free preset for a voiceless
+        # character, and redesign replaces a designed/preset voice
         from app.services.casting_director import assign_voice
-        if design_voice:
+        if redesign_voice and c.voice_id and (c.voice_source or "") != "cloned":
+            c.voice_id = None
             assign_voice(c, 0, db=db, project_id=str(c.project_id))
-        else:
-            assign_voice(c, 0)
+        elif not c.voice_id:
+            if design_voice:
+                assign_voice(c, 0, db=db, project_id=str(c.project_id))
+            else:
+                assign_voice(c, 0)
     db.commit()
     emit("stage:progress", {"stage": "casting", "status": "completed",
          "agent": "Casting Director",
-         "label": f"{c.name}: {len(variants)} plate(s) ready"}, project_id)
+         "label": (f"{c.name}: {len(variants)} plate(s) ready" if regen_plates
+                   else f"{c.name}: voice updated")}, project_id)
     return {"variants": [{"id": str(v.id), "label": v.label,
                           "plate_image_url": v.plate_image_url,
                           "plate_status": v.plate_status} for v in variants],

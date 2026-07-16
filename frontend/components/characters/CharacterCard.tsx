@@ -107,6 +107,14 @@ export function CharacterCard({
   const [spend, setSpend] = useState<SpendRequest | null>(null);
   const hasFace = !!character.reference_image_url;
   const hasPlates = (casting?.variants.length ?? 0) > 0;
+  // costumes already painted: the dialog offers them as an untickable extra
+  // instead of silently re-charging for what the user may only want to keep
+  const hasPaintedPlates = Boolean(
+    casting?.variants?.some((v) => v.plate_image_url)
+  );
+  const redesignable = Boolean(
+    voiceEnabled && casting?.voice_id && casting?.voice_source !== "cloned"
+  );
 
   // only the plate being worked on shows the spinner, not its siblings
   const variantBusy = (variantId: string) =>
@@ -212,20 +220,39 @@ export function CharacterCard({
                   onClick={() =>
                     setSpend({
                       title: `Generate plates for ${character.name}`,
-                      costLine: "Prices below are estimates. A failed face check can add one retry plate.",
+                      costLine: hasPaintedPlates
+                        ? "Pick what to generate below. Prices are estimates."
+                        : "Prices below are estimates. A failed face check can add one retry plate.",
                       note: hasFace
                         ? "Every outfit renders on the locked face above."
                         : "No face is set, so a default face gets invented and locked.",
                       confirmLabel: "Generate",
-                      breakdown: [
-                        {
-                          label: "Costume plates",
-                          detail: `${Math.max(casting?.variants.length ?? 0, 1)} outfit plate${(casting?.variants.length ?? 0) > 1 ? "s" : ""} on qwen-image-edit-max, at $0.075 per image`,
-                          amount: Math.max(casting?.variants.length ?? 0, 1) * 0.075,
-                        },
-                      ],
-                      options:
-                        voiceEnabled && !casting?.voice_id
+                      // freshly cast: costumes are the whole point, priced as
+                      // a fixed line. Already painted: they become an untickable
+                      // extra so a voice only run never re-buys good plates.
+                      breakdown: hasPaintedPlates
+                        ? undefined
+                        : [
+                            {
+                              label: "Costume plates",
+                              detail: `${Math.max(casting?.variants.length ?? 0, 1)} outfit plate${(casting?.variants.length ?? 0) > 1 ? "s" : ""} on qwen-image-edit-max, at $0.075 per image`,
+                              amount: Math.max(casting?.variants.length ?? 0, 1) * 0.075,
+                            },
+                          ],
+                      options: [
+                        ...(hasPaintedPlates
+                          ? [
+                              {
+                                key: "regenPlates",
+                                label: `Regenerate all ${casting?.variants.length ?? 0} costume plate${(casting?.variants.length ?? 0) === 1 ? "" : "s"}`,
+                                priceLine: `$${(Math.max(casting?.variants.length ?? 0, 1) * 0.075).toFixed(2)}`,
+                                note: "Repaints every outfit on the current face with qwen-image-edit-max. Leave unticked to keep the plates you have.",
+                                defaultOn: false,
+                                amount: Math.max(casting?.variants.length ?? 0, 1) * 0.075,
+                              },
+                            ]
+                          : []),
+                        ...(voiceEnabled && !casting?.voice_id
                           ? [
                               {
                                 key: "designVoice",
@@ -236,12 +263,35 @@ export function CharacterCard({
                                 amount: 0.2,
                               },
                             ]
-                          : undefined,
-                      run: (choices) =>
+                          : []),
+                        ...(redesignable
+                          ? [
+                              {
+                                key: "redesignVoice",
+                                label: "Redesign the voice",
+                                priceLine: "$0.20 once",
+                                note: "Writes a fresh voice from this character's sheet, replacing the current one. Leave unticked to keep it.",
+                                defaultOn: false,
+                                amount: 0.2,
+                              },
+                            ]
+                          : []),
+                      ],
+                      run: (choices) => {
+                        const regen = hasPaintedPlates
+                          ? Boolean(choices?.regenPlates)
+                          : true;
+                        const redesign = Boolean(choices?.redesignVoice);
+                        const needsVoice = voiceEnabled && !casting?.voice_id;
+                        // everything unticked: nothing to generate, spend nothing
+                        if (!regen && !redesign && !needsVoice) return;
                         generatePlates.mutate({
                           characterId: character.id,
                           designVoice: choices?.designVoice ?? true,
-                        }),
+                          regenPlates: regen,
+                          redesignVoice: redesign,
+                        });
+                      },
                     })
                   }
                   title={

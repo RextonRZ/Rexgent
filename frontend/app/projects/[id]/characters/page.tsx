@@ -82,6 +82,12 @@ export default function CharactersPage({
   const voicelessCount = characters.filter(
     (c) => !castingByCharId[c.id]?.voice_id
   ).length;
+  // designed/preset voices can be redesigned; a clone is the user's own
+  // recording and is never offered for replacement
+  const redesignCount = characters.filter((c) => {
+    const cc = castingByCharId[c.id];
+    return cc?.voice_id && cc?.voice_source !== "cloned";
+  }).length;
 
   const characterById = useMemo(() => {
     const map: Record<string, { name: string; image?: string | null }> = {};
@@ -116,18 +122,9 @@ export default function CharactersPage({
                 },
                 // location plates and the style frame render at storyboard
                 // time now, so this run no longer charges for them
-                ...(voiceEnabled && voicelessCount === 0 && characters.length > 0
-                  ? [
-                      {
-                        label: "Voices",
-                        detail: "every character already has a voice, nothing to charge",
-                        amount: 0,
-                      },
-                    ]
-                  : []),
               ],
-              options:
-                voiceEnabled && voicelessCount > 0
+              options: [
+                ...(voiceEnabled && voicelessCount > 0
                   ? [
                       {
                         key: "designVoice",
@@ -138,9 +135,25 @@ export default function CharactersPage({
                         amount: voicelessCount * 0.2,
                       },
                     ]
-                  : undefined,
+                  : []),
+                ...(voiceEnabled && redesignCount > 0
+                  ? [
+                      {
+                        key: "redesignVoice",
+                        label: `Redesign voices for ${redesignCount} character${redesignCount === 1 ? "" : "s"}`,
+                        priceLine: `$${(redesignCount * 0.2).toFixed(2)}`,
+                        note: "Writes fresh designed voices over their current designed or preset ones. Cloned voices are never touched. Leave unticked to keep what you have.",
+                        defaultOn: false,
+                        amount: redesignCount * 0.2,
+                      },
+                    ]
+                  : []),
+              ],
               run: (choices) =>
-                runCasting.mutate({ designVoice: choices?.designVoice ?? true }),
+                runCasting.mutate({
+                  designVoice: choices?.designVoice ?? true,
+                  redesignVoice: choices?.redesignVoice ?? false,
+                }),
             })
           }
           disabled={runCasting.isPending}

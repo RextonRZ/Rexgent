@@ -12,6 +12,11 @@ function fmtTokens(n: number): string {
   return String(n);
 }
 
+/** Tiny real spends must not read as $0.00 (a short voice pass is ~$0.003). */
+function fmtUsd(v: number): string {
+  return v > 0 && v < 0.005 ? `$${parseFloat(v.toFixed(4))}` : `$${v.toFixed(2)}`;
+}
+
 const TIER_DOT: Record<string, string> = {
   flash: "bg-emerald-400",
   plus: "bg-sky-400",
@@ -153,7 +158,7 @@ export function CostPanelContent({ projectId }: { projectId: string }) {
                   style={{ width: `${Math.min((amt / maxCat) * 100, 100)}%` }}
                 />
               </div>
-              <span className="w-12 text-right tabular-nums">${amt.toFixed(2)}</span>
+              <span className="w-12 text-right tabular-nums">{fmtUsd(amt)}</span>
             </>
           );
           return (
@@ -189,8 +194,8 @@ export function CostPanelContent({ projectId }: { projectId: string }) {
                         <span className="truncate font-mono">{model}</span>
                         <span className="shrink-0 tabular-nums">
                           {/* voice design bills per voice, not per character */}
-                          {fmtQty(v.qty, model.includes("voice-design") ? "voice" : c.unit)} · $
-                          {v.usd.toFixed(2)}
+                          {fmtQty(v.qty, model.includes("voice-design") ? "voice" : c.unit)} ·{" "}
+                          {fmtUsd(v.usd)}
                         </span>
                       </div>
                     ))}
@@ -212,7 +217,7 @@ export function CostPanelContent({ projectId }: { projectId: string }) {
                   {chip.label}
                 </span>
                 <span className="w-12 text-right tabular-nums">
-                  ${(byStage[s.key] ?? 0).toFixed(2)}
+                  {fmtUsd(byStage[s.key] ?? 0)}
                 </span>
               </div>
             </div>

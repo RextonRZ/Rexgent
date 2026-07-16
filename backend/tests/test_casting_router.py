@@ -43,10 +43,11 @@ def test_run_casting_forwards_design_voice_untick():
     try:
         with patch("app.workers.casting_worker.run_casting_job") as m:
             r = client.post(
-                "/api/casting/00000000-0000-0000-0000-000000000000/run?design_voice=false")
+                "/api/casting/00000000-0000-0000-0000-000000000000/run"
+                "?design_voice=false&redesign_voice=true")
             assert r.status_code == 200
             m.delay.assert_called_once_with(
-                "00000000-0000-0000-0000-000000000000", False)
+                "00000000-0000-0000-0000-000000000000", False, True)
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -60,5 +61,6 @@ def test_worker_forwards_design_voice_to_cast_bible():
         cd.return_value.cast_bible = AsyncMock(return_value={})
         from app.workers.casting_worker import run_casting_job
         run_casting_job.apply(
-            args=("00000000-0000-0000-0000-000000000000", False)).get()
+            args=("00000000-0000-0000-0000-000000000000", False, True)).get()
         assert cd.return_value.cast_bible.call_args.kwargs["design_voice"] is False
+        assert cd.return_value.cast_bible.call_args.kwargs["redesign_voice"] is True

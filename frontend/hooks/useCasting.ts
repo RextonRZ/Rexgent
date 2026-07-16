@@ -132,21 +132,33 @@ export function useRegenerateVariant() {
 
 /** Generate/regenerate ONE character's costume plates on their current face.
  *  designVoice buys a bespoke designed voice when the character has none yet
- *  (TTS overlay mode); untick takes a free preset instead. */
+ *  (TTS overlay mode); untick takes a free preset instead. regenPlates=false
+ *  skips the costumes (voice-only run); redesignVoice replaces an existing
+ *  designed/preset voice with a fresh design. */
 export function useGenerateCharacterPlates() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       characterId,
       designVoice = true,
+      regenPlates = true,
+      redesignVoice = false,
     }: {
       characterId: string;
       designVoice?: boolean;
+      regenPlates?: boolean;
+      redesignVoice?: boolean;
     }) => {
       const { data } = await api.post(
         `/api/casting/character/${characterId}/plates`,
         null,
-        { params: { design_voice: designVoice } }
+        {
+          params: {
+            design_voice: designVoice,
+            regen_plates: regenPlates,
+            redesign_voice: redesignVoice,
+          },
+        }
       );
       return data;
     },
@@ -160,9 +172,15 @@ export function useGenerateCharacterPlates() {
 export function useRunCasting(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (opts?: { designVoice?: boolean }) => {
+    mutationFn: async (opts?: {
+      designVoice?: boolean;
+      redesignVoice?: boolean;
+    }) => {
       const { data } = await api.post(`/api/casting/${projectId}/run`, null, {
-        params: { design_voice: opts?.designVoice ?? true },
+        params: {
+          design_voice: opts?.designVoice ?? true,
+          redesign_voice: opts?.redesignVoice ?? false,
+        },
       });
       return data;
     },
