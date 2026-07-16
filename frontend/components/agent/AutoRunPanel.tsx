@@ -306,7 +306,7 @@ export function AutoRunPanel({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Target length (sec/ep)</Label>
+            <Label>Length guide (sec/ep)</Label>
             <Input
               type="number"
               min={10}
@@ -318,6 +318,10 @@ export function AutoRunPanel({
                 setTargetLength(Math.max(10, Number(e.target.value) || 10));
               }}
             />
+            <p className="text-[11px] text-muted-foreground">
+              A pacing guide, not an exact cut: clips render in fixed lengths,
+              so the finished episode usually runs a little over this number.
+            </p>
           </div>
         </div>
 

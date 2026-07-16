@@ -161,7 +161,7 @@ export function NewProjectModal({
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">
-                Length (sec/ep)
+                Length guide (sec/ep)
               </Label>
               <Input
                 type="number"
