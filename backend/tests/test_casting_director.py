@@ -27,27 +27,38 @@ def test_distinct_locations_groups_by_key():
     assert keys["rooftop"] == [3]
 
 
-def test_view_qualifiers_collapse_into_one_location_family():
-    # the 'Shattered Tides' bug: "Anna's Cabin" and "Front of Anna's Cabin"
-    # keyed separately, painting two unrelated cabins for the same place
+def test_same_place_same_view_shares_a_plate_but_views_split():
+    # the 'Shattered Tides' bug, refined: same-view scenes of one place must
+    # share a plate (no two unrelated paintings of the cabin), but the plate
+    # is RENDERED on screen as the set, so interior and exterior views must
+    # NOT merge — an exterior shot anchored to an interior room is wrong.
     scenes = [{"number": 1, "location": "Anna's Cabin",
                "heading": "INT. ANNA'S CABIN - NIGHT"},
               {"number": 2, "location": "Front of Anna's Cabin",
+               "heading": "INT. ANNA'S CABIN - NIGHT"},
+              {"number": 3, "location": "Anna's Cabin",
                "heading": "INT. ANNA'S CABIN - NIGHT"}]
     locs = distinct_locations(scenes)
-    assert len(locs) == 1
-    assert locs[0]["scene_numbers"] == [1, 2]
-    assert locs[0]["description"] == "Anna's Cabin"   # the base name paints the plate
-    assert locs[0]["heading"] == "INT. ANNA'S CABIN - NIGHT"
+    by_key = {l["location_key"]: l for l in locs}
+    assert set(by_key) == {"anna_s_cabin__int", "anna_s_cabin__ext"}
+    assert by_key["anna_s_cabin__int"]["scene_numbers"] == [1, 3]
+    assert by_key["anna_s_cabin__ext"]["scene_numbers"] == [2]
+    # the 'front of' qualifier outranks the mislabeled INT heading
+    assert by_key["anna_s_cabin__ext"]["view"] == "ext"
+    assert by_key["anna_s_cabin__int"]["description"] == "Anna's Cabin"
 
 
-def test_inside_outside_of_the_same_place_share_a_plate():
-    scenes = [{"number": 1, "location": "the courtroom"},
-              {"number": 2, "location": "outside the courtroom"},
-              {"number": 3, "location": "Inside the Courtroom"}]
+def test_inside_qualifier_joins_the_interior_plate():
+    scenes = [{"number": 1, "location": "the courtroom",
+               "heading": "INT. COURTROOM - DAY"},
+              {"number": 2, "location": "Inside the Courtroom",
+               "heading": "INT. COURTROOM - DAY"},
+              {"number": 3, "location": "outside the courtroom",
+               "heading": "EXT. COURTHOUSE STEPS - DAY"}]
     locs = distinct_locations(scenes)
-    assert len(locs) == 1
-    assert locs[0]["scene_numbers"] == [1, 2, 3]
+    by_key = {l["location_key"]: l for l in locs}
+    assert by_key["courtroom__int"]["scene_numbers"] == [1, 2]
+    assert by_key["courtroom__ext"]["scene_numbers"] == [3]
 
 
 def test_genuinely_different_places_stay_separate():
@@ -76,6 +87,15 @@ def test_heading_time_words_like_later_are_not_lighting():
     p = location_plate_prompt("beach", heading="EXT. BEACH - LATER", tags=[])
     assert "exterior" in p
     assert "later" not in p.lower()
+
+
+def test_prompt_view_overrides_mislabeled_heading():
+    p = location_plate_prompt("Front of Anna's Cabin",
+                              heading="INT. ANNA'S CABIN - NIGHT",
+                              tags=[], view="ext")
+    assert "exterior" in p
+    assert "interior" not in p
+    assert "night" in p    # the time still comes from the heading
 
 
 @pytest.mark.asyncio
@@ -147,7 +167,7 @@ async def test_ensure_location_plates_fills_only_missing(monkeypatch):
         SimpleNamespace(number=2, location="Rooftop", heading="EXT. ROOFTOP - NIGHT"),
         SimpleNamespace(number=3, location="coffee shop", heading="INT. COFFEE SHOP - DAY"),
     ]
-    existing = [SimpleNamespace(location_key="rooftop")]
+    existing = [SimpleNamespace(location_key="rooftop__ext")]
     db = _FakeDB(script=script, scenes=scenes, plates=existing)
 
     fake_plates = MagicMock()
@@ -162,7 +182,7 @@ async def test_ensure_location_plates_fills_only_missing(monkeypatch):
     assert made == 1
     assert fake_plates.generate_and_store_plate.await_count == 1
     assert len(db.added) == 1
-    assert db.added[0].location_key == "coffee_shop"
+    assert db.added[0].location_key == "coffee_shop__int"
     assert db.added[0].scene_numbers == [1, 3]
     assert db.committed is True
 
@@ -176,7 +196,7 @@ async def test_ensure_location_plates_noop_when_covered(monkeypatch):
     script = SimpleNamespace(id=uuid.uuid4())
     scenes = [SimpleNamespace(number=1, location="Lab", heading="INT. LAB - NIGHT")]
     db = _FakeDB(script=script, scenes=scenes,
-                 plates=[SimpleNamespace(location_key="lab")])
+                 plates=[SimpleNamespace(location_key="lab__int")])
 
     fake_plates = MagicMock()
     fake_plates.generate_and_store_plate = AsyncMock()

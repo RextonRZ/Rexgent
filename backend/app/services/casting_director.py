@@ -24,20 +24,23 @@ def _key(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", (name or "").strip().lower()).strip("_")
 
 
-# View/position qualifiers the structurer prepends to a place name. Longest
-# first so "in front of" wins over "front of", "outside of" over "outside".
-_VIEW_QUALIFIERS = (
-    "in front of", "entrance to", "entrance of", "interior of", "exterior of",
-    "outside of", "inside of", "front of", "back of", "next to",
-    "outside", "inside", "behind", "beside", "near",
+# View/position qualifiers the structurer prepends to a place name, split by
+# which side of the walls they put the camera on. Longest first so "in front
+# of" wins over "front of", "outside of" over "outside".
+_EXT_QUALIFIERS = (
+    "in front of", "entrance to", "entrance of", "exterior of", "outside of",
+    "front of", "back of", "next to", "outside", "behind", "beside", "near",
 )
+_INT_QUALIFIERS = ("interior of", "inside of", "inside")
+_VIEW_QUALIFIERS = tuple(sorted(_EXT_QUALIFIERS + _INT_QUALIFIERS,
+                                key=len, reverse=True))
 
 
 def location_family(name: str) -> str:
-    """One PLACE, one plate: collapse view/position qualifiers and articles so
-    'Front of Anna's Cabin', 'inside the cabin' and 'Anna's Cabin' key the
-    same family. Two independently painted images of one place never look
-    like the same place — grouping them is the only reliable consistency."""
+    """One PLACE, one family: collapse view/position qualifiers and articles
+    so 'Front of Anna's Cabin', 'inside the cabin' and 'Anna's Cabin' key the
+    same family — two independently painted images of one place never look
+    like the same place."""
     low = re.sub(r"\s+", " ", str(name or "").strip().lower())
     while True:
         trimmed = re.sub(r"^(?:the|a|an)\s+", "", low)
@@ -51,17 +54,40 @@ def location_family(name: str) -> str:
     return _key(low)
 
 
+def location_view(location: str, heading=None) -> str | None:
+    """'int' / 'ext' / None — which side of the walls the camera is on. The
+    location's own qualifier ('front of', 'inside') outranks the heading:
+    screenwriters mislabel INT/EXT (a headlights-outside scene shipped under
+    INT.), but a view qualifier in the location text is deliberate."""
+    low = re.sub(r"\s+", " ", str(location or "").strip().lower())
+    trimmed = re.sub(r"^(?:the|a|an)\s+", "", low)
+    for q in _VIEW_QUALIFIERS:
+        if trimmed.startswith(q + " "):
+            return "ext" if q in _EXT_QUALIFIERS else "int"
+    up = str(heading or "").strip().upper()
+    if up.startswith("INT"):
+        return "int"
+    if up.startswith("EXT"):
+        return "ext"
+    return None
+
+
 def distinct_locations(scenes: list[dict]) -> list[dict]:
-    """Group scenes into location FAMILIES so one place paints exactly one
-    plate. The shortest raw name in a family (the base place, not a view of
-    it) becomes the plate's description; the first heading provides its
-    interior/exterior and time hints."""
+    """Group scenes by location family AND view, so one place paints one plate
+    per side of its walls: same-view scenes share a plate (consistency), but
+    interior and exterior never merge — the plate is rendered on screen as
+    the set (reference_stack attaches it on room-showing framings), and an
+    exterior shot anchored to an interior room is simply the wrong image.
+    The shortest raw name in a group paints it; the first heading provides
+    its time hint."""
     grouped: dict[str, dict] = {}
     for sc in scenes:
         raw = str(sc.get("location", "") or "")
-        k = location_family(raw) or "unknown"
+        view = location_view(raw, sc.get("heading"))
+        fam = location_family(raw) or "unknown"
+        k = f"{fam}__{view}" if view else fam
         g = grouped.setdefault(k, {"location_key": k, "description": raw,
-                                   "heading": sc.get("heading"),
+                                   "heading": sc.get("heading"), "view": view,
                                    "scene_numbers": []})
         g["scene_numbers"].append(sc.get("number"))
         if raw and (not g["description"] or len(raw) < len(g["description"])):
@@ -94,12 +120,14 @@ def _heading_hints(heading) -> tuple[str | None, str | None]:
     return place, time
 
 
-def location_plate_prompt(desc: str, heading=None, tags=None) -> str:
+def location_plate_prompt(desc: str, heading=None, tags=None, view=None) -> str:
     """The location plate's image prompt. A bare '{name} background plate'
-    painted a different-looking place every run; the heading's interior/
-    exterior and time of day pin the plate to the scenes it backs, and the
-    plate is explicitly unpopulated."""
+    painted a different-looking place every run; the interior/exterior view
+    and the heading's time of day pin the plate to the scenes it backs, and
+    the plate is explicitly unpopulated. `view` ('int'/'ext', from the
+    location group) outranks the heading's INT/EXT."""
     place, time = _heading_hints(heading)
+    place = {"int": "interior", "ext": "exterior"}.get(view) or place
     bits = [str(desc or "").strip() or "interior room",
             (f"empty {place} establishing background plate" if place
              else "empty establishing background plate")]
@@ -166,7 +194,8 @@ async def ensure_location_plates(db: Session, project_id) -> int:
         tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
                    index=idx, total=len(missing))
         desc = strip_character_names(loc["description"], char_names) or "interior room"
-        prompt = location_plate_prompt(desc, heading=loc.get("heading"), tags=tags)
+        prompt = location_plate_prompt(desc, heading=loc.get("heading"),
+                                       tags=tags, view=loc.get("view"))
         url, _ = await plates.generate_and_store_plate(
             pid, "location", loc["location_key"], prompt,
             negative_prompt=LOCATION_PLATE_NEGATIVE)
@@ -294,7 +323,8 @@ class CastingDirector:
                        index=idx, total=total)
             desc = strip_character_names(loc["description"], char_names) or "interior room"
             prompt = location_plate_prompt(desc, heading=loc.get("heading"),
-                                           tags=style.get("style_tags", []))
+                                           tags=style.get("style_tags", []),
+                                           view=loc.get("view"))
             url, _ = await self.plates.generate_and_store_plate(
                 pid, "location", loc["location_key"], prompt,
                 negative_prompt=LOCATION_PLATE_NEGATIVE)
