@@ -12,6 +12,7 @@ from app.models.generation_job import GenerationJob
 from app.models.generated_clip import GeneratedClip
 from app.models.shot import Shot
 from app.models.final_export import FinalExport
+from app.models.line_audio import LineAudio
 from app.services.caption_generator import CaptionGenerator
 from app.services.production_report import build_report
 from app.services.oss_manager import OSSManager
@@ -22,9 +23,109 @@ logger = logging.getLogger(__name__)
 
 
 def native_audio_policy():
-    """No TTS overlay now, so every clip keeps its own voice + ambience at full
-    volume — never muted."""
+    """Native mode (TTS_OVERLAY off): every clip keeps its own voice + ambience
+    at full volume — never muted. Overlay mode mutes the clip instead and lays
+    the synthesized voice layer over it."""
     return False, None
+
+
+def build_dialogue_segments(line_rows, scene_plan):
+    """Place per-line dialogue audio on the global timeline, aligning each line to
+    the shot that speaks it. line_rows: dicts with scene_number, line_index,
+    audio_local, duration_seconds (+ optional text/character_name, which ride
+    along so burned captions share the voice's exact timing). scene_plan:
+    ordered per-scene shot layout."""
+    from app.services.audio_timeline import place_dialogue
+    rows = [
+        {"scene_number": r["scene_number"], "line_index": r["line_index"],
+         "audio_path": r["audio_local"], "duration": r["duration_seconds"],
+         "text": r.get("text"), "character": r.get("character_name")}
+        for r in line_rows
+    ]
+    return place_dialogue(rows, scene_plan)
+
+
+def voice_captions_incomplete(spoken: list, entries: list) -> bool:
+    """True when the placed voice lines cover FEWER dialogue lines than the cut
+    actually shows on screen — a dropped TTS call left part of the conversation
+    unvoiced. Captions follow the voices, so without this the subtitles would
+    silently shrink to match the missing audio; instead we fall back to the
+    shots' own dialogue so every spoken line is still captioned."""
+    dialogue_shots = sum(1 for e in entries if (e.get("text") or "").strip())
+    return len([s for s in spoken if s.get("text")]) < dialogue_shots
+
+
+def characters_needing_resynthesis(rows, current_voice_by_name, script_speakers,
+                                   script_line_keys=None) -> set:
+    """Names whose dialogue audio no longer matches casting: their lines were
+    synthesized with a different voice_id than the character's CURRENT one
+    (recast after generation; rows with NO recorded voice count too), or they
+    speak in the script but audio is missing — either no lines at all, or
+    individual line slots that a flaky TTS call skipped (script_line_keys:
+    {(scene_number, line_index, character)}). Pure function so the recast
+    rules are testable."""
+    from app.services.guardrails import canonical_character
+    stale = set()
+    for r in rows:
+        # "CATHERINE (V.O.)" rows are judged against CATHERINE's current
+        # voice — a stage qualifier must not exempt a line from recasting
+        cur = (current_voice_by_name.get(r.character_name)
+               or current_voice_by_name.get(
+                   canonical_character(r.character_name or "", current_voice_by_name)))
+        if cur and r.voice_id != cur:
+            stale.add(r.character_name)
+    have = {r.character_name for r in rows}
+    missing = {s for s in script_speakers if s not in have}
+    if script_line_keys:
+        have_slots = {(r.scene_number, r.line_index) for r in rows}
+        missing |= {ch for (sc, li, ch) in script_line_keys
+                    if ch in script_speakers and (sc, li) not in have_slots}
+    return stale | missing
+
+
+def _ensure_voice_lines(db, project_id: str) -> None:
+    """Make the dialogue audio match casting before the mix.
+    - No lines at all (manual Generate never synthesizes) -> synthesize everything.
+    - A character was recast (voice_id on their lines != their current voice,
+      e.g. switched preset or enrolled a clone) -> re-synthesize ONLY their lines.
+    Other characters' audio is reused, so a recast costs TTS for one character,
+    not the whole script."""
+    try:
+        import asyncio
+        from app.models.character import Character
+        from app.models.script import Script, Scene
+        from app.agent.pipeline_ops import synth_dialogue_op
+
+        pid = uuid.UUID(project_id)
+        rows = db.query(LineAudio).filter(LineAudio.project_id == pid).all()
+        if not rows:
+            # First export (manual flow never synthesized before): do the full
+            # synth, then FALL THROUGH to the missing-line recheck below. A line
+            # whose TTS failed every retry during this synth would otherwise be
+            # dropped with no second pass until a LATER export — the drama ships
+            # with half its conversation silent and uncaptioned.
+            asyncio.run(synth_dialogue_op(db, project_id))
+            rows = db.query(LineAudio).filter(LineAudio.project_id == pid).all()
+
+        chars = db.query(Character).filter(Character.project_id == pid).all()
+        current = {c.name: c.voice_id for c in chars if c.voice_id}
+        speakers: set = set()
+        line_keys: set = set()
+        script = (db.query(Script).filter(Script.project_id == pid)
+                  .order_by(Script.created_at.desc()).first())
+        if script:
+            for s in db.query(Scene).filter(Scene.script_id == script.id).all():
+                for li, line in enumerate(s.dialogue_json or []):
+                    if line.get("character"):
+                        speakers.add(line["character"])
+                        line_keys.add((s.number, li, line["character"]))
+
+        redo = characters_needing_resynthesis(rows, current, speakers, line_keys)
+        if redo:
+            logger.info(f"Export: re-synthesizing recast voices for {sorted(redo)}")
+            asyncio.run(synth_dialogue_op(db, project_id, only_characters=redo))
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Export: dialogue synth skipped: {e}")
 
 
 def _stage(project_id: str, status: str, label: str) -> None:
@@ -213,9 +314,14 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 resp.raise_for_status()
                 with open(local, "wb") as fh:
                     fh.write(resp.content)
-                # No TTS overlay now, so every clip keeps its own native voice +
-                # ambience at full volume — never muted, never treated as a bed.
-                mute, vol = native_audio_policy()
+                if getattr(get_settings(), "tts_overlay", False):
+                    # TTS overlay: the clip's own audio is fully MUTED — the
+                    # synthesized voice layer replaces it (the user's design:
+                    # video mute, TTS on top)
+                    mute, vol = True, None
+                else:
+                    # native mode: the clip keeps its own voice + ambience
+                    mute, vol = native_audio_policy()
                 # what this chunk really contributes to the final timeline
                 probed = VideoStitcher._duration(local)
                 tin = float(seg["in"] or 0.0)
@@ -227,9 +333,22 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     eff = max(0.0, probed - tin)
                 else:  # probe failed — fall back to the storyboard estimate
                     eff = duration_by_clip.get(str(seg["clip"].id), 5) if seg["clip"] else 5
-                # native audio plays in the stitched cut, so there is no TTS line
-                # to place — onset/mouth timing is no longer computed
                 onset, mouth = None, None
+                if (getattr(get_settings(), "tts_overlay", False)
+                        and meta and meta["dialogue"]):
+                    # overlay: measure where the on-screen mouth actually
+                    # speaks (fun-asr) so the TTS line lands ON the lips and
+                    # paces itself to them — best-effort, line places at the
+                    # chunk start without it
+                    try:
+                        from app.services.audio_policy import speech_span
+                        span = speech_span(local)
+                        if span:
+                            onset = max(0.0, float(span[0]) - tin)
+                            mouth = max(0.0, min(float(span[1] - span[0]),
+                                                 max(0.0, eff - onset)))
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(f"Export: mouth probe skipped: {e}")
                 cut_entries.append({
                     "scene_number": meta["scene"] if meta else None,
                     "duration": eff,
@@ -298,10 +417,35 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 bgm_local = None
                 logger.warning(f"Export: music download failed: {e}")
 
-        # ── Voice lines: TTS synthesis is gone, so clips play their own NATIVE
-        # audio and there are no separate voice lines to place. line_rows stays
-        # empty and nothing is laid on the timeline. ──
+        # ── Voice lines (TTS overlay only): ensured and downloaded ONCE; every
+        # cut places from the same pool (placement is scene-keyed, so a line
+        # can only land in the cut that contains its scene). Native mode keeps
+        # line_rows empty and the clips' own audio plays. ──
         line_rows: list = []
+        if getattr(get_settings(), "tts_overlay", False):
+            try:
+                from app.websocket.tool_events import tool_event
+                tool_event(project_id, "export", "synth_voices", "started", agent="Audio Mixer")
+                _ensure_voice_lines(db, project_id)
+                tool_event(project_id, "export", "synth_voices", "succeeded", agent="Audio Mixer",
+                           artifact="voices match casting")
+                for row in db.query(LineAudio).filter(
+                        LineAudio.project_id == uuid.UUID(project_id)).all():
+                    if not row.audio_url:
+                        continue
+                    lp = os.path.join(workdir, f"line_{row.scene_number}_{row.line_index}.wav")
+                    try:
+                        lr = httpx.get(row.audio_url, timeout=120.0)
+                        lr.raise_for_status()
+                        with open(lp, "wb") as fh:
+                            fh.write(lr.content)
+                        line_rows.append({"scene_number": row.scene_number, "line_index": row.line_index,
+                                          "audio_local": lp, "duration_seconds": row.duration_seconds or 0.0,
+                                          "text": row.text, "character_name": row.character_name})
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(f"Export: could not download line audio {row.audio_url}: {e}")
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Export: voice prep skipped: {e}")
 
         # A dialogue drop shows up here as fewer voiced lines than the cut speaks
         # — surface it so a half-silent export is diagnosable from the log alone.
@@ -319,9 +463,18 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 stitcher.stitch(inputs, cut_local, ratio=ratio)
                 t["artifact"] = f"{len(inputs)} clips{label}"
 
-            # No TTS overlay now — clips carry their own native audio, so there
-            # are no separate dialogue lines to place on the timeline.
+            # ── Dialogue placement (overlay only): each line aligned to the
+            # shot that speaks it, on THIS cut's real probed chunk durations.
+            # Native mode leaves this empty; the clips carry their own audio ──
             dialogue_segments: list = []
+            if line_rows:
+                try:
+                    scene_plan = build_cut_plan(entries)
+                    with tool_run(project_id, "export", "assemble_timeline", "Editor") as t:
+                        dialogue_segments = build_dialogue_segments(line_rows, scene_plan)
+                        t["artifact"] = f"{len(dialogue_segments)} lines placed{label}"
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"Export: dialogue prep skipped{label}: {e}")
 
             # ── A held ending: when the final voice line outruns the footage,
             # freeze the last frame long enough for it to finish (plus a beat)
@@ -340,13 +493,23 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: ending hold skipped{label}: {e}")
 
-            # ── Captions: the shot dialogue timed to chunk durations. Burned in
-            # AND uploaded as a sidecar .srt ──
+            # ── Captions: timed to the placed voice lines when they exist and
+            # are COMPLETE, else to the shots' own dialogue (speech-paced).
+            # Burned in AND uploaded as a sidecar .srt ──
             srt_url = None
             try:
+                spoken = [s for s in dialogue_segments if s.get("text")]
                 cut_captions = [{"dialogue": e.get("text"), "duration": e["duration"]}
                                 for e in entries]
-                srt = caption_gen.generate_srt(cut_captions)
+                use_voice = bool(spoken) and not voice_captions_incomplete(spoken, entries)
+                if spoken and not use_voice:
+                    logger.warning(
+                        "captions: only %d voiced line(s) for %d dialogue shot(s)%s "
+                        "— captioning from shot dialogue so none are missing",
+                        len(spoken),
+                        sum(1 for e in entries if (e.get("text") or "").strip()), label)
+                srt = (caption_gen.generate_srt_from_segments(spoken) if use_voice
+                       else caption_gen.generate_srt(cut_captions))
                 if srt.strip():
                     srt_path = os.path.join(workdir, f"captions{suffix}.srt")
                     with open(srt_path, "w", encoding="utf-8") as f:
@@ -362,24 +525,36 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: subtitle burn skipped{label}: {e}")
 
-            # ── Mix: the stitched cut ALREADY carries native audio at full
-            # volume, so a mix is only needed to lay the user's BGM UNDER it.
-            # No BGM -> the stitched cut is the final audio, nothing to mix. ──
+            # ── Mix. Native mode: the stitched cut already carries clip audio,
+            # so a mix only lays the BGM bed under it. Overlay mode: the clips
+            # are muted, so the mix lays the placed voice lines PLUS the bed,
+            # ducking the music under speech. ──
             try:
                 from app.websocket.emitter import emit
-                if bgm_local:
+                if dialogue_segments or bgm_local:
                     emit("audio.mix.started", {}, project_id)
                     mixed = os.path.join(workdir, f"final_audio{suffix}.mp4")
                     with tool_run(project_id, "export", "mix_audio", "Audio Mixer") as t:
-                        stitcher.mix_tracks(
-                            cut_local, [], bgm_local, mixed,
-                            bgm_volume=float(audio.get("volume", 0.35)) if audio else 0.35,
-                            duck=False,
-                            bgm_fade_in=float(audio.get("fade_in", 0.0)) if audio else 0.0,
-                            bgm_fade_out=float(audio.get("fade_out", 0.0)) if audio else 0.0,
-                            ambient_volume=1.0,
-                        )
-                        t["artifact"] = "native audio + bgm"
+                        if dialogue_segments:
+                            stitcher.mix_tracks(
+                                cut_local, dialogue_segments, bgm_local, mixed,
+                                bgm_volume=float(audio.get("volume", 1.0)) if audio else 1.0,
+                                duck=bool(audio.get("duck", True)) if audio else True,
+                                bgm_fade_in=float(audio.get("fade_in", 0.0)) if audio else 0.0,
+                                bgm_fade_out=float(audio.get("fade_out", 0.0)) if audio else 0.0,
+                            )
+                            t["artifact"] = (f"{len(dialogue_segments)} voices"
+                                             + (" + music" if bgm_local else ""))
+                        else:
+                            stitcher.mix_tracks(
+                                cut_local, [], bgm_local, mixed,
+                                bgm_volume=float(audio.get("volume", 0.35)) if audio else 0.35,
+                                duck=False,
+                                bgm_fade_in=float(audio.get("fade_in", 0.0)) if audio else 0.0,
+                                bgm_fade_out=float(audio.get("fade_out", 0.0)) if audio else 0.0,
+                                ambient_volume=1.0,
+                            )
+                            t["artifact"] = "native audio + bgm"
                     cut_local = mixed
                     emit("audio.mix.completed", {}, project_id)
             except Exception as e:  # noqa: BLE001
