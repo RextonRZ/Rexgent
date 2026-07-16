@@ -1,6 +1,33 @@
 import pytest
 import app.agent.graph as agraph
-from app.agent.graph import build_pipeline_graph, route_after_judge
+from app.agent.graph import (build_pipeline_graph, route_after_judge,
+                             build_revision_notes, rewrite_regressed)
+
+
+def test_revision_notes_include_the_previous_draft():
+    # the reviser was rewriting blind: premise + critique bullets, never the
+    # draft it was told to fix — "keep what worked" without seeing what worked
+    j = {"blocking_issues": ["hook is weak"], "top_weaknesses": ["flat ending"]}
+    n = build_revision_notes(j, "INT. CABIN - NIGHT\nANNA: We need to talk.")
+    assert "hook is weak" in n
+    assert "flat ending" in n
+    assert "PREVIOUS DRAFT" in n
+    assert "We need to talk." in n
+
+
+def test_revision_notes_without_draft_still_nonempty():
+    n = build_revision_notes({}, None)
+    assert "REVISION PASS" in n
+    assert "PREVIOUS DRAFT" not in n
+
+
+def test_rewrite_regressed_detects_a_worse_rewrite():
+    # the 09:33 drama: draft 6.3 -> rewrite 5.3; the rewrite must not ship
+    assert rewrite_regressed({"overall": 6.3}, {"overall": 5.3}) is True
+    assert rewrite_regressed({"overall": 6.1}, {"overall": 8.3}) is False
+    assert rewrite_regressed({"overall": 6.0}, {"overall": 6.0}) is False
+    assert rewrite_regressed(None, {"overall": 5.0}) is False
+    assert rewrite_regressed({"overall": "bad"}, {"overall": 5.0}) is False
 
 
 @pytest.fixture(autouse=True)

@@ -13,6 +13,46 @@ from app.websocket.emitter import emit
 MAX_REVISIONS = 1
 
 
+def build_revision_notes(judgement: dict | None, previous_draft: str | None) -> str:
+    """The rewrite brief: the judge's critique PLUS the draft being revised.
+    Without the draft the reviser rewrote blind from the premise — told to
+    'keep what worked' without ever seeing what worked — and regularly scored
+    LOWER than the script it replaced (6.3 -> 5.3)."""
+    j = judgement or {}
+    points = list(j.get("blocking_issues") or []) + list(j.get("top_weaknesses") or [])
+    if points:
+        notes = (
+            "REVISION PASS — the previous draft was rejected by the script "
+            "judge. Fix these specific problems while keeping what worked:\n- "
+            + "\n- ".join(str(p) for p in points[:6])
+        )
+    else:
+        notes = (
+            "REVISION PASS — the previous draft was rejected by the script "
+            f"judge (recommendation: {j.get('recommendation', 'REVISE_FIRST')}). "
+            "Tighten the pacing, sharpen the hook and the ending, and keep "
+            "what already worked."
+        )
+    if (previous_draft or "").strip():
+        notes += (
+            "\n\nPREVIOUS DRAFT — this is the script being revised. Keep its "
+            "story, characters and every beat that works; change only what "
+            "the notes above call out:\n\n" + previous_draft.strip()
+        )
+    return notes
+
+
+def rewrite_regressed(prev_judgement: dict | None, new_judgement: dict | None) -> bool:
+    """True when the revision scored WORSE than the draft it replaced — the
+    rewrite is discarded and the original ships. Never trade down."""
+    try:
+        prev = float((prev_judgement or {}).get("overall") or 0)
+        new = float((new_judgement or {}).get("overall") or 0)
+    except (TypeError, ValueError):
+        return False
+    return prev > 0 and new < prev
+
+
 def route_after_judge(state: PipelineState) -> str:
     rec = (state.get("judgement") or {}).get("recommendation", "PROCEED")
     pid = state.get("project_id")
@@ -51,29 +91,26 @@ def build_pipeline_graph(db=None):
         _emit_node(state, "generate_script")
         if db is None:
             return state
-        # On a revision pass, feed the judge's actual critique back in — a
-        # regeneration that ignores WHY the draft failed just rolls the dice.
-        # notes must be NON-EMPTY on every revision, even when the judge gave
-        # no itemized points: the rewrite label ("Rewriting with the judge's
+        # On a revision pass, feed the judge's actual critique back in — WITH
+        # the draft being revised, or the reviser rewrites blind and regularly
+        # scores lower than the script it replaced. notes must be NON-EMPTY on
+        # every revision: the rewrite label ("Rewriting with the judge's
         # notes") keys off it, and a blank fell back to "Writing your
         # screenplay" — the user couldn't tell self-correction was happening.
         notes = ""
         if state.get("revise_count", 0) > 0:
-            j = state.get("judgement") or {}
-            points = list(j.get("blocking_issues") or []) + list(j.get("top_weaknesses") or [])
-            if points:
-                notes = (
-                    "REVISION PASS — the previous draft was rejected by the script "
-                    "judge. Fix these specific problems while keeping what worked:\n- "
-                    + "\n- ".join(str(p) for p in points[:6])
-                )
-            else:
-                notes = (
-                    "REVISION PASS — the previous draft was rejected by the script "
-                    f"judge (recommendation: {j.get('recommendation', 'REVISE_FIRST')}). "
-                    "Tighten the pacing, sharpen the hook and the ending, and keep "
-                    "what already worked."
-                )
+            prev_raw = None
+            if db is not None and state.get("script_id"):
+                try:
+                    import uuid as _uuid
+                    from app.models.script import Script
+                    row = (db.query(Script)
+                           .filter(Script.id == _uuid.UUID(str(state["script_id"])))
+                           .first())
+                    prev_raw = getattr(row, "raw_text", None)
+                except Exception:  # noqa: BLE001 — the critique alone still works
+                    prev_raw = None
+            notes = build_revision_notes(state.get("judgement"), prev_raw)
         out = await pipeline_ops.generate_script_op(
             db, state["project_id"], state["premise"], state.get("genre", "drama"),
             state.get("tone", "dramatic"),
@@ -103,6 +140,31 @@ def build_pipeline_graph(db=None):
                 state.get("structured", {}),
                 target_length=state.get("target_length"))
             tb["artifact"] = (state["judgement"] or {}).get("recommendation", "scored")
+        # never trade down: a rewrite that scored LOWER than the draft it
+        # replaced is discarded, and the original ships with its judgement
+        if (state.get("prev_judgement")
+                and rewrite_regressed(state["prev_judgement"], state["judgement"])):
+            emit("stage:progress", {"stage": "script", "status": "update",
+                 "agent": "Story Analyst",
+                 "label": "The rewrite scored lower, keeping the first draft"},
+                 str(state["project_id"]))
+            if db is not None and state.get("script_id") and state.get("prev_script_id"):
+                try:
+                    # delete the losing rewrite's rows so every "latest script"
+                    # query resolves to the draft that actually ships
+                    import uuid as _uuid
+                    from app.models.script import Script, Scene
+                    sid = _uuid.UUID(str(state["script_id"]))
+                    db.query(Scene).filter(Scene.script_id == sid).delete(
+                        synchronize_session=False)
+                    db.query(Script).filter(Script.id == sid).delete(
+                        synchronize_session=False)
+                    db.commit()
+                except Exception:  # noqa: BLE001 — keeping both rows beats crashing
+                    db.rollback()
+            state["judgement"] = state["prev_judgement"]
+            state["script_id"] = state["prev_script_id"]
+            state["structured"] = state.get("prev_structured") or state.get("structured")
         from app.agents.reporter import report_agent
         j = state["judgement"]
         report_agent(db, state["project_id"], agent="narrative_judge", stage="judge",
@@ -114,6 +176,11 @@ def build_pipeline_graph(db=None):
     async def n_revise(state: PipelineState) -> PipelineState:
         _emit_node(state, "revise")
         state["revise_count"] = state.get("revise_count", 0) + 1
+        # stash the draft being replaced: if the rewrite judges WORSE, the
+        # judge node restores this one instead of shipping a downgrade
+        state["prev_script_id"] = state.get("script_id")
+        state["prev_structured"] = state.get("structured")
+        state["prev_judgement"] = state.get("judgement")
         if db is not None and state.get("project_id"):
             from app.agents.reporter import report_agent
             j = state.get("judgement") or {}
