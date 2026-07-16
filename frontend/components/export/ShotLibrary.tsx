@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Pencil } from "lucide-react";
 import type { SceneShots } from "@/hooks/useStoryboard";
 import type { GeneratedClip } from "@/lib/types";
 import { ClipBadge } from "@/components/budget/ClipBadge";
@@ -61,7 +62,7 @@ function TakeTile({
             title="AI-edit this take"
             className="absolute bottom-1.5 right-1.5 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg ring-2 ring-background hover:scale-110 transition-transform"
           >
-            ✏️
+            <Pencil className="size-4" />
           </button>
         )}
       </div>

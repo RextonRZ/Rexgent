@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Pause, Play } from "lucide-react";
 import { LoadingVideo } from "@/components/shared/LoadingVideo";
 
 export interface TimelineItem {
@@ -207,8 +208,8 @@ export function SequencePlayer({
             onClick={togglePlay}
             className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors"
           >
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/90 text-white text-xl glow">
-              ▶
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/90 text-white glow">
+              <Play className="size-6 fill-current" />
             </span>
           </button>
         )}
@@ -236,9 +237,17 @@ export function SequencePlayer({
       <div className="flex items-center gap-2">
         <button
           onClick={togglePlay}
-          className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground glow"
+          className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground glow"
         >
-          {playing ? "❚❚ Pause" : "▶ Play cut"}
+          {playing ? (
+            <>
+              <Pause className="size-3.5 fill-current" /> Pause
+            </>
+          ) : (
+            <>
+              <Play className="size-3.5 fill-current" /> Play cut
+            </>
+          )}
         </button>
         <span className="text-xs text-muted-foreground">
           {items.length} clip{items.length === 1 ? "" : "s"} · plays in timeline

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SpendConfirm, type SpendRequest, type SpendItem } from "@/components/shared/SpendConfirm";
 import { useProject } from "@/hooks/useProjects";
@@ -125,11 +126,16 @@ export function GenerationLauncher({ projectId }: { projectId: string }) {
         size="lg"
         className="glow shrink-0"
       >
-        {startGeneration.isPending
-          ? "Starting…"
-          : calcBudget.isPending
-          ? "Pricing the plan…"
-          : "▶ Start generation"}
+        {startGeneration.isPending ? (
+          "Starting…"
+        ) : calcBudget.isPending ? (
+          "Pricing the plan…"
+        ) : (
+          <>
+            <Play className="size-4" />
+            Start generation
+          </>
+        )}
       </Button>
       <SpendConfirm request={spend} onClose={() => setSpend(null)} />
     </div>

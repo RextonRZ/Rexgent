@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Clapperboard, Download, FolderArchive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   SequencePlayer,
@@ -614,7 +615,10 @@ export function ExportEditor({ projectId }: { projectId: string }) {
             // a multi-episode drama delivers one video per episode
             result!.report_json!.episodes!.map((ep) => (
               <a key={ep.episode} href={ep.url} target="_blank" rel="noreferrer">
-                <Button variant="outline">⬇ Episode {ep.episode}</Button>
+                <Button variant="outline">
+                  <Download className="size-4" />
+                  Episode {ep.episode}
+                </Button>
               </a>
             ))
           ) : result?.download_url || result?.url ? (
@@ -623,7 +627,10 @@ export function ExportEditor({ projectId }: { projectId: string }) {
               target="_blank"
               rel="noreferrer"
             >
-              <Button variant="outline">⬇ Download MP4</Button>
+              <Button variant="outline">
+                <Download className="size-4" />
+                Download MP4
+              </Button>
             </a>
           ) : null}
           {result?.caption_url && (result?.report_json?.episodes?.length ?? 0) <= 1 ? (
@@ -635,7 +642,8 @@ export function ExportEditor({ projectId }: { projectId: string }) {
           ) : null}
           {(result?.report_json?.episodes?.length ?? 0) > 1 ? (
             <Button variant="ghost" size="sm" onClick={downloadAllZip}>
-              ⬇ All (.zip)
+              <FolderArchive className="size-4" />
+              All (.zip)
             </Button>
           ) : null}
           {multiEpisode && (
@@ -654,11 +662,16 @@ export function ExportEditor({ projectId }: { projectId: string }) {
             className="glow"
             size="lg"
           >
-            {rendering
-              ? "Rendering…"
-              : multiEpisode
-                ? `🎬 Export episode ${currentEp}`
-                : "🎬 Export final MP4"}
+            {rendering ? (
+              "Rendering…"
+            ) : (
+              <>
+                <Clapperboard className="size-4" />
+                {multiEpisode
+                  ? `Export episode ${currentEp}`
+                  : "Export final MP4"}
+              </>
+            )}
           </Button>
         </div>
       </div>
