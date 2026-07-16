@@ -1,9 +1,14 @@
 """A generic placeholder must never be cast as a character. is_placeholder_
 character_name catches unknown markers, bare common nouns, article/adjective +
 generic noun, numbered extras, and relational/role labels — while keeping real
-names, including ones that are also common words (Rose, Hunter, Grace)."""
+names, including ones that are also common words (Rose, Hunter, Grace).
+drop_placeholder_characters is the ONE shared gate every Character-row door
+uses — the agent pipeline and the manual extract endpoint alike."""
 import pytest
-from app.services.guardrails import is_placeholder_character_name as ph
+from app.services.guardrails import (
+    is_placeholder_character_name as ph,
+    drop_placeholder_characters,
+)
 
 
 @pytest.mark.parametrize("name", [
@@ -43,3 +48,27 @@ def test_two_token_name_with_a_role_survives():
     # but the role alone is a placeholder
     assert ph("Sergeant") is True
     assert ph("Nurse") is True
+
+
+class TestDropPlaceholderCharacters:
+    """The 'Shattered Tides' leak: the manual extract endpoint created a
+    SHADOWY FIGURE row because only the agent pipeline filtered. Both doors
+    now share this one gate."""
+
+    def test_splits_kept_and_dropped(self):
+        data = [{"name": "Anna", "role": "PROTAGONIST"},
+                {"name": "SHADOWY FIGURE", "role": "ANTAGONIST"},
+                {"name": "Deok-hyun", "role": "SUPPORTING"}]
+        kept, dropped = drop_placeholder_characters(data)
+        assert [c["name"] for c in kept] == ["Anna", "Deok-hyun"]
+        assert dropped == ["SHADOWY FIGURE"]
+
+    def test_all_real_names_drop_nothing(self):
+        data = [{"name": "Rose"}, {"name": "Hunter"}]
+        kept, dropped = drop_placeholder_characters(data)
+        assert kept == data
+        assert dropped == []
+
+    def test_empty_and_none_input(self):
+        assert drop_placeholder_characters([]) == ([], [])
+        assert drop_placeholder_characters(None) == ([], [])

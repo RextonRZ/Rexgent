@@ -15,10 +15,18 @@ def _look_by_tag(tag: str) -> tuple:
 class TestWidenFaceless:
     def test_person_framing_on_empty_shot_is_widened(self):
         shots = [{"characters_in_frame": [], "shot_type": "MS"},
-                 {"characters_in_frame": [], "shot_type": "CU"}]
+                 {"characters_in_frame": [], "shot_type": "OTS"},
+                 {"characters_in_frame": [], "shot_type": "MCU"}]
         widen_faceless_framings(shots)
-        assert shots[0]["shot_type"] == "LS"
-        assert shots[1]["shot_type"] == "LS"
+        assert [s["shot_type"] for s in shots] == ["LS", "LS", "LS"]
+
+    def test_faceless_close_framings_become_detail_inserts(self):
+        # a faceless CU/ECU is a deliberate DETAIL shot (a hand, an object) —
+        # widening it to LS destroys the Director's intent. It becomes INSERT.
+        shots = [{"characters_in_frame": [], "shot_type": "CU"},
+                 {"characters_in_frame": [], "shot_type": "ECU"}]
+        widen_faceless_framings(shots)
+        assert [s["shot_type"] for s in shots] == ["INSERT", "INSERT"]
 
     def test_wide_and_insert_faceless_are_left_alone(self):
         shots = [{"characters_in_frame": [], "shot_type": "EWS"},

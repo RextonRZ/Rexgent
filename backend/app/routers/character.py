@@ -66,6 +66,17 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
              "agent": "Casting Director", "label": "Character extraction failed"}, pid)
         raise
 
+    # the same placeholder gate as the agent pipeline: a generic figure
+    # ('SHADOWY FIGURE', 'Man', 'the reporter') must never become a Character
+    # row through THIS door either — it stays in the action text as an extra
+    from app.services.guardrails import drop_placeholder_characters
+    characters_data, dropped = drop_placeholder_characters(characters_data)
+    if dropped:
+        import logging
+        logging.getLogger(__name__).warning(
+            "dropped placeholder cast names (not cast): %s", dropped)
+        emit("characters:placeholders_dropped", {"names": dropped}, pid)
+
     inferrer = MBTIInferrer() if infer_mbti else None
     created = []
 

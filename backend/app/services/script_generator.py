@@ -4,6 +4,15 @@ from app.services.language import language_instruction
 from app.config import get_settings
 
 
+def plan_dialogue_budget(target_length: int | None) -> int:
+    """How many dialogue lines fit an episode of `target_length` seconds. A
+    line plays ~5s on screen (short line -> 5s clip tier), so ~1 line per 6s
+    leaves room for action beats and silence. Floor of 3 so a tiny episode is
+    still a drama. Without this the writer paced by feel: a 30s ask produced
+    11 lines that boarded to 97s."""
+    return max(3, round((target_length or 0) / 6))
+
+
 class ScriptGenerator:
     def __init__(self):
         self.qwen = QwenClient(get_settings())
@@ -31,6 +40,7 @@ class ScriptGenerator:
             tone=tone,
             episode_count=episode_count,
             target_length=target_length,
+            line_budget=plan_dialogue_budget(target_length),
             notes=notes or "None",
             development=development or "None",
         )

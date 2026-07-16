@@ -416,6 +416,20 @@ def is_placeholder_character_name(name) -> bool:
     return all(t in _GENERIC_PERSON_NOUNS for t in meaningful)
 
 
+def drop_placeholder_characters(data) -> tuple[list[dict], list[str]]:
+    """Split extracted character dicts into (castable, dropped placeholder
+    names). The ONE shared gate for every door that creates Character rows —
+    the agent pipeline AND the manual extract endpoint. A SHADOWY FIGURE row
+    slipped in because only the pipeline filtered."""
+    kept, dropped = [], []
+    for cd in (data or []):
+        if is_placeholder_character_name(cd.get("name")):
+            dropped.append(cd.get("name"))
+        else:
+            kept.append(cd)
+    return kept, dropped
+
+
 class PreGenerationValidator:
     def validate(self, characters: list[dict], shots: list[dict]) -> dict:
         issues: list[str] = []

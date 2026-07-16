@@ -292,19 +292,37 @@ def insert_atmosphere(shots: list[dict], count: int, location,
 
 # A person framing implies a body in the frame; on a scenery shot with no cast
 # it renders as an awkward, subjectless shot ("a medium shot of nothing").
-_PERSON_FRAMINGS = {"CU", "ECU", "MCU", "MS", "FS", "OTS", "POV"}
+_PERSON_FRAMINGS = {"MCU", "MS", "FS", "OTS", "POV"}
+_DETAIL_FRAMINGS = {"CU", "ECU"}
 
 
 def widen_faceless_framings(shots: list[dict]) -> list[dict]:
-    """Any shot with NO characters in frame must use a WIDE scenery framing —
-    snap a person framing (CU/MCU/MS/FS/OTS/POV) to LS so an empty-cast Wan shot
-    doesn't render as a broken close-up of nothing. EWS/WS/LS (already wide) and
-    INSERT (a deliberate detail) are left alone. Mutates in place, returns it."""
+    """Any shot with NO characters in frame must not wear a person framing.
+    A faceless MCU/MS/FS/OTS/POV is a body framing with no body — snap it to LS
+    so an empty-cast Wan shot doesn't render as a broken shot of nothing. A
+    faceless CU/ECU is different: the Director meant a DETAIL (a trembling
+    hand, an object) — widening it to LS destroys the shot, so it becomes
+    INSERT instead. EWS/WS/LS (already wide) and INSERT are left alone.
+    Must run AFTER the cast is final (the reconciler can empty a shot's cast).
+    Mutates in place, returns it."""
     for s in (shots or []):
         if not (s.get("characters_in_frame") or []):
-            if str(s.get("shot_type") or "").upper() in _PERSON_FRAMINGS:
+            stype = str(s.get("shot_type") or "").upper()
+            if stype in _PERSON_FRAMINGS:
                 s["shot_type"] = "LS"
+            elif stype in _DETAIL_FRAMINGS:
+                s["shot_type"] = "INSERT"
     return shots
+
+
+def board_over_target(boarded_seconds: int, target_length: int | None,
+                      tolerance: float = 0.3) -> bool:
+    """True when the boarded runtime overshoots the requested target by more
+    than the tolerance — the signal to warn BEFORE render money is spent (a
+    30s ask that boards 97s). No target, no warning."""
+    if not target_length:
+        return False
+    return boarded_seconds > round(target_length * (1 + tolerance))
 
 
 class StoryboardGenerator:

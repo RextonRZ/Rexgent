@@ -134,9 +134,8 @@ async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = 
     # must NEVER be cast: it has no real identity to lock, renders as garbled
     # text, and pollutes the cast. Drop it here and surface which ones — the
     # figure stays in the action text as a generic extra.
-    from app.services.guardrails import is_placeholder_character_name
-    dropped = [cd.get("name") for cd in data if is_placeholder_character_name(cd.get("name"))]
-    data = [cd for cd in data if not is_placeholder_character_name(cd.get("name"))]
+    from app.services.guardrails import drop_placeholder_characters
+    data, dropped = drop_placeholder_characters(data)
     if dropped:
         import logging
         logging.getLogger(__name__).warning(
@@ -291,13 +290,6 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             if enriched:
                 for idx, sd in enumerate(shots, start=1):
                     sd["shot_number"] = idx
-            # (3) any faceless scenery shot (inserted OR the LLM's own) must use a
-            # WIDE framing — a person framing on empty scenery renders as an
-            # awkward subjectless shot. Runs when the Wan features are on.
-            if (getattr(get_settings(), "wan_beats", False)
-                    or getattr(get_settings(), "ensure_establishing_shot", False)):
-                from app.services.storyboard_generator import widen_faceless_framings
-                widen_faceless_framings(shots)
             # the 180-degree rule, enforced not requested: first placement
             # establishes each character's screen side; drift snaps back,
             # a flagged reverse angle re-establishes the line of action.
@@ -341,12 +333,13 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # stack would chase an identity that cannot exist. A dropped extra
             # stays in the action text and renders as a generic figure.
             real_cast = {str(c.name).upper() for c in characters}
+            from app.services.guardrails import canonical_character
+            from app.services.stage_map import reconcile_frame_with_subjects
+            known_names = [c.get("name") for c in scene_chars if c.get("name")]
             for sd in shots:
                 # resolve name variants the LLM invents ("KERRY (ON SCREEN)")
                 # back to real cast members, or identity references and the
-                # pre-generation check never find them
-                from app.services.guardrails import canonical_character
-                known_names = [c.get("name") for c in scene_chars if c.get("name")]
+                # pre-generation check never find them.
                 # canonicalize against the SCENE cast (disambiguates bare first
                 # names / stage qualifiers), then keep only real cast members
                 in_frame = list(dict.fromkeys(
@@ -369,13 +362,24 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 # is a spurious inclusion the stager left unplaced (the antagonist
                 # 'Man' in a two-person beat). Drop them so their plate isn't sent
                 # as a floating face reference the model places at random.
-                from app.services.stage_map import reconcile_frame_with_subjects
                 in_frame = reconcile_frame_with_subjects(
                     in_frame, kept_subjects, sd.get("action"))
+                sd["characters_in_frame"] = in_frame
                 # foreground names must be a subset of who is actually in frame
-                foreground = [n for n in (canonical_character(x, known_names)
-                                          for x in (sd.get("foreground_characters") or []))
-                              if n in in_frame]
+                sd["foreground_characters"] = [
+                    n for n in (canonical_character(x, known_names)
+                                for x in (sd.get("foreground_characters") or []))
+                    if n in in_frame]
+            # faceless framing normalization runs on the FINAL cast — the
+            # reconciliation above can empty a shot's cast (a detail insert of
+            # "Anna's hand" whose only listed figure wasn't real cast), and a
+            # shot that only NOW became faceless still must not wear a person
+            # framing. Running earlier missed exactly those shots.
+            if (getattr(get_settings(), "wan_beats", False)
+                    or getattr(get_settings(), "ensure_establishing_shot", False)):
+                from app.services.storyboard_generator import widen_faceless_framings
+                widen_faceless_framings(shots)
+            for sd in shots:
                 # clamp bounded enum columns (shot_type, camera_movement) so one
                 # over-long LLM value can't fail the whole scene's batch insert
                 shot = Shot(**clamp_bounded_strings({
@@ -385,8 +389,8 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     "action": sd.get("action"), "dialogue": sd.get("dialogue"),
                     "emotional_beat": sd.get("emotional_beat"),
                     "estimated_duration_seconds": sd.get("estimated_duration_seconds", 5),
-                    "characters_in_frame": in_frame,
-                    "foreground_characters": foreground,
+                    "characters_in_frame": sd.get("characters_in_frame") or [],
+                    "foreground_characters": sd.get("foreground_characters") or [],
                     "blocking_json": ({"subjects": sd.get("subjects"),
                                        "reverse_angle": bool(sd.get("reverse_angle"))}
                                       if sd.get("subjects") else None),
@@ -420,6 +424,20 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                  str(script.project_id))
     except Exception:  # noqa: BLE001 — detection is best-effort, never blocks
         pass
+    # over-target check: warn BEFORE render money is spent when the board runs
+    # long (the 30s ask that boarded 97s — the script wrote past its budget and
+    # every line must still be covered). A WARNING, never a block.
+    from app.services.storyboard_generator import board_over_target
+    boarded_total = sum(int(s.estimated_duration_seconds or 0) for s, _ in created)
+    if board_over_target(boarded_total, target_length):
+        import logging
+        logging.getLogger(__name__).warning(
+            "storyboard runs long: boarded %ss against a %ss target", boarded_total, target_length)
+        emit("storyboard:over_target",
+             {"boarded_seconds": boarded_total, "target_seconds": target_length},
+             str(script.project_id))
+        _progress(script.project_id, "storyboard", "update", "Director",
+                  f"Heads up: this board plays about {boarded_total}s, over the {target_length}s target")
     with tool_run(script.project_id, "storyboard", "write_shots_db", "Director") as t:
         db.commit()
         t["artifact"] = f"{len(created)} rows"
