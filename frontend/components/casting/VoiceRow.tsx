@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Mic, Play } from "lucide-react";
 import { SpendConfirm, type SpendRequest } from "@/components/shared/SpendConfirm";
 import { Button } from "@/components/ui/button";
 import {
@@ -164,9 +165,15 @@ export function VoiceRow({
         <button
           onClick={handlePreview}
           disabled={previewing || !voiceId}
-          className="shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-primary hover:bg-primary/15 disabled:opacity-40"
+          className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-primary hover:bg-primary/15 disabled:opacity-40"
         >
-          {previewing ? "…" : "▶ Preview"}
+          {previewing ? (
+            "…"
+          ) : (
+            <>
+              <Play className="size-3 fill-current" /> Preview
+            </>
+          )}
         </button>
       </div>
 
@@ -252,11 +259,11 @@ export function VoiceRow({
                 onClick={startRecording}
                 disabled={cloneVoice.isPending}
               >
-                🎙 Record
+                <Mic className="size-3.5" /> Record
               </Button>
             ) : (
               <Button size="sm" variant="outline" onClick={stopRecording} className="text-bad">
-                ■ Stop ({seconds}s)
+                <span className="inline-block size-2.5 rounded-[2px] bg-current" /> Stop ({seconds}s)
               </Button>
             )}
             <span className="text-[10px] text-muted-foreground">or</span>
