@@ -353,6 +353,7 @@ class GenerationRunner:
                             prev_clip = None
                             prev_clip_secs = None
                             if (scene_anchor is None
+                                    and not (shot.characters_in_frame or [])
                                     and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
                                 scene_anchor = prev_last_frame
                         continue
@@ -382,6 +383,7 @@ class GenerationRunner:
                     # the first wide shot's closing frame anchors the room for the
                     # rest of the scene — a run of close-ups can't erase the set
                     if (scene_anchor is None and prev_last_frame
+                            and not (shot.characters_in_frame or [])
                             and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
                         scene_anchor = prev_last_frame
                     async with self._cost_lock:
@@ -418,6 +420,7 @@ class GenerationRunner:
                             prev_clip = None
                             prev_clip_secs = None
                             if (scene_anchor is None
+                                    and not (shot.characters_in_frame or [])
                                     and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
                                 scene_anchor = prev_last_frame
                         return
@@ -442,6 +445,7 @@ class GenerationRunner:
                     prev_clip_secs = (int(shot.estimated_duration_seconds or 0)
                                       if prev_clip else None)
                     if (scene_anchor is None and prev_last_frame
+                            and not (shot.characters_in_frame or [])
                             and str(shot.shot_type or "").upper() in WIDE_FRAMINGS):
                         scene_anchor = prev_last_frame
                     async with self._cost_lock:
@@ -493,6 +497,7 @@ class GenerationRunner:
                                              for s in unit) or None
                         last_shot = unit[-1]
                         if (scene_anchor is None
+                                and not (last_shot.characters_in_frame or [])
                                 and str(last_shot.shot_type or "").upper() in WIDE_FRAMINGS):
                             scene_anchor = prev_last_frame
                     idx += len(unit)

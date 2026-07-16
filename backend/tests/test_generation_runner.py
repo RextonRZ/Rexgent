@@ -167,9 +167,9 @@ async def test_scene_anchor_and_setting_flow_into_shot(monkeypatch):
                                scene_setting=setting)
     added = runner.db.add.call_args[0][0]
     roles = {p["role"] for p in added.references_json}
-    # peopled frames never ride as references (they render as extra copies of
-    # the cast) — the anchor is accepted but must not reach the stack
-    assert "scene_anchor" not in roles
+    # the scene anchor rides (the runner sources it from people-free frames
+    # only); prev_frame never does — it renders as an extra copy of the cast
+    assert "scene_anchor" in roles
     assert "prev_frame" not in roles
     # the crafted prompt received the scene setting (rule 13 injection)
     craft_kwargs = runner.prompt_crafter.craft.await_args.kwargs

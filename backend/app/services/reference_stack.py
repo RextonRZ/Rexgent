@@ -8,13 +8,14 @@ from app.services.wardrobe_planner import map_variant_for_scene
 WIDE_FRAMINGS = {"MS", "FS", "LS", "EWS", "WS"}
 
 # Framings that still SHOW the room even though they aren't wide: an
-# over-the-shoulder or POV frames a subject against real visible space, and
-# rendering one without the location plate lets the model reinvent the set
-# (measured: OTS shots scored background 0.30 while their MS neighbours in
-# the same scene scored 0.85+ — the character "teleported" to a window that
-# was never there). These get the location anchor too; WIDE_FRAMINGS stays
-# strict because it also picks the scene-anchor source frame.
-ROOM_FRAMINGS = WIDE_FRAMINGS | {"OTS", "POV"}
+# over-the-shoulder, POV or MCU frames a subject against real visible space,
+# and rendering one without the location plate lets the model reinvent the
+# set (measured: OTS shots scored background 0.30, and an MCU scene-opener
+# invented a whole different cabin at bg 0.30). These get the location
+# anchor too; WIDE_FRAMINGS stays strict because it also picks the
+# scene-anchor source frame. Only CU/ECU stay exempt — there the face fills
+# the frame and a sharp room reference reads as a flat backdrop.
+ROOM_FRAMINGS = WIDE_FRAMINGS | {"OTS", "POV", "MCU"}
 
 
 def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
@@ -61,14 +62,16 @@ def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
                           if v.get("is_default") and v.get("plate_image_url")), None))
         if plate:
             entries.append((plate, "costume" if name in fg else "character", name))
-    # prev_frame / scene_anchor are NOT attached: those frames CONTAIN the
-    # cast in-picture, and sent as reference images beside the identity plates
-    # they render as EXTRA COPIES of the characters (two Deok-hyuns in one
-    # shot). Frame continuity belongs ONLY to Wan's typed first_frame /
-    # first_clip continuation; r2v set continuity rides on the people-free
-    # location plate + style plate + the scene's locked lighting instead.
-    # (params stay accepted so callers need no change; they are ignored here)
-    _ = (prev_last_frame_url, scene_anchor_url)
+    # prev_frame is NOT attached: that frame CONTAINS the cast in-picture, and
+    # sent as a reference image beside the identity plates it renders as an
+    # EXTRA COPY of the characters (two Deok-hyuns in one shot). Frame
+    # continuity belongs ONLY to Wan's typed first_frame / first_clip
+    # continuation. scene_anchor DOES ride — but the runner only ever assigns
+    # it from a PEOPLE-FREE shot's closing frame (the establishing/atmosphere
+    # clip), so it anchors the room without carrying anyone who could double.
+    _ = prev_last_frame_url
+    if scene_anchor_url:
+        entries.append((scene_anchor_url, "scene_anchor", None))
     # location plate on any framing that shows the room (or when unknown)
     include_location = ((shot_type is None or str(shot_type).upper() in ROOM_FRAMINGS)
                         and not suppress_location)

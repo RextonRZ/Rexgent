@@ -58,13 +58,14 @@ def test_wide_shot_keeps_location_plate():
 
 
 def test_tight_shot_drops_location_plate():
-    # a close-up must not anchor the whole wide room — it reads as a flat backdrop
+    # a true close-up must not anchor the whole wide room — it reads as a
+    # flat backdrop behind a face that fills the frame
     stack = build_reference_stack(
         characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
-        prev_last_frame_url="prev", model_cap=9, shot_type="MCU")
+        prev_last_frame_url="prev", model_cap=9, shot_type="CU")
     urls = [m["url"] for m in stack]
     assert "loc1" not in urls
-    # identity and style anchor it; frames never ride as references
+    # identity and style anchor it; prev_frame never rides as a reference
     assert urls == ["mia_uniform", "style"]
 
 
@@ -106,19 +107,30 @@ def test_labeled_cap_trims_provenance_too():
     assert len(media) == len(prov) == 2
 
 
-def test_frames_never_ride_as_references():
-    # prev_frame / scene_anchor CONTAIN the cast in-picture: attached beside
-    # the identity plates they render as EXTRA COPIES of the characters (two
-    # Deok-hyuns in one shot). Frame continuity belongs ONLY to Wan's typed
-    # first_frame / first_clip continuation — never to the r2v stack.
+def test_prev_frame_never_rides_but_the_faceless_anchor_does():
+    # prev_frame CONTAINS the cast in-picture: attached beside the identity
+    # plates it renders as an EXTRA COPY of the characters (two Deok-hyuns).
+    # scene_anchor DOES ride — the runner only assigns it from a PEOPLE-FREE
+    # shot's frame (the scenery clip), so it anchors the room and connects
+    # the peopled shots to the Wan scenery without anyone to duplicate.
     media, prov = build_reference_stack_labeled(
         characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
         prev_last_frame_url="prev", model_cap=9, shot_type="CU",
         scene_anchor_url="anchor")
     urls = [m["url"] for m in media]
     assert "prev" not in urls
-    assert "anchor" not in urls
-    assert all(p["role"] not in ("prev_frame", "scene_anchor") for p in prov)
+    assert "anchor" in urls
+    assert next(p for p in prov if p["url"] == "anchor")["role"] == "scene_anchor"
+    assert all(p["role"] != "prev_frame" for p in prov)
+
+
+def test_mcu_keeps_the_location_plate():
+    # an MCU scene-opener invented a whole different cabin (bg 0.30) because
+    # tight framings dropped the plate; only CU/ECU are exempt now
+    stack = build_reference_stack(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url=None, model_cap=9, shot_type="MCU")
+    assert "loc1" in [m["url"] for m in stack]
 
 
 def test_state_change_suppresses_location_plate():
