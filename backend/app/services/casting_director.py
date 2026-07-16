@@ -307,8 +307,8 @@ async def ensure_location_plates(db: Session, project_id) -> int:
         emit("casting.plate.started",
              {"kind": "location", "key": loc["location_key"], "index": idx, "total": len(missing)}, pid)
         # staged under STORYBOARD in the crew graph: location plates paint at
-        # boarding time now, not on the Characters tab
-        tool_event(pid, "storyboard", "location_plates", "started", agent="Casting",
+        # boarding time now, not on the Characters tab — the Director's work
+        tool_event(pid, "storyboard", "location_plates", "started", agent="Director",
                    index=idx, total=len(missing))
         desc = strip_character_names(loc["description"], char_names) or "interior room"
         prompt = location_plate_prompt(desc, heading=loc.get("heading"),
@@ -323,7 +323,7 @@ async def ensure_location_plates(db: Session, project_id) -> int:
              {"kind": "location", "key": loc["location_key"], "index": idx, "total": len(missing)}, pid)
 
     db.commit()
-    tool_event(pid, "storyboard", "location_plates", "succeeded", agent="Casting",
+    tool_event(pid, "storyboard", "location_plates", "succeeded", agent="Director",
                artifact=f"{len(missing)} location plates")
     return len(missing)
 
@@ -354,14 +354,14 @@ async def ensure_style_plate(db: Session, project_id) -> bool:
                 "visual style.")
     pid = str(project_id)
     plates = PlateGenerator(db)
-    tool_event(pid, "storyboard", "style_plate", "started", agent="Casting")
+    tool_event(pid, "storyboard", "style_plate", "started", agent="Director")
     url, _ = await plates.generate_and_store_plate(
         pid, "style", "style", prompt,
         negative_prompt=style.negative_prompt or None,
         base_image_url=base_url)
     style.plate_image_url = url
     db.commit()
-    tool_event(pid, "storyboard", "style_plate", "succeeded", agent="Casting",
+    tool_event(pid, "storyboard", "style_plate", "succeeded", agent="Director",
                artifact="style frame from the lead's plate" if base_url else "style frame")
     emit("casting.plate.completed", {"kind": "style", "key": "style"}, pid)
     return True

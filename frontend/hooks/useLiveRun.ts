@@ -487,9 +487,20 @@ export function ensureLiveRun(projectId: string) {
       kind: "done",
     });
   });
-  on("casting.plate.started", () => castingRun("Casting", "Shooting reference plates"));
+  // location and style plates paint at STORYBOARD time now — their progress
+  // belongs to the Director's row, never the Casting Director's
+  const plateStage = (p?: { kind?: string }) =>
+    p?.kind === "location" || p?.kind === "style" ? "storyboard" : "characters";
+  on("casting.plate.started", (p) => {
+    if (plateStage(p) === "storyboard") return; // the storyboard tool events narrate these
+    castingRun("Casting", "Shooting reference plates");
+  });
   on("casting.plate.completed", (p) => {
     const what = `Plate ready: ${p?.kind ?? "plate"} ${String(p?.key ?? "").replace(/_/g, " ")}`.trim();
+    if (plateStage(p) === "storyboard") {
+      pushTrail("storyboard", { at: Date.now(), agent: "Director", label: what, kind: "done" });
+      return;
+    }
     castingRun("Casting", what);
     pushTrail("characters", { at: Date.now(), agent: "Casting", label: what, kind: "done" });
   });

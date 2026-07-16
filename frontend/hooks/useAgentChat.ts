@@ -86,7 +86,9 @@ function feedToMessage(item: FeedItem): ChatMessage | null {
       } else {
         what = `${kind} ${rawKey.replace(/_/g, " ").replace(/ s /g, "'s ")}`;
       }
-      return { ...base, agent: "Casting Director", kind: "done", text: `Plate ready: ${what}`, detail: p.total ? `${p.index}/${p.total}` : undefined };
+      // location/style plates paint at storyboard time — that's the Director's work
+      const speaker = kind === "location" || kind === "style" ? "Director" : "Casting Director";
+      return { ...base, agent: speaker, kind: "done", text: `Plate ready: ${what}`, detail: p.total ? `${p.index}/${p.total}` : undefined };
     }
     case "casting.completed":
       // awaiting-review already speaks twice (the stage line and the review

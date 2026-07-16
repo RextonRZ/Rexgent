@@ -134,13 +134,17 @@ export function BudgetDashboard({
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {wanPrimary ? (
             <>
-              <span
-                className="inline-flex items-center gap-1.5 rounded-full bg-wan/15 text-wan px-2 py-0.5"
-                title="Wan renders the silent visual shots — continuity, scenery, action"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-wan" />
-                {budget.wan_shots ?? 0} Wan · visuals
-              </span>
+              {/* every shot carries dialogue now, so a 0 Wan plan is the norm:
+                  the chip only appears when Wan actually renders something */}
+              {(budget.wan_shots ?? 0) > 0 && (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full bg-wan/15 text-wan px-2 py-0.5"
+                  title="Wan renders the silent visual shots — continuity, scenery, action"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-wan" />
+                  {budget.wan_shots} Wan · visuals
+                </span>
+              )}
               <span
                 className="inline-flex items-center gap-1.5 rounded-full bg-hh/15 text-hh px-2 py-0.5"
                 title="HappyHorse renders the character shots — faces, dialogue, lip-sync"
@@ -185,7 +189,9 @@ export function BudgetDashboard({
         </div>
         <p className="text-[11px] text-zinc-400">
           {wanPrimary
-            ? "Wan renders the visuals and continuity; HappyHorse renders the talking and new character shots. The opening hook is protected first."
+            ? (budget.wan_shots ?? 0) > 0
+              ? "Wan renders the visuals and continuity; HappyHorse renders the talking and new character shots. The opening hook is protected first."
+              : "Every shot carries dialogue, so HappyHorse renders the whole episode with the cast's real faces. The opening hook is protected first."
             : "The Producer keeps the shots that carry the story at full quality and eases the rest to a faster pass to fit your cap; the opening hook stays full first."}
         </p>
       </div>
