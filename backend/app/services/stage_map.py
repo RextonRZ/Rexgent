@@ -119,11 +119,24 @@ def reconcile_frame_with_subjects(in_frame: list, subjects, action: str) -> list
             if str(n).strip().upper() in subj_names or _name_in_text(n, action)]
 
 
+_MOVE_RE = re.compile(
+    r"\b(walk|walks|walking|step|steps|stepping|move|moves|moving|approach|"
+    r"approaches|approaching|cross|crosses|crossing|closer|away|toward|"
+    r"towards|retreat|retreats|backs?|backing|rush|rushes|rushing|"
+    r"lean|leans|leaning|rise|rises|rising|sits?|sitting|stands? up)\b", re.IGNORECASE)
+
+
 def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
     """shots_blocking: per shot, {"subjects": [...], "reverse_angle": bool}
-    or None for shots without blocking. Mutates screen_side in place on
-    violations. Returns (the same list, human-readable correction notes)."""
+    or None for shots without blocking. Mutates screen_side AND frame_position
+    in place on violations. Returns (the same list, correction notes).
+
+    Two properties carry across the scene: the 180-degree rule (screen side)
+    and DEPTH (frame_position) — a pair standing close in one shot teleported
+    across the room in the next. Depth may only change when the subject's own
+    `action` moves them; otherwise it snaps back to the established depth."""
     established: dict[str, str] = {}
+    depths: dict[str, str] = {}
     notes: list[str] = []
     for i, blocking in enumerate(shots_blocking):
         if not blocking or not blocking.get("subjects"):
@@ -135,14 +148,26 @@ def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
             if not isinstance(s, dict):
                 continue  # defense in depth — normalize_subjects upstream
             name = str(s.get("character") or "").strip().upper()
-            side = s.get("screen_side")
-            if not name or side not in ("left", "center", "right"):
+            if not name:
                 continue
-            held = established.get(name)
-            if held and {side, held} == {"left", "right"}:
-                s["screen_side"] = held
-                notes.append(
-                    f"shot {i + 1}: {name} drifted to {side}, snapped back to {held}")
-            elif not held and side in ("left", "right"):
-                established[name] = side
+            side = s.get("screen_side")
+            if side in ("left", "center", "right"):
+                held = established.get(name)
+                if held and {side, held} == {"left", "right"}:
+                    s["screen_side"] = held
+                    notes.append(
+                        f"shot {i + 1}: {name} drifted to {side}, snapped back to {held}")
+                elif not held and side in ("left", "right"):
+                    established[name] = side
+            pos = str(s.get("frame_position") or "").strip().upper()
+            if pos in ("FG", "MG", "BG"):
+                moved = bool(_MOVE_RE.search(str(s.get("action") or "")))
+                held_pos = depths.get(name)
+                if held_pos and pos != held_pos and not moved:
+                    s["frame_position"] = held_pos
+                    notes.append(
+                        f"shot {i + 1}: {name} jumped {held_pos}->{pos} with no "
+                        f"movement written, snapped back to {held_pos}")
+                else:
+                    depths[name] = pos
     return shots_blocking, notes

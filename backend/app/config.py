@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     # as disconnected from the drama, while the held beats (same cast, same
     # frame) are the Wan continuation that actually works.
     wan_atmosphere: bool = False
+    # All-speech boarding: every shot carries a spoken line — silent beats
+    # teleported postures between renders and read as filler. OFF -> unchanged.
+    dialogue_only: bool = False
+    # TTS voice overlay (restore in progress — see the 2026-07-16 plan): clips
+    # keep rendering with native talk, but export mutes the clip audio and
+    # lays per-line TTS (designed voices + instruct acting + mouth pacing).
+    # Dormant until the plan's tasks 1-4 land; OFF -> native audio unchanged.
+    tts_overlay: bool = False
     # Ground-truth frame handoff: a VL model reads the previous clip's ACTUAL
     # final frame (poses, props, door states) and the description feeds the
     # next shot's opening state — textual continuity that cannot duplicate

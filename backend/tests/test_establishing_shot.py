@@ -323,6 +323,29 @@ class TestDropSceneryShots:
         assert kept == shots
 
 
+class TestDropSilentShots:
+    """DIALOGUE_ONLY: every shot carries a line — silent beats teleported
+    postures (stand -> sit -> stand) and read as filler, so the drama is
+    all speech now."""
+
+    def test_drops_every_silent_shot(self):
+        from app.services.storyboard_generator import drop_silent_shots
+        shots = [_talk(["A", "B"]),
+                 {"characters_in_frame": ["A"], "dialogue": None, "shot_type": "CU"},
+                 _talk(["A", "B"]),
+                 {"characters_in_frame": [], "dialogue": "", "shot_type": "LS"}]
+        kept, dropped = drop_silent_shots(shots)
+        assert dropped == 2
+        assert all(str(s.get("dialogue") or "").strip() for s in kept)
+
+    def test_all_speech_board_is_untouched(self):
+        from app.services.storyboard_generator import drop_silent_shots
+        shots = [_talk(["A", "B"]), _talk(["A"])]
+        kept, dropped = drop_silent_shots(shots)
+        assert dropped == 0
+        assert kept == shots
+
+
 class TestHookFirstScenery:
     """THE HOOK owns the first 3 seconds: scenery never plays first. The
     guaranteed Wan visual slots in at the first safe boundary AFTER the hook,

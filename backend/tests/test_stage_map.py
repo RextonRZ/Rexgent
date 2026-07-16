@@ -6,6 +6,36 @@ def blocking(*subjects, reverse=False):
             "reverse_angle": reverse}
 
 
+def test_frame_position_drift_snaps_back_without_movement():
+    # shot 5 -> 6: the pair stood close, then teleported far apart. Depth
+    # (frame_position) now carries like screen sides: it may only change when
+    # the subject's own action MOVES them.
+    from app.services.stage_map import enforce_scene_sides as ess
+    shots = [
+        {"subjects": [{"character": "A", "screen_side": "left", "frame_position": "MG"}],
+         "reverse_angle": False},
+        {"subjects": [{"character": "A", "screen_side": "left", "frame_position": "BG"}],
+         "reverse_angle": False},
+    ]
+    fixed, notes = ess(shots)
+    assert fixed[1]["subjects"][0]["frame_position"] == "MG"   # snapped
+    assert len(notes) == 1
+
+
+def test_frame_position_change_with_movement_is_kept():
+    from app.services.stage_map import enforce_scene_sides as ess
+    shots = [
+        {"subjects": [{"character": "A", "screen_side": "left", "frame_position": "BG"}],
+         "reverse_angle": False},
+        {"subjects": [{"character": "A", "screen_side": "left", "frame_position": "FG",
+                       "action": "walking toward camera, closing the distance"}],
+         "reverse_angle": False},
+    ]
+    fixed, notes = ess(shots)
+    assert fixed[1]["subjects"][0]["frame_position"] == "FG"   # a real move
+    assert notes == []
+
+
 def test_first_placement_establishes_the_side():
     shots = [blocking(("SOL", "right"), ("FIGURE", "left")),
              blocking(("SOL", "right"), ("FIGURE", "left"))]

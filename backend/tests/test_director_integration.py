@@ -42,6 +42,9 @@ def _fixture_db():
 @pytest.mark.asyncio
 async def test_director_on_produces_varied_shot_types(monkeypatch):
     monkeypatch.setattr(ops.get_settings(), "director_engine", True, raising=False)
+    # variety is asserted over silent beats too — pin the all-speech flag off
+    # so a local DIALOGUE_ONLY=true env doesn't drop the fixture's EWS/CU
+    monkeypatch.setattr(ops.get_settings(), "dialogue_only", False, raising=False)
     db, script = _fixture_db()
     # stub the Director plan + the Stager so the test is deterministic
     from app.director.types import ShotPlan, PlannedShot

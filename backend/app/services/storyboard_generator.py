@@ -180,6 +180,15 @@ def drop_scenery_shots(shots: list[dict]) -> tuple[list[dict], int]:
     return kept, len(shots or []) - len(kept)
 
 
+def drop_silent_shots(shots: list[dict]) -> tuple[list[dict], int]:
+    """DIALOGUE_ONLY boarding: keep only shots that carry a spoken line.
+    Silent beats teleported postures between renders (standing -> seated ->
+    standing) and read as filler; an all-speech drama cuts line to line.
+    Returns (kept shots NOT renumbered, dropped count)."""
+    kept = [s for s in (shots or []) if str(s.get("dialogue") or "").strip()]
+    return kept, len(shots or []) - len(kept)
+
+
 def hook_first_scenery(shots: list[dict], location, lighting,
                        colour_mood) -> tuple[list[dict], str | None]:
     """THE HOOK owns the drama's first 3 seconds — scenery never plays first.

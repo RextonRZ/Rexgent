@@ -595,6 +595,24 @@ async def test_prev_frame_report_feeds_the_opening_state():
 
 
 @pytest.mark.asyncio
+async def test_two_person_shot_eyelines_lock_to_each_other():
+    # scene 1 shot 5: BOTH characters looked into the lens. In a two-person
+    # shot a vague or camera eyeline deterministically becomes "at {other}".
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MS", "action": "she reacts"},
+        character_visuals={"CATHERINE": "a woman", "AIDEN": "a boy"},
+        target_model="happyhorse",
+        blocking={"subjects": [
+            {"character": "CATHERINE", "eyeline": "camera"},
+            {"character": "AIDEN", "eyeline": "toward the other character"}]})
+    p = out["prompt"]
+    assert "CATHERINE looks at AIDEN" in p
+    assert "AIDEN looks at CATHERINE" in p
+    assert "lens" not in p
+
+
+@pytest.mark.asyncio
 async def test_back_turned_subject_stays_back_turned():
     # a hold showing someone's back must not rotate them to camera — the
     # revealed face never matches the cast

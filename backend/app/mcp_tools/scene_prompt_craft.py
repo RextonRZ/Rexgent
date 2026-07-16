@@ -285,14 +285,25 @@ class ScenePromptCraft:
         # leaking a named person into the prompt via a stray blocking subject.
         subs = (blocking or {}).get("subjects") if isinstance(blocking, dict) else None
         in_frame_upper = {str(k).strip().upper() for k in character_visuals.keys()}
-        def _eyeline_text(raw) -> str:
-            # a literal 'camera' eyeline renders as staring into the lens —
-            # fourth-wall break. Translate it to a near-lens look instead.
-            t = str(raw).strip()
+        _VAGUE_EYELINES = {"camera", "at camera", "the camera", "at the camera",
+                           "toward the other character", "off-camera", ""}
+        frame_names = [str(k) for k in character_visuals.keys()]
+
+        def _eyeline_text(subj_name, raw) -> str:
+            t = str(raw or "").strip()
+            # in a TWO-person shot a vague or camera eyeline locks to the other
+            # character — both actors stared into the lens instead of at each
+            # other, and "toward the other character" left the model guessing
+            if len(frame_names) == 2 and t.lower() in _VAGUE_EYELINES:
+                other = next((n for n in frame_names
+                              if n.strip().upper() != str(subj_name).strip().upper()), None)
+                if other:
+                    return f"at {other}"
+            # otherwise a literal 'camera' eyeline still never means the lens
             if t.lower() in ("camera", "at camera", "the camera", "at the camera"):
                 return "just off-camera, never into the lens"
             return t
-        eye = [f"{s.get('character')} looks {_eyeline_text(s.get('eyeline'))}"
+        eye = [f"{s.get('character')} looks {_eyeline_text(s.get('character'), s.get('eyeline'))}"
                for s in (subs or [])
                if isinstance(s, dict) and s.get('character') and s.get('eyeline')
                and str(s.get('character')).strip().upper() in in_frame_upper]

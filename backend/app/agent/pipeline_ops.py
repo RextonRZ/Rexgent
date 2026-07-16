@@ -271,6 +271,13 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # Wan enrichment (all deterministic, flag-gated; OFF -> byte-identical).
             # A helper renumbers the scene only when a shot was actually inserted.
             enriched = False
+            # all-speech boarding: every shot carries a line (silent beats
+            # teleported postures and read as filler)
+            if getattr(get_settings(), "dialogue_only", False):
+                from app.services.storyboard_generator import drop_silent_shots
+                shots, dropped_n = drop_silent_shots(shots)
+                if dropped_n:
+                    enriched = True
             # people-free scenery disallowed (wan_atmosphere off): drop even the
             # Director's own — empty Wan scenes render square and hallucinate,
             # and they read as disconnected from the drama
