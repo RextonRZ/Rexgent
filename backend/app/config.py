@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     # as disconnected from the drama, while the held beats (same cast, same
     # frame) are the Wan continuation that actually works.
     wan_atmosphere: bool = False
+    # Ground-truth frame handoff: a VL model reads the previous clip's ACTUAL
+    # final frame (poses, props, door states) and the description feeds the
+    # next shot's opening state — textual continuity that cannot duplicate
+    # people the way a frame reference did. One VL call per shot.
+    frame_handoff: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

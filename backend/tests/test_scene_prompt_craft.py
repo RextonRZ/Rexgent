@@ -579,6 +579,36 @@ async def test_craft_to_wan_scenery_gets_ambience_and_score():
 
 
 @pytest.mark.asyncio
+async def test_prev_frame_report_feeds_the_opening_state():
+    # the VL frame handoff: what the previous clip ACTUALLY ended on reaches
+    # the prompt, with the opening-state rule attached
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MS", "action": "she rises"},
+        character_visuals={"ANNA": "a woman"}, target_model="happyhorse",
+        prev_frame_report="The woman in the navy shirt is seated on the sofa, "
+                          "hands folded; the door behind her is closed.")
+    sent = crafter.qwen.chat_json.call_args.kwargs["messages"][1]["content"]
+    assert "actually ENDED like this" in sent
+    assert "seated on the sofa" in sent
+    assert "OPENING STATE" in sent
+
+
+@pytest.mark.asyncio
+async def test_back_turned_subject_stays_back_turned():
+    # a hold showing someone's back must not rotate them to camera — the
+    # revealed face never matches the cast
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MS", "action": "they hold the moment"},
+        character_visuals={"DEOK": "a man"}, target_model="wan",
+        blocking={"subjects": [{"character": "DEOK",
+                                "facing": "away-from-camera"}]})
+    assert "keeps their back to the camera" in out["prompt"]
+    assert "turning around to face the camera" in out["negative_prompt"]
+
+
+@pytest.mark.asyncio
 async def test_negative_bans_invented_facial_hair_and_blemishes():
     # scene 2 shot 3 grew a beard and a moustache on a clean-shaven man, and
     # close-ups invented pimples — banned unless a description wears them

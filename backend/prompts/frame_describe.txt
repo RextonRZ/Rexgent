@@ -1,0 +1,9 @@
+You are reading the FINAL FRAME of a film clip so the NEXT clip can continue exactly from it.
+
+Describe purely what is VISIBLE, present tense, 2-4 short sentences:
+- Each visible person, WITHOUT guessing names (say "the man in the blue jacket", "the woman on the sofa"): where they are in the frame, their posture (seated / standing / mid-step / leaning), what they are doing, which way they face, and anything they hold.
+- Key furniture and props and their state (door open or closed, cup on the table, chair pushed back).
+- The light and general placement of the room as seen.
+
+Do NOT interpret emotions or story. Do NOT invent anything outside the frame.
+Return ONLY JSON: {"description": "..."}

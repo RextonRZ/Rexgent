@@ -53,6 +53,9 @@ CHAR_PLATE_NEGATIVE = (
     "hair accessory, hairpin, hair clip, tiara, headband, strings in hair, "
     # the plate pose is FIXED: standing, facing camera — never a scene posture
     "sitting, seated, chair, stool, bench, cross-legged, kneeling, crouching, lying down, leaning, "
+    # eyewear worn anywhere but the face confuses every render that references
+    # the plate (sunglasses perched on the head read as a hair accessory)
+    "sunglasses on top of head, glasses perched on hair, eyewear on head, "
     "room interior, doorway, window, scenery background, scene, busy background, cluttered, text, watermark"
 )
 

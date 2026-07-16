@@ -67,6 +67,8 @@ class GenerationRunner:
         self.prompt_crafter = ScenePromptCraft()
         from app.mcp_tools.continuity_agent import ContinuityAgent
         self.continuity = ContinuityAgent()
+        from app.services.frame_reader import FrameReader
+        self.frame_reader = FrameReader()
         self.breaker = CostCircuitBreaker(budget=budget_usd)
         self.budget_ceiling = self.breaker.ceiling
 
@@ -293,6 +295,7 @@ class GenerationRunner:
             r2.oss = self.oss
             r2.continuity = self.continuity
             r2.prompt_crafter = self.prompt_crafter
+            r2.frame_reader = getattr(self, "frame_reader", None)
             r2.budget_ceiling = self.budget_ceiling
             r2._video_ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
 
@@ -513,6 +516,7 @@ class GenerationRunner:
 
     async def _craft_prompt(self, shot, char_by_name, scene_setting=None,
                             prev_action=None, next_action=None, foreground=None,
+                            prev_frame_report=None,
                             environment=None,
                             outfits=None, blocking=None, lipsync=False,
                             native_talk=False, speaker="", image_legend="",
@@ -545,6 +549,7 @@ class GenerationRunner:
             scene_setting=scene_setting,
             prev_action=prev_action,
             next_action=next_action,
+            prev_frame_report=prev_frame_report,
             foreground_characters=[n for n in in_frame if n in fg],
             blocking=blocking,
             lipsync=lipsync,
@@ -821,6 +826,14 @@ class GenerationRunner:
         # continuing a face already established in the last frame.
         frame_anchor_pre = prev_last_frame_url or scene_anchor_url
         settings_v2 = getattr(get_settings(), "identity_routing_v2", False)
+        # ground-truth frame handoff: a VL model reads the previous clip's
+        # ACTUAL final frame once per shot (not per retry) — poses, props,
+        # door states — so the crafted prompt opens from what really rendered
+        prev_frame_report = None
+        if (prev_last_frame_url
+                and getattr(get_settings(), "frame_handoff", False)
+                and getattr(self, "frame_reader", None)):
+            prev_frame_report = await self.frame_reader.describe(prev_last_frame_url)
         # Compute newcomers for EVERY tier, not just wan: under the v2 flag the
         # role block below runs for every shot, so a face-locked newcomer
         # entering on a non-wan shot must still be detected as an entrance.
@@ -961,6 +974,7 @@ class GenerationRunner:
                 crafted = await self._craft_prompt(
                     shot, char_by_name, scene_setting, prev_action, next_action,
                     foreground=foreground, outfits=outfits,
+                    prev_frame_report=prev_frame_report,
                     blocking=getattr(shot, "blocking_json", None),
                     native_talk=native_talk,
                     speaker=(native_speaker if native_talk else ""),

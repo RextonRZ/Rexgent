@@ -302,6 +302,27 @@ def _scenery():
             "action": "The stormy sea and the cabin."}
 
 
+class TestDropSceneryShots:
+    """Scenery is disallowed now: empty Wan scenes render square and read as
+    disconnected — even Director-authored people-free shots are dropped."""
+
+    def test_drops_faceless_silent_shots(self):
+        from app.services.storyboard_generator import drop_scenery_shots
+        shots = [_talk(["A", "B"]), _scenery(), _talk(["A", "B"]), _scenery()]
+        kept, dropped = drop_scenery_shots(shots)
+        assert dropped == 2
+        assert all(s.get("characters_in_frame") for s in kept)
+
+    def test_peopled_and_talking_shots_survive(self):
+        from app.services.storyboard_generator import drop_scenery_shots
+        shots = [_talk(["A"]),
+                 {"characters_in_frame": ["A"], "dialogue": None, "shot_type": "MS"},
+                 {"characters_in_frame": [], "dialogue": "Hello?", "shot_type": "MS"}]
+        kept, dropped = drop_scenery_shots(shots)
+        assert dropped == 0
+        assert kept == shots
+
+
 class TestHookFirstScenery:
     """THE HOOK owns the first 3 seconds: scenery never plays first. The
     guaranteed Wan visual slots in at the first safe boundary AFTER the hook,

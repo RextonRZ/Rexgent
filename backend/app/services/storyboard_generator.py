@@ -165,6 +165,16 @@ def _pausable_after(shot: dict) -> bool:
     return not line.endswith(("?", "...", "…"))
 
 
+def drop_scenery_shots(shots: list[dict]) -> tuple[list[dict], int]:
+    """Remove every people-free silent shot from a scene. Wan renders empty
+    scenes at the seed image's aspect (square plates -> square video) and
+    hallucinates content, and in practice they read as disconnected from the
+    drama — when scenery is disallowed, even Director-authored ones go.
+    Returns (kept shots NOT renumbered, dropped count)."""
+    kept = [s for s in (shots or []) if not _is_scenery(s)]
+    return kept, len(shots or []) - len(kept)
+
+
 def hook_first_scenery(shots: list[dict], location, lighting,
                        colour_mood) -> tuple[list[dict], str | None]:
     """THE HOOK owns the drama's first 3 seconds — scenery never plays first.

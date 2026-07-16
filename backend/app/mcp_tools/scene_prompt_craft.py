@@ -36,6 +36,7 @@ class ScenePromptCraft:
         scene_setting: dict | None = None,
         prev_action: str | None = None,
         next_action: str | None = None,
+        prev_frame_report: str | None = None,
         foreground_characters: list | None = None,
         blocking: dict | None = None,
         lipsync: bool = False,
@@ -68,15 +69,23 @@ class ScenePromptCraft:
         # Adjacent-shot context (rule 14) so the prompt shows only THIS shot's
         # incremental motion instead of replaying the previous shot's action.
         continuity_parts = []
+        if prev_frame_report:
+            # ground truth beats intention: a VL model read the previous
+            # clip's ACTUAL final frame, so the opening state continues from
+            # what really rendered, not what the board hoped had rendered
+            continuity_parts.append(
+                "The previous clip actually ENDED like this (read from its "
+                f"final frame): {prev_frame_report}")
         if prev_action:
             continuity_parts.append(
                 f"Previous shot (already shown — do NOT replay this): {prev_action}")
+        if prev_frame_report or prev_action:
             # each clip renders independently and no frame is chained, so the
             # OPENING pose must be stated or she teleports from sitting to
             # mid-stride between cuts
             continuity_parts.append(
                 "OPENING STATE: this shot begins exactly where the previous "
-                "shot ended — same positions and postures (someone seated is "
+                "clip ended — same positions and postures (someone seated is "
                 "STILL seated at frame one). Any change of pose or position "
                 "happens ON CAMERA during this shot, never before it.")
         if next_action:
@@ -275,6 +284,25 @@ class ScenePromptCraft:
                and str(s.get('character')).strip().upper() in in_frame_upper]
         eyelines = (" Eyelines: " + "; ".join(eye) + ".") if eye else ""
 
+        # (2b) BACK STAYS BACK: a subject staged facing away (or a foreground
+        # occluder) must not rotate to camera mid-shot — continuation models
+        # love turning them around, and the revealed face never matches the
+        # cast. Stated positively AND banned in the negative below.
+        backs = [str(s.get("character"))
+                 for s in (subs or [])
+                 if isinstance(s, dict) and s.get("character")
+                 and str(s.get("facing") or "") == "away-from-camera"
+                 and str(s.get("character")).strip().upper() in in_frame_upper]
+        for fgc in (foreground_characters or []):
+            if str(fgc).strip().upper() in in_frame_upper and str(fgc) not in backs:
+                backs.append(str(fgc))
+        back_clause = ""
+        if backs:
+            who = ", ".join(backs)
+            keeps = "keep" if len(backs) > 1 else "keeps"
+            back_clause = (f" {who} {keeps} their back to the camera for the "
+                           "entire shot, never turning around, face never shown.")
+
         # (3) Setting backstop: never a blank background — if the body names none
         # of the scene's setting, add a concise clause (the location plate may
         # have been trimmed from the ref stack).
@@ -333,7 +361,8 @@ class ScenePromptCraft:
         # assemble: front matter, model body, deterministic clauses, DURATION last
         dur = int(shot.get("estimated_duration_seconds", 5))
         assembled = ((front + " ") if front else "") + body.lstrip()
-        assembled = (assembled.rstrip() + speech + eyelines + setting_clause + wan_sound)
+        assembled = (assembled.rstrip() + speech + eyelines + back_clause
+                     + setting_clause + wan_sound)
         result["prompt"] = assembled.rstrip().rstrip(",") + f" Duration: {dur} seconds."
 
         if repairs:
@@ -355,6 +384,9 @@ class ScenePromptCraft:
             sup = environment["suppressed"]
             if sup.lower() not in (result.get("negative_prompt") or "").lower():
                 result["negative_prompt"] += ", " + sup
+        if backs:
+            result["negative_prompt"] += (
+                ", turning around to face the camera, revealing the face")
         if character_visuals:
             # invented-feature bans (peopled shots): models grow beards on
             # clean-shaven men and blemishes in close-ups. Facial hair is
