@@ -592,6 +592,52 @@ async def cast_bible_op(db: Session, project_id: str) -> dict:
     return await CastingDirector(db).cast_bible(project_id)
 
 
+async def synth_dialogue_op(db: Session, project_id: str,
+                            only_characters: set | None = None) -> int:
+    """Synthesize dialogue audio (TTS overlay). only_characters restricts the
+    run to those speakers' lines (recast after first synthesis) — other
+    characters' existing audio is left untouched."""
+    from app.services.dialogue_synthesizer import DialogueSynthesizer
+    from app.models.line_audio import LineAudio
+    script = (db.query(Script).filter(Script.project_id == uuid.UUID(str(project_id)))
+              .order_by(Script.created_at.desc()).first())
+    if not script:
+        return 0
+    scenes = db.query(Scene).filter(Scene.script_id == script.id).order_by(Scene.number).all()
+    chars = db.query(Character).filter(Character.project_id == uuid.UUID(str(project_id))).all()
+    # Assign a distinct preset voice to any character that skipped casting, so the
+    # export isn't every character speaking in the same fallback voice.
+    from app.services.casting_director import assign_voice
+    changed = False
+    for i, c in enumerate(chars):
+        if not c.voice_id:
+            assign_voice(c, i, db=db, project_id=str(project_id))
+            changed = True
+    if changed:
+        db.commit()
+    voice_by_name = {c.name: {"voice_id": c.voice_id, "voice_model": c.voice_model} for c in chars}
+    scene_dicts = [{"number": s.number, "dialogue_json": s.dialogue_json} for s in scenes]
+    rows = await DialogueSynthesizer(db).synthesize_lines(
+        project_id, scene_dicts, voice_by_name, only_characters=only_characters)
+    # Exact replace: drop ONLY the (scene, line) slots we actually re-synthesized.
+    # A line whose TTS failed keeps its previous audio instead of going silent,
+    # and the next export's missing/stale detection retries it.
+    new_keys = {(r["scene_number"], r["line_index"]) for r in rows}
+    if new_keys:
+        for old in db.query(LineAudio).filter(
+                LineAudio.project_id == uuid.UUID(str(project_id))).all():
+            if (old.scene_number, old.line_index) in new_keys:
+                db.delete(old)
+    for r in rows:
+        db.add(LineAudio(**r))
+    db.commit()
+    from app.agents.reporter import report_agent
+    report_agent(db, project_id, agent="audio_continuity", stage="audio",
+                 decision={"lines": len(rows)},
+                 rationale=f"Synthesized {len(rows)} dialogue lines", confidence=1.0)
+    return len(rows)
+
+
 async def clarify_op(db: Session, project_id: str) -> dict:
     from app.agents.clarification_agent import ClarificationAgent, needs_pause
     from app.agents.reporter import report_agent

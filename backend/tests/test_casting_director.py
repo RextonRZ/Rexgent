@@ -17,6 +17,26 @@ def test_resolve_outfit_drops_eyewear():
     assert resolve_outfit("navy blazer, safety glasses, slacks", None) == "navy blazer, slacks"
 
 
+def test_assign_voice_defaults_to_preset_without_overlay():
+    # TTS_OVERLAY off: no paid design — a gender-matched preset is assigned
+    from types import SimpleNamespace
+    from app.services.casting_director import assign_voice
+    c = SimpleNamespace(voice_id=None, voice_model=None, voice_source=None,
+                        gender="female", name="Anna")
+    assign_voice(c, 0)
+    assert c.voice_id
+    assert c.voice_source == "preset"
+
+
+def test_voice_design_prompt_folds_the_character_sheet():
+    from types import SimpleNamespace
+    from app.services.casting_director import voice_design_prompt
+    c = SimpleNamespace(estimated_age="20s", gender="female",
+                        personality_summary="guarded, warm underneath")
+    p = voice_design_prompt(c)
+    assert "female" in p and "20s" in p and "guarded" in p
+
+
 def test_distinct_locations_groups_by_key():
     scenes = [{"number": 1, "location": "Coffee Shop"},
               {"number": 2, "location": "coffee shop"},
