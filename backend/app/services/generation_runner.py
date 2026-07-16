@@ -304,7 +304,13 @@ class GenerationRunner:
                             db2.query(Character).filter(Character.project_id == job2.project_id).all()}
             shots = db2.query(Shot).filter(Shot.scene_id == scene.id).order_by(Shot.number).all()
 
-            scene_anchor = None
+            # the scene opens ALREADY anchored to its people-free room: the
+            # location plate. Every shot from the FIRST carries the same set —
+            # and CU/ECU (which drop the location role from the stack) still
+            # see the room through the anchor. The plate has nobody in it, so
+            # it can never render as a duplicate person. Only when a scene has
+            # no plate does a faceless wide's closing frame take the role.
+            scene_anchor = (bible.get("location_by_scene") or {}).get(scene.number)
             set_json = getattr(scene, "set_json", None)
             # Continuity de-dup runs over the shots that actually render (the
             # allocator may have cut some), so each prompt sees the real

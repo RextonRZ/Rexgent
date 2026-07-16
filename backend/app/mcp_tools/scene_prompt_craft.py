@@ -274,9 +274,11 @@ class ScenePromptCraft:
         if scene_setting:
             items = [str(i) for i in (scene_setting.get("set_items") or [])][:4]
             loc = str(scene_setting.get("location") or "").strip()
-            hay = body.lower()
-            named = (loc and loc.lower() in hay) or any(it.lower()[:15] in hay for it in items)
-            if not named and (loc or items):
+            # ALWAYS restated (not only when the body forgot): the SAME named
+            # landmarks in every shot of the scene are what keep the model
+            # redrawing the same room — without them each angle invents its
+            # own furniture and the backgrounds drift shot to shot
+            if loc or items:
                 clause = ", ".join([p for p in [loc] + items if p])
                 setting_clause = f" Setting: {clause}."
 
@@ -345,6 +347,17 @@ class ScenePromptCraft:
             sup = environment["suppressed"]
             if sup.lower() not in (result.get("negative_prompt") or "").lower():
                 result["negative_prompt"] += ", " + sup
+        if character_visuals:
+            # invented-feature bans (peopled shots): models grow beards on
+            # clean-shaven men and blemishes in close-ups. Facial hair is
+            # banned ONLY when no cast description wears any (like eyewear);
+            # skin artifacts are never a wardrobe choice, always banned.
+            visuals_text = " ".join(str(v) for v in character_visuals.values()).lower()
+            if not _re.search(r"beard|moustache|mustache|stubble|facial hair|goatee",
+                              visuals_text):
+                result["negative_prompt"] += ", beard, mustache, stubble, facial hair"
+            result["negative_prompt"] += (
+                ", acne, pimples, skin blemishes, dark spots on face")
         # Final gate (rule A5): the crafted prompt still carries typographic
         # gremlins — em/en dashes, smart quotes, and the replacement char (mojibake)
         # — which corrupt adjacent words and confuse the video model. Fold them to

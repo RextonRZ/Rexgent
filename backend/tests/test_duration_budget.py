@@ -21,12 +21,12 @@ class TestLineBudgetEnforcement:
         assert count_dialogue_lines(None) == 0
 
     def test_the_shattered_tides_draft_is_over(self):
-        # 11 lines against a 30s budget of 5 -> needs the trim pass
-        assert over_line_budget(_structured(4, 7), 30) == 5
+        # 11 lines against a 30s budget of 6 -> needs the trim pass
+        assert over_line_budget(_structured(4, 7), 30) == 6
 
     def test_one_line_of_grace(self):
-        assert over_line_budget(_structured(6), 30) is None    # 5 + 1 tolerated
-        assert over_line_budget(_structured(7), 30) == 5
+        assert over_line_budget(_structured(7), 30) is None    # 6 + 1 tolerated
+        assert over_line_budget(_structured(8), 30) == 6
 
     def test_within_budget_needs_no_trim(self):
         assert over_line_budget(_structured(3, 2), 30) is None
@@ -38,10 +38,10 @@ class TestLineBudgetEnforcement:
 
 class TestDialogueBudget:
     def test_thirty_seconds_is_a_handful_of_lines(self):
-        assert plan_dialogue_budget(30) == 5
+        assert plan_dialogue_budget(30) == 6
 
     def test_seventy_seconds(self):
-        assert plan_dialogue_budget(70) == 12
+        assert plan_dialogue_budget(70) == 14
 
     def test_never_below_three_lines(self):
         assert plan_dialogue_budget(10) == 3
@@ -49,7 +49,7 @@ class TestDialogueBudget:
         assert plan_dialogue_budget(None) == 3
 
     def test_scales_with_long_episodes(self):
-        assert plan_dialogue_budget(300) == 50
+        assert plan_dialogue_budget(300) == 60
 
 
 class TestSceneShotBudget:

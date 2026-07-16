@@ -64,9 +64,13 @@ class Settings(BaseSettings):
     # no dialogue) that routes to Wan. OFF by default -> boarding unchanged.
     ensure_establishing_shot: bool = False
     # Weave silent Wan beats into every scene: held two-shots between dialogue
-    # (same framing + cast, no line) and a few faceless atmosphere cutaways
-    # scaled by target length. OFF by default -> boarding unchanged.
+    # (same framing + cast, no line). OFF by default -> boarding unchanged.
     wan_beats: bool = False
+    # Faceless atmosphere cutaways (people-free scenery mid-scene). Split from
+    # wan_beats and OFF by default: in practice the empty-scenery inserts read
+    # as disconnected from the drama, while the held beats (same cast, same
+    # frame) are the Wan continuation that actually works.
+    wan_atmosphere: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

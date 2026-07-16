@@ -104,8 +104,14 @@ def image_ref_legend(provenance) -> str:
         "identity": "{c}'s face",
         "costume": "{c}'s outfit",
         "prev_frame": "the previous shot's frame for continuity",
-        "scene_anchor": "the scene's establishing frame",
-        "location": "the location and set",
+        # the room references show the PLACE, not the camera view: without the
+        # angle clause the model pastes the image as a flat backdrop and every
+        # shot shows the same props from the same side regardless of the
+        # planned camera position
+        "scene_anchor": ("the scene's set - keep its furniture and props, "
+                         "rendered from THIS shot's camera angle"),
+        "location": ("the location and set - keep its furniture and props, "
+                     "rendered from THIS shot's camera angle"),
         "style": "the visual style",
     }
     parts = []

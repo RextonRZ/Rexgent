@@ -579,6 +579,42 @@ async def test_craft_to_wan_scenery_gets_ambience_and_score():
 
 
 @pytest.mark.asyncio
+async def test_negative_bans_invented_facial_hair_and_blemishes():
+    # scene 2 shot 3 grew a beard and a moustache on a clean-shaven man, and
+    # close-ups invented pimples — banned unless a description wears them
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MS", "action": "he listens"},
+        character_visuals={"DEOK": "a man with a sharp jawline, short black hair"},
+        target_model="happyhorse")
+    neg = out["negative_prompt"]
+    assert "beard" in neg and "mustache" in neg
+    assert "acne" in neg and "pimples" in neg
+
+
+@pytest.mark.asyncio
+async def test_described_beard_is_not_banned():
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MS", "action": "he listens"},
+        character_visuals={"JAE": "an older man with a salt-and-pepper beard"},
+        target_model="happyhorse")
+    assert "beard" not in out["negative_prompt"].replace("salt-and-pepper beard", "")
+    # skin bans still apply
+    assert "acne" in out["negative_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_scenery_shots_skip_the_facial_bans():
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "EWS", "action": "the empty shore"},
+        character_visuals={}, target_model="wan", to_wan=True)
+    assert "beard" not in out["negative_prompt"]
+    assert "acne" not in out["negative_prompt"]
+
+
+@pytest.mark.asyncio
 async def test_craft_to_wan_peopled_hold_keeps_music_out():
     # a silent held beat sits BETWEEN two spoken lines — a 3s score swell
     # mid-conversation jars against the talking clips around it

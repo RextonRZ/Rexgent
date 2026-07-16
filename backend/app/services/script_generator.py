@@ -6,11 +6,12 @@ from app.config import get_settings
 
 def plan_dialogue_budget(target_length: int | None) -> int:
     """How many dialogue lines fit an episode of `target_length` seconds. A
-    line plays ~5s on screen (short line -> 5s clip tier), so ~1 line per 6s
-    leaves room for action beats and silence. Floor of 3 so a tiny episode is
-    still a drama. Without this the writer paced by feel: a 30s ask produced
-    11 lines that boarded to 97s."""
-    return max(3, round((target_length or 0) / 6))
+    line plays ~5s on screen (short line -> 5s clip tier), so ~1 line per 5s
+    keeps conversations alive while the duration fitter and the 3s beat floor
+    hold the runtime. Floor of 3 so a tiny episode is still a drama. Without
+    this the writer paced by feel: a 30s ask produced 11 lines that boarded
+    to 97s; the earlier 1-per-6s budget made conversations feel clipped."""
+    return max(3, round((target_length or 0) / 5))
 
 
 def count_dialogue_lines(structured: dict | None) -> int:

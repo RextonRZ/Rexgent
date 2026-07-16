@@ -301,7 +301,7 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     if len(held) != len(shots):
                         hold_budget -= len(held) - len(shots)
                         shots, enriched = held, True
-                if atmo_budget > 0:
+                if atmo_budget > 0 and getattr(get_settings(), "wan_atmosphere", False):
                     before = len(shots)
                     with_atmo = insert_atmosphere(shots, atmo_budget, scene.location,
                                                   _look_of("lighting"),

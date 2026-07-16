@@ -119,7 +119,7 @@ async def test_judge_receives_format_context():
     await judge.evaluate(script_json={"scenes": []}, target_length=30)
     sent = judge.qwen.chat_json.call_args.kwargs["messages"][1]["content"]
     assert "30" in sent
-    assert "5" in sent          # the line budget for 30s
+    assert "6" in sent          # the line budget for 30s
     assert "FORMAT CONTEXT" in sent
 
 
