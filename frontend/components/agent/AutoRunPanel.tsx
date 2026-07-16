@@ -392,12 +392,20 @@ export function AutoRunPanel({
           </p>
         )}
 
-        {/* in the rewrite dialog the button pins to the bottom of the scroll
-            viewport, so it stays reachable however long the form gets */}
+        {runError && (
+          <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            {runError} The Showrunner chat and crew dock show how far the run
+            got.
+          </p>
+        )}
+
+        {/* in the rewrite dialog the button FLOATS at the bottom of the
+            scroll viewport: always in reach, flush with the dialog edge,
+            the form fading out beneath it in the dialog's glass colour */}
         <div
           className={
             rewrite
-              ? "sticky bottom-0 z-10 -mx-4 border-t bg-popover/95 px-4 py-3 backdrop-blur"
+              ? "sticky bottom-0 z-10 -mx-4 rounded-b-xl bg-gradient-to-t from-[hsl(250_20%_10%)] via-[hsl(250_20%_10%/0.92)] to-transparent px-4 pt-6 pb-3"
               : undefined
           }
         >
@@ -419,13 +427,6 @@ export function AutoRunPanel({
               : "Write my script (no video spend)"}
           </Button>
         </div>
-
-        {runError && (
-          <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-            {runError} The Showrunner chat and crew dock show how far the run
-            got.
-          </p>
-        )}
 
         {result && !rewrite && (
           <div className="border-t pt-3 text-sm space-y-2">

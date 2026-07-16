@@ -323,7 +323,9 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
               <DialogHeader>
                 <DialogTitle>Rewrite script</DialogTitle>
               </DialogHeader>
-              <DialogBody>
+              {/* -mb-4: the scroll region reaches the dialog's bottom edge so
+                  the floating submit sits flush with the rounded corner */}
+              <DialogBody className="-mb-4">
                 <AutoRunPanel
                   projectId={params.id}
                   mode="rewrite"
