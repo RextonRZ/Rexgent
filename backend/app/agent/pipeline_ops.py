@@ -558,7 +558,9 @@ def allocate_budget_op(db: Session, project_id: str, shots: list[dict], budget_u
         from app.models.project import Project
         project = db.query(Project).filter(Project.id == uuid.UUID(str(project_id))).first()
         budget_usd = float(project.credit_budget) if project and project.credit_budget else 40.0
-    with tool_run(project_id, "generate", "budget_allocate", "Producer") as t:
+    # staged under STORYBOARD in the crew graph: the Producer fits the money
+    # on the storyboard page (pre-production), not during generation
+    with tool_run(project_id, "storyboard", "budget_allocate", "Producer") as t:
         result = TokenOptimizer().allocate(
             shots, budget_usd, wan_primary=getattr(get_settings(), "wan_primary", False))
         tier_by_id = {s["shot_id"]: s["quality_tier"] for s in result["scored_shots"]}

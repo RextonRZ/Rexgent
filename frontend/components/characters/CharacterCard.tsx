@@ -7,6 +7,7 @@ import { MBTIBadge } from "./MBTIBadge";
 import { FaceUpload } from "./FaceUpload";
 import { AppearanceGenerator } from "./AppearanceGenerator";
 import { PlateCard } from "@/components/casting/PlateCard";
+import { VoiceRow } from "@/components/casting/VoiceRow";
 import { ZoomableImage } from "@/components/shared/Lightbox";
 import { SpendConfirm, type SpendRequest } from "@/components/shared/SpendConfirm";
 import {
@@ -93,9 +94,12 @@ function Expandable({ text }: { text: string }) {
 export function CharacterCard({
   character,
   casting,
+  voiceEnabled = false,
 }: {
   character: Character;
   casting?: CastingCharacter;
+  /** TTS overlay mode: show the voice panel (preset/clone/preview) */
+  voiceEnabled?: boolean;
 }) {
   const regenerateVariant = useRegenerateVariant();
   const swapOutfit = useSwapOutfit();
@@ -271,6 +275,17 @@ export function CharacterCard({
                 </p>
               )}
             </Section>
+
+            {voiceEnabled && (
+              <Section title="Voice">
+                <VoiceRow
+                  characterId={character.id}
+                  voiceId={casting.voice_id}
+                  voiceSource={casting.voice_source}
+                  voiceDesign={casting.voice_design}
+                />
+              </Section>
+            )}
           </>
         )}
         <SpendConfirm request={spend} onClose={() => setSpend(null)} />

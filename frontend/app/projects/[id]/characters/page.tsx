@@ -178,6 +178,7 @@ export default function CharactersPage({
             <CharacterList
               characters={characters}
               castingByCharId={castingByCharId}
+              voiceEnabled={Boolean(bible?.tts_overlay)}
             />
           )}
         </TabsContent>

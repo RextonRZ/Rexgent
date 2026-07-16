@@ -58,7 +58,9 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
     # graph node stayed dark on it
     from app.websocket.tool_events import tool_run
     optimizer = TokenOptimizer()
-    with tool_run(project_id, "generate", "budget_allocate", "Producer") as tb:
+    # staged under STORYBOARD in the crew graph: budget fitting happens on the
+    # storyboard page (pre-production), not during generation
+    with tool_run(project_id, "storyboard", "budget_allocate", "Producer") as tb:
         result = optimizer.allocate(shots_data, budget,
                                     wan_primary=get_settings().wan_primary)
         if result.get("wan_shots") or result.get("happyhorse_shots"):

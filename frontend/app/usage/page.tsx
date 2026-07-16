@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  AudioWaveform,
   CheckCircle2,
   Clapperboard,
   Film,
@@ -81,7 +82,6 @@ const ROSTER: {
     icon: Film,
     tint: "text-fuchsia-300/60",
     models: [
-      { name: "wan2.7-t2v / i2v / r2v", role: "Wan · visuals, continuity, scenery", match: ["wan2.7"] },
       { name: "happyhorse-1.1-t2v / i2v / r2v", role: "HappyHorse · faces, dialogue, lip-sync", match: ["happyhorse-1.1"] },
       { name: "happyhorse-1.0-video-edit", role: "Fix a take, the regen loop", match: ["happyhorse-1.0-video-edit"] },
     ],
@@ -95,6 +95,20 @@ const ROSTER: {
     models: [
       { name: "wan2.6-t2i", role: "Reference plates — character, location, style", match: ["wan2.6-t2i"] },
       { name: "qwen-image-edit-max", role: "Costume plates and frame edits", match: ["qwen-image-edit-max"] },
+    ],
+  },
+  {
+    group: "Voice",
+    unit: "character",
+    category: "tts",
+    icon: AudioWaveform,
+    tint: "text-sky-300/60",
+    models: [
+      { name: "qwen3-tts-vd", role: "Designed voices — bespoke timbre per character", match: ["qwen3-tts-vd-2026-01-26"] },
+      { name: "qwen-voice-design", role: "Voice design — casting writes each voice from age and personality", match: ["qwen-voice-design"] },
+      { name: "qwen3-tts-flash", role: "Preset voices + instruct acting delivery", match: ["qwen3-tts-flash"] },
+      { name: "qwen3-tts-vc-realtime", role: "Cloned voices", match: ["qwen3-tts-vc-realtime"] },
+      { name: "qwen-voice-enrollment", role: "Clone enrollment" },
     ],
   },
 ];
@@ -717,7 +731,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
       {/* ── 4 · reliability ── */}
       <Rise index={3}>
         <SectionTitle>Reliability</SectionTitle>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <HealthCard
             label="Continuity pass"
             value={rel.continuity_pass_rate != null ? fmtPct(rel.continuity_pass_rate) : null}
@@ -729,15 +743,6 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
             }
             evidence={<EvidenceStrip samples={rel.flagged_samples} />}
           />
-          {wan && (
-            <HealthCard
-              label="Wan retries"
-              value={fmtPct(wan.retry_rate)}
-              health={retryHealth(wan)}
-              note={`${wan.retried} of ${wan.clips} clips retried`}
-              evidence={<EvidenceStrip samples={rel.retried_samples} />}
-            />
-          )}
           {hh && (
             <HealthCard
               label="HappyHorse retries"

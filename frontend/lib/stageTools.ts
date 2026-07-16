@@ -11,6 +11,7 @@ import {
   Image,
   Lamp,
   ListTree,
+  Mic,
   PenLine,
   RefreshCw,
   ScanFace,
@@ -22,6 +23,7 @@ import {
   Upload,
   UserRound,
   Users,
+  Volume2,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -88,10 +90,12 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
       trigger: "runs with Run AI Analysis to grade the ending and pitch alternates",
     },
   ],
+  // every stage lists its tools in EXECUTION ORDER: required steps first in
+  // the sequence they actually run, conditional/optional steps in their real
+  // slot with a trigger note
   characters: [
     { key: "extract_cast", icon: Users, kind: "llm" },
     { key: "write_cast_db", icon: Database, kind: "db" },
-    { key: "generate_plates", icon: Image, kind: "media" },
     {
       key: "map_relationships", icon: Share2, kind: "llm",
       run: "conditional",
@@ -101,6 +105,12 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
       key: "profile_cast", icon: UserRound, kind: "llm",
       run: "conditional",
       trigger: "runs by itself inside Generate Plates for any character still missing a look; Generate Appearance (no photo) on a character card re-runs it for one character",
+    },
+    { key: "generate_plates", icon: Image, kind: "media" },
+    {
+      key: "voice_assign", icon: Mic, kind: "service",
+      run: "conditional",
+      trigger: "TTS overlay mode only — each character gets a designed, preset or cloned voice",
     },
     {
       key: "face_lock", icon: ScanFace, kind: "validator",
@@ -113,12 +123,27 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
     { key: "shot_breakdown", icon: Clapperboard, kind: "llm" },
     { key: "set_design", icon: Lamp, kind: "llm" },
     { key: "write_shots_db", icon: Database, kind: "db" },
+    {
+      key: "location_plates", icon: Image, kind: "media",
+      run: "conditional",
+      trigger: "paints each location's plate right after boarding, only for locations still missing one",
+    },
+    {
+      key: "style_plate", icon: Image, kind: "media",
+      run: "conditional",
+      trigger: "paints the style frame from the lead's plate, once",
+    },
   ],
   // budget_allocate is deliberately NOT predeclared: it fires on the
   // Storyboard page (pre-production), so a permanent idle node here read as
   // broken — when it does run, the graph appends it dynamically with its
   // artifact, so the Producer still shows up the moment money gets fitted.
   generate: [
+    {
+      key: "frame_handoff", icon: ScanFace, kind: "llm",
+      run: "conditional",
+      trigger: "a VL model reads the previous clip's final frame so the next shot opens from ground truth",
+    },
     { key: "prompt_craft", icon: Wand2, kind: "llm" },
     { key: "dispatch_video", icon: Film, kind: "media" },
     { key: "verify_face", icon: ShieldCheck, kind: "validator" },
@@ -135,9 +160,17 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
     },
   ],
   export: [
+    {
+      key: "synth_voices", icon: Volume2, kind: "media",
+      run: "conditional",
+      trigger: "TTS overlay mode only — synthesizes or refreshes every dialogue line's voice before placement",
+    },
     { key: "stitch_clips", icon: Film, kind: "media" },
-    { key: "render_mp4", icon: Upload, kind: "media" },
-    { key: "write_export_db", icon: Database, kind: "db" },
+    {
+      key: "assemble_timeline", icon: ListTree, kind: "service",
+      run: "conditional",
+      trigger: "TTS overlay mode only — places each voice line on the shot that speaks it",
+    },
     {
       key: "burn_captions", icon: Type, kind: "media",
       run: "conditional",
@@ -148,6 +181,8 @@ export const STAGE_TOOLS: Record<StageKey, ToolSpec[]> = {
       run: "conditional",
       trigger: "when there are voices or music to mix under the picture",
     },
+    { key: "render_mp4", icon: Upload, kind: "media" },
+    { key: "write_export_db", icon: Database, kind: "db" },
   ],
 };
 

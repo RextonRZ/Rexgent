@@ -7,9 +7,11 @@ import type { Character } from "@/lib/types";
 export function CharacterList({
   characters,
   castingByCharId,
+  voiceEnabled = false,
 }: {
   characters: Character[];
   castingByCharId?: Record<string, CastingCharacter>;
+  voiceEnabled?: boolean;
 }) {
   if (characters.length === 0) {
     return (
@@ -32,6 +34,7 @@ export function CharacterList({
           key={char.id}
           character={char}
           casting={castingByCharId?.[char.id]}
+          voiceEnabled={voiceEnabled}
         />
       ))}
     </div>

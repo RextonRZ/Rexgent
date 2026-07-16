@@ -68,6 +68,8 @@ def get_bible(project_id: str, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == pid).first()
     return {
         "auto_approve_casting": (project.auto_approve_casting if project else False),
+        # the frontend voice panel shows only when the TTS overlay is in use
+        "tts_overlay": bool(getattr(get_settings(), "tts_overlay", False)),
         "characters": [{"id": str(c.id), "name": c.name,
             "voice_id": c.voice_id, "voice_source": c.voice_source,
             "voice_design": (voice_design_prompt(c) if c.voice_source == "designed" else None),
