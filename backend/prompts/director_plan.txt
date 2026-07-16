@@ -16,6 +16,10 @@ Return ONLY a JSON array of shot objects, in scene order, each:
 }
 
 RULES:
+- THE HOOK: if this is SCENE 1, its FIRST shot is the drama's first 3 seconds on a phone screen fighting a
+  scroll — stage it on the most arresting beat the scene offers (the confrontation mid-motion, the charged
+  line, the dangerous act). NEVER open scene 1 on scenery, an empty room, or a slow establishing wide; a
+  scenery breath may come SECOND, after the hook has landed.
 - Cover EVERY dialogue line exactly once (by its 0-based index in covers_lines). A shot may fold two short
   consecutive same-speaker lines. A non-dialogue beat has covers_lines: [].
 - VARY shot_size and camera_movement; never repeat a shot_size back-to-back.

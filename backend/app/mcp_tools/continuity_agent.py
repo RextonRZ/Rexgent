@@ -29,6 +29,33 @@ def calibrate_face_similarity(sim: float) -> float:
     return round(0.75 + (sim - GENUINE_SIM) / (STRONG_SIM - GENUINE_SIM) * 0.25, 4)
 
 
+def expected_faces(characters_in_frame, foreground_characters=None,
+                   subjects=None) -> list:
+    """The characters whose FACES the staging says are visible: everyone in
+    frame minus foreground occluders (a back/shoulder to camera) minus any
+    blocking subject facing away-from-camera. Only these are face-scored —
+    grading a face the shot deliberately hides tanks a correct render."""
+    fg = {str(c) for c in (foreground_characters or [])}
+    away = {str(s.get("character")) for s in (subjects or [])
+            if isinstance(s, dict)
+            and str(s.get("facing") or "") == "away-from-camera"}
+    return [n for n in (characters_in_frame or [])
+            if str(n) not in fg and str(n) not in away]
+
+
+def unseen_tolerant_average(scores: list[float], visible_slots: int) -> float | None:
+    """Average per-character face confidences, forgiving structurally UNSEEN
+    faces: when fewer faces are detectable in the frames than characters
+    expected (a profile turned at the wrong moment, a face cropped by the
+    framing), the lowest scores are hidden people matched against the WRONG
+    face — drop them instead of punishing the shot. Real identity drift still
+    reads low because the visible face itself mismatches its reference."""
+    if not scores:
+        return None
+    keep = sorted(scores, reverse=True)[:max(1, min(len(scores), visible_slots))]
+    return round(sum(keep) / len(keep), 4)
+
+
 def combine_scores(face, outfit, background) -> int:
     parts, weights = [], []
     if face is not None:
@@ -55,13 +82,13 @@ class ContinuityAgent:
         return sample_frames(clip_url, duration, count=3)
 
     async def validate(self, clip_url, duration, characters_in_frame, bible, scene_number,
-                       foreground_characters=None) -> dict:
+                       foreground_characters=None, subjects=None) -> dict:
         frames = self._sample(clip_url, duration)
-        fg = set(foreground_characters or [])
-        # Only score faces we expect to SEE: a foreground occluder (back/shoulder
-        # to camera) has no face in frame, so matching it would spuriously tank
-        # the score on every reveal / over-the-shoulder shot.
-        face_names = [n for n in characters_in_frame if n not in fg]
+        # Only score faces the STAGING says are visible: a foreground occluder
+        # (back/shoulder to camera) and an away-facing blocking subject have no
+        # face in frame, so matching them would spuriously tank the score on
+        # every reveal / over-the-shoulder shot.
+        face_names = expected_faces(characters_in_frame, foreground_characters, subjects)
         # face: every detected face in every sampled frame, embedded once.
         # The old pass took only the LARGEST face per frame and averaged every
         # character against it — in a two-person shot each character was graded
@@ -69,7 +96,11 @@ class ContinuityAgent:
         # render near 50. Now each character is judged on their own best match
         # across all faces; identity drift still reads low because no detected
         # face matches the reference then.
-        frame_faces = [fv for fr in frames for fv in self.embedder.model.embed_all(fr)]
+        faces_per_frame = [self.embedder.model.embed_all(fr) for fr in frames]
+        frame_faces = [fv for fr in faces_per_frame for fv in fr]
+        # the most faces any single frame shows = how many characters can
+        # actually be graded; the rest are hidden by the framing
+        visible_slots = max((len(f) for f in faces_per_frame), default=0)
         per_char = []
         for name in face_names:
             ch = bible["characters"].get(name)
@@ -82,7 +113,7 @@ class ContinuityAgent:
             sims = [self.embedder.compare_vectors(ref, fv) for fv in frame_faces]
             if sims:
                 per_char.append(calibrate_face_similarity(max(sims)))
-        face = round(sum(per_char) / len(per_char), 4) if per_char else None
+        face = unseen_tolerant_average(per_char, visible_slots)
         # outfit + background via one VL call on the middle frame
         outfit = background = None
         if frames:

@@ -272,20 +272,22 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # A helper renumbers the scene only when a shot was actually inserted.
             enriched = False
             _look_of = lambda key: next((sd.get(key) for sd in shots if sd.get(key)), None)
-            # (1) Guarantee a Wan visual: the drama's FIRST scene opens on a
-            # people-free establishing shot (empty cast) when it doesn't already,
-            # so every drama gets at least one Wan clip.
+            # (1) Guarantee a Wan visual WITHOUT burying the hook: the drama's
+            # first 3 seconds belong to the most arresting beat, so the
+            # establishing wide slots in at the first safe boundary AFTER the
+            # hook (never splitting a question from its answer), and a scenery
+            # opener the Director boarded itself is relocated the same way.
             if (scene_index == 1
                     and getattr(get_settings(), "ensure_establishing_shot", False)):
-                from app.services.storyboard_generator import (
-                    scene_opens_on_scenery, make_establishing_shot)
-                if not scene_opens_on_scenery(shots):
-                    shots = [make_establishing_shot(scene.location,
-                                                    _look_of("lighting"),
-                                                    _look_of("colour_mood"))] + shots
+                from app.services.storyboard_generator import hook_first_scenery
+                shots, hook_action = hook_first_scenery(
+                    shots, scene.location, _look_of("lighting"), _look_of("colour_mood"))
+                if hook_action:
                     enriched = True
-                    # the establishing wide IS one scenery beat — count it against
-                    # the atmosphere budget so scene 1 doesn't pile up cutaways
+                if hook_action == "inserted":
+                    # a NEW establishing wide IS one scenery beat — count it
+                    # against the atmosphere budget so scene 1 doesn't pile up
+                    # cutaways (a relocation adds nothing, so it costs nothing)
                     atmo_budget = max(0, atmo_budget - 1)
             # (2) Weave silent Wan beats: held two-shots between dialogue (same
             # framing + cast, no line -> Wan continuation), and a few faceless

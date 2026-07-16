@@ -152,6 +152,55 @@ def _held_look_index(prev: dict, last_variant: int) -> int:
     return (last_variant + 1) % len(_HELD_BEAT_LOOKS)
 
 
+def _is_scenery(shot: dict) -> bool:
+    """People-free AND silent — the shot the router sends to Wan."""
+    return (not (shot.get("characters_in_frame") or [])
+            and not str(shot.get("dialogue") or "").strip())
+
+
+def _pausable_after(shot: dict) -> bool:
+    """A scenery beat may follow this shot: its line (if any) is a COMPLETED
+    statement — never a question awaiting its answer or a trailing line."""
+    line = str(shot.get("dialogue") or "").rstrip()
+    return not line.endswith(("?", "...", "…"))
+
+
+def hook_first_scenery(shots: list[dict], location, lighting,
+                       colour_mood) -> tuple[list[dict], str | None]:
+    """THE HOOK owns the drama's first 3 seconds — scenery never plays first.
+    The guaranteed Wan visual (the establishing wide) slots in at the first
+    SAFE boundary after the hook instead: after a completed statement, never
+    between a question and its answer. When the Director boarded its own
+    scenery opener, that shot is RELOCATED behind the hook rather than
+    duplicated. Returns (new list NOT renumbered, action) where action is
+    "inserted" | "moved" | None."""
+    shots = list(shots or [])
+    if not shots:
+        return shots, None
+
+    def safe_slot(seq: list[dict]) -> int | None:
+        for i in range(1, len(seq) + 1):
+            if _pausable_after(seq[i - 1]):
+                return i
+        return None
+
+    if _is_scenery(shots[0]):
+        if len(shots) < 3:
+            return shots, None      # nothing substantial to hook with
+        rest = shots[1:]
+        i = safe_slot(rest)
+        if i is None:
+            return shots, None
+        return rest[:i] + [shots[0]] + rest[i:], "moved"
+    if any(_is_scenery(s) for s in shots):
+        return shots, None          # scenery exists and is not first: fine
+    i = safe_slot(shots)
+    if i is None:
+        i = len(shots)              # every line hangs -> closing wide instead
+    est = make_establishing_shot(location, lighting, colour_mood)
+    return shots[:i] + [est] + shots[i:], "inserted"
+
+
 def _held_beat(prev: dict, variant: int = 0) -> dict:
     """A silent held beat that copies the PRECEDING shot's framing, cast and
     blocking with NO dialogue, so it routes to Wan (a silent same-angle

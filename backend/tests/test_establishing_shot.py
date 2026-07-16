@@ -5,6 +5,7 @@ from app.services.storyboard_generator import (
     scene_opens_on_scenery, make_establishing_shot,
     insert_silent_holds, insert_atmosphere, make_atmosphere_shot,
     widen_faceless_framings, plan_hold_budget, _HELD_BEAT_LOOKS,
+    hook_first_scenery,
 )
 
 
@@ -294,3 +295,58 @@ def test_establishing_shot_handles_missing_location():
     assert est["characters_in_frame"] == []
     assert "the location" in est["action"]
     assert est["dialogue"] is None
+
+
+def _scenery():
+    return {"characters_in_frame": [], "dialogue": None, "shot_type": "LS",
+            "action": "The stormy sea and the cabin."}
+
+
+class TestHookFirstScenery:
+    """THE HOOK owns the first 3 seconds: scenery never plays first. The
+    guaranteed Wan visual slots in at the first safe boundary AFTER the hook,
+    and never between a question and its answer."""
+
+    def test_inserts_establishing_after_the_hook(self):
+        shots = [_talk(["A", "B"], line="Anna, we need to talk."),
+                 _talk(["A", "B"], line="What is it?")]
+        out, action = hook_first_scenery(shots, "a cabin", "NIGHT", "COOL")
+        assert action == "inserted"
+        assert out[0]["dialogue"] == "Anna, we need to talk."   # hook stays first
+        assert out[1]["characters_in_frame"] == []              # scenery second
+        assert out[1]["shot_type"] == "EWS"
+
+    def test_never_splits_a_question_from_its_answer(self):
+        shots = [_talk(["A", "B"], line="Why did you lie to me?"),
+                 _talk(["A", "B"], line="I had no choice."),
+                 _talk(["A", "B"], line="Tell me now.")]
+        out, action = hook_first_scenery(shots, "a cabin", "NIGHT", "COOL")
+        assert action == "inserted"
+        empties = [i for i, s in enumerate(out) if not s["characters_in_frame"]]
+        assert empties == [2]     # after the answer, not between Q and A
+
+    def test_relocates_an_llm_scenery_opener_behind_the_hook(self):
+        # the 'Shattered Tides' case: the Director opened scene 1 on a mood
+        # wide; the hook must play first and the scenery slides to slot 2
+        shots = [_scenery(),
+                 _talk(["A", "B"], line="Anna, we need to talk."),
+                 _talk(["A", "B"], line="What is it, Deok-hyun?")]
+        out, action = hook_first_scenery(shots, "a cabin", "NIGHT", "COOL")
+        assert action == "moved"
+        assert out[0]["dialogue"] == "Anna, we need to talk."
+        assert out[1]["characters_in_frame"] == []
+        assert len(out) == 3      # moved, not duplicated
+
+    def test_scenery_already_mid_scene_is_left_alone(self):
+        shots = [_talk(["A", "B"]), _scenery(), _talk(["A", "B"])]
+        out, action = hook_first_scenery(shots, "a cabin", "NIGHT", "COOL")
+        assert action is None
+        assert out == shots
+
+    def test_tiny_scene_with_scenery_opener_is_left_alone(self):
+        shots = [_scenery(), _talk(["A", "B"])]
+        out, action = hook_first_scenery(shots, "a cabin", "NIGHT", "COOL")
+        assert action is None
+
+    def test_empty_scene_is_a_noop(self):
+        assert hook_first_scenery([], "x", None, None) == ([], None)

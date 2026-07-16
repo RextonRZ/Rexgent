@@ -4,7 +4,52 @@ from app.mcp_tools.continuity_agent import (
     ContinuityAgent,
     combine_scores,
     calibrate_face_similarity,
+    expected_faces,
+    unseen_tolerant_average,
 )
+
+
+class TestExpectedFaces:
+    """Only faces the STAGING says are visible get scored: a foreground
+    shoulder and a character facing away from camera have no face to match,
+    so grading them tanks a correct render."""
+
+    def test_foreground_characters_are_excluded(self):
+        assert expected_faces(["Anna", "Deok"], ["Deok"], None) == ["Anna"]
+
+    def test_away_facing_subjects_are_excluded(self):
+        subjects = [{"character": "Anna", "facing": "toward-camera"},
+                    {"character": "Deok", "facing": "away-from-camera"}]
+        assert expected_faces(["Anna", "Deok"], [], subjects) == ["Anna"]
+
+    def test_everyone_visible_stays(self):
+        assert expected_faces(["Anna", "Deok"], [], []) == ["Anna", "Deok"]
+
+    def test_handles_none_inputs(self):
+        assert expected_faces(None, None, None) == []
+
+
+class TestUnseenTolerantAverage:
+    """When fewer faces are detectable than characters expected (a profile
+    turned away, a face cropped by the framing), the lowest scores are hidden
+    people matched against the WRONG face — dropped, not punished."""
+
+    def test_hidden_second_face_does_not_tank_the_shot(self):
+        # two expected, only one face detected: the 0.2 is the hidden person
+        # scored against the visible person's face — ignore it
+        assert unseen_tolerant_average([0.95, 0.2], visible_slots=1) == 0.95
+
+    def test_real_drift_still_reads_low(self):
+        # two expected, two faces detected: both scores count, drift shows
+        assert unseen_tolerant_average([0.95, 0.2], visible_slots=2) == 0.575
+
+    def test_no_scores_is_none(self):
+        assert unseen_tolerant_average([], visible_slots=0) is None
+
+    def test_zero_detected_still_keeps_the_best(self):
+        # defensive: if we somehow scored someone with no detections counted,
+        # keep at least the best score rather than dividing by zero
+        assert unseen_tolerant_average([0.6], visible_slots=0) == 0.6
 
 
 def test_calibration_maps_arcface_scale_to_confidence():

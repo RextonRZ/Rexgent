@@ -998,7 +998,8 @@ class GenerationRunner:
                 guard = await self.continuity.validate(
                     clip_url=clip_url, duration=shot.estimated_duration_seconds,
                     characters_in_frame=in_frame, bible=bible, scene_number=scene_number,
-                    foreground_characters=foreground)
+                    foreground_characters=foreground,
+                    subjects=(getattr(shot, "blocking_json", None) or {}).get("subjects"))
                 emit("continuity.scoring.completed", {"shot_id": str(shot.id), "scores": guard}, pid)
                 tool_event(pid, "generate", "verify_face", "succeeded", agent="Continuity",
                            artifact=f"scored {guard['continuity_score']}%")
@@ -1040,7 +1041,8 @@ class GenerationRunner:
                         r_guard = await self.continuity.validate(
                             clip_url=r_url, duration=shot.estimated_duration_seconds,
                             characters_in_frame=in_frame, bible=bible,
-                            scene_number=scene_number, foreground_characters=foreground)
+                            scene_number=scene_number, foreground_characters=foreground,
+                            subjects=(getattr(shot, "blocking_json", None) or {}).get("subjects"))
                         if r_guard["continuity_score"] > best_guard["continuity_score"]:
                             best_url, best_guard, best_tier = r_url, r_guard, r_tier
                         if r_guard["overall_pass"]:
