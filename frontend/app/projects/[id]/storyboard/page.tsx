@@ -204,7 +204,7 @@ export default function StoryboardPage({
                     <img
                       src={bible.style.plate_image_url}
                       alt="Style preset"
-                      className="aspect-video w-full object-cover"
+                      className="aspect-[3/4] w-full object-cover"
                     />
                   )}
                   <p className="px-4 py-2.5 text-[11px] text-muted-foreground">
