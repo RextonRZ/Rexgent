@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -90,7 +92,7 @@ export function NewProjectModal({
         <DialogHeader>
           <DialogTitle className="text-xl">New drama</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 pt-2">
+        <DialogBody className="space-y-4 pt-2">
           <div>
             <Label className="text-xs text-muted-foreground">Drama title</Label>
             <Input
@@ -257,6 +259,8 @@ export function NewProjectModal({
               {createError}
             </p>
           )}
+        </DialogBody>
+        <DialogFooter className="bg-transparent">
           <Button
             onClick={handleCreate}
             disabled={pending}
@@ -265,7 +269,7 @@ export function NewProjectModal({
           >
             {pending ? "Creating…" : "Create drama →"}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

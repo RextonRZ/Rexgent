@@ -160,13 +160,15 @@ export function AutoRunPanel({
   };
 
   return (
-    <Card className="py-6">
-      <CardHeader className="px-6">
-        <CardTitle>
-          {rewrite ? "Rewrite script" : "Full Auto — One Premise → Whole Drama"}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-6 space-y-5">
+    // in rewrite mode the panel lives inside a dialog that already shows the
+    // title, so the Card chrome and duplicate heading disappear
+    <Card className={rewrite ? "border-0 bg-transparent py-0 shadow-none" : "py-6"}>
+      {!rewrite && (
+        <CardHeader className="px-6">
+          <CardTitle>Full Auto — One Premise → Whole Drama</CardTitle>
+        </CardHeader>
+      )}
+      <CardContent className={rewrite ? "px-0 space-y-5" : "px-6 space-y-5"}>
         <p className="text-sm text-muted-foreground">
           {rewrite
             ? "Adjust the premise, scope or budget and write a fresh draft. Your current draft stays in history."
@@ -390,23 +392,33 @@ export function AutoRunPanel({
           </p>
         )}
 
-        <Button
-          onClick={handleRun}
-          disabled={!premise || autoRun.isPending}
-          className="w-full"
+        {/* in the rewrite dialog the button pins to the bottom of the scroll
+            viewport, so it stays reachable however long the form gets */}
+        <div
+          className={
+            rewrite
+              ? "sticky bottom-0 z-10 -mx-4 border-t bg-popover/95 px-4 py-3 backdrop-blur"
+              : undefined
+          }
         >
-          {rewrite
-            ? autoRun.isPending
-              ? "Rewriting…"
-              : "Rewrite my script (no video spend)"
-            : autoRun.isPending
-            ? fullAuto
-              ? "Producing your episode…"
-              : "Writing…"
-            : fullAuto
-            ? "Produce my episode (spends voucher)"
-            : "Write my script (no video spend)"}
-        </Button>
+          <Button
+            onClick={handleRun}
+            disabled={!premise || autoRun.isPending}
+            className="w-full"
+          >
+            {rewrite
+              ? autoRun.isPending
+                ? "Rewriting…"
+                : "Rewrite my script (no video spend)"
+              : autoRun.isPending
+              ? fullAuto
+                ? "Producing your episode…"
+                : "Writing…"
+              : fullAuto
+              ? "Produce my episode (spends voucher)"
+              : "Write my script (no video spend)"}
+          </Button>
+        </div>
 
         {runError && (
           <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">

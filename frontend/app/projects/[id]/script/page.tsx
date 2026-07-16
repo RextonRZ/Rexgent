@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -318,22 +319,21 @@ export default function ScriptPage({ params }: { params: { id: string } }) {
           )}
 
           <Dialog open={rewriteOpen} onOpenChange={setRewriteOpen}>
-            <DialogContent
-              className="glass sm:max-w-2xl max-h-[90vh] overflow-y-auto"
-              showCloseButton
-            >
+            <DialogContent className="glass sm:max-w-2xl" showCloseButton>
               <DialogHeader>
                 <DialogTitle>Rewrite script</DialogTitle>
               </DialogHeader>
-              <AutoRunPanel
-                projectId={params.id}
-                mode="rewrite"
-                initialPremise={projectPremise}
-                initialGenre={projectGenre}
-                initialEpisodes={epParam}
-                initialTargetLength={lenParam}
-                onRewritten={() => setRewriteOpen(false)}
-              />
+              <DialogBody>
+                <AutoRunPanel
+                  projectId={params.id}
+                  mode="rewrite"
+                  initialPremise={projectPremise}
+                  initialGenre={projectGenre}
+                  initialEpisodes={epParam}
+                  initialTargetLength={lenParam}
+                  onRewritten={() => setRewriteOpen(false)}
+                />
+              </DialogBody>
             </DialogContent>
           </Dialog>
         </div>

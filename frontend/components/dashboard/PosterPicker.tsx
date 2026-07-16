@@ -6,6 +6,7 @@ import { Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -99,7 +100,7 @@ export function PosterPicker({
             No clips yet — posters are cut from your generated footage.
           </p>
         ) : (
-          <div className="flex gap-4 pt-2">
+          <DialogBody className="flex gap-4 pt-2">
             {/* clip list */}
             <div className="flex max-h-[420px] w-40 shrink-0 flex-col gap-2 overflow-y-auto pr-1">
               {clips.map((c, i) => (
@@ -220,7 +221,7 @@ export function PosterPicker({
                 </p>
               )}
             </div>
-          </div>
+          </DialogBody>
         )}
       </DialogContent>
     </Dialog>
