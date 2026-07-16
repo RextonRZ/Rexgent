@@ -191,7 +191,9 @@ async def ensure_location_plates(db: Session, project_id) -> int:
     for idx, loc in enumerate(missing, start=1):
         emit("casting.plate.started",
              {"kind": "location", "key": loc["location_key"], "index": idx, "total": len(missing)}, pid)
-        tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
+        # staged under STORYBOARD in the crew graph: location plates paint at
+        # boarding time now, not on the Characters tab
+        tool_event(pid, "storyboard", "location_plates", "started", agent="Casting",
                    index=idx, total=len(missing))
         desc = strip_character_names(loc["description"], char_names) or "interior room"
         prompt = location_plate_prompt(desc, heading=loc.get("heading"),
@@ -206,9 +208,48 @@ async def ensure_location_plates(db: Session, project_id) -> int:
              {"kind": "location", "key": loc["location_key"], "index": idx, "total": len(missing)}, pid)
 
     db.commit()
-    tool_event(pid, "characters", "generate_plates", "succeeded", agent="Casting",
+    tool_event(pid, "storyboard", "location_plates", "succeeded", agent="Casting",
                artifact=f"{len(missing)} location plates")
     return len(missing)
+
+
+async def ensure_style_plate(db: Session, project_id) -> bool:
+    """Paint the style plate at STORYBOARD time (not casting), image-edited
+    FROM the lead character's plate so the style frame shows the real cast
+    face instead of an invented person. Idempotent: an existing style image is
+    never repainted. Returns True when a plate was painted."""
+    style = db.query(StylePreset).filter(StylePreset.project_id == project_id).first()
+    if style is None or (style.plate_image_url or "").strip():
+        return False
+    # the lead's default plate seeds the edit (the image API takes ONE base
+    # image, so the style frame carries one real face — the protagonist)
+    chars = db.query(Character).filter(Character.project_id == project_id).all()
+    chars.sort(key=lambda c: 0 if str(c.role or "").upper() == "PROTAGONIST" else 1)
+    base_url = None
+    for c in chars:
+        for v in db.query(CostumeVariant).filter(CostumeVariant.character_id == c.id).all():
+            if v.plate_image_url:
+                base_url = v.plate_image_url
+                break
+        if base_url:
+            break
+    prompt = ((style.free_text or "cinematic realistic drama").strip()
+              + ". A cinematic film still of the SAME person as the reference "
+                "image - keep the identical face and hair - placed in this "
+                "visual style.")
+    pid = str(project_id)
+    plates = PlateGenerator(db)
+    tool_event(pid, "storyboard", "style_plate", "started", agent="Casting")
+    url, _ = await plates.generate_and_store_plate(
+        pid, "style", "style", prompt,
+        negative_prompt=style.negative_prompt or None,
+        base_image_url=base_url)
+    style.plate_image_url = url
+    db.commit()
+    tool_event(pid, "storyboard", "style_plate", "succeeded", agent="Casting",
+               artifact="style frame from the lead's plate" if base_url else "style frame")
+    emit("casting.plate.completed", {"kind": "style", "key": "style"}, pid)
+    return True
 
 
 import re as _re
@@ -302,36 +343,16 @@ class CastingDirector:
             locations = distinct_locations(scene_dicts)
             style = await style_from_request(self.plates.qwen, self.style_prompt, self._style_input(project_id))
 
-        total = 1 + len(locations) + sum(max(1, len(plan.get(c.name, []))) for c in characters)
+        # Style TAGS are computed here (the costume plates need them), but the
+        # style IMAGE and the location plates are NOT painted at casting: they
+        # render at storyboard time (ensure_location_plates / ensure_style_plate)
+        # — the Characters tab's "Generate plates" spends only on the cast, and
+        # the style image can then be built FROM a cast plate so it shows the
+        # real lead instead of an invented person.
+        _ = locations  # location plates paint at boarding via ensure_location_plates
+        total = sum(max(1, len(plan.get(c.name, []))) for c in characters)
         idx = 0
-
-        idx += 1
-        emit("casting.plate.started", {"kind": "style", "key": "style", "index": idx, "total": total}, pid)
-        tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
-                   index=idx, total=total)
-        s_url, _ = await self.plates.generate_and_store_plate(pid, "style", "style",
-                                                              style.get("prompt", ""),
-                                                              negative_prompt=style.get("negative_prompt"))
-        self._upsert_style(project_id, style, s_url)
-        emit("casting.plate.completed", {"kind": "style", "key": "style", "index": idx, "total": total}, pid)
-
-        char_names = [c.name for c in characters]
-        for loc in locations:
-            idx += 1
-            emit("casting.plate.started", {"kind": "location", "key": loc["location_key"], "index": idx, "total": total}, pid)
-            tool_event(pid, "characters", "generate_plates", "started", agent="Casting",
-                       index=idx, total=total)
-            desc = strip_character_names(loc["description"], char_names) or "interior room"
-            prompt = location_plate_prompt(desc, heading=loc.get("heading"),
-                                           tags=style.get("style_tags", []),
-                                           view=loc.get("view"))
-            url, _ = await self.plates.generate_and_store_plate(
-                pid, "location", loc["location_key"], prompt,
-                negative_prompt=LOCATION_PLATE_NEGATIVE)
-            self.db.add(LocationPlate(project_id=project_id, location_key=loc["location_key"],
-                                      description=loc["description"], plate_image_url=url,
-                                      scene_numbers=loc["scene_numbers"]))
-            emit("casting.plate.completed", {"kind": "location", "key": loc["location_key"], "index": idx, "total": total}, pid)
+        self._upsert_style(project_id, style, None)
 
         faces_locked = 0
         for c in characters:

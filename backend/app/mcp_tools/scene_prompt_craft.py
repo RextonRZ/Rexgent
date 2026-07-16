@@ -263,15 +263,22 @@ class ScenePromptCraft:
             if spoken:
                 who = (speaker or "").strip()
                 tone_clause = f", {tone}," if tone else ""
+                # the clip is LONGER than the line (5s tier for a 4-word line):
+                # without a pacing clause the model stretches the delivery to
+                # fill the clip and speech comes out unnaturally slow
+                pace = (" The line is delivered at a NATURAL conversational pace "
+                        "- never slowed or stretched to fill the clip; after the "
+                        "line ends they simply hold in the moment, silent.")
                 if who:
                     # name the speaker (ties to their [Image N]) and keep everyone
                     # else's mouth still, so the RIGHT person animates in a group shot
                     speech = (f" {who} is the one speaking{tone_clause}: {who} clearly says "
                               f"these exact words aloud with natural lip movement while "
-                              f'everyone else keeps a closed, still mouth and listens: "{spoken}"')
+                              f'everyone else keeps a closed, still mouth and listens: "{spoken}"'
+                              + pace)
                 else:
                     speech = (" The character clearly speaks these exact words aloud"
-                              + (f" {tone}" if tone else "") + f': "{spoken}"')
+                              + (f" {tone}" if tone else "") + f': "{spoken}"' + pace)
 
         # (2) Eyelines — ONLY for characters actually in this frame. Gating to the
         # in-frame cast is what stops a scenery/Wan shot (no in-frame cast) from

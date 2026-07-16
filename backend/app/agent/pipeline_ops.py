@@ -519,11 +519,14 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
     # instead of waiting for the user to press Generate Plates. Idempotent
     # and an enhancement only — never fails the storyboard.
     try:
-        from app.services.casting_director import ensure_location_plates
+        from app.services.casting_director import ensure_location_plates, ensure_style_plate
         _progress(script.project_id, "storyboard", "update", "Director",
                   "Painting location plates")
         with track_project(script.project_id, db):
             await ensure_location_plates(db, script.project_id)
+            # the style plate paints HERE too (not at casting): built from the
+            # lead's plate so the style frame wears the real cast face
+            await ensure_style_plate(db, script.project_id)
     except Exception:  # noqa: BLE001
         import logging
         logging.getLogger(__name__).warning(

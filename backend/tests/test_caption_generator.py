@@ -1,7 +1,10 @@
 from app.services.caption_generator import CaptionGenerator
 
 
-def test_srt_timing_and_skips_silent_clips():
+def test_srt_follows_the_spoken_line_not_the_clip():
+    # the caption used to wear the WHOLE clip (a 2-word line captioned for
+    # 5 seconds): now it appears at the speech onset and stays 1s after the
+    # line ends, clamped to the clip
     gen = CaptionGenerator()
     srt = gen.generate_srt([
         {"dialogue": None, "duration": 4},          # establishing, no caption
@@ -10,10 +13,19 @@ def test_srt_timing_and_skips_silent_clips():
     ])
     assert "Something's wrong." in srt
     assert "I know what you are." in srt
-    # First captioned line starts at 4s (after the silent 4s clip).
-    assert "00:00:04,000 --> 00:00:09,000" in srt
-    # Second caption runs 9s -> 15s.
-    assert "00:00:09,000 --> 00:00:15,000" in srt
+    # clip 2 starts at 4s: onset 4.35, 2 words ≈ 0.77s spoken, +1s hold
+    assert "00:00:04,350 -->" in srt
+    assert "--> 00:00:06,119" in srt
+    # clip 3 starts at 9s: onset 9.35, 5 words ≈ 1.92s spoken, +1s hold
+    assert "00:00:09,350 -->" in srt
+    assert "--> 00:00:12,273" in srt
+
+
+def test_srt_long_line_clamps_to_the_clip_end():
+    gen = CaptionGenerator()
+    line = " ".join(["word"] * 40)      # ~15s of speech in a 5s clip
+    srt = gen.generate_srt([{"dialogue": line, "duration": 5}])
+    assert "--> 00:00:05,000" in srt    # never past the clip
 
 
 def test_srt_empty_when_no_dialogue():

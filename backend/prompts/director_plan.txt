@@ -23,8 +23,10 @@ RULES:
 - Cover EVERY dialogue line exactly once (by its 0-based index in covers_lines). A shot may fold two short
   consecutive same-speaker lines. A non-dialogue beat has covers_lines: [].
 - VARY shot_size and camera_movement; never repeat a shot_size back-to-back.
-- BREAK UP THE TALK: do not make every shot a talking head. Interleave non-verbal beats (reaction, insert,
-  a held beat, an establishing) — a scene of pure back-to-back speech is forbidden.
+- BREAK UP THE TALK: do not make every shot a talking head — but a non-dialogue beat must PERFORM a
+  WRITTEN stage direction from the scene text ("her eyes narrow", "he turns to face her", "she glances at
+  the file") — never an invented camera-only beat (a dolly revealing the room, a slow pan over the set).
+  The script's silent beats ARE the drama; if the scene text offers none, plan no non-verbal shot.
 - Give EVERY shot an action_beat: a physical or visual moment (a step, a clenched fist, a lingering glance,
   fingers on a glass), scaled to the genre. Make the staging EVOLVE shot to shot (blocking_delta): distance
   closes, a weapon raises, someone turns away.

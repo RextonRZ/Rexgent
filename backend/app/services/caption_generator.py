@@ -1,3 +1,8 @@
+_WORDS_PER_SEC = 2.6    # natural delivery pace — matches the boarding fitter
+_SPEECH_ONSET = 0.35    # native talk takes a breath before the first word
+_CAPTION_HOLD = 1.0     # the caption lingers this long after the line ends
+
+
 class CaptionGenerator:
     def generate_srt_from_segments(self, segments: list[dict]) -> str:
         """Build an .srt from placed dialogue segments — the same offsets the
@@ -21,19 +26,24 @@ class CaptionGenerator:
         return "\n".join(lines)
 
     def generate_srt(self, clips_with_dialogue: list[dict]) -> str:
-        """Build an .srt from sequential clips. Each clip: {dialogue, duration}."""
+        """Build an .srt from sequential clips ({dialogue, duration}). The
+        caption follows the SPOKEN line, not the clip: it appears at the
+        estimated speech onset and stays _CAPTION_HOLD seconds after the line
+        ends, clamped to the clip — a 2-word line inside a 5s clip no longer
+        wears its caption for the whole clip."""
         lines: list[str] = []
         index = 1
         current = 0.0
 
         for clip in clips_with_dialogue:
             dialogue = clip.get("dialogue")
-            duration = clip.get("duration", 5)
+            duration = float(clip.get("duration", 5) or 5)
             if dialogue:
-                start = self._format_time(current)
-                end = self._format_time(current + duration)
+                spoken = len(str(dialogue).split()) / _WORDS_PER_SEC
+                start_s = current + min(_SPEECH_ONSET, duration)
+                end_s = min(current + duration, start_s + spoken + _CAPTION_HOLD)
                 lines.append(str(index))
-                lines.append(f"{start} --> {end}")
+                lines.append(f"{self._format_time(start_s)} --> {self._format_time(end_s)}")
                 lines.append(dialogue)
                 lines.append("")
                 index += 1
