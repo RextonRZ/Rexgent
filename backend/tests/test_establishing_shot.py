@@ -4,8 +4,12 @@ no dialogue) that the router sends to Wan. These cover the pure helpers."""
 from app.services.storyboard_generator import (
     scene_opens_on_scenery, make_establishing_shot,
     insert_silent_holds, insert_atmosphere, make_atmosphere_shot,
-    widen_faceless_framings,
+    widen_faceless_framings, plan_hold_budget, _HELD_BEAT_LOOKS,
 )
+
+
+def _look_by_tag(tag: str) -> tuple:
+    return next(l for l in _HELD_BEAT_LOOKS if l[2] == tag)
 
 
 class TestWidenFaceless:
@@ -40,7 +44,7 @@ def _talk(cast, stype="MS", line="Hi."):
 class TestSilentHolds:
     def test_inserts_held_beat_between_stable_two_person_dialogue(self):
         shots = [_talk(["Anna", "Deok"]), _talk(["Anna", "Deok"])]
-        out = insert_silent_holds(shots, max_holds=2)
+        out, _ = insert_silent_holds(shots, max_holds=2)
         assert len(out) == 3
         held = out[1]
         assert held["dialogue"] is None
@@ -50,15 +54,15 @@ class TestSilentHolds:
 
     def test_no_hold_when_cast_not_shared(self):
         shots = [_talk(["Anna", "Deok"]), _talk(["Mara", "Elara"])]
-        assert insert_silent_holds(shots, max_holds=2) == shots
+        assert insert_silent_holds(shots, max_holds=2)[0] == shots
 
     def test_no_hold_for_single_person_shots(self):
         shots = [_talk(["Anna"]), _talk(["Anna"])]
-        assert insert_silent_holds(shots, max_holds=2) == shots
+        assert insert_silent_holds(shots, max_holds=2)[0] == shots
 
     def test_respects_max_holds_and_spaces_them(self):
         shots = [_talk(["A", "B"]) for _ in range(5)]
-        out = insert_silent_holds(shots, max_holds=1)
+        out, _ = insert_silent_holds(shots, max_holds=1)
         # exactly one held beat added
         assert sum(1 for s in out if s.get("dialogue") is None) == 1
 
@@ -66,7 +70,91 @@ class TestSilentHolds:
         # a shot with no dialogue can't seed a held beat (needs two talking shots)
         shots = [{"characters_in_frame": ["A", "B"], "dialogue": None, "shot_type": "MS"},
                  _talk(["A", "B"])]
-        assert insert_silent_holds(shots, max_holds=2) == shots
+        assert insert_silent_holds(shots, max_holds=2)[0] == shots
+
+
+class TestHeldBeatVariety:
+    """The 'Shattered Tides' bug: 3 held beats all read the identical canned
+    line. Wording must vary, follow the tone of the line it holds after, and
+    never repeat between consecutive holds — even across scenes."""
+
+    def test_consecutive_holds_never_share_wording(self):
+        shots = [_talk(["A", "B"]) for _ in range(6)]
+        out, _ = insert_silent_holds(shots, max_holds=3)
+        holds = [s for s in out if s.get("dialogue") is None]
+        assert len(holds) >= 2
+        for a, b in zip(holds, holds[1:]):
+            assert a["action"] != b["action"]
+            assert a["emotional_beat"] != b["emotional_beat"]
+
+    def test_question_line_holds_as_anticipation(self):
+        shots = [_talk(["A", "B"], line="Where were you last night?"),
+                 _talk(["A", "B"])]
+        out, _ = insert_silent_holds(shots, max_holds=1)
+        assert out[1]["action"] == _look_by_tag("anticipation")[0]
+
+    def test_exclamation_line_holds_as_tension(self):
+        shots = [_talk(["A", "B"], line="Get out!"), _talk(["A", "B"])]
+        out, _ = insert_silent_holds(shots, max_holds=1)
+        assert out[1]["action"] == _look_by_tag("tension")[0]
+
+    def test_context_pick_never_repeats_the_previous_hold(self):
+        # two question anchors would both want 'anticipation'; the second
+        # must fall through to a different look
+        shots = [_talk(["A", "B"], line="Who told you?"), _talk(["A", "B"]),
+                 _talk(["A", "B"], line="Why does it matter?"), _talk(["A", "B"])]
+        out, _ = insert_silent_holds(shots, max_holds=2)
+        holds = [s for s in out if s.get("dialogue") is None]
+        assert len(holds) == 2
+        assert holds[0]["action"] != holds[1]["action"]
+
+    def test_wording_rotation_threads_across_scenes(self):
+        s1 = [_talk(["A", "B"]) for _ in range(2)]
+        s2 = [_talk(["A", "B"]) for _ in range(2)]
+        out1, last = insert_silent_holds(s1, max_holds=1)
+        out2, _ = insert_silent_holds(s2, max_holds=1, last_variant=last)
+        h1 = next(s for s in out1 if s.get("dialogue") is None)
+        h2 = next(s for s in out2 if s.get("dialogue") is None)
+        assert h1["action"] != h2["action"]
+
+    def test_no_holds_passes_variant_through(self):
+        shots = [_talk(["A"])]
+        out, last = insert_silent_holds(shots, max_holds=2, last_variant=3)
+        assert out == shots
+        assert last == 3
+
+    def test_held_beat_keeps_geometry_but_drops_completed_actions(self):
+        # continuity = same positions/facings; NOT re-performing the gesture
+        # that already finished in the previous shot
+        prev = _talk(["A", "B"])
+        prev["subjects"] = [{"character": "A", "screen_side": "left",
+                             "facing": "right", "action": "slams the table"},
+                            {"character": "B", "screen_side": "right"}]
+        shots = [prev, _talk(["A", "B"])]
+        out, _ = insert_silent_holds(shots, max_holds=1)
+        held = out[1]
+        subj = held["subjects"][0]
+        assert subj["screen_side"] == "left"
+        assert subj["facing"] == "right"
+        assert "action" not in subj
+
+
+class TestHoldBudget:
+    """Held beats are budgeted per DRAMA (~1 per 45s, cap 2), not 2 per scene —
+    a 30s two-scene drama was getting 3 of them."""
+
+    def test_short_drama_gets_one(self):
+        assert plan_hold_budget(30) == 1
+
+    def test_scales_to_two(self):
+        assert plan_hold_budget(90) == 2
+
+    def test_capped_at_two_for_long_dramas(self):
+        assert plan_hold_budget(300) == 2
+
+    def test_floor_of_one_even_when_length_missing(self):
+        assert plan_hold_budget(0) == 1
+        assert plan_hold_budget(None) == 1
 
 
 class TestAtmosphere:

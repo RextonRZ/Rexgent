@@ -12,7 +12,8 @@ from app.models.generation_job import GenerationJob
 from app.services.script_generator import ScriptGenerator
 from app.services.script_structurer import ScriptStructurer
 from app.services.character_extractor import CharacterExtractor
-from app.services.storyboard_generator import StoryboardGenerator, plan_shot_budget
+from app.services.storyboard_generator import (
+    StoryboardGenerator, plan_shot_budget, plan_hold_budget)
 from app.services.guardrails import InputSanitizer
 from app.mcp_tools.token_optimizer import TokenOptimizer
 from app.graph.sync import sync_scenes, sync_characters
@@ -191,6 +192,10 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
     # of 3. Decremented as scenes consume it — a single-scene drama spends the
     # whole budget in that scene (spaced out).
     atmo_budget = min(3, max(1, round((target_length or 0) / 35)))
+    # drama-level held-beat budget (~1 per 45s, cap 2) and the look the last
+    # hold used, threaded across scenes so wording never repeats drama-wide
+    hold_budget = plan_hold_budget(target_length)
+    hold_variant = -1
     with track_project(script.project_id, db):
         for scene_index, scene in enumerate(scenes, start=1):
             _progress(script.project_id, "storyboard", "update", "Director",
@@ -268,9 +273,12 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             if getattr(get_settings(), "wan_beats", False):
                 from app.services.storyboard_generator import (
                     insert_silent_holds, insert_atmosphere)
-                held = insert_silent_holds(shots, max_holds=2)
-                if len(held) != len(shots):
-                    shots, enriched = held, True
+                if hold_budget > 0:
+                    held, hold_variant = insert_silent_holds(
+                        shots, max_holds=hold_budget, last_variant=hold_variant)
+                    if len(held) != len(shots):
+                        hold_budget -= len(held) - len(shots)
+                        shots, enriched = held, True
                 if atmo_budget > 0:
                     before = len(shots)
                     with_atmo = insert_atmosphere(shots, atmo_budget, scene.location,

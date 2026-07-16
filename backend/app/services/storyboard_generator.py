@@ -114,13 +114,57 @@ def make_establishing_shot(location, lighting, colour_mood) -> dict:
     }
 
 
-def _held_beat(prev: dict) -> dict:
+def plan_hold_budget(target_length: int | None) -> int:
+    """Drama-level silent-hold budget: about one held beat per 45s of target
+    runtime, floor 1 (even a short piece gets one breath), cap 2. Budgeted per
+    drama, not per scene — 2-per-scene piled three identical held beats onto a
+    30-second two-scene drama and read as repetition."""
+    return min(2, max(1, round((target_length or 0) / 45)))
+
+
+# Distinct silent looks so multiple held beats never read as the same repeating
+# shot. Every look continues the moment (no new gesture, no reposition), so the
+# frame still matches the preceding shot for a Wan continuation. The tag lets
+# the picker match the tone of the line just spoken.
+_HELD_BEAT_LOOKS = (
+    ("They hold still, the last words settling between them, neither ready to speak.",
+     "the weight of what was just said", "emotion"),
+    ("Neither of them moves. The silence stretches taut, eyes locked, nothing given away.",
+     "unspoken tension", "tension"),
+    ("A held pause. They watch each other, waiting to see what comes next.",
+     "waiting for the reply", "anticipation"),
+    ("The moment rests unspoken. Stillness, a slow breath, thoughts turning behind their eyes.",
+     "a quiet beat of reflection", "reflection"),
+)
+
+
+def _held_look_index(prev: dict, last_variant: int) -> int:
+    """Pick the held-beat look from the tone of the line it holds after — a
+    question hangs in anticipation, an exclamation in tension — falling back to
+    rotation, and never reusing the previous hold's look."""
+    line = str(prev.get("dialogue") or "").strip()
+    want = ("anticipation" if line.endswith("?")
+            else "tension" if line.endswith("!") else None)
+    if want is not None:
+        idx = next(i for i, l in enumerate(_HELD_BEAT_LOOKS) if l[2] == want)
+        if idx != last_variant:
+            return idx
+    return (last_variant + 1) % len(_HELD_BEAT_LOOKS)
+
+
+def _held_beat(prev: dict, variant: int = 0) -> dict:
     """A silent held beat that copies the PRECEDING shot's framing, cast and
     blocking with NO dialogue, so it routes to Wan (a silent same-angle
     continuation of established faces — two people holding the moment between
     lines). Same shot_type as prev -> not a reangle; same cast -> not a
-    newcomer; silent -> continue_hold -> Wan."""
+    newcomer; silent -> continue_hold -> Wan. `variant` picks the look from
+    _HELD_BEAT_LOOKS. Blocking keeps each subject's position/facing/eyeline but
+    drops the per-subject `action`: that gesture already finished in the
+    previous shot, and restating it makes the hold replay it."""
     cast = list(prev.get("characters_in_frame") or [])
+    action, beat, _tag = _HELD_BEAT_LOOKS[variant % len(_HELD_BEAT_LOOKS)]
+    subjects = [{k: v for k, v in s.items() if k != "action"}
+                for s in (prev.get("subjects") or []) if isinstance(s, dict)]
     return {
         "shot_number": 0,        # caller renumbers
         "shot_type": prev.get("shot_type") or "MS",
@@ -128,25 +172,29 @@ def _held_beat(prev: dict) -> dict:
         "characters_in_frame": cast,
         "subject": prev.get("subject"),
         "foreground_characters": list(prev.get("foreground_characters") or []),
-        "subjects": [dict(s) for s in (prev.get("subjects") or []) if isinstance(s, dict)],
+        "subjects": subjects,
         "reverse_angle": False,
-        "action": "They hold still in the silence between words, the moment resting unspoken.",
+        "action": action,
         "dialogue": None,
         "lighting": prev.get("lighting"),
         "colour_mood": prev.get("colour_mood"),
-        "emotional_beat": "a held silence between them",
+        "emotional_beat": beat,
         "estimated_duration_seconds": 3,
         "notes": "silent held beat (Wan continuation)",
     }
 
 
-def insert_silent_holds(shots: list[dict], max_holds: int = 2) -> list[dict]:
+def insert_silent_holds(shots: list[dict], max_holds: int = 2,
+                        last_variant: int = -1) -> tuple[list[dict], int]:
     """Weave silent held beats between consecutive DIALOGUE shots that share a
     stable 2+ person cast: the held beat keeps the preceding shot's framing and
-    cast with no dialogue, so it routes to Wan. Bounded to max_holds per scene,
-    and spaced (never two in a row). Returns a new list; NOT renumbered."""
+    cast with no dialogue, so it routes to Wan. Bounded to max_holds (the
+    caller passes the DRAMA-level remainder) and spaced (never two in a row).
+    Each hold takes a different look; `last_variant` threads the previous
+    hold's look in (and back out through the return) so wording never repeats,
+    even across scenes. Returns (new list NOT renumbered, last look used)."""
     if max_holds <= 0 or len(shots) < 2:
-        return list(shots)
+        return list(shots), last_variant
     out: list[dict] = []
     holds = 0
     i, n = 0, len(shots)
@@ -159,13 +207,14 @@ def insert_silent_holds(shots: list[dict], max_holds: int = 2) -> list[dict]:
                 and str(s.get("dialogue") or "").strip()
                 and str(nxt.get("dialogue") or "").strip()
                 and set(cast_a) <= {str(c) for c in (nxt.get("characters_in_frame") or [])}):
-            out.append(_held_beat(s))
+            last_variant = _held_look_index(s, last_variant)
+            out.append(_held_beat(s, last_variant))
             out.append(nxt)           # keep the next line, and space the holds out
             holds += 1
             i += 2
             continue
         i += 1
-    return out
+    return out, last_variant
 
 
 # Distinct looks so multiple cutaways (and the establishing wide) never render
