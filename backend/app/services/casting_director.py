@@ -395,6 +395,21 @@ def resolve_outfit(scene_outfit: str | None, default_clothing: str | None) -> st
     return _strip_face_obscuring_eyewear(resolved)
 
 
+def characters_needing_plates(db, characters, regen_plates: bool = True):
+    """Which cast members get plates painted this run. A full regen paints
+    everyone; otherwise only characters with no painted costume plate yet, so
+    a bible rerun (say, for voices) never re-buys plates that are already
+    good. A fresh cast is all-unpainted, so regen_plates=False still paints
+    the whole cast there."""
+    if regen_plates or not characters:
+        return list(characters)
+    painted = {cv.character_id for cv in
+               db.query(CostumeVariant).filter(
+                   CostumeVariant.character_id.in_([c.id for c in characters]),
+                   CostumeVariant.plate_image_url.isnot(None)).all()}
+    return [c for c in characters if c.id not in painted]
+
+
 class CastingDirector:
     def __init__(self, db: Session):
         self.db = db
@@ -403,7 +418,8 @@ class CastingDirector:
         self.style_prompt = load_prompt("style_plate.txt")
 
     async def cast_bible(self, project_id, design_voice: bool = True,
-                         redesign_voice: bool = False) -> dict:
+                         redesign_voice: bool = False,
+                         regen_plates: bool = True) -> dict:
         pid = str(project_id)
         emit("casting.started", {}, pid)
         script = (self.db.query(Script).filter(Script.project_id == project_id)
@@ -452,12 +468,15 @@ class CastingDirector:
                 tool_event(pid, "characters", "profile_cast", "succeeded",
                            agent="Casting", artifact=f"{looks_written} looks written")
             self.db.commit()
-            plan = await self.planner.plan(script.structured_json or {},
-                                           [{"name": c.name} for c in characters])
-            emit("casting.wardrobe_plan.completed", {"variant_count": sum(len(v) for v in plan.values())}, pid)
-
-            locations = distinct_locations(scene_dicts)
-            style = await style_from_request(self.plates.qwen, self.style_prompt, self._style_input(project_id))
+            # a rerun without the regenerate tick paints only the cast members
+            # still missing plates — no wardrobe/style calls for a no-op run
+            to_paint = characters_needing_plates(self.db, characters, regen_plates)
+            plan, style = {}, None
+            if to_paint:
+                plan = await self.planner.plan(script.structured_json or {},
+                                               [{"name": c.name} for c in to_paint])
+                emit("casting.wardrobe_plan.completed", {"variant_count": sum(len(v) for v in plan.values())}, pid)
+                style = await style_from_request(self.plates.qwen, self.style_prompt, self._style_input(project_id))
 
         # Style TAGS are computed here (the costume plates need them), but the
         # style IMAGE and the location plates are NOT painted at casting: they
@@ -465,13 +484,13 @@ class CastingDirector:
         # — the Characters tab's "Generate plates" spends only on the cast, and
         # the style image can then be built FROM a cast plate so it shows the
         # real lead instead of an invented person.
-        _ = locations  # location plates paint at boarding via ensure_location_plates
-        total = sum(max(1, len(plan.get(c.name, []))) for c in characters)
+        total = sum(max(1, len(plan.get(c.name, []))) for c in to_paint)
         idx = 0
-        self._upsert_style(project_id, style, None)
+        if style:
+            self._upsert_style(project_id, style, None)
 
         faces_locked = 0
-        for c in characters:
+        for c in to_paint:
             variants = plan.get(c.name) or [{"label": "default", "outfit_description": "",
                                              "scene_numbers": []}]
             for i, v in enumerate(variants):

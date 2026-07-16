@@ -175,11 +175,14 @@ export function useRunCasting(projectId: string) {
     mutationFn: async (opts?: {
       designVoice?: boolean;
       redesignVoice?: boolean;
+      /** false only skips REPAINTING; characters missing plates still get them */
+      regenPlates?: boolean;
     }) => {
       const { data } = await api.post(`/api/casting/${projectId}/run`, null, {
         params: {
           design_voice: opts?.designVoice ?? true,
           redesign_voice: opts?.redesignVoice ?? false,
+          regen_plates: opts?.regenPlates ?? true,
         },
       });
       return data;

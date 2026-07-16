@@ -88,6 +88,12 @@ export default function CharactersPage({
     const cc = castingByCharId[c.id];
     return cc?.voice_id && cc?.voice_source !== "cloned";
   }).length;
+  // already painted plates move to an untickable extra: a rerun only charges
+  // for the cast members still missing plates unless regenerate is ticked
+  const paintedCount = characters.filter((c) =>
+    castingByCharId[c.id]?.variants?.some((v) => v.plate_image_url)
+  ).length;
+  const unpaintedCount = characters.length - paintedCount;
 
   const characterById = useMemo(() => {
     const map: Record<string, { name: string; image?: string | null }> = {};
@@ -114,16 +120,31 @@ export default function CharactersPage({
               costLine: "One run builds the full production bible. Every model it touches is priced below.",
               note: "Estimates: a failed face check can add a retry plate.",
               confirmLabel: "Generate plates",
-              breakdown: [
-                {
-                  label: "Identity and costume plates",
-                  detail: `${characters.length} character${characters.length === 1 ? "" : "s"} × 2 plates each on wan2.6-t2i and qwen-image-edit-max, at $0.075 per image`,
-                  amount: characters.length * 2 * 0.075,
-                },
+              breakdown:
                 // location plates and the style frame render at storyboard
                 // time now, so this run no longer charges for them
-              ],
+                unpaintedCount > 0
+                  ? [
+                      {
+                        label: "Identity and costume plates",
+                        detail: `${unpaintedCount} character${unpaintedCount === 1 ? "" : "s"} without plates × 2 each on wan2.6-t2i and qwen-image-edit-max, at $0.075 per image`,
+                        amount: unpaintedCount * 2 * 0.075,
+                      },
+                    ]
+                  : undefined,
               options: [
+                ...(paintedCount > 0
+                  ? [
+                      {
+                        key: "regenPlates",
+                        label: `Regenerate plates for ${paintedCount} already cast character${paintedCount === 1 ? "" : "s"}`,
+                        priceLine: `$${(paintedCount * 2 * 0.075).toFixed(2)}`,
+                        note: "Repaints their identity and costume plates on the current faces. Leave unticked to keep the plates you have.",
+                        defaultOn: false,
+                        amount: paintedCount * 2 * 0.075,
+                      },
+                    ]
+                  : []),
                 ...(voiceEnabled && voicelessCount > 0
                   ? [
                       {
@@ -150,9 +171,12 @@ export default function CharactersPage({
                   : []),
               ],
               run: (choices) =>
+                // regenPlates=false still paints anyone missing plates; the
+                // tick only decides whether painted ones get redone
                 runCasting.mutate({
                   designVoice: choices?.designVoice ?? true,
                   redesignVoice: choices?.redesignVoice ?? false,
+                  regenPlates: Boolean(choices?.regenPlates),
                 }),
             })
           }

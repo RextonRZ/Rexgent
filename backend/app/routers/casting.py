@@ -96,7 +96,7 @@ def approve_casting(project_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{project_id}/run")
 def run_casting(project_id: str, design_voice: bool = True,
-                redesign_voice: bool = False,
+                redesign_voice: bool = False, regen_plates: bool = True,
                 db: Session = Depends(get_db)):
     if not db.query(Project).filter(Project.id == uuid.UUID(project_id)).first():
         raise HTTPException(status_code=404, detail="Project not found")
@@ -108,7 +108,7 @@ def run_casting(project_id: str, design_voice: bool = True,
          "agent": "Casting Director", "label": "Casting the production bible"},
          project_id)
     from app.workers.casting_worker import run_casting_job
-    run_casting_job.delay(project_id, design_voice, redesign_voice)
+    run_casting_job.delay(project_id, design_voice, redesign_voice, regen_plates)
     return {"status": "started"}
 
 

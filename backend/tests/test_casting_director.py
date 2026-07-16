@@ -139,6 +139,27 @@ def test_assign_cast_voices_redesign_replaces_but_never_cloned(monkeypatch):
     assert preset.voice_id == "designed-Rex"
 
 
+def test_characters_needing_plates_skips_painted_without_regen():
+    # a bible rerun must not re-buy plates that are already painted
+    import uuid
+    from types import SimpleNamespace
+    from app.services.casting_director import characters_needing_plates
+
+    painted = SimpleNamespace(id=uuid.uuid4(), name="Mia")
+    fresh = SimpleNamespace(id=uuid.uuid4(), name="Rex")
+
+    class _VarDB:
+        def query(self, model): return self
+        def filter(self, *a): return self
+        def all(self):
+            return [SimpleNamespace(character_id=painted.id,
+                                    plate_image_url="https://oss/p.jpg")]
+
+    chars = [painted, fresh]
+    assert characters_needing_plates(_VarDB(), chars, regen_plates=True) == chars
+    assert characters_needing_plates(_VarDB(), chars, regen_plates=False) == [fresh]
+
+
 def test_voice_design_prompt_folds_the_character_sheet():
     from types import SimpleNamespace
     from app.services.casting_director import voice_design_prompt

@@ -10,18 +10,20 @@ logger = logging.getLogger(__name__)
 
 @celery_app.task(bind=True, name="run_casting_job")
 def run_casting_job(self, project_id: str, design_voice: bool = True,
-                    redesign_voice: bool = False):
+                    redesign_voice: bool = False, regen_plates: bool = True):
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
         from app.services.api_keys import use_project_key
         use_project_key(db, project_id)  # bill the project owner's key
-        # Plate generation is the primary job — must succeed. design_voice is
-        # the spend dialog's tick (unticked, voices fall back to free presets)
-        # and redesign_voice replaces existing designed/preset voices.
+        # Plate generation is the primary job — must succeed. The spend
+        # dialog's ticks ride along: design_voice (unticked, free presets),
+        # redesign_voice (replace designed/preset voices) and regen_plates
+        # (unticked, only cast members missing plates get painted).
         asyncio.run(CastingDirector(db).cast_bible(uuid.UUID(project_id),
                                                    design_voice=design_voice,
-                                                   redesign_voice=redesign_voice))
+                                                   redesign_voice=redesign_voice,
+                                                   regen_plates=regen_plates))
     except Exception as e:  # noqa: BLE001
         # surface the crash — otherwise the casting spinner sticks forever
         # (mirrors generation_worker's guard)
