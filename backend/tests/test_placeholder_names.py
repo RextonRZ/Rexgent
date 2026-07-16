@@ -22,6 +22,10 @@ from app.services.guardrails import (
     # occupation-only figures
     "Reporter", "Journalist", "Chef", "Lawyer", "Thief", "Dancer", "Singer",
     "Photographer", "Pilot", "Sheriff", "the reporter", "Reporter 2",
+    # descriptor stacks ending in a generic noun — the concrete-figure rule
+    # taught the writer to say 'a broad-shouldered figure', and it got cast
+    "BROAD-SHOULDERED FIGURE", "the rain-soaked figure", "burly man",
+    "one-armed stranger", "tattooed woman",
     "", "   ", "???",
 ])
 def test_placeholders_are_flagged(name):

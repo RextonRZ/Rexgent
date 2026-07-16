@@ -413,7 +413,13 @@ def is_placeholder_character_name(name) -> bool:
                   and t not in _NAME_MODIFIERS and not t.isdigit()]
     if not meaningful:
         return True
-    return all(t in _GENERIC_PERSON_NOUNS for t in meaningful)
+    # HEAD-NOUN rule: a descriptor stack ending in a generic person noun is a
+    # DESCRIPTION, not a name — 'broad-shouldered figure', 'rain-soaked man',
+    # 'burly stranger' — whatever adjectives precede it (the modifier list can
+    # never enumerate them all). Real people never trip this: surnames that
+    # double as common nouns (Hunter, Baker, Mason) are deliberately excluded
+    # from the generic set, and 'Doctor Kim' ends in the proper name.
+    return meaningful[-1] in _GENERIC_PERSON_NOUNS
 
 
 def drop_placeholder_characters(data) -> tuple[list[dict], list[str]]:
