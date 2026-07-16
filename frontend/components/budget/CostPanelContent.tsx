@@ -34,7 +34,9 @@ const CATEGORIES = [
 
 function fmtQty(q: number, unit: string): string {
   const n = q >= 1000 ? `${Math.round(q / 1000)}K` : String(Math.round(q));
-  return unit ? `${n}${unit === "img" ? " img" : unit}` : n;
+  if (!unit) return n;
+  // long word units read as "12 img" / "1 voice"; short ones stick: "34s", "500ch"
+  return unit.length > 2 ? `${n} ${unit}` : `${n}${unit}`;
 }
 const STAGES = [
   { key: "casting", label: "Casting" },
@@ -186,7 +188,9 @@ export function CostPanelContent({ projectId }: { projectId: string }) {
                       >
                         <span className="truncate font-mono">{model}</span>
                         <span className="shrink-0 tabular-nums">
-                          {fmtQty(v.qty, c.unit)} · ${v.usd.toFixed(2)}
+                          {/* voice design bills per voice, not per character */}
+                          {fmtQty(v.qty, model.includes("voice-design") ? "voice" : c.unit)} · $
+                          {v.usd.toFixed(2)}
                         </span>
                       </div>
                     ))}

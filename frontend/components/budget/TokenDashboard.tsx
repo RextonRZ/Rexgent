@@ -121,9 +121,11 @@ export function TokenDashboard({ projectId }: { projectId: string }) {
           <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
             {(
               [
-                ["video", "bg-violet-400", (q: number) => `${Math.round(q)}s`],
-                ["image", "bg-indigo-300", (q: number) => `${Math.round(q)} img`],
-                ["tts", "bg-sky-300", (q: number) => `${fmtTokens(q)} ch`],
+                ["video", "bg-violet-400", (q: number, _m: string) => `${Math.round(q)}s`],
+                ["image", "bg-indigo-300", (q: number, _m: string) => `${Math.round(q)} img`],
+                // voice design bills per voice, not per character
+                ["tts", "bg-sky-300", (q: number, m: string) =>
+                  m.includes("voice-design") ? `${Math.round(q)} voice` : `${fmtTokens(q)} ch`],
               ] as const
             ).flatMap(([cat, dot, fmt]) =>
               Object.entries(ledger.media_models?.[cat] ?? {})
@@ -138,7 +140,7 @@ export function TokenDashboard({ projectId }: { projectId: string }) {
                       {model}
                     </span>
                     <span className="shrink-0 tabular-nums text-foreground/80">
-                      {fmt(v.qty)}
+                      {fmt(v.qty, model)}
                     </span>
                     <span className="w-12 shrink-0 text-right tabular-nums text-muted-foreground">
                       ${v.usd.toFixed(2)}
