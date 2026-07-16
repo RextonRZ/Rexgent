@@ -52,6 +52,56 @@ class TestDialogueBudget:
         assert plan_dialogue_budget(300) == 50
 
 
+class TestSceneShotBudget:
+    """The Director's per-scene budget was a flat +2 non-verbal beats: a 30s
+    drama boarded 8 silent shots (37s of the 62s total). Extra beats must come
+    from the TIME budget, keeping at least one non-verbal beat per scene."""
+
+    def test_short_scene_gets_one_extra_beat(self):
+        from app.services.storyboard_generator import plan_scene_shot_budget
+        assert plan_scene_shot_budget(shots_per_scene=3, n_lines=3, hard_cap=12) == 4
+
+    def test_time_budget_grants_room_when_available(self):
+        from app.services.storyboard_generator import plan_scene_shot_budget
+        assert plan_scene_shot_budget(shots_per_scene=6, n_lines=3, hard_cap=12) == 6
+
+    def test_hard_cap_wins(self):
+        from app.services.storyboard_generator import plan_scene_shot_budget
+        assert plan_scene_shot_budget(shots_per_scene=3, n_lines=20, hard_cap=12) == 12
+
+
+class TestFitSilentBeats:
+    """Silent beats defaulted to 5s: 8 of them cost 37s on a 30s drama. When
+    the board overshoots, silent shots clamp to 3s; dialogue keeps the time
+    its lines need."""
+
+    def _board(self):
+        return [{"estimated_duration_seconds": 5, "dialogue": "Who is it?"},
+                {"estimated_duration_seconds": 5, "dialogue": None},
+                {"estimated_duration_seconds": 5, "dialogue": ""},
+                {"estimated_duration_seconds": 3, "dialogue": None},
+                {"estimated_duration_seconds": 10, "dialogue": "I can explain everything now."}]
+
+    def test_clamps_silent_shots_when_over_target(self):
+        from app.services.storyboard_generator import fit_silent_beats_to_target
+        shots = self._board()   # 28s against a 20s target
+        assert fit_silent_beats_to_target(shots, 20) is True
+        assert [s["estimated_duration_seconds"] for s in shots] == [5, 3, 3, 3, 10]
+
+    def test_noop_when_board_fits(self):
+        from app.services.storyboard_generator import fit_silent_beats_to_target
+        shots = self._board()   # 28s against a 30s target: fine
+        assert fit_silent_beats_to_target(shots, 30) is False
+        assert shots[1]["estimated_duration_seconds"] == 5
+
+    def test_dialogue_durations_are_never_touched(self):
+        from app.services.storyboard_generator import fit_silent_beats_to_target
+        shots = self._board()
+        fit_silent_beats_to_target(shots, 10)
+        assert shots[0]["estimated_duration_seconds"] == 5
+        assert shots[4]["estimated_duration_seconds"] == 10
+
+
 class TestBoardOverTarget:
     def test_within_tolerance_is_fine(self):
         assert board_over_target(38, 30) is False    # 30% over is tolerated

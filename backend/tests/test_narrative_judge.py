@@ -81,6 +81,49 @@ async def test_low_dialogue_density_blocks():
 
 
 @pytest.mark.asyncio
+async def test_budgeted_dialogue_density_does_not_block():
+    # the 30s bug: the dialogue BUDGET caps a script at ~5 short lines, and the
+    # judge scored density 4.0 -> auto-blocked -> a rewrite loop that made the
+    # script worse. Density is a format preference: only near-silent (<3)
+    # blocks; 4.0 must NOT.
+    judge = NarrativeJudge.__new__(NarrativeJudge)
+    judge.qwen = MagicMock()
+    judge.qwen.chat_json = AsyncMock(return_value={
+        "scores": {"tension_arc": 7.0, "character_consistency": 7.5, "pacing": 6.5,
+                   "dialogue_naturalness": 6.5, "genre_adherence": 8.0, "dialogue_density": 4.0},
+        "overall": 6.5,
+        "blocking_issues": [],
+        "top_strengths": [],
+        "top_weaknesses": [],
+        "recommendation": "PROCEED",
+    })
+    judge.prompt_template = "placeholder"
+
+    result = await judge.evaluate(script_json={"scenes": []}, blocking_threshold=5.0)
+    assert result["blocking_issues"] == []
+    assert result["recommendation"] == "PROCEED"
+
+
+@pytest.mark.asyncio
+async def test_judge_receives_format_context():
+    # the judge must know the target length + line budget, or it judges a
+    # 30-second piece as if length were free
+    judge = NarrativeJudge.__new__(NarrativeJudge)
+    judge.qwen = MagicMock()
+    judge.qwen.chat_json = AsyncMock(return_value={
+        "scores": {}, "overall": 7.0, "blocking_issues": [],
+        "top_strengths": [], "top_weaknesses": [], "recommendation": "PROCEED",
+    })
+    judge.prompt_template = "placeholder"
+
+    await judge.evaluate(script_json={"scenes": []}, target_length=30)
+    sent = judge.qwen.chat_json.call_args.kwargs["messages"][1]["content"]
+    assert "30" in sent
+    assert "5" in sent          # the line budget for 30s
+    assert "FORMAT CONTEXT" in sent
+
+
+@pytest.mark.asyncio
 async def test_judge_handles_non_dict_response():
     judge = NarrativeJudge.__new__(NarrativeJudge)
     judge.qwen = MagicMock()

@@ -12,7 +12,7 @@ Scoring axes (each 0-10):
 3. pacing — is scene length and placement appropriate for narrative function? Scenes that start late and end early score high; slow setup scores low.
 4. dialogue_naturalness — does dialogue sound like real people talking?
 5. genre_adherence — does the script deliver on the promises of its stated genre?
-6. dialogue_density — how much do characters actually SPEAK vs pure visual description? A near-silent, visual-only script (little/no spoken dialogue) scores low (<5); a script with rich spoken interaction scores high.
+6. dialogue_density — do the spoken lines CARRY the drama? Judge density relative to the episode's length budget (a 30-second episode holds only ~5 short lines — few lines is the format, not a flaw). Score high when the lines do real dramatic work (conflict, subtext, momentum) even if there are few; score low (<5) only when the script leans almost entirely on visual description with dialogue doing no dramatic work; reserve <3 for an essentially silent script.
 7. hook_strength — would the FIRST 3 SECONDS stop a scrolling viewer? Opening mid-conflict with a shocking act, line, or question scores high; opening with waking up, arriving, scenery, or introductions scores low (<5).
 8. cliffhanger_pull — does each episode END on an unresolved turn that demands the next episode? (The final episode may resolve.) An episode that just... ends, or resolves everything early, scores low (<5).
 

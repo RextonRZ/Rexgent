@@ -248,13 +248,13 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             if getattr(get_settings(), "director_engine", False):
                 try:
                     # genre lives on Project (Script has none); safe on a detached
-                    # Script. Budget = one shot per line PLUS room for a couple of
-                    # non-verbal beats (establishing/insert/reaction) so a dialogue
-                    # scene isn't wall-to-wall talking heads and the visual model
-                    # (Wan) gets silent shots to render. Capped at 12.
+                    # Script. Budget = one shot per line PLUS non-verbal beats
+                    # granted by the TIME budget (a flat +2 let a 30s drama board
+                    # 8 silent beats). Capped at 12.
                     genre = getattr(getattr(script, "project", None), "genre", None)
                     n_lines = len(scene.dialogue_json or [])
-                    budget = min(max(shots_per_scene, n_lines) + 2, gen._HARD_CAP)
+                    from app.services.storyboard_generator import plan_scene_shot_budget
+                    budget = plan_scene_shot_budget(shots_per_scene, n_lines, gen._HARD_CAP)
                     look = recommend_look(genre)
                     plan = await plan_scene(scene_json, scene_chars, look,
                                             budget=budget, qwen=gen.qwen)
@@ -474,6 +474,16 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                  str(script.project_id))
     except Exception:  # noqa: BLE001 — detection is best-effort, never blocks
         pass
+    # duration fitter: when the board runs past the target, silent beats claim
+    # only the time they need (3s) — dialogue keeps what its lines require
+    from app.services.storyboard_generator import fit_silent_beats_to_target
+    views = [{"estimated_duration_seconds": s.estimated_duration_seconds,
+              "dialogue": s.dialogue} for s, _ in created]
+    if fit_silent_beats_to_target(views, target_length):
+        for (s, _), v in zip(created, views):
+            s.estimated_duration_seconds = v["estimated_duration_seconds"]
+        _progress(script.project_id, "storyboard", "update", "Director",
+                  "Tightened silent beats to fit the target length")
     # over-target check: warn BEFORE render money is spent when the board runs
     # long (the 30s ask that boarded 97s — the script wrote past its budget and
     # every line must still be covered). A WARNING, never a block.

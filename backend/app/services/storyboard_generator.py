@@ -334,6 +334,37 @@ def board_over_target(boarded_seconds: int, target_length: int | None,
     return boarded_seconds > round(target_length * (1 + tolerance))
 
 
+def plan_scene_shot_budget(shots_per_scene: int, n_lines: int, hard_cap: int) -> int:
+    """The Director's per-scene shot budget: one shot per dialogue line plus
+    room for non-verbal beats — but the extra room comes from the TIME budget
+    (shots_per_scene, itself derived from the target length), not a flat +2:
+    the flat allowance let a 30s drama board 8 silent beats (37s of a 62s
+    total). Every scene keeps at least one non-verbal beat."""
+    return min(max(shots_per_scene, n_lines + 1), hard_cap)
+
+
+_SILENT_BEAT_MAX = 3
+
+
+def fit_silent_beats_to_target(shots: list[dict], target_length: int | None) -> bool:
+    """When the boarded total overshoots the target, clamp SILENT shots to
+    _SILENT_BEAT_MAX seconds — a reaction, insert or held beat reads fine at
+    2-3s, and the 5s default made silent beats cost more than the dialogue.
+    Dialogue shots keep the time their lines need. Mutates in place; True
+    when anything changed."""
+    total = sum(int(s.get("estimated_duration_seconds") or 0) for s in (shots or []))
+    if not board_over_target(total, target_length, tolerance=0.15):
+        return False
+    changed = False
+    for s in shots:
+        if str(s.get("dialogue") or "").strip():
+            continue
+        if int(s.get("estimated_duration_seconds") or 0) > _SILENT_BEAT_MAX:
+            s["estimated_duration_seconds"] = _SILENT_BEAT_MAX
+            changed = True
+    return changed
+
+
 class StoryboardGenerator:
     # Never balloon a single scene past this many shots, even if it is very
     # dialogue-heavy — keeps cost and length sane.

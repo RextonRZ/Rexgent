@@ -99,7 +99,9 @@ def build_pipeline_graph(db=None):
         from app.websocket.tool_events import tool_run
         with tool_run(state["project_id"], "script", "narrative_judge",
                       "Story Analyst") as tb:
-            state["judgement"] = await NarrativeJudge().evaluate(state.get("structured", {}))
+            state["judgement"] = await NarrativeJudge().evaluate(
+                state.get("structured", {}),
+                target_length=state.get("target_length"))
             tb["artifact"] = (state["judgement"] or {}).get("recommendation", "scored")
         from app.agents.reporter import report_agent
         j = state["judgement"]
