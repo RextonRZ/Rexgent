@@ -148,6 +148,30 @@ async def generate_script(
             with tool_run(pid, "script", "structure_scenes", "Screenwriter") as tb:
                 structured = await structurer.structure(raw_text, language=request.language)
                 tb["artifact"] = f"{len(structured.get('scenes', []))} scenes"
+            # dialogue-budget ENFORCEMENT, same as the full-auto path: one trim
+            # rewrite when the draft overshoots the line budget the prompt set
+            from app.services.script_generator import (
+                over_line_budget, count_dialogue_lines, trim_note)
+            budget = over_line_budget(structured, request.target_length)
+            if budget is not None:
+                n_lines = count_dialogue_lines(structured)
+                emit("stage:progress", {"stage": "script", "status": "update",
+                     "agent": "Screenwriter",
+                     "label": f"Draft runs long ({n_lines} lines), trimming to {budget}"}, pid)
+                with tool_run(pid, "script", "trim_dialogue", "Screenwriter") as tb:
+                    raw_text = await generator.generate(
+                        genre=request.genre,
+                        premise=clean_premise,
+                        tone=request.tone,
+                        episode_count=request.episode_count,
+                        target_length=request.target_length,
+                        notes=trim_note(n_lines, budget, request.target_length),
+                        language=request.language,
+                        model=request.model,
+                        development=development,
+                    )
+                    structured = await structurer.structure(raw_text, language=request.language)
+                    tb["artifact"] = f"{count_dialogue_lines(structured)} lines"
     except Exception:
         emit("stage:progress", {"stage": "script", "status": "failed",
              "agent": "Screenwriter", "label": "Script generation failed"}, pid)

@@ -13,6 +13,32 @@ def plan_dialogue_budget(target_length: int | None) -> int:
     return max(3, round((target_length or 0) / 6))
 
 
+def count_dialogue_lines(structured: dict | None) -> int:
+    """Total dialogue lines in a structured script (every line becomes ~5s of
+    screen time downstream — the coverage invariant boards them all)."""
+    return sum(len(sc.get("dialogue_lines") or [])
+               for sc in (structured or {}).get("scenes", []))
+
+
+def over_line_budget(structured: dict | None, target_length: int | None) -> int | None:
+    """The budget, when the structured draft exceeds it (one line of grace) —
+    the signal to run ONE trim rewrite. None when the draft fits. The prompt
+    states the budget, but the writer LLM overshoots it by 2x when the story
+    wants more; enforcement has to happen after the draft, not inside it."""
+    budget = plan_dialogue_budget(target_length)
+    return budget if count_dialogue_lines(structured) > budget + 1 else None
+
+
+def trim_note(lines: int, budget: int, target_length: int | None) -> str:
+    """The revision note for the trim rewrite, phrased like a judge's note so
+    the writer keeps the story and cuts only the talk."""
+    return (f"REVISION - your previous draft had {lines} lines of dialogue, but a "
+            f"{target_length} second episode holds at most {budget}. Rewrite the SAME "
+            f"story with at most {budget} dialogue lines in total, each under 15 words. "
+            f"Merge or cut lines and let actions carry the rest; keep the hook, the "
+            f"escalation and the cliffhanger.")
+
+
 class ScriptGenerator:
     def __init__(self):
         self.qwen = QwenClient(get_settings())

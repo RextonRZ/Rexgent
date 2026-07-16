@@ -87,6 +87,27 @@ async def generate_script_op(
         with tool_run(project_id, "script", "structure_scenes", "Screenwriter") as t:
             structured = await ScriptStructurer().structure(raw_text, language=language)
             t["artifact"] = f"{len(structured.get('scenes', []))} scenes"
+        # dialogue-budget ENFORCEMENT: the prompt states the budget, but the
+        # writer overshoots it 2x when the story wants more (11 lines on a 30s
+        # ask boarded 73s). ONE trim rewrite with a judge-style note; a draft
+        # still over after that proceeds — boarding's over-target warning
+        # surfaces it before render money is spent.
+        from app.services.script_generator import (
+            over_line_budget, count_dialogue_lines, trim_note)
+        budget = over_line_budget(structured, target_length)
+        if budget is not None:
+            n_lines = count_dialogue_lines(structured)
+            _progress(project_id, "script", "update", "Screenwriter",
+                      f"Draft runs long ({n_lines} lines), trimming to {budget}")
+            with tool_run(project_id, "script", "trim_dialogue", "Screenwriter") as t:
+                raw_text = await ScriptGenerator().generate(
+                    genre=genre, premise=clean_premise, tone=tone,
+                    episode_count=episode_count, target_length=target_length,
+                    language=language, notes=trim_note(n_lines, budget, target_length),
+                    model=model or "qwen-max", development=development,
+                )
+                structured = await ScriptStructurer().structure(raw_text, language=language)
+                t["artifact"] = f"{count_dialogue_lines(structured)} lines"
         with tool_run(project_id, "script", "write_script_db", "Screenwriter") as t:
             script, scene_uuids = _persist_script(db, project_id, raw_text, structured)
             t["artifact"] = f"{len(scene_uuids)} rows"

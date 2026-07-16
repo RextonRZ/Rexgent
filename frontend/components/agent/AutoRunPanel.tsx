@@ -60,7 +60,9 @@ export function AutoRunPanel({
   const rewrite = mode === "rewrite";
   const { data: project } = useProject(projectId);
   const [premise, setPremise] = useState(initialPremise);
-  const [genre, setGenre] = useState(initialGenre || "sci-fi");
+  // default to drama, the platform's home genre: a silent "sci-fi" default
+  // injected sci-fi beats into premises that never asked for them
+  const [genre, setGenre] = useState(initialGenre || "drama");
   const [tone, setTone] = useState("dramatic");
   // tone reaches the LLM as free prompt text — presets guide, custom frees
   const [customTone, setCustomTone] = useState(false);
