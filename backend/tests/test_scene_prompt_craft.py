@@ -647,6 +647,31 @@ async def test_negative_bans_invented_facial_hair_and_blemishes():
 
 
 @pytest.mark.asyncio
+async def test_negative_bans_duplicated_people():
+    # scene 1 shot 2 rendered TWO Lucases from the prev-frame reference —
+    # any peopled shot bans rendering the same person twice
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MS", "action": "they argue"},
+        character_visuals={"ANGELINE": "a girl", "LUCAS": "a boy"},
+        target_model="happyhorse")
+    neg = out["negative_prompt"]
+    assert "same person twice" in neg
+    assert "duplicate" in neg
+
+
+@pytest.mark.asyncio
+async def test_no_duplicate_ban_on_empty_frame():
+    # a scenery shot has no people to duplicate — the ban stays out so the
+    # negative doesn't smuggle person-language into an empty landscape
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "LS", "action": "the empty street"},
+        character_visuals={}, target_model="wan")
+    assert "same person twice" not in out["negative_prompt"]
+
+
+@pytest.mark.asyncio
 async def test_described_beard_is_not_banned():
     crafter = _spc()
     out = await crafter.craft(

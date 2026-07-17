@@ -345,6 +345,28 @@ class TestDropSilentShots:
         assert dropped == 0
         assert kept == shots
 
+    def test_all_silent_scene_keeps_its_board(self):
+        # scene 4 of "Snowy's Silent Absence": a pure visual cliffhanger with
+        # ZERO dialogue lines — dropping every silent shot left the scene with
+        # 0 shots in the storyboard. An inherently non-verbal scene keeps its
+        # board; the drop is for silent FILLER between lines, not whole scenes.
+        from app.services.storyboard_generator import drop_silent_shots
+        shots = [{"characters_in_frame": ["A"], "dialogue": None, "shot_type": "MS"},
+                 {"characters_in_frame": ["A"], "dialogue": "", "shot_type": "CU"}]
+        kept, dropped = drop_silent_shots(shots)
+        assert dropped == 0
+        assert kept == shots
+
+
+def test_all_scenery_scene_keeps_its_board():
+    # same guard for the scenery drop: a scene boarded entirely people-free
+    # must not vanish from the storyboard
+    from app.services.storyboard_generator import drop_scenery_shots
+    shots = [_scenery(), _scenery()]
+    kept, dropped = drop_scenery_shots(shots)
+    assert dropped == 0
+    assert kept == shots
+
 
 class TestHookFirstScenery:
     """THE HOOK owns the first 3 seconds: scenery never plays first. The

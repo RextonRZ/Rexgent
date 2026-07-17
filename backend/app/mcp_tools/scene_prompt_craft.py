@@ -628,6 +628,12 @@ class ScenePromptCraft:
             result["negative_prompt"] += (
                 ", turning to face the camera, both subjects facing the "
                 "viewer, looking into the lens")
+        if frame_names:
+            # the prev-frame reference kept seeding a SECOND copy of a cast
+            # member into the frame (two Lucases in one shot) — ban outright
+            result["negative_prompt"] += (
+                ", duplicate person, the same person twice, identical twins, "
+                "extra copy of a character")
         if character_visuals:
             # invented-feature bans (peopled shots): models grow beards on
             # clean-shaven men, glasses and headbands on children, blemishes

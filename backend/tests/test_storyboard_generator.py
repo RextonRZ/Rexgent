@@ -219,6 +219,50 @@ def test_tight_two_shot_widens_to_ms():
     assert len(notes) == 2
 
 
+def test_tight_two_shot_becomes_ots_when_speaker_known():
+    # widening every tight two-shot to MS made a whole conversation render
+    # as a wall of Medium Shots. When the speaker is known, the Director's
+    # tight intent survives as an OTS: the speaker faces camera over the
+    # listener's foreground shoulder — classic shot/reverse-shot.
+    from app.services.storyboard_generator import widen_tight_two_shots
+    shots = [
+        {"shot_type": "MCU", "characters_in_frame": ["ANGELINE", "LUCAS"],
+         "dialogue": "Why won't you help me?"},
+        {"shot_type": "CU", "characters_in_frame": ["LUCAS", "ANGELINE"],
+         "dialogue": "I told you, I don't know anything!"},
+    ]
+    lines = [{"character": "Angeline", "line": "Why won't you help me?"},
+             {"character": "Lucas", "line": "I told you, I don't know anything!"}]
+    widen_tight_two_shots(shots, dialogue_lines=lines)
+    assert shots[0]["shot_type"] == "OTS"
+    assert shots[0]["foreground_characters"] == ["LUCAS"]   # listener's shoulder
+    assert shots[1]["shot_type"] == "OTS"
+    assert shots[1]["foreground_characters"] == ["ANGELINE"]
+
+
+def test_tight_two_shot_still_widens_without_a_speaker():
+    # no dialogue lines (or a speaker not in frame): the safe MS widen stands
+    from app.services.storyboard_generator import widen_tight_two_shots
+    shots = [
+        {"shot_type": "MCU", "characters_in_frame": ["A", "B"], "dialogue": None},
+        {"shot_type": "MCU", "characters_in_frame": ["A", "B"],
+         "dialogue": "Someone off-screen speaks."},
+    ]
+    lines = [{"character": "NARRATOR", "line": "Someone off-screen speaks."}]
+    widen_tight_two_shots(shots, dialogue_lines=lines)
+    assert shots[0]["shot_type"] == "MS"
+    assert shots[1]["shot_type"] == "MS"
+
+
+def test_tight_three_shot_widens_even_with_speaker():
+    # OTS is a two-hander geometry: three or more in frame still widens
+    from app.services.storyboard_generator import widen_tight_two_shots
+    shots = [{"shot_type": "MCU", "characters_in_frame": ["A", "B", "C"],
+              "dialogue": "Line."}]
+    widen_tight_two_shots(shots, dialogue_lines=[{"character": "A", "line": "Line."}])
+    assert shots[0]["shot_type"] == "MS"
+
+
 def test_default_solo_subject_is_absorbed_not_presenting():
     # a solo default staged facing camera reads like a TV host; the subject
     # should be turned into their own action instead

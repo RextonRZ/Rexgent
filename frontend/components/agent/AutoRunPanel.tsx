@@ -461,7 +461,16 @@ export function AutoRunPanel({
                 </span>{" "}
                 / ${cap.toFixed(0)} ·{" "}
                 {result.budget.wan_shots || result.budget.happyhorse_shots
-                  ? `${result.budget.wan_shots ?? 0} Wan / ${result.budget.happyhorse_shots ?? 0} HappyHorse`
+                  ? [
+                      result.budget.wan_shots
+                        ? `${result.budget.wan_shots} Wan`
+                        : null,
+                      result.budget.happyhorse_shots
+                        ? `${result.budget.happyhorse_shots} HappyHorse`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" / ")
                   : `${result.budget.full_shots} full / ${result.budget.fast_shots} fast`}
               </p>
             )}

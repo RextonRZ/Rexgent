@@ -427,9 +427,11 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             for sd in shots:
                 sd["action"] = strip_noncast_action(
                     sd.get("action"), sd.get("characters_in_frame"), known_names)
-            # a CU/MCU cannot hold two people: tight two-shots widen to MS so
-            # the render matches the stage diagram instead of dropping a face
-            widen_tight_two_shots(shots)
+            # a CU/MCU cannot hold two people: a tight two-shot with a known
+            # speaker keeps its close intent as an OTS (speaker over the
+            # listener's shoulder); otherwise it widens to MS so the render
+            # matches the stage diagram instead of dropping a face
+            widen_tight_two_shots(shots, dialogue_lines=scene.dialogue_json)
             for sd in shots:
                 # clamp bounded enum columns (shot_type, camera_movement) so one
                 # over-long LLM value can't fail the whole scene's batch insert

@@ -116,8 +116,11 @@ def image_ref_legend(provenance) -> str:
     goes where. N is 1-based and matches the media order sent to the model
     (the same order as build_reference_stack_labeled's provenance)."""
     role_label = {
-        "character": "{c} (their face AND the exact outfit to wear)",
-        "identity": "{c}'s face",
+        # "face AND the exact outfit" left hair unpinned: the render gave the
+        # plate's face a different haircut. Name every identity-carrying part.
+        "character": ("{c} (their exact face, hairstyle, hair accessories, "
+                      "eyewear or lack of it, AND the exact outfit to wear)"),
+        "identity": "{c}'s face and hairstyle",
         "costume": "{c}'s outfit",
         "prev_frame": ("the previous moment of THIS scene - continue its "
                        "state, lighting and set; the people in it are the "
@@ -134,10 +137,12 @@ def image_ref_legend(provenance) -> str:
         "style": "the visual style",
     }
     parts = []
-    has_person = False
+    people: list[str] = []
     for i, p in enumerate(provenance or [], start=1):
         if p.get("role") in ("character", "identity", "costume"):
-            has_person = True
+            name = str(p.get("character") or "the subject")
+            if name not in people:
+                people.append(name)
         tmpl = role_label.get(p.get("role"), "a reference")
         parts.append(f"[Image {i}] is " + tmpl.format(c=p.get("character") or "the subject"))
     if not parts:
@@ -147,10 +152,21 @@ def image_ref_legend(provenance) -> str:
     # applies only when a real face/outfit plate is in the stack.
     preamble = (
         "Reference image guide (match each person to their OWN image, never "
-        "swap faces or outfits between people): " if has_person
+        "swap faces or outfits between people): " if people
         else "Reference images (match the location and visual style only, no people): "
     )
-    return preamble + "; ".join(parts) + "."
+    legend = preamble + "; ".join(parts) + "."
+    if people:
+        # the exact headcount, stated outright: the prev-frame reference alone
+        # kept seeding a SECOND copy of a character into the frame
+        n = len(people)
+        legend += (
+            f" The frame holds exactly {n} "
+            + ("person" if n == 1 else "people") + ": " + ", ".join(people)
+            + (" - never an extra figure, never the same person twice."
+               if n > 1 else " - never a second figure.")
+        )
+    return legend
 
 
 def build_reference_stack(characters_in_frame, scene_number, bible,

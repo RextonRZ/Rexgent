@@ -270,11 +270,14 @@ def test_word_warp_plan_paces_each_word_to_the_native_grid():
     mouth = [(3.00, 3.40), (3.50, 4.30), (4.90, 5.30), (5.40, 6.40)]
     plan = word_warp_plan(tts, mouth)
     assert plan is not None
-    # word 2 -> word 3: tts gap 0.5s vs native gap 1.4s -> stretched, clamped
-    assert {"start": 0.6, "end": 1.1, "tempo": 0.6} in plan
+    # word 2 -> word 3: tts gap 0.5s vs native gap 1.4s -> stretched, clamped.
+    # The band is NARROW (0.75..1.35): the first 0.6..1.6 band made the same
+    # voice audibly speed up and slow down word to word — the "inconsistent
+    # voice" complaint. Better a slightly looser sync than a warbling read.
+    assert {"start": 0.6, "end": 1.1, "tempo": 0.75} in plan
     # the tail past the last word passes through untouched
     assert plan[-1]["end"] is None and plan[-1]["tempo"] == 1.0
-    assert all(0.6 <= p["tempo"] <= 1.6 for p in plan)
+    assert all(0.75 <= p["tempo"] <= 1.35 for p in plan)
 
 
 def test_word_warp_plan_refuses_mismatched_word_counts():
@@ -331,7 +334,8 @@ def test_place_dialogue_attaches_word_warp():
     seg = place_dialogue(line_rows, scene_plan)[0]
     assert seg["start"] == 3.0
     assert "warp" in seg and "tempo" not in seg
-    assert abs(seg["duration"] - 3.133) < 0.01
+    # stretched words clamp at 0.75 now (the natural-delivery band)
+    assert abs(seg["duration"] - 2.767) < 0.01
 
 
 def test_tight_cut_trims_dead_air_around_the_line():

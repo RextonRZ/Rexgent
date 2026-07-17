@@ -196,8 +196,12 @@ def drop_scenery_shots(shots: list[dict]) -> tuple[list[dict], int]:
     scenes at the seed image's aspect (square plates -> square video) and
     hallucinates content, and in practice they read as disconnected from the
     drama — when scenery is disallowed, even Director-authored ones go.
+    A scene boarded ENTIRELY people-free keeps its board: the drop trims
+    cutaways from a peopled scene, it must never erase a scene outright.
     Returns (kept shots NOT renumbered, dropped count)."""
     kept = [s for s in (shots or []) if not _is_scenery(s)]
+    if not kept and shots:
+        return list(shots), 0
     return kept, len(shots or []) - len(kept)
 
 
@@ -205,8 +209,13 @@ def drop_silent_shots(shots: list[dict]) -> tuple[list[dict], int]:
     """DIALOGUE_ONLY boarding: keep only shots that carry a spoken line.
     Silent beats teleported postures between renders (standing -> seated ->
     standing) and read as filler; an all-speech drama cuts line to line.
+    A scene with NO spoken line at all (a visual cliffhanger, a wordless
+    reunion) is inherently non-verbal and keeps its board — dropping every
+    shot left a 0-shot scene in the storyboard.
     Returns (kept shots NOT renumbered, dropped count)."""
     kept = [s for s in (shots or []) if str(s.get("dialogue") or "").strip()]
+    if not kept and shots:
+        return list(shots), 0
     return kept, len(shots or []) - len(kept)
 
 
@@ -421,19 +430,41 @@ def widen_faceless_framings(shots: list[dict]) -> list[dict]:
 _TIGHT_FRAMINGS = {"CU", "ECU", "MCU"}
 
 
-def widen_tight_two_shots(shots: list[dict]) -> list[str]:
+def widen_tight_two_shots(shots: list[dict],
+                          dialogue_lines: list[dict] | None = None) -> list[str]:
     """A close-up cannot hold two people: an MCU listing two cast rendered
-    only ONE of them while the stage diagram promised both. Tight framings
-    with 2+ in-frame characters widen to MS. OTS is left alone — it is BUILT
-    for two people (one of them a foreground shoulder). Mutates in place,
-    returns correction notes."""
+    only ONE of them while the stage diagram promised both. OTS is left
+    alone — it is BUILT for two people (one of them a foreground shoulder).
+
+    Widening EVERY tight two-shot to MS turned a whole conversation into a
+    wall of Medium Shots, so when the speaker is known (dialogue_lines pair
+    with dialogue-bearing shots in speaking order, the same convention the
+    audio placement uses) a tight TWO-shot keeps the Director's close intent
+    as an OTS: the speaker faces camera over the listener's foreground
+    shoulder — shot/reverse-shot, and consecutive lines alternate sides by
+    themselves. No identifiable in-frame speaker, or 3+ cast, still widens
+    to MS. Mutates in place, returns correction notes."""
     notes: list[str] = []
+    speakers = iter([str(l.get("character") or "").strip()
+                     for l in (dialogue_lines or [])])
     for i, s in enumerate(shots or []):
+        speaker = ""
+        if str(s.get("dialogue") or "").strip():
+            speaker = next(speakers, "")
         cast = s.get("characters_in_frame") or []
         stype = str(s.get("shot_type") or "").upper()
         if len(cast) >= 2 and stype in _TIGHT_FRAMINGS:
-            s["shot_type"] = "MS"
-            notes.append(f"shot {i + 1}: {stype} with {len(cast)} cast widened to MS")
+            cast_up = {str(c).strip().upper(): c for c in cast}
+            if len(cast) == 2 and speaker.upper() in cast_up:
+                listener = next(c for c in cast
+                                if str(c).strip().upper() != speaker.upper())
+                s["shot_type"] = "OTS"
+                s["foreground_characters"] = [listener]
+                notes.append(f"shot {i + 1}: {stype} two-shot kept tight as OTS "
+                             f"over {listener}'s shoulder")
+            else:
+                s["shot_type"] = "MS"
+                notes.append(f"shot {i + 1}: {stype} with {len(cast)} cast widened to MS")
     return notes
 
 

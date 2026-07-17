@@ -98,7 +98,11 @@ def dialogue_shot_words(scene_plan: list[dict]) -> dict[int, list]:
 # the per-word warp may pace harder than the single-tempo clamp (it is
 # correcting real word-level drift, not dragging a whole line), but each
 # word still stays within what sounds human
-WARP_TEMPO_MIN, WARP_TEMPO_MAX = 0.6, 1.6
+# NARROW band: the first 0.6..1.6 band chased lip-sync so hard the same
+# voice audibly sped up and slowed down word to word — the delivery warbled.
+# Human emphasis varies roughly a quarter either way; past that, better a
+# slightly looser sync than an unnatural read.
+WARP_TEMPO_MIN, WARP_TEMPO_MAX = 0.75, 1.35
 # gate padding: breaths ride just outside the measured word span
 _GATE_PAD = 0.15
 
