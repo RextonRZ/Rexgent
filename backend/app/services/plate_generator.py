@@ -33,7 +33,9 @@ import re as _re
 _EYEWEAR = _re.compile(r"glasses|spectacles|eyewear|sunglasses|眼镜", _re.I)
 
 
-def char_plate_negative(*texts) -> str:
+def char_plate_negative(*texts, creature: bool = False) -> str:
+    if creature:
+        return CREATURE_PLATE_NEGATIVE
     if any(_EYEWEAR.search(x or "") for x in texts):
         return CHAR_PLATE_NEGATIVE
     return CHAR_PLATE_NEGATIVE + ", eyeglasses, spectacles, glasses on face"
@@ -57,6 +59,18 @@ CHAR_PLATE_NEGATIVE = (
     # the plate (sunglasses perched on the head read as a hair accessory)
     "sunglasses on top of head, glasses perched on hair, eyewear on head, "
     "room interior, doorway, window, scenery background, scene, busy background, cluttered, text, watermark"
+)
+
+
+# A creature plate keeps the identity discipline (one subject, neutral, no
+# scene) but NOT the human pose standard — animals sit, crouch and perch
+# naturally, and the subject must never be replaced by a person.
+CREATURE_PLATE_NEGATIVE = (
+    "two people, second person, multiple people, another person, crowd, background people, "
+    "human, person, man, woman, "
+    "different animal, different species, different markings, deformed, extra limbs, "
+    "room interior, doorway, window, scenery background, scene, busy background, cluttered, "
+    "text, watermark"
 )
 
 
@@ -125,7 +139,8 @@ def subject_descriptor(gender: str | None = None, age: str | None = None,
     return lead or "a person"
 
 
-def character_plate_prompt(has_face: bool, subject: str, outfit: str = "") -> str:
+def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
+                           creature: bool = False) -> str:
     """A costume-plate prompt for identity + wardrobe: ONE subject in a FIXED
     standing pose on a plain backdrop — face clearly visible, the whole outfit
     readable from head to shoes. `subject` is who they are (gender/age/
@@ -134,7 +149,24 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "") -> st
     look (and a dog/child isn't forced into an adult t-shirt). The outfit text
     is scene-cleaned: wardrobe descriptions leak postures and surroundings
     ('sitting by the window, staring at the sea') that would get rendered into
-    the plate."""
+    the plate. creature=True swaps the human pose standard for a natural
+    full-body animal/creature reference — a rabbit cannot stand straight with
+    arms at its sides."""
+    outfit = clean_appearance((outfit or "").strip())
+    if creature:
+        frame = ("Solo studio reference photo of ONE creature alone, no people, "
+                 "the full body visible in a natural resting pose, head and face "
+                 "turned toward the camera, plain seamless neutral backdrop, soft "
+                 "even lighting. Ignore any location, action or scene — plain "
+                 "background only. This is an identity reference, not a "
+                 "performance — the emotion of each shot is set later at "
+                 "generation time.")
+        base = f"{subject}, wearing {outfit}" if outfit else subject
+        if has_face:
+            return (f"The exact same creature as the reference image ({base}) — "
+                    f"keep the identical markings, colors and body proportions. "
+                    f"{frame}")
+        return f"{base}. {frame}"
     frame = ("Solo studio costume-reference photo of ONE subject alone, no other people, "
              "standing straight facing the camera in a fixed reference pose, the whole "
              "outfit visible from head to shoes, arms relaxed at the sides, face clearly "
@@ -144,7 +176,6 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "") -> st
              "any location, action or scene — plain background only. This is an identity "
              "and wardrobe reference, not a performance — the emotion of each shot is "
              "set later at generation time.")
-    outfit = clean_appearance((outfit or "").strip())
     if has_face:
         anchor = ("Keep the same age and body proportions as the reference — do not make "
                   "them younger or older.")

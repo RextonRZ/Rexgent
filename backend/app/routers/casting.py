@@ -176,10 +176,11 @@ async def override_variant(variant_id: str, file: UploadFile = File(...), db: Se
     return {"plate_image_url": url}
 
 
-def _char_plate_prompt(char, outfit: str) -> str:
+def _char_plate_prompt(char, outfit: str, creature: bool = False) -> str:
     subject = subject_descriptor(char.gender, char.estimated_age,
                                  char.physical_description or char.visual_description)
-    return character_plate_prompt(bool(char.reference_image_url), subject, outfit)
+    return character_plate_prompt(bool(char.reference_image_url), subject, outfit,
+                                  creature=creature)
 
 
 _OUTFIT_READ_PROMPT = (
@@ -338,15 +339,27 @@ async def generate_character_plates(character_id: str, design_voice: bool = True
             except Exception:  # noqa: BLE001
                 pass
         pg = PlateGenerator(db)
+        # creatures get a natural full-body reference and skip the ArcFace
+        # check (no human face); stylized looks skip the check too — the
+        # embeddings are meaningless on cartoon/pixel faces
+        from app.services.character_traits import is_creature, is_stylized_style
+        from app.models.style_preset import StylePreset
+        creature = is_creature(c)
+        style_row = db.query(StylePreset).filter(
+            StylePreset.project_id == c.project_id).first()
+        stylized = is_stylized_style(
+            getattr(style_row, "free_text", None),
+            " ".join(getattr(style_row, "style_tags", None) or []))
         for v in variants:
-            prompt = _char_plate_prompt(c, v.outfit_description or "")
+            prompt = _char_plate_prompt(c, v.outfit_description or "", creature=creature)
             url, vector = await pg.generate_and_store_plate(
                 project_id, "character", f"{c.name}_{v.label}", prompt,
                 negative_prompt=char_plate_negative(
                     c.visual_description, c.physical_description,
-                    c.video_prompt_fragment, v.outfit_description),
+                    c.video_prompt_fragment, v.outfit_description, creature=creature),
                 base_image_url=c.reference_image_url, prompt_extend=False,
-                match_vector=c.face_vector if c.reference_image_url else None)
+                match_vector=(c.face_vector if c.reference_image_url
+                              and not creature and not stylized else None))
             v.plate_image_url, v.face_vector = url, vector
             # a rejected reference (content filter) must not masquerade as a lock
             v.plate_status = ("ref_rejected" if pg.last_face_preserved is False

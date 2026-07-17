@@ -246,3 +246,27 @@ async def test_face_reference_preflight_classifies_verdicts():
 
     client.edit_image = AsyncMock(side_effect=RuntimeError("timeout"))
     assert await client.check_face_reference("https://oss/me.jpg") == "unknown"
+
+
+def test_creature_plate_prompt_drops_the_human_pose_standard():
+    # a rabbit cannot stand straight with arms at its sides — the creature
+    # plate asks for a natural full-body reference instead
+    from app.services.plate_generator import character_plate_prompt
+    p = character_plate_prompt(False, "a small white rabbit, red collar",
+                               creature=True)
+    assert "head to shoes" not in p
+    assert "arms relaxed" not in p
+    assert "Never sitting" not in p
+    assert "full body" in p.lower()
+    assert "ONE creature" in p
+    # identity discipline survives: plain backdrop, no scene
+    assert "plain seamless neutral backdrop" in p
+
+
+def test_creature_negative_keeps_identity_bans_but_allows_natural_poses():
+    from app.services.plate_generator import char_plate_negative
+    n = char_plate_negative("a small white rabbit", creature=True)
+    assert "two people" in n            # never a second subject
+    assert "text, watermark" in n
+    assert "sitting" not in n           # animals sit naturally
+    assert "human, person" in n         # and never a person instead

@@ -181,6 +181,14 @@ def voice_design_prompt(char) -> str:
     persona = (getattr(char, "personality_summary", None) or "").strip()
     if persona:
         bits.append(f"personality: {persona[:400]}.")
+    # a rabbit should not get "a female around 30": species shapes the timbre
+    from app.services.character_traits import species_of
+    species = species_of(getattr(char, "physical_description", None),
+                         getattr(char, "visual_description", None))
+    if species:
+        bits.append(f"This is a non-human character (a {species}): design a "
+                    f"characterful voice that fits the species and the "
+                    f"personality, still fully intelligible.")
     bits.append("Natural conversational voice for a drama, emotionally expressive, "
                 "clear diction, speaks English.")
     return " ".join(bits)[:2000]
@@ -489,6 +497,12 @@ class CastingDirector:
         if style:
             self._upsert_style(project_id, style, None)
 
+        # non-photoreal looks make ArcFace embeddings meaningless: verify
+        # nothing rather than fail everything (plates still image-edit from
+        # any uploaded reference — only the face CHECK is skipped)
+        from app.services.character_traits import is_creature, is_stylized_style
+        stylized = is_stylized_style(self._style_input(project_id))
+
         faces_locked = 0
         for c in to_paint:
             variants = plan.get(c.name) or [{"label": "default", "outfit_description": "",
@@ -508,15 +522,21 @@ class CastingDirector:
                 subject = subject_descriptor(
                     c.gender, c.estimated_age,
                     clean_appearance(c.physical_description) or clean_appearance(c.visual_description))
-                prompt = character_plate_prompt(bool(c.reference_image_url), subject, outfit)
+                # a rabbit gets a natural full-body reference, not the human
+                # standing standard — and no ArcFace check (no human face)
+                creature = is_creature(c)
+                prompt = character_plate_prompt(bool(c.reference_image_url), subject, outfit,
+                                                creature=creature)
                 url, vector = await self.plates.generate_and_store_plate(
                     pid, "character", f"{c.name}_{v['label']}", prompt,
                     negative_prompt=char_plate_negative(
                         c.visual_description, c.physical_description,
-                        c.video_prompt_fragment, outfit),
+                        c.video_prompt_fragment, outfit, creature=creature),
                     base_image_url=c.reference_image_url, prompt_extend=False,
-                    # verify the rendered face against the uploaded one
-                    match_vector=c.face_vector if c.reference_image_url else None)
+                    # verify the rendered face against the uploaded one —
+                    # meaningless for creatures and stylized looks, so skipped
+                    match_vector=(c.face_vector if c.reference_image_url
+                                  and not creature and not stylized else None))
                 if vector:
                     faces_locked += 1
                 is_default = (i == 0)

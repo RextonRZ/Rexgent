@@ -375,3 +375,15 @@ def test_resolve_outfit_wardrobe_wins_clothing_backfills():
     assert resolve_outfit("   ", "school uniform") == "school uniform"
     # neither -> empty (the prompt simply omits an outfit line)
     assert resolve_outfit(None, None) == ""
+
+
+def test_voice_design_prompt_says_the_species():
+    from types import SimpleNamespace
+    from app.services.casting_director import voice_design_prompt
+    rabbit = SimpleNamespace(name="Snowy", estimated_age=None, gender=None,
+                             personality_summary="gentle and curious",
+                             physical_description="a small white rabbit",
+                             visual_description=None, role="SUPPORTING")
+    p = voice_design_prompt(rabbit)
+    assert "rabbit" in p.lower()
+    assert "non-human" in p.lower() or "animal" in p.lower()
