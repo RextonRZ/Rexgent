@@ -52,6 +52,10 @@ RULES:
   instant jump to tears.
 - CONVERSATION FLOW: while an exchange is live, hold the two-way coverage (OTS / reverse / reaction); an
   environment cutaway may land only at a natural pause — never between a question and its answer.
+- CLEAN SINGLES: when a solo shot addresses someone present in the scene but off-frame (the reverse of the
+  coverage), write that subject's eyeline as "at <name>, off-screen near camera" — the listener stands
+  beside the lens, the gaze rests just past it. A solo shot with NO addressee gets an eyeline on the task
+  itself ("at the empty hutch"), never "at the camera".
 - SHOW THE DISCOVERY: when a character finds, sees or points at something (an animal, an object, a person),
   at least one shot must put THE DISCOVERED THING IN FRAME — an OTS past the discoverer onto it, a POV of
   it, or a two-element frame holding both. A reaction close-up alone tells the audience nothing was there.

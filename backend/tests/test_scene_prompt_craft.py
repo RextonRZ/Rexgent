@@ -438,7 +438,11 @@ async def test_eyeline_appended_from_blocking():
         target_model="happyhorse",
         blocking={"subjects": [{"character": "KIM", "eyeline": "at Yoon"},
                                {"character": "YOON", "eyeline": "off-camera left"}]})
-    assert "looks at Yoon" in result["prompt"]
+    # KIM is ALONE in frame and Yoon is her off-screen listener: the eyeline
+    # sits beside the lens and the off-frame name never enters the prompt
+    # (naming Yoon here used to risk rendering a second person)
+    assert "Eyelines: KIM looks just beside the camera" in result["prompt"]
+    assert "Yoon" not in result["prompt"]
 
 
 @pytest.mark.asyncio
@@ -876,3 +880,52 @@ async def test_solo_shot_bans_fourth_wall_and_absorbs():
     assert "absorbed in what they are doing" in result["prompt"]
     assert "looking at the camera" in result["negative_prompt"]
     assert "breaking the fourth wall" in result["negative_prompt"]
+
+
+def test_solo_eyeline_to_offscreen_listener_sits_beside_the_lens():
+    # a clean single in a conversation: the listener is off-frame at the
+    # camera position — the gaze rests just past the lens, never into it,
+    # and never gets rewritten into task absorption
+    from app.mcp_tools.scene_prompt_craft import resolve_solo_eyeline
+    text, mode = resolve_solo_eyeline("at Theo", ["Angeline"])
+    assert mode == "listener"
+    assert "off-screen" in text and "never directly into" in text
+    assert "Theo" not in text  # off-frame names must not enter the prompt
+    # explicit off-screen direction from the board counts too
+    text2, mode2 = resolve_solo_eyeline("at Mia, off-screen near camera", ["Rex"])
+    assert mode2 == "listener"
+
+
+def test_solo_eyeline_objects_and_vague_keep_old_behavior():
+    from app.mcp_tools.scene_prompt_craft import resolve_solo_eyeline
+    # an OBJECT eyeline the board wrote survives untouched (authored)
+    text, mode = resolve_solo_eyeline("at the empty hutch", ["Angeline"])
+    assert (text, mode) == ("at the empty hutch", "authored")
+    # vague still resolves to task absorption
+    text2, mode2 = resolve_solo_eyeline("off-camera", ["Angeline"])
+    assert mode2 == "absorbed" and "what they are doing" in text2
+    # the subject s own name (self-reference noise) is not a listener
+    text3, mode3 = resolve_solo_eyeline("at Angeline", ["Angeline"])
+    assert mode3 == "absorbed"
+
+
+@pytest.mark.asyncio
+async def test_solo_listener_shot_keeps_near_lens_gaze():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "Medium close-up, a girl speaking",
+        "negative_prompt": "blurry", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MCU", "action": "She pleads with him",
+              "estimated_duration_seconds": 5},
+        character_visuals={"Angeline": {"video_prompt_fragment": "an 8-year-old girl"}},
+        target_model="happyhorse",
+        blocking={"subjects": [{"character": "Angeline", "eyeline": "at Theo"}]})
+    # the listener clause replaces the absorbed clause...
+    assert "speaking to someone OFF-SCREEN" in result["prompt"]
+    assert "absorbed in what they are doing" not in result["prompt"]
+    # ...and the negative bans only the true lens stare, not near-lens gaze
+    assert "staring directly into the lens" in result["negative_prompt"]
+    assert "looking at the camera" not in result["negative_prompt"]

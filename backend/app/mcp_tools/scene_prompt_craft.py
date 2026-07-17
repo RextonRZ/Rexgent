@@ -19,6 +19,11 @@ _ACTION_CAMERA_RE = re.compile(r"\b(?:the\s+)?camera\b", re.I)
 
 _ABSORBED_EYELINE = ("on what they are doing - absorbed in the action, "
                      "never toward the lens")
+_LISTENER_EYELINE = ("just beside the camera, at the off-screen person they "
+                     "are speaking to - the gaze rests close past the lens, "
+                     "never directly into it")
+_OFFSCREEN_RE = re.compile(r"off[- ]?screen", re.I)
+_EYELINE_TARGET_RE = re.compile(r"^(?:at|toward|towards)\s+(.+)$", re.I)
 
 
 def solo_eyeline(raw: str | None) -> str:
@@ -32,6 +37,34 @@ def solo_eyeline(raw: str | None) -> str:
     if t in vague or t.startswith("just off-camera"):
         return _ABSORBED_EYELINE
     return str(raw).strip()
+
+
+def resolve_solo_eyeline(raw: str | None, frame_names: list) -> tuple[str, str]:
+    """(text, mode) for a solo subject's eyeline. Three modes:
+    - "listener": the eyeline names a PERSON who is not in this frame (the
+      clean single of a conversation - the other character stands off-screen
+      at the camera position). The gaze rests just beside the lens, and the
+      off-frame name never enters the prompt (it would render that person).
+    - "authored": a specific non-person eyeline the board wrote ('at the
+      empty hutch') survives untouched.
+    - "absorbed": vague eyelines become task absorption (the Dora fix)."""
+    t = str(raw or "").strip()
+    in_frame_upper = {str(n).strip().upper() for n in (frame_names or [])}
+    if _OFFSCREEN_RE.search(t):
+        return _LISTENER_EYELINE, "listener"
+    m = _EYELINE_TARGET_RE.match(t)
+    if m:
+        target = m.group(1).strip().rstrip(".")
+        first = target.split()[0] if target.split() else ""
+        looks_like_object = first.lower() in (
+            "the", "a", "an", "his", "her", "their", "its", "what")
+        if not looks_like_object and first[:1].isupper():
+            if target.upper() in in_frame_upper:
+                # self-reference noise ("Angeline looks at Angeline")
+                return _ABSORBED_EYELINE, "absorbed"
+            return _LISTENER_EYELINE, "listener"
+    resolved = solo_eyeline(t)
+    return resolved, ("absorbed" if resolved == _ABSORBED_EYELINE else "authored")
 
 
 def decamera_action(action: str | None) -> str | None:
@@ -336,13 +369,18 @@ class ScenePromptCraft:
                            "toward the other character", "off-camera", ""}
         frame_names = [str(k) for k in character_visuals.keys()]
 
+        solo_mode = {"mode": None}
+
         def _eyeline_text(subj_name, raw) -> str:
             t = str(raw or "").strip()
-            # a SOLO subject's vague eyeline becomes task absorption — the
-            # Dora-the-Explorer case: presenting to the audience while
-            # supposedly searching for the rabbit
+            # a SOLO subject: vague eyelines become task absorption (the
+            # Dora-the-Explorer case), an off-frame PERSON becomes the
+            # off-screen listener beside the lens (a conversation's clean
+            # single), and authored object eyelines survive untouched
             if len(frame_names) == 1:
-                return solo_eyeline(t)
+                text, mode = resolve_solo_eyeline(t, frame_names)
+                solo_mode["mode"] = mode
+                return text
             # in a TWO-person shot a vague or camera eyeline locks to the other
             # character — both actors stared into the lens instead of at each
             # other, and "toward the other character" left the model guessing
@@ -360,16 +398,22 @@ class ScenePromptCraft:
                if isinstance(s, dict) and s.get('character') and s.get('eyeline')
                and str(s.get('character')).strip().upper() in in_frame_upper]
         eyelines = (" Eyelines: " + "; ".join(eye) + ".") if eye else ""
-        # (2a) SOLO ABSORPTION: one person alone in frame is IN the scene, not
-        # hosting it — they focus on their own action, and the fourth wall
-        # holds even when no blocking subjects were staged at all. Name-free
-        # on purpose: Wan-bound prompts carry no reference images, so a name
-        # here would be the only name in the text (and there is only one
-        # person to mean).
+        # (2a) SOLO CLAUSE: one person alone in frame is IN the scene, not
+        # hosting it. Speaking to an off-screen listener (the conversation's
+        # clean single) keeps a near-lens gaze; anything else is absorbed in
+        # its own action. Name-free on purpose: Wan-bound prompts carry no
+        # reference images, so a name here would be the only name in the
+        # text (and there is only one person to mean).
         if len(frame_names) == 1:
-            eyelines += (" The subject is alone in the frame, absorbed in "
-                         "what they are doing - never looking at the camera, "
-                         "no eye contact with the viewer.")
+            if solo_mode["mode"] == "listener":
+                eyelines += (" The subject is alone in the frame, speaking to "
+                             "someone OFF-SCREEN just beside the camera - their "
+                             "gaze rests close past the lens, never directly "
+                             "into it, and no second person is visible.")
+            else:
+                eyelines += (" The subject is alone in the frame, absorbed in "
+                             "what they are doing - never looking at the camera, "
+                             "no eye contact with the viewer.")
 
         # (2b) BACK STAYS BACK: a subject staged facing away (or a foreground
         # occluder) must not rotate to camera mid-shot — continuation models
@@ -535,10 +579,17 @@ class ScenePromptCraft:
             result["negative_prompt"] += (
                 ", turning around to face the camera, revealing the face")
         if len(frame_names) == 1:
-            # the Dora ban: a solo subject presenting to the audience
-            result["negative_prompt"] += (
-                ", looking at the camera, direct eye contact with the viewer, "
-                "breaking the fourth wall, presenting to the camera")
+            if solo_mode["mode"] == "listener":
+                # near-lens gaze is WANTED here — ban only the true lens stare
+                # and the listener materializing in frame
+                result["negative_prompt"] += (
+                    ", staring directly into the lens, breaking the fourth "
+                    "wall, second person in frame")
+            else:
+                # the Dora ban: a solo subject presenting to the audience
+                result["negative_prompt"] += (
+                    ", looking at the camera, direct eye contact with the viewer, "
+                    "breaking the fourth wall, presenting to the camera")
         if character_visuals:
             # invented-feature bans (peopled shots): models grow beards on
             # clean-shaven men, glasses and headbands on children, blemishes
