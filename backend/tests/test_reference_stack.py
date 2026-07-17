@@ -196,3 +196,41 @@ def test_ots_and_pov_keep_location_plate():
             characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
             prev_last_frame_url="prev", model_cap=9, shot_type=st)
         assert "loc1" in [m["url"] for m in stack], st
+
+
+def test_prev_frame_safe_allows_only_non_shrinking_cast():
+    # the Blood and Bone lesson: pasting people from the previous frame is
+    # only safe when everyone in that frame belongs in THIS shot too
+    from app.services.reference_stack import prev_frame_safe
+    assert prev_frame_safe(["MIA", "REX"], ["MIA", "REX"]) is True   # same pair
+    assert prev_frame_safe(["MIA"], ["MIA", "REX"]) is True          # someone enters
+    assert prev_frame_safe(["MIA", "REX"], ["MIA"]) is False         # someone LEAVES
+    assert prev_frame_safe([], ["MIA"]) is True                      # people-free frame
+    assert prev_frame_safe(None, ["MIA"]) is True
+
+
+def test_guarded_prev_frame_rides_after_the_cast_plates():
+    stack, prov = build_reference_stack_labeled(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url="prev", model_cap=9,
+        prev_frame_allowed=True)
+    urls = [m["url"] for m in stack]
+    assert urls == ["mia_uniform", "prev", "loc1", "style"]
+    assert prov[1] == {"url": "prev", "role": "prev_frame"}
+
+
+def test_prev_frame_still_never_rides_by_default():
+    # flag off / guard failed: byte-identical to the frameless stack
+    stack, _ = build_reference_stack_labeled(
+        characters_in_frame=["Mia"], scene_number=1, bible=_bible(),
+        prev_last_frame_url="prev", model_cap=9)
+    assert all(m["url"] != "prev" for m in stack)
+
+
+def test_prev_frame_legend_forbids_extra_copies():
+    from app.services.reference_stack import image_ref_legend
+    legend = image_ref_legend([
+        {"url": "mia_uniform", "role": "character", "character": "Mia"},
+        {"url": "prev", "role": "prev_frame"},
+    ])
+    assert "never render extra copies" in legend

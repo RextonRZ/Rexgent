@@ -386,7 +386,8 @@ class GenerationRunner:
                         lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines, shot_dialogue=shot.dialogue),
                         environment=environment, prev_in_frame=prev_in_frame,
                         prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
-                        prev_clip_url=prev_clip, prev_clip_seconds=prev_clip_secs)
+                        prev_clip_url=prev_clip, prev_clip_seconds=prev_clip_secs,
+                        prev_frame_same_scene=(i > 0))
                     prev_clip_secs = (int(shot.estimated_duration_seconds or 0)
                                       if prev_clip else None)
                     # the first wide shot's closing frame anchors the room for the
@@ -450,7 +451,8 @@ class GenerationRunner:
                         lipsync_line=pick_lipsync_line(shot.id, speaking_ids, scene_lines, shot_dialogue=shot.dialogue),
                         environment=environment, prev_in_frame=prev_in_frame,
                         prev_shot_type=(ordered[i - 1].shot_type if i > 0 else None),
-                        prev_clip_url=prev_clip, prev_clip_seconds=prev_clip_secs)
+                        prev_clip_url=prev_clip, prev_clip_seconds=prev_clip_secs,
+                        prev_frame_same_scene=(i > 0))
                     prev_clip_secs = (int(shot.estimated_duration_seconds or 0)
                                       if prev_clip else None)
                     if (scene_anchor is None and prev_last_frame
@@ -802,7 +804,8 @@ class GenerationRunner:
                             prev_action=None, next_action=None,
                             lipsync_line=None, environment=None,
                             prev_in_frame=None, prev_shot_type=None,
-                            prev_clip_url=None, prev_clip_seconds=None):
+                            prev_clip_url=None, prev_clip_seconds=None,
+                            prev_frame_same_scene=False):
         spent_usd = 0.0
         pid = str(job.project_id)
         # shots boarded before name normalization store raw variants ("Eirik"
@@ -917,11 +920,23 @@ class GenerationRunner:
                 v = map_variant_for_scene(ch_b.get("variants", []), scene_number)
                 if v and (v.get("outfit_description") or "").strip():
                     outfits[n] = v["outfit_description"].strip()
+        # PREV_FRAME_GUARDED: the previous frame rides as a reference image
+        # only when provably safe — same scene AND its cast is a subset of
+        # this shot's cast (people may enter, never vanish). This is the
+        # Blood and Bone continuity without the duplicate-people bug.
+        from app.services.reference_stack import prev_frame_safe
+        prev_canonical = [canonical_character(n, bible["characters"])
+                          for n in (prev_in_frame or [])]
+        prev_frame_allowed = bool(
+            getattr(get_settings(), "prev_frame_guarded", False)
+            and prev_frame_same_scene and prev_last_frame_url
+            and prev_frame_safe(prev_canonical, in_frame))
         ref_stack, ref_provenance = build_reference_stack_labeled(
             characters_in_frame=in_frame, scene_number=scene_number, bible=bible,
             prev_last_frame_url=prev_last_frame_url, model_cap=model_cap,
             shot_type=shot.shot_type, scene_anchor_url=scene_anchor_url,
-            suppress_location=suppress_location, foreground_characters=foreground)
+            suppress_location=suppress_location, foreground_characters=foreground,
+            prev_frame_allowed=prev_frame_allowed)
         seed = stable_seed(pid, shot.id)
         # [Image N] guide: tie each reference plate to its person so the model
         # never swaps faces/outfits across a multi-character shot. Only when the

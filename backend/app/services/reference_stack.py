@@ -18,10 +18,24 @@ WIDE_FRAMINGS = {"MS", "FS", "LS", "EWS", "WS"}
 ROOM_FRAMINGS = WIDE_FRAMINGS | {"OTS", "POV", "MCU"}
 
 
+def prev_frame_safe(prev_cast, cur_cast) -> bool:
+    """Whether the previous shot's final frame can ride as a reference image
+    without pasting anyone into this shot who does not belong. The frame
+    CONTAINS its cast in-picture, so it is safe exactly when that cast is a
+    subset of THIS shot's cast: people may enter between shots, but a person
+    who LEFT would come back as an extra copy (two Deok-hyuns). Measured on
+    real dramas: the best-connected episode (Blood and Bone) chained frames
+    with an identical cast in every consecutive pair — this guard admits
+    precisely that shape. The caller must also require SAME SCENE: a frame
+    from another location fails differently (wrong room, not extra people)."""
+    return set(prev_cast or []) <= set(cur_cast or [])
+
+
 def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
                                   prev_last_frame_url, model_cap, shot_type=None,
                                   scene_anchor_url=None, suppress_location=False,
-                                  foreground_characters=None):
+                                  foreground_characters=None,
+                                  prev_frame_allowed=False):
     """Same stack as build_reference_stack, but each reference keeps its role
     (identity | costume | prev_frame | scene_anchor | location | style) and,
     where relevant, the character it belongs to. The provenance list is
@@ -62,14 +76,16 @@ def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
                           if v.get("is_default") and v.get("plate_image_url")), None))
         if plate:
             entries.append((plate, "costume" if name in fg else "character", name))
-    # prev_frame is NOT attached: that frame CONTAINS the cast in-picture, and
-    # sent as a reference image beside the identity plates it renders as an
-    # EXTRA COPY of the characters (two Deok-hyuns in one shot). Frame
-    # continuity belongs ONLY to Wan's typed first_frame / first_clip
-    # continuation. scene_anchor DOES ride — but the runner only ever assigns
-    # it from a PEOPLE-FREE shot's closing frame (the establishing/atmosphere
-    # clip), so it anchors the room without carrying anyone who could double.
-    _ = prev_last_frame_url
+    # prev_frame rides ONLY when the runner proved it safe (PREV_FRAME_GUARDED:
+    # same scene AND the frame's cast is a subset of this shot's cast — see
+    # prev_frame_safe). Unguarded, that frame CONTAINS the cast in-picture and
+    # renders as an EXTRA COPY of the characters (two Deok-hyuns in one shot);
+    # guarded, it is the strongest continuity signal there is — the actual
+    # pixels of the previous moment. scene_anchor DOES ride — but the runner
+    # only ever assigns it from a PEOPLE-FREE source, so it anchors the room
+    # without carrying anyone who could double.
+    if prev_frame_allowed and prev_last_frame_url:
+        entries.append((prev_last_frame_url, "prev_frame", None))
     if scene_anchor_url:
         entries.append((scene_anchor_url, "scene_anchor", None))
     # location plate on any framing that shows the room (or when unknown)
@@ -103,7 +119,10 @@ def image_ref_legend(provenance) -> str:
         "character": "{c} (their face AND the exact outfit to wear)",
         "identity": "{c}'s face",
         "costume": "{c}'s outfit",
-        "prev_frame": "the previous shot's frame for continuity",
+        "prev_frame": ("the previous moment of THIS scene - continue its "
+                       "state, lighting and set; the people in it are the "
+                       "SAME people as the plates above, never render extra "
+                       "copies of them"),
         # the room references show the PLACE, not the camera view: without the
         # angle clause the model pastes the image as a flat backdrop and every
         # shot shows the same props from the same side regardless of the

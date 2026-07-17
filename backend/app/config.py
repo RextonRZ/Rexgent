@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # next shot's opening state — textual continuity that cannot duplicate
     # people the way a frame reference did. One VL call per shot.
     frame_handoff: bool = False
+    # attach the previous shot's final frame as a reference image when provably
+    # safe (same scene + non-shrinking cast) — the Blood and Bone continuity,
+    # without the duplicate-people failure mode
+    prev_frame_guarded: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.
