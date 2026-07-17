@@ -34,7 +34,11 @@ class FaceEmbedder:
                     {"type": "image_url", "image_url": {"url": image_url}},
                     {"type": "text", "text": (
                         "Describe the face of the main person: facial structure, eye shape, "
-                        "jawline, skin tone, hair, distinctive features. Return JSON with keys "
+                        "jawline, skin tone, hair (exact length, style and colour), facial "
+                        "hair (state it exactly if present), and EYEWEAR — if they wear "
+                        "glasses, name the exact pair ('thin black rectangular glasses'); "
+                        "if they wear none, write NOTHING about eyewear (never 'no "
+                        "glasses'). Then any distinctive features. Return JSON with keys "
                         "face_description (string) and embedding_keywords (list of short visual "
                         "keywords for video prompts). Return ONLY JSON."
                     )},
