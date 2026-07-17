@@ -14,6 +14,29 @@ logger = logging.getLogger(__name__)
 TTS_LINE_ATTEMPTS = 3
 
 
+def line_direction(line: dict) -> str | None:
+    """The acting notes for one line: the parenthetical the writer embedded
+    ("(whispering, frantic)") plus any explicit direction field (the shot's
+    emotional beat rides in on it) — stripped from the SPOKEN text, but
+    handed to the instruct TTS so the delivery matches the writing."""
+    import re
+    bits = re.findall(r"\(([^)]+)\)", line.get("line") or "")
+    if line.get("direction"):
+        bits.append(str(line["direction"]))
+    joined = ", ".join(b.strip() for b in bits if b.strip())
+    return joined or None
+
+
+def scene_line_beats(shots: list[dict]) -> list[str | None]:
+    """A scene's emotional beats in speaking order: the k-th dialogue line
+    pairs with the k-th dialogue-bearing shot (the SAME order-based convention
+    placement uses), so beats[k] is the acting direction for line k."""
+    speaking = sorted((s for s in shots or []
+                       if str(s.get("dialogue") or "").strip()),
+                      key=lambda s: s.get("number") or 0)
+    return [s.get("emotional_beat") for s in speaking]
+
+
 def probe_duration(audio_bytes: bytes) -> float:
     import tempfile, subprocess, os
     p = tempfile.mktemp(suffix=".wav")
@@ -50,17 +73,7 @@ class DialogueSynthesizer:
         def _want(line) -> bool:
             return only_characters is None or line.get("character") in only_characters
 
-        def _direction(line) -> str | None:
-            """The acting notes for this line: the parenthetical the writer
-            embedded ("(whispering, frantic)") plus any explicit direction
-            field — stripped from the SPOKEN text, but handed to the instruct
-            TTS so the delivery matches the writing."""
-            import re
-            bits = re.findall(r"\(([^)]+)\)", line.get("line") or "")
-            if line.get("direction"):
-                bits.append(str(line["direction"]))
-            joined = ", ".join(b.strip() for b in bits if b.strip())
-            return joined or None
+        _direction = line_direction
 
         def _spoken(text) -> str:
             """Strip parenthetical stage directions: '(whispering, frantic)

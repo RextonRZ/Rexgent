@@ -154,21 +154,46 @@ class VideoStitcher:
 
     def mix_tracks(self, video_path, dialogue_segments, bgm_path, output_path,
                    bgm_volume=0.3, duck=True, bgm_fade_in=0.0, bgm_fade_out=0.0,
-                   ambient_volume=0.7):
+                   ambient_volume=0.7, speech_gate=None, gate_level=0.06):
         """Final mix: TTS dialogue on top of a BED made of the video's own
         (model-generated) ambient audio + the user's BGM. Each dialogue segment
         is delayed to its timeline start; the whole bed ducks under speech
-        (sidechaincompress) so voices stay intelligible. Returns output_path."""
+        (sidechaincompress) so voices stay intelligible. speech_gate dips the
+        bed to gate_level over the given global (start, end) windows — the
+        clips' own fake speech is silenced there while their music/ambience
+        survives everywhere else. Returns output_path."""
         inputs = ["-i", video_path]
         filters, dlg_labels = [], []
         for i, seg in enumerate(dialogue_segments):
             inputs += ["-i", seg["audio_path"]]
             delay_ms = int(float(seg["start"]) * 1000)
-            # pace the line to the on-screen mouth: atempo is pitch-preserving,
-            # and placement pre-clamped the factor to a natural range
-            tempo = seg.get("tempo")
-            chain = (f"atempo={float(tempo):.3f}," if tempo else "")
-            filters.append(f"[{i+1}:a]{chain}adelay={delay_ms}|{delay_ms}[d{i}]")
+            warp = seg.get("warp")
+            if warp:
+                # word-level repace: slice the line at its word boundaries and
+                # atempo each slice onto the on-screen mouth's own rhythm
+                # (pitch-preserving; placement pre-clamped every factor)
+                k = len(warp)
+                filters.append(f"[{i+1}:a]asplit={k}"
+                               + "".join(f"[w{i}_{j}]" for j in range(k)))
+                labels = []
+                for j, piece in enumerate(warp):
+                    tr = f"atrim=start={float(piece['start']):.3f}"
+                    if piece.get("end") is not None:
+                        tr += f":end={float(piece['end']):.3f}"
+                    chain = [tr, "asetpts=PTS-STARTPTS"]
+                    tp = float(piece.get("tempo") or 1.0)
+                    if abs(tp - 1.0) >= 0.01:
+                        chain.append(f"atempo={tp:.3f}")
+                    filters.append(f"[w{i}_{j}]{','.join(chain)}[wp{i}_{j}]")
+                    labels.append(f"[wp{i}_{j}]")
+                filters.append(f"{''.join(labels)}concat=n={k}:v=0:a=1,"
+                               f"adelay={delay_ms}|{delay_ms}[d{i}]")
+            else:
+                # pace the line to the on-screen mouth: atempo is
+                # pitch-preserving, and placement pre-clamped the factor
+                tempo = seg.get("tempo")
+                chain = (f"atempo={float(tempo):.3f}," if tempo else "")
+                filters.append(f"[{i+1}:a]{chain}adelay={delay_ms}|{delay_ms}[d{i}]")
             dlg_labels.append(f"[d{i}]")
         n = len(dialogue_segments)
         dlg = None
@@ -183,7 +208,12 @@ class VideoStitcher:
         # ── bed: the stitched video's own ambient track + optional BGM ──
         bed_labels = []
         if self._has_audio(video_path):
-            filters.append(f"[0:a]volume={ambient_volume}[amb]")
+            amb_chain = [f"volume={ambient_volume}"]
+            if speech_gate:
+                windows = "+".join(f"between(t,{float(s):.3f},{float(e):.3f})"
+                                   for s, e in speech_gate)
+                amb_chain.append(f"volume={gate_level}:enable='{windows}'")
+            filters.append(f"[0:a]{','.join(amb_chain)}[amb]")
             bed_labels.append("[amb]")
         if bgm_path:
             bgm_idx = n + 1

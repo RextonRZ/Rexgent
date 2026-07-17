@@ -89,3 +89,25 @@ async def test_only_characters_filters_but_keeps_line_indices(monkeypatch):
     assert rows[0]["line_index"] == 1          # full-list index, not 0
     assert rows[0]["voice_id"] == "new-clone"  # synthesized with the NEW voice
     ds.qwen.synthesize_speech.assert_awaited_once()
+
+
+def test_line_direction_merges_parenthetical_and_beat():
+    from app.services.dialogue_synthesizer import line_direction
+    assert line_direction({"line": "(whispering) I saw you."}) == "whispering"
+    assert line_direction({"line": "I saw you.",
+                           "direction": "confusion and hurt"}) == "confusion and hurt"
+    assert line_direction({"line": "(sobbing) Why?",
+                           "direction": "betrayal"}) == "sobbing, betrayal"
+    assert line_direction({"line": "Hello."}) is None
+
+
+def test_scene_line_beats_orders_by_shot_number():
+    # the k-th dialogue line pairs with the k-th speaking shot (the same
+    # convention placement uses), so beats come back in shot order
+    from app.services.dialogue_synthesizer import scene_line_beats
+    shots = [
+        {"number": 2, "dialogue": "line b", "emotional_beat": "beat B"},
+        {"number": 1, "dialogue": "line a", "emotional_beat": "beat A"},
+        {"number": 3, "dialogue": "", "emotional_beat": "silent"},
+    ]
+    assert scene_line_beats(shots) == ["beat A", "beat B"]

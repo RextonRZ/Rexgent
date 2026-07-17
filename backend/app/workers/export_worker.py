@@ -39,7 +39,8 @@ def build_dialogue_segments(line_rows, scene_plan):
     rows = [
         {"scene_number": r["scene_number"], "line_index": r["line_index"],
          "audio_path": r["audio_local"], "duration": r["duration_seconds"],
-         "text": r.get("text"), "character": r.get("character_name")}
+         "text": r.get("text"), "character": r.get("character_name"),
+         "words": r.get("words")}
         for r in line_rows
     ]
     return place_dialogue(rows, scene_plan)
@@ -163,7 +164,8 @@ def build_cut_plan(entries: list[dict]) -> list[dict]:
         shot = {"duration": float(e.get("duration") or 0.0),
                 "has_dialogue": bool(e.get("has_dialogue")),
                 "speech_onset": e.get("speech_onset"),
-                "mouth_dur": e.get("mouth_dur")}
+                "mouth_dur": e.get("mouth_dur"),
+                "mouth_words": e.get("mouth_words")}
         if plan and plan[-1]["scene_number"] == e.get("scene_number"):
             plan[-1]["shots"].append(shot)
         else:
@@ -300,10 +302,12 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
         oss.upload_file(report_path, report_key)
 
         # Download every segment and concatenate into one MP4 with FFmpeg,
-        # applying each segment's trim (in/out). A dialogue shot's ORIGINAL
-        # audio is muted — the model fakes its own speech on those, which
-        # would murmur under the real TTS voices; scenery shots keep their
-        # ambience. Imported media is never muted.
+        # applying each segment's trim (in/out). In overlay mode a dialogue
+        # shot's soundtrack survives as a quiet bed (the mix gates its
+        # measured speech window to near-silence under the real TTS voice);
+        # it is only fully muted when the speech span could not be measured,
+        # because an ungated fake voice would murmur under the TTS. Scenery
+        # keeps its ambience, imported media is never touched.
         from app.models.script import Scene
         shot_meta: dict = {}
         if clips_for_export:
@@ -328,9 +332,9 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 with open(local, "wb") as fh:
                     fh.write(resp.content)
                 if use_overlay:
-                    # TTS overlay: the clip's own audio is fully MUTED — the
-                    # synthesized voice layer replaces it (the user's design:
-                    # video mute, TTS on top)
+                    # TTS overlay: the synthesized voice replaces the clip's
+                    # FAKE speech, but the soundtrack should survive — the
+                    # decision is refined after the mouth probe below
                     mute, vol = True, None
                 else:
                     # native mode: the clip keeps its own voice + ambience
@@ -346,21 +350,36 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     eff = max(0.0, probed - tin)
                 else:  # probe failed — fall back to the storyboard estimate
                     eff = duration_by_clip.get(str(seg["clip"].id), 5) if seg["clip"] else 5
-                onset, mouth = None, None
+                onset, mouth, mouth_words = None, None, None
                 if use_overlay and meta and meta["dialogue"]:
                     # overlay: measure where the on-screen mouth actually
                     # speaks (fun-asr) so the TTS line lands ON the lips and
-                    # paces itself to them — best-effort, line places at the
-                    # chunk start without it
+                    # paces itself to them, word by word when the grid holds —
+                    # best-effort, line places at the chunk start without it
                     try:
-                        from app.services.audio_policy import speech_span
-                        span = speech_span(local)
-                        if span:
-                            onset = max(0.0, float(span[0]) - tin)
-                            mouth = max(0.0, min(float(span[1] - span[0]),
+                        from app.services.audio_policy import (BED_VOLUME,
+                                                               speech_profile)
+                        profile = speech_profile(local)
+                        if profile:
+                            onset = max(0.0, float(profile["onset"]) - tin)
+                            mouth = max(0.0, min(float(profile["mouth"]),
                                                  max(0.0, eff - onset)))
+                            mouth_words = [
+                                (round(max(0.0, b - tin), 3),
+                                 round(max(0.0, e - tin), 3))
+                                for b, e in (profile.get("words") or [])
+                                if e > tin and (b - tin) < eff] or None
+                            # the speech window is measured, so the mix can
+                            # gate exactly it: keep the clip's music/ambience
+                            # as a quiet bed instead of killing the whole
+                            # soundtrack along with the fake voice
+                            mute, vol = False, BED_VOLUME
                     except Exception as e:  # noqa: BLE001
                         logger.warning(f"Export: mouth probe skipped: {e}")
+                elif use_overlay:
+                    # scenery/no-dialogue chunks have no fake speech to clash
+                    # with the TTS — their ambience always survives
+                    mute, vol = False, None
                 cut_entries.append({
                     "scene_number": meta["scene"] if meta else None,
                     "duration": eff,
@@ -368,6 +387,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     "text": meta["dialogue"] if meta else None,
                     "speech_onset": onset,
                     "mouth_dur": mouth,
+                    "mouth_words": mouth_words,
                 })
                 # appended LAST so stitch_inputs and cut_entries always align
                 # index-for-index (episode slicing depends on it)
@@ -451,9 +471,13 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                         lr.raise_for_status()
                         with open(lp, "wb") as fh:
                             fh.write(lr.content)
+                        # the line's own word grid: the other half of the lip
+                        # warp (best-effort — None just means single-tempo)
+                        from app.services.audio_policy import audio_words
                         line_rows.append({"scene_number": row.scene_number, "line_index": row.line_index,
                                           "audio_local": lp, "duration_seconds": row.duration_seconds or 0.0,
-                                          "text": row.text, "character_name": row.character_name})
+                                          "text": row.text, "character_name": row.character_name,
+                                          "words": audio_words(lp)})
                     except Exception as e:  # noqa: BLE001
                         logger.warning(f"Export: could not download line audio {row.audio_url}: {e}")
             except Exception as e:  # noqa: BLE001
@@ -548,12 +572,18 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                     mixed = os.path.join(workdir, f"final_audio{suffix}.mp4")
                     with tool_run(project_id, "export", "mix_audio", "Audio Mixer") as t:
                         if dialogue_segments:
+                            # overlay: the clips' soundtracks survive as the
+                            # bed, gated to near-silence exactly where their
+                            # fake speech was measured
+                            from app.services.audio_timeline import speech_windows
+                            gate = (speech_windows(entries) or None) if use_overlay else None
                             stitcher.mix_tracks(
                                 cut_local, dialogue_segments, bgm_local, mixed,
                                 bgm_volume=float(audio.get("volume", 1.0)) if audio else 1.0,
                                 duck=bool(audio.get("duck", True)) if audio else True,
                                 bgm_fade_in=float(audio.get("fade_in", 0.0)) if audio else 0.0,
                                 bgm_fade_out=float(audio.get("fade_out", 0.0)) if audio else 0.0,
+                                speech_gate=gate,
                             )
                             t["artifact"] = (f"{len(dialogue_segments)} voices"
                                              + (" + music" if bgm_local else ""))

@@ -82,6 +82,101 @@ def dialogue_shot_mouths(scene_plan: list[dict]) -> dict[int, list]:
     return mouths
 
 
+def dialogue_shot_words(scene_plan: list[dict]) -> dict[int, list]:
+    """Per scene, each dialogue-bearing shot's measured word grid (fun-asr
+    word timestamps of its fake speech) — parallel to dialogue_shot_offsets.
+    None where unmeasured."""
+    words: dict[int, list] = {}
+    for scene in scene_plan:
+        lst = words.setdefault(scene["scene_number"], [])
+        for shot in scene.get("shots", []):
+            if shot.get("has_dialogue"):
+                lst.append(shot.get("mouth_words"))
+    return words
+
+
+# the per-word warp may pace harder than the single-tempo clamp (it is
+# correcting real word-level drift, not dragging a whole line), but each
+# word still stays within what sounds human
+WARP_TEMPO_MIN, WARP_TEMPO_MAX = 0.6, 1.6
+# gate padding: breaths ride just outside the measured word span
+_GATE_PAD = 0.15
+
+
+def word_warp_plan(tts_words: list, mouth_words: list,
+                   lo: float = WARP_TEMPO_MIN,
+                   hi: float = WARP_TEMPO_MAX) -> list[dict] | None:
+    """Piecewise tempo plan that repaces a TTS line word by word onto the
+    clip's own speech rhythm. Both sides say the SAME scripted words, so the
+    k-th TTS word maps to the k-th on-screen word: each inter-word segment
+    gets tempo = tts_gap / native_gap (clamped), leading silence and the tail
+    pass through untouched. Returns [{"start","end","tempo"}] over the TTS
+    file's timeline (end None = to EOF), or None when warping is unsafe
+    (mismatched word counts: ASR misheard) or pointless (already in step)."""
+    n = len(tts_words or [])
+    if n < 3 or n != len(mouth_words or []):
+        return None
+    tts_pts = [b for b, _ in tts_words] + [tts_words[-1][1]]
+    nat_pts = [b for b, _ in mouth_words] + [mouth_words[-1][1]]
+    segs: list[dict] = []
+    if tts_pts[0] > 0.05:  # leading breath/silence plays as-is
+        segs.append({"start": 0.0, "end": round(tts_pts[0], 3), "tempo": 1.0})
+    for i in range(n):
+        t_dur = tts_pts[i + 1] - tts_pts[i]
+        n_dur = nat_pts[i + 1] - nat_pts[i]
+        if t_dur <= 0.02 or n_dur <= 0.02:
+            return None  # degenerate timestamps — do not slice on noise
+        tempo = round(max(lo, min(hi, t_dur / n_dur)), 3)
+        segs.append({"start": round(tts_pts[i], 3),
+                     "end": round(tts_pts[i + 1], 3), "tempo": tempo})
+    # merge neighbours in (near-)lockstep so the filter graph stays small
+    merged: list[dict] = []
+    for s in segs:
+        if merged and abs(merged[-1]["tempo"] - s["tempo"]) < 0.05:
+            prev = merged[-1]
+            t_total = (prev["end"] - prev["start"]) + (s["end"] - s["start"])
+            n_total = ((prev["end"] - prev["start"]) / prev["tempo"]
+                       + (s["end"] - s["start"]) / s["tempo"])
+            prev["end"] = s["end"]
+            prev["tempo"] = round(t_total / n_total, 3) if n_total > 0 else 1.0
+        else:
+            merged.append(dict(s))
+    # already in step -> the single-tempo path (or nothing) is enough
+    if all(abs(s["tempo"] - 1.0) < 0.08 for s in merged):
+        return None
+    merged.append({"start": round(tts_pts[-1], 3), "end": None, "tempo": 1.0})
+    return merged
+
+
+def warp_output_duration(plan: list[dict], raw_duration: float) -> float:
+    """How long the line PLAYS after piecewise warping (atempo divides each
+    segment's duration by its tempo). The open-ended tail runs to EOF."""
+    total = 0.0
+    for seg in plan or []:
+        end = float(seg["end"]) if seg.get("end") is not None else float(raw_duration)
+        total += max(0.0, end - float(seg["start"])) / float(seg.get("tempo") or 1.0)
+    return round(total, 3)
+
+
+def speech_windows(entries: list[dict]) -> list[tuple[float, float]]:
+    """Global (start, end) spans where the cut's clips speak their own FAKE
+    dialogue — the mix gates the bed to near-silence exactly there, so the
+    clip's music/ambience survives the overlay while its voice does not.
+    entries: cut order, [{duration, has_dialogue, speech_onset, mouth_dur}]."""
+    out: list[tuple[float, float]] = []
+    t = 0.0
+    for e in entries or []:
+        dur = float(e.get("duration") or 0.0)
+        onset, mouth = e.get("speech_onset"), e.get("mouth_dur")
+        if e.get("has_dialogue") and onset is not None and mouth:
+            start = max(t, t + float(onset) - _GATE_PAD)
+            end = min(t + dur, t + float(onset) + float(mouth) + _GATE_PAD)
+            if end > start:
+                out.append((round(start, 3), round(end, 3)))
+        t += dur
+    return out
+
+
 def paced_text(text: str, level: int) -> str:
     """Rewrite a line with `level` written pauses (ellipses) at even word
     boundaries: 'I can't do this anymore.' -> 'I... can't do this... anymore.'
@@ -151,6 +246,7 @@ def place_dialogue(line_rows: list[dict], scene_plan: list[dict], gap: float = 0
     no fragile text matching. Extra lines (a shot folded two) continue back-to-back."""
     offs = dialogue_shot_offsets(scene_plan)
     mouths = dialogue_shot_mouths(scene_plan)
+    words_by_scene = dialogue_shot_words(scene_plan)
     scene_offs = scene_global_offsets(scene_plan)
     by_scene: dict = {}
     for r in sorted(line_rows, key=lambda x: (x["scene_number"], x["line_index"])):
@@ -196,6 +292,16 @@ def place_dialogue(line_rows: list[dict], scene_plan: list[dict], gap: float = 0
             if tempo:
                 seg["tempo"] = tempo
                 played_dur = raw_dur / tempo
+            # word-level warp beats the single tempo when both grids exist:
+            # the voice then tracks the on-screen mouth word by word
+            scene_words = words_by_scene.get(n, [])
+            mouth_words = scene_words[i] if i < len(scene_words) else None
+            if ln.get("words") and mouth_words:
+                plan_w = word_warp_plan(ln["words"], mouth_words)
+                if plan_w:
+                    seg["warp"] = plan_w
+                    seg.pop("tempo", None)
+                    played_dur = warp_output_duration(plan_w, raw_dur)
             seg["duration"] = round(played_dur, 3)
             # text/character ride along so burned captions share the exact
             # timing of the voice they subtitle

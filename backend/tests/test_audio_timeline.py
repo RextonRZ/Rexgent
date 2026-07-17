@@ -260,3 +260,75 @@ def test_pacing_retakes_targets_only_unbridgeable_gaps():
     assert len(targets) == 1
     ln, mouth = targets[0]
     assert ln["line_index"] == 0 and mouth == 2.4
+
+
+def test_word_warp_plan_paces_each_word_to_the_native_grid():
+    # the TTS said it evenly; the on-screen mouth paused mid-sentence.
+    # Each inter-word segment gets its own tempo so the voice tracks the lips.
+    from app.services.audio_timeline import word_warp_plan
+    tts = [(0.10, 0.50), (0.60, 1.00), (1.10, 1.50), (1.60, 2.20)]
+    mouth = [(3.00, 3.40), (3.50, 4.30), (4.90, 5.30), (5.40, 6.40)]
+    plan = word_warp_plan(tts, mouth)
+    assert plan is not None
+    # word 2 -> word 3: tts gap 0.5s vs native gap 1.4s -> stretched, clamped
+    assert {"start": 0.6, "end": 1.1, "tempo": 0.6} in plan
+    # the tail past the last word passes through untouched
+    assert plan[-1]["end"] is None and plan[-1]["tempo"] == 1.0
+    assert all(0.6 <= p["tempo"] <= 1.6 for p in plan)
+
+
+def test_word_warp_plan_refuses_mismatched_word_counts():
+    # ASR misheard (different word counts): warping would misalign every
+    # word after the mismatch, so the plan declines and single-tempo pacing
+    # takes over
+    from app.services.audio_timeline import word_warp_plan
+    tts = [(0.1, 0.5), (0.6, 1.0), (1.1, 1.5), (1.6, 2.2)]
+    mouth = [(3.0, 3.4), (3.5, 4.3), (4.9, 5.3)]
+    assert word_warp_plan(tts, mouth) is None
+    # too few words to be worth slicing
+    assert word_warp_plan(tts[:2], mouth[:2]) is None
+
+
+def test_word_warp_plan_skips_already_matched_pacing():
+    from app.services.audio_timeline import word_warp_plan
+    tts = [(0.1, 0.5), (0.6, 1.0), (1.1, 1.7)]
+    mouth = [(2.1, 2.5), (2.6, 3.0), (3.1, 3.7)]  # same rhythm, just offset
+    assert word_warp_plan(tts, mouth) is None
+
+
+def test_warp_output_duration_sums_warped_segments():
+    from app.services.audio_timeline import warp_output_duration
+    plan = [{"start": 0.0, "end": 0.6, "tempo": 1.0},
+            {"start": 0.6, "end": 1.1, "tempo": 0.6},
+            {"start": 1.1, "end": 1.6, "tempo": 1.0},
+            {"start": 1.6, "end": 2.2, "tempo": 0.6},
+            {"start": 2.2, "end": None, "tempo": 1.0}]
+    assert abs(warp_output_duration(plan, 2.4) - 3.133) < 0.01
+
+
+def test_speech_windows_gates_only_measured_speech():
+    # global (start, end) spans of the clips'\'' own fake speech: the mix
+    # silences the bed exactly there, keeping ambience everywhere else
+    from app.services.audio_timeline import speech_windows
+    entries = [
+        {"duration": 6.0, "has_dialogue": True, "speech_onset": 1.0, "mouth_dur": 3.0},
+        {"duration": 4.0, "has_dialogue": False},
+        {"duration": 5.0, "has_dialogue": True, "speech_onset": 0.5, "mouth_dur": 2.0},
+    ]
+    w = speech_windows(entries)
+    assert w == [(0.85, 4.15), (10.35, 12.65)]
+
+
+def test_place_dialogue_attaches_word_warp():
+    from app.services.audio_timeline import place_dialogue
+    line_rows = [{"scene_number": 1, "line_index": 0, "audio_path": "l0.wav",
+                  "duration": 2.4, "text": "hey", "character": "MIA",
+                  "words": [(0.10, 0.50), (0.60, 1.00), (1.10, 1.50), (1.60, 2.20)]}]
+    scene_plan = [{"scene_number": 1, "shots": [
+        {"duration": 8.0, "has_dialogue": True, "speech_onset": 3.0,
+         "mouth_dur": 3.4,
+         "mouth_words": [(3.00, 3.40), (3.50, 4.30), (4.90, 5.30), (5.40, 6.40)]}]}]
+    seg = place_dialogue(line_rows, scene_plan)[0]
+    assert seg["start"] == 3.0
+    assert "warp" in seg and "tempo" not in seg
+    assert abs(seg["duration"] - 3.133) < 0.01

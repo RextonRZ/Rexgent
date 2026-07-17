@@ -160,3 +160,36 @@ def test_mix_ambient_only_still_produces_audio():
         args = run.call_args[0][0]
     assert "[amb]" in " ".join(args)
     assert args[args.index("-map") + 1] == "0:v"
+
+
+def test_mix_tracks_builds_word_warp_chain():
+    st = VideoStitcher()
+    with patch("subprocess.run") as run:
+        run.return_value.returncode = 0
+        st.mix_tracks("v.mp4",
+                      [{"audio_path": "a.wav", "start": 3.0,
+                        "warp": [{"start": 0.0, "end": 0.6, "tempo": 1.0},
+                                 {"start": 0.6, "end": 1.1, "tempo": 0.6},
+                                 {"start": 1.1, "end": None, "tempo": 1.0}]}],
+                      "bgm.mp3", "out.mp4", bgm_volume=0.3, duck=True)
+        joined = " ".join(run.call_args[0][0])
+    assert "asplit=3" in joined
+    assert "atrim=start=0.600:end=1.100" in joined
+    assert "atempo=0.600" in joined
+    assert "concat=n=3:v=0:a=1" in joined
+    assert "adelay=3000|3000" in joined
+
+
+def test_mix_tracks_gates_native_speech_windows():
+    st = VideoStitcher()
+    with patch("subprocess.run") as run, \
+         patch.object(VideoStitcher, "_has_audio", return_value=True):
+        run.return_value.returncode = 0
+        st.mix_tracks("v.mp4", [{"audio_path": "a.wav", "start": 1.0}],
+                      None, "out.mp4",
+                      speech_gate=[(0.85, 4.15), (10.35, 12.65)])
+        joined = " ".join(run.call_args[0][0])
+    # the bed dips to near-silence exactly over the fake speech, and ONLY there
+    assert "between(t,0.850,4.150)" in joined
+    assert "between(t,10.350,12.650)" in joined
+    assert "volume=0.06" in joined

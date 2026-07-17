@@ -89,50 +89,100 @@ def spoken_span(sentences: list) -> tuple[float, float] | None:
     return onset, max(0.0, round(tail - onset, 2))
 
 
-def speech_span(video_path: str) -> tuple[float, float] | None:
-    """(onset, mouth_duration) of the clip's own (fake) speech — the model's
-    audio tracks its on-screen mouth, so the real TTS line is placed at the
-    onset AND paced across the mouth's span. Measured with fun-asr sentence
-    timestamps: the VAD cannot do this job, its music bias flags frame one
-    on every scored clip (measured 0.03-0.06s across a whole drama). None
-    when no recognizable words occur."""
+def spoken_words(sentences: list) -> list[tuple[float, float]]:
+    """Per-word (begin_s, end_s) grid across the worded sentences — the grid
+    the lip warp paces against. Wordless sentences (music the recognizer
+    half-heard) contribute nothing; word tokens without text are skipped.
+    Pure function, testable."""
+    grid: list[tuple[float, float]] = []
+    for s in sentences or []:
+        if not isinstance(s, dict) or not str(s.get("text") or "").strip():
+            continue
+        for w in s.get("words") or []:
+            if not isinstance(w, dict) or not str(w.get("text") or "").strip():
+                continue
+            b, e = w.get("begin_time"), w.get("end_time")
+            if b is None:
+                continue
+            b_s = round(float(b) / 1000.0, 3)
+            e_s = round(float(e) / 1000.0, 3) if e is not None else b_s
+            grid.append((b_s, max(b_s, e_s)))
+    return grid
+
+
+def _recognize_sentences(wav: str) -> list | None:
+    """fun-asr sentence dicts (with word timestamps) for a 16k mono wav.
+    None on any failure — every caller treats the measurement as best-effort."""
+    from app.config import get_settings
+    from app.services.api_keys import resolve_qwen_key
+    settings = get_settings()
+    key = resolve_qwen_key(settings)
+    if not key:
+        return None
+    import dashscope
+    from dashscope.audio.asr import Recognition
+    dashscope.api_key = key
+    dashscope.base_websocket_api_url = (
+        "wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference")
+    rec = Recognition(model="fun-asr-realtime", format="wav",
+                      sample_rate=_SAMPLE_RATE, callback=None)
+    result = rec.call(wav)
+    if getattr(result, "status_code", 200) != 200:
+        raise RuntimeError(
+            f"{getattr(result, 'status_code', '?')}: {getattr(result, 'message', '')}")
+    sentences = result.get_sentence() or []
+    if isinstance(sentences, dict):
+        sentences = [sentences]
+    return sentences
+
+
+def speech_profile(media_path: str) -> dict | None:
+    """{"onset", "mouth", "words"} of the clip's own (fake) speech — the
+    model's audio tracks its on-screen mouth, so the real TTS line is placed
+    at the onset AND paced across the mouth's span; the word grid lets the
+    warp pace it word by word. Measured with fun-asr sentence timestamps:
+    the VAD cannot do this job, its music bias flags frame one on every
+    scored clip (measured 0.03-0.06s across a whole drama). None when no
+    recognizable words occur. Works on video or audio files alike."""
     wav = tempfile.mktemp(suffix=".wav")
     try:
         proc = subprocess.run(
-            ["ffmpeg", "-y", "-i", video_path, "-vn", "-ac", "1",
+            ["ffmpeg", "-y", "-i", media_path, "-vn", "-ac", "1",
              "-ar", str(_SAMPLE_RATE), wav],
             capture_output=True, timeout=120)
         if proc.returncode != 0 or not os.path.exists(wav):
             return None
-        from app.config import get_settings
-        from app.services.api_keys import resolve_qwen_key
-        settings = get_settings()
-        key = resolve_qwen_key(settings)
-        if not key:
+        sentences = _recognize_sentences(wav)
+        if sentences is None:
             return None
-        import dashscope
-        from dashscope.audio.asr import Recognition
-        dashscope.api_key = key
-        dashscope.base_websocket_api_url = (
-            "wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference")
-        rec = Recognition(model="fun-asr-realtime", format="wav",
-                          sample_rate=_SAMPLE_RATE, callback=None)
-        result = rec.call(wav)
-        if getattr(result, "status_code", 200) != 200:
-            raise RuntimeError(
-                f"{getattr(result, 'status_code', '?')}: {getattr(result, 'message', '')}")
-        sentences = result.get_sentence() or []
-        if isinstance(sentences, dict):
-            sentences = [sentences]
-        return spoken_span(sentences)
+        span = spoken_span(sentences)
+        if span is None:
+            return None
+        return {"onset": span[0], "mouth": span[1],
+                "words": spoken_words(sentences)}
     except Exception as e:  # noqa: BLE001 — measurement is best-effort
-        logger.warning("speech_onset failed for %s: %s", video_path, e)
+        logger.warning("speech profile failed for %s: %s", media_path, e)
         return None
     finally:
         try:
             os.unlink(wav)
         except OSError:
             pass
+
+
+def audio_words(audio_path: str) -> list[tuple[float, float]] | None:
+    """The word grid of a synthesized line file — the OTHER half of the lip
+    warp (the clip's grid comes from speech_profile). None when unmeasured."""
+    profile = speech_profile(audio_path)
+    return profile["words"] if profile else None
+
+
+def speech_span(video_path: str) -> tuple[float, float] | None:
+    """Back-compat wrapper: (onset, mouth_duration) from speech_profile."""
+    profile = speech_profile(video_path)
+    if profile is None:
+        return None
+    return profile["onset"], profile["mouth"]
 
 
 def speech_onset(video_path: str) -> float | None:

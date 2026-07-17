@@ -630,7 +630,26 @@ async def synth_dialogue_op(db: Session, project_id: str,
     if changed:
         db.commit()
     voice_by_name = {c.name: {"voice_id": c.voice_id, "voice_model": c.voice_model} for c in chars}
-    scene_dicts = [{"number": s.number, "dialogue_json": s.dialogue_json} for s in scenes]
+    # Ride each shot's emotional beat into the line as acting direction —
+    # most lines carry no parenthetical, and without direction the instruct
+    # TTS reads them flat. COPIES only: the ORM's dialogue_json stays clean.
+    scene_dicts = []
+    for s in scenes:
+        lines = [dict(ln) for ln in (s.dialogue_json or [])]
+        try:
+            from app.services.dialogue_synthesizer import scene_line_beats
+            shot_rows = db.query(Shot).filter(Shot.scene_id == s.id).all()
+            beats = scene_line_beats(
+                [{"number": sh.number, "dialogue": sh.dialogue,
+                  "emotional_beat": sh.emotional_beat} for sh in shot_rows])
+            for k, ln in enumerate(lines):
+                if k < len(beats) and beats[k] and not ln.get("direction"):
+                    ln["direction"] = beats[k]
+        except Exception as e:  # noqa: BLE001 — direction is a bonus, never a blocker
+            import logging
+            logging.getLogger(__name__).warning(
+                "beat direction skipped for scene %s: %s", s.number, e)
+        scene_dicts.append({"number": s.number, "dialogue_json": lines})
     rows = await DialogueSynthesizer(db).synthesize_lines(
         project_id, scene_dicts, voice_by_name, only_characters=only_characters)
     # Exact replace: drop ONLY the (scene, line) slots we actually re-synthesized.

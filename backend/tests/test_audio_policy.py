@@ -82,3 +82,26 @@ def test_spoken_span_covers_first_to_last_worded_sentence():
              {"text": "do this anymore", "begin_time": 4000, "end_time": 5140}]
     assert spoken_span(sents) == (2.17, 2.97)
     assert spoken_span([{"text": "", "begin_time": 0}]) is None
+
+
+def test_spoken_words_reads_the_word_grid():
+    # fun-asr sentences carry per-word timestamps: the grid the lip warp
+    # paces against, in seconds
+    sentences = [{"text": "Snowy, where are you?", "begin_time": 1200,
+                  "end_time": 3000,
+                  "words": [
+                      {"text": "Snowy,", "begin_time": 1200, "end_time": 1700},
+                      {"text": "where", "begin_time": 1750, "end_time": 2100},
+                      {"text": "are", "begin_time": 2100, "end_time": 2350},
+                      {"text": "you?", "begin_time": 2400, "end_time": 3000},
+                  ]}]
+    from app.services.audio_policy import spoken_words
+    assert spoken_words(sentences) == [(1.2, 1.7), (1.75, 2.1),
+                                       (2.1, 2.35), (2.4, 3.0)]
+
+
+def test_spoken_words_skips_wordless_music_sentences():
+    from app.services.audio_policy import spoken_words
+    assert spoken_words([{"text": "", "begin_time": 0, "words": [
+        {"text": "", "begin_time": 0, "end_time": 400}]}]) == []
+    assert spoken_words([{"text": "hi", "begin_time": 0}]) == []
