@@ -31,6 +31,22 @@ def prev_frame_safe(prev_cast, cur_cast) -> bool:
     return set(prev_cast or []) <= set(cur_cast or [])
 
 
+def frame_text_handoff_needed(prev_frame_allowed: bool,
+                              prev_last_frame_url,
+                              frame_handoff_on: bool) -> bool:
+    """The VL frame-read (a TEXT description of the previous clip's real final
+    frame) is COMPLEMENTARY to the prev-frame IMAGE, not a duplicate of it.
+    When the image rides (prev_frame_allowed: same scene, non-shrinking cast)
+    it already carries the exact end state pixel-for-pixel, so the VL text
+    would only restate it in worse detail and pad an already dense prompt.
+    Read the frame as text ONLY when the image cannot ride — a cut, a reangle,
+    a shrinking cast — where text is the one continuity carrier that cannot
+    duplicate people. This also skips the VL call (cost + latency) on every
+    same-scene continuation, where it was never earning its keep."""
+    return bool(frame_handoff_on and prev_last_frame_url
+                and not prev_frame_allowed)
+
+
 def build_reference_stack_labeled(characters_in_frame, scene_number, bible,
                                   prev_last_frame_url, model_cap, shot_type=None,
                                   scene_anchor_url=None, suppress_location=False,

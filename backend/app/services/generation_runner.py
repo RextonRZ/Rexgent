@@ -829,23 +829,11 @@ class GenerationRunner:
         # continuing a face already established in the last frame.
         frame_anchor_pre = prev_last_frame_url or scene_anchor_url
         settings_v2 = getattr(get_settings(), "identity_routing_v2", False)
-        # ground-truth frame handoff: a VL model reads the previous clip's
-        # ACTUAL final frame once per shot (not per retry) — poses, props,
-        # door states — so the crafted prompt opens from what really rendered
+        # The ground-truth frame handoff (a VL model reading the previous clip's
+        # ACTUAL final frame into an OPENING STATE clause) is deferred until
+        # AFTER prev_frame_allowed is known below: the VL text is COMPLEMENTARY
+        # to the prev-frame image, so it only reads when the image can't ride.
         prev_frame_report = None
-        if (prev_last_frame_url
-                and getattr(get_settings(), "frame_handoff", False)
-                and getattr(self, "frame_reader", None)):
-            tool_event(pid, "generate", "frame_handoff", "started", agent="Continuity",
-                       index=job.completed_shots + 1, total=job.total_shots)
-            prev_frame_report = await self.frame_reader.describe(prev_last_frame_url)
-            tool_event(pid, "generate", "frame_handoff",
-                       "succeeded" if prev_frame_report else "failed",
-                       agent="Continuity",
-                       artifact=(f"read the previous frame: "
-                                 f"{prev_frame_report[:60]}…" if prev_frame_report
-                                 else None),
-                       error=None if prev_frame_report else "frame unreadable, board text used")
         # Compute newcomers for EVERY tier, not just wan: under the v2 flag the
         # role block below runs for every shot, so a face-locked newcomer
         # entering on a non-wan shot must still be detected as an entrance.
@@ -931,6 +919,28 @@ class GenerationRunner:
             getattr(get_settings(), "prev_frame_guarded", False)
             and prev_frame_same_scene and prev_last_frame_url
             and prev_frame_safe(prev_canonical, in_frame))
+        # ground-truth frame handoff, COMPLEMENTARY to the prev-frame image: the
+        # VL reads the previous clip's ACTUAL final frame (poses, props, door
+        # states) into an OPENING STATE clause ONLY when the image can't ride
+        # (a cut, a reangle, a shrinking cast). When the image rides it already
+        # carries the end state pixel-for-pixel, so the text is skipped — no
+        # redundant paragraph in the prompt, and no VL call spent. One call per
+        # qualifying shot (not per retry).
+        from app.services.reference_stack import frame_text_handoff_needed
+        if (frame_text_handoff_needed(
+                prev_frame_allowed, prev_last_frame_url,
+                getattr(get_settings(), "frame_handoff", False))
+                and getattr(self, "frame_reader", None)):
+            tool_event(pid, "generate", "frame_handoff", "started", agent="Continuity",
+                       index=job.completed_shots + 1, total=job.total_shots)
+            prev_frame_report = await self.frame_reader.describe(prev_last_frame_url)
+            tool_event(pid, "generate", "frame_handoff",
+                       "succeeded" if prev_frame_report else "failed",
+                       agent="Continuity",
+                       artifact=(f"read the previous frame: "
+                                 f"{prev_frame_report[:60]}…" if prev_frame_report
+                                 else None),
+                       error=None if prev_frame_report else "frame unreadable, board text used")
         ref_stack, ref_provenance = build_reference_stack_labeled(
             characters_in_frame=in_frame, scene_number=scene_number, bible=bible,
             prev_last_frame_url=prev_last_frame_url, model_cap=model_cap,

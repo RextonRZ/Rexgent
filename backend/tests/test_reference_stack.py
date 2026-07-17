@@ -198,6 +198,21 @@ def test_ots_and_pov_keep_location_plate():
         assert "loc1" in [m["url"] for m in stack], st
 
 
+def test_frame_text_handoff_only_when_image_absent():
+    # the VL text and the prev-frame image are complementary: when the image
+    # rides (same scene, non-shrinking cast) the text is redundant and just
+    # pads the prompt, so it fires ONLY when the image can't ride
+    from app.services.reference_stack import frame_text_handoff_needed
+    # image attached -> no text (the image already carries the end state)
+    assert frame_text_handoff_needed(True, "prev.png", True) is False
+    # image NOT attached (a cut / reangle / shrinking cast) -> text carries it
+    assert frame_text_handoff_needed(False, "prev.png", True) is True
+    # no previous frame at all -> nothing to read
+    assert frame_text_handoff_needed(False, None, True) is False
+    # frame_handoff flag off -> never
+    assert frame_text_handoff_needed(False, "prev.png", False) is False
+
+
 def test_prev_frame_safe_allows_only_non_shrinking_cast():
     # the Blood and Bone lesson: pasting people from the previous frame is
     # only safe when everyone in that frame belongs in THIS shot too
