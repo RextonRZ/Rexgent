@@ -157,7 +157,8 @@ def subject_descriptor(gender: str | None = None, age: str | None = None,
 
 
 def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
-                           creature: bool = False) -> str:
+                           creature: bool = False,
+                           strip_eyewear: bool = False) -> str:
     """A costume-plate prompt for identity + wardrobe: ONE subject in a FIXED
     standing pose on a plain backdrop — face clearly visible, the whole outfit
     readable from head to shoes. `subject` is who they are (gender/age/
@@ -170,6 +171,12 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
     full-body animal/creature reference — a rabbit cannot stand straight with
     arms at its sides."""
     outfit = clean_appearance((outfit or "").strip())
+    # a locked face that WEARS glasses beats the negative ban (the edit keeps
+    # the face it is shown, specs included) — for a non-wearer the removal
+    # must be said positively, or the specs are inherited forever
+    strip = (" Remove any eyeglasses or spectacles from the face - this "
+             "subject does not wear glasses." if strip_eyewear and has_face
+             else "")
     if creature:
         frame = ("Solo studio reference photo of ONE creature alone, no people, "
                  "the full body visible in a natural resting pose, head and face "
@@ -200,10 +207,10 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
             return (f"The exact same subject as the reference image ({subject}) — keep the "
                     f"identical face, and the same hair where the outfit does not cover it. "
                     f"{anchor} Wearing {outfit}. Render EVERY item of the outfit, including "
-                    f"any headwear, eyewear and accessories. {frame}")
+                    f"any headwear, eyewear and accessories.{strip} {frame}")
         # no story costume: preserve the reference's own clothing too
         return (f"The exact same subject as the reference image ({subject}) — keep the identical "
-                f"face, hair and the same clothing as the reference. {anchor} {frame}")
+                f"face, hair and the same clothing as the reference. {anchor}{strip} {frame}")
     if outfit:
         return (f"{subject}, wearing {outfit}. Render every item of the outfit, "
                 f"including any headwear and accessories. {frame}")

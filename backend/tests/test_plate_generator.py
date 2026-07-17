@@ -284,3 +284,15 @@ def test_negated_eyewear_still_bans_glasses_on_the_plate():
     assert "eyeglasses" in n
     n2 = char_plate_negative("a man with thin black glasses")
     assert "eyeglasses" not in n2
+
+
+def test_plate_prompt_strips_inherited_glasses():
+    # a bespectacled LOCKED face beats the negative ban: the edit keeps the
+    # face it sees, specs included — a non-wearer needs the removal said
+    # positively in the prompt
+    from app.services.plate_generator import character_plate_prompt
+    p = character_plate_prompt(True, "a 17-year-old boy", "denim jacket",
+                               strip_eyewear=True)
+    assert "Remove any eyeglasses" in p
+    p2 = character_plate_prompt(True, "a 17-year-old boy", "denim jacket")
+    assert "Remove any eyeglasses" not in p2

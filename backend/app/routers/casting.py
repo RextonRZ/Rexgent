@@ -185,10 +185,15 @@ async def override_variant(variant_id: str, file: UploadFile = File(...), db: Se
 
 
 def _char_plate_prompt(char, outfit: str, creature: bool = False) -> str:
+    from app.services.plate_generator import wears_eyewear
     subject = subject_descriptor(char.gender, char.estimated_age,
                                  char.physical_description or char.visual_description)
+    # a locked face wearing invented specs poisons every re-edit: when no
+    # text says glasses, the prompt orders the removal explicitly
+    strip = not wears_eyewear(char.visual_description, char.physical_description,
+                              char.video_prompt_fragment, outfit)
     return character_plate_prompt(bool(char.reference_image_url), subject, outfit,
-                                  creature=creature)
+                                  creature=creature, strip_eyewear=strip)
 
 
 _OUTFIT_READ_PROMPT = (

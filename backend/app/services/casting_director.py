@@ -542,8 +542,11 @@ class CastingDirector:
                 # a rabbit gets a natural full-body reference, not the human
                 # standing standard — and no ArcFace check (no human face)
                 creature = is_creature(c)
+                from app.services.plate_generator import wears_eyewear
+                strip = not wears_eyewear(c.visual_description, c.physical_description,
+                                          c.video_prompt_fragment, outfit)
                 prompt = character_plate_prompt(bool(c.reference_image_url), subject, outfit,
-                                                creature=creature)
+                                                creature=creature, strip_eyewear=strip)
                 url, vector = await self.plates.generate_and_store_plate(
                     pid, "character", f"{c.name}_{v['label']}", prompt,
                     negative_prompt=char_plate_negative(
