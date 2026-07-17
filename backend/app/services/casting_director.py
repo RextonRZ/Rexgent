@@ -264,9 +264,14 @@ def assign_cast_voices(db, project_id, characters, design_voice: bool = True,
     if not getattr(get_settings(), "tts_overlay", False):
         return 0
     pid = str(project_id)
+    from app.services.character_traits import is_creature as _is_creature
     with tool_run(pid, "characters", "voice_assign", "Casting",
                   total=len(characters)) as t:
         for idx, c in enumerate(characters):
+            # animals get no sound design at casting — a talking cartoon
+            # animal still gets a voice from the synth-time fallback
+            if _is_creature(c):
+                continue
             emit("casting.voice.started", {"character": c.name}, pid)
             if (redesign_voice and c.voice_id
                     and (c.voice_source or "") != "cloned"):

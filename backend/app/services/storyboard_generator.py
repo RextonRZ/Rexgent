@@ -47,12 +47,12 @@ def _default_subjects(names) -> list[dict]:
     if not names:
         return []
     if len(names) == 1:
-        # eyeline is OFF-camera by default: a solo subject staring into the
-        # lens breaks the fourth wall (she looked at the screen instead of at
-        # the artifact she was speaking to)
+        # a solo subject is IN the scene, not hosting it: staged square to
+        # camera with an off-lens eyeline she still read as a presenter
+        # (the Dora-the-Explorer case) — turn her INTO her own action instead
         return [{"character": names[0], "frame_position": "MG", "screen_side": "center",
-                 "facing": "camera",
-                 "eyeline": "just off-camera, on what the action focuses on",
+                 "facing": "three-quarter toward their action, angled away from the lens",
+                 "eyeline": "on what they are doing, absorbed in the action",
                  "posture": "standing"}]
     sides = ["left", "right", "center"]
     facings = {"left": "right", "right": "left", "center": "camera"}

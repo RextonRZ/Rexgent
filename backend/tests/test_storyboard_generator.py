@@ -217,3 +217,12 @@ def test_tight_two_shot_widens_to_ms():
     assert shots[2]["shot_type"] == "MS"
     assert shots[3]["shot_type"] == "OTS"   # OTS is BUILT for two people
     assert len(notes) == 2
+
+
+def test_default_solo_subject_is_absorbed_not_presenting():
+    # a solo default staged facing camera reads like a TV host; the subject
+    # should be turned into their own action instead
+    from app.services.storyboard_generator import _default_subjects
+    solo = _default_subjects(["Angeline"])[0]
+    assert solo["facing"] != "camera"
+    assert "what they are doing" in solo["eyeline"]

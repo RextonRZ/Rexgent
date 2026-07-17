@@ -15,6 +15,8 @@ export interface CostumeVariant {
 export interface CastingCharacter {
   id: string;
   name: string;
+  /** non-human cast member: own section, reference plates, no voice design */
+  creature?: boolean;
   voice_id: string | null;
   voice_source: string | null;
   voice_design: string | null;

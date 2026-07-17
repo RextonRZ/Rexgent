@@ -17,6 +17,23 @@ _FACIAL_HAIR_RE = re.compile(
 _ACTION_CAMERA_RE = re.compile(r"\b(?:the\s+)?camera\b", re.I)
 
 
+_ABSORBED_EYELINE = ("on what they are doing - absorbed in the action, "
+                     "never toward the lens")
+
+
+def solo_eyeline(raw: str | None) -> str:
+    """A solo subject's vague eyeline resolves to TASK ABSORPTION, not just
+    off-lens: 'off-camera' alone still rendered a Dora-the-Explorer host
+    presenting to the audience while supposedly searching. A specific eyeline
+    the board wrote ('at the empty hutch') survives untouched."""
+    t = str(raw or "").strip().lower()
+    vague = {"camera", "at camera", "the camera", "at the camera", "off-camera",
+             "just off-camera", "off camera", "toward the other character", ""}
+    if t in vague or t.startswith("just off-camera"):
+        return _ABSORBED_EYELINE
+    return str(raw).strip()
+
+
 def decamera_action(action: str | None) -> str | None:
     """Boards leak camera-referential staging into ACTION text ("she is now
     closer to the camera") — rendered literally that pulls a straight
@@ -321,6 +338,11 @@ class ScenePromptCraft:
 
         def _eyeline_text(subj_name, raw) -> str:
             t = str(raw or "").strip()
+            # a SOLO subject's vague eyeline becomes task absorption — the
+            # Dora-the-Explorer case: presenting to the audience while
+            # supposedly searching for the rabbit
+            if len(frame_names) == 1:
+                return solo_eyeline(t)
             # in a TWO-person shot a vague or camera eyeline locks to the other
             # character — both actors stared into the lens instead of at each
             # other, and "toward the other character" left the model guessing
@@ -338,6 +360,16 @@ class ScenePromptCraft:
                if isinstance(s, dict) and s.get('character') and s.get('eyeline')
                and str(s.get('character')).strip().upper() in in_frame_upper]
         eyelines = (" Eyelines: " + "; ".join(eye) + ".") if eye else ""
+        # (2a) SOLO ABSORPTION: one person alone in frame is IN the scene, not
+        # hosting it — they focus on their own action, and the fourth wall
+        # holds even when no blocking subjects were staged at all. Name-free
+        # on purpose: Wan-bound prompts carry no reference images, so a name
+        # here would be the only name in the text (and there is only one
+        # person to mean).
+        if len(frame_names) == 1:
+            eyelines += (" The subject is alone in the frame, absorbed in "
+                         "what they are doing - never looking at the camera, "
+                         "no eye contact with the viewer.")
 
         # (2b) BACK STAYS BACK: a subject staged facing away (or a foreground
         # occluder) must not rotate to camera mid-shot — continuation models
@@ -502,6 +534,11 @@ class ScenePromptCraft:
         if backs:
             result["negative_prompt"] += (
                 ", turning around to face the camera, revealing the face")
+        if len(frame_names) == 1:
+            # the Dora ban: a solo subject presenting to the audience
+            result["negative_prompt"] += (
+                ", looking at the camera, direct eye contact with the viewer, "
+                "breaking the fourth wall, presenting to the camera")
         if character_visuals:
             # invented-feature bans (peopled shots): models grow beards on
             # clean-shaven men, glasses and headbands on children, blemishes

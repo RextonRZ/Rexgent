@@ -30,10 +30,14 @@ def test_two_hander_faces_each_other():
     assert all({"frame_position", "eyeline", "posture"} <= set(s) for s in subs)
 
 
-def test_solo_faces_camera():
+def test_solo_is_absorbed_in_the_action_not_presenting():
+    # facing camera read as a TV host (the Dora-the-Explorer case): a solo
+    # subject is IN the scene, angled into their own action, eyes on the task
     subs = _default_subjects(["Deok-hyun"])
     assert len(subs) == 1
-    assert subs[0]["screen_side"] == "center" and subs[0]["facing"] == "camera"
+    assert subs[0]["screen_side"] == "center"
+    assert subs[0]["facing"] != "camera"
+    assert "what they are doing" in subs[0]["eyeline"]
 
 
 def test_empty_and_blank_names():

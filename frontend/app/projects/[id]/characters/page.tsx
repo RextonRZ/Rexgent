@@ -79,14 +79,16 @@ export default function CharactersPage({
   // TTS overlay mode: voices are part of the bible, so the spend dialog
   // prices them; in native mode the clips speak for themselves
   const voiceEnabled = Boolean(bible?.tts_overlay);
-  const voicelessCount = characters.filter(
-    (c) => !castingByCharId[c.id]?.voice_id
-  ).length;
+  // animals get no sound design: they never count toward voice spends
+  const voicelessCount = characters.filter((c) => {
+    const cc = castingByCharId[c.id];
+    return !cc?.voice_id && !cc?.creature;
+  }).length;
   // designed/preset voices can be redesigned; a clone is the user's own
   // recording and is never offered for replacement
   const redesignCount = characters.filter((c) => {
     const cc = castingByCharId[c.id];
-    return cc?.voice_id && cc?.voice_source !== "cloned";
+    return cc?.voice_id && cc?.voice_source !== "cloned" && !cc?.creature;
   }).length;
   // already painted plates move to an untickable extra: a rerun only charges
   // for the cast members still missing plates unless regenerate is ticked

@@ -846,3 +846,33 @@ def test_decamera_action_redirects_lens_stares():
     plain = "She kneels by the hutch."
     assert decamera_action(plain) == plain
     assert decamera_action(None) is None
+
+
+def test_solo_eyeline_absorbs_into_the_task():
+    # the Dora the Explorer case: a solo subject presenting to camera while
+    # supposedly searching — vague eyelines resolve to task absorption
+    from app.mcp_tools.scene_prompt_craft import solo_eyeline
+    out = solo_eyeline("off-camera")
+    assert "what they are doing" in out and "never" in out
+    assert solo_eyeline("at the camera") == out
+    # a SPECIFIC eyeline the board wrote survives untouched
+    assert solo_eyeline("at the empty hutch") == "at the empty hutch"
+
+
+@pytest.mark.asyncio
+async def test_solo_shot_bans_fourth_wall_and_absorbs():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "Medium close-up, a girl searching the bushes",
+        "negative_prompt": "blurry", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MCU", "action": "She searches the bushes",
+              "estimated_duration_seconds": 5},
+        character_visuals={"Angeline": {"video_prompt_fragment": "an 8-year-old girl"}},
+        target_model="happyhorse",
+        blocking={"subjects": [{"character": "Angeline", "eyeline": "off-camera"}]})
+    assert "absorbed in what they are doing" in result["prompt"]
+    assert "looking at the camera" in result["negative_prompt"]
+    assert "breaking the fourth wall" in result["negative_prompt"]

@@ -112,8 +112,12 @@ export function CharacterCard({
   const hasPaintedPlates = Boolean(
     casting?.variants?.some((v) => v.plate_image_url)
   );
+  // animals get no sound design: no voice panel, no voice spend options,
+  // and their plates read as identity references rather than costumes
+  const creature = Boolean(casting?.creature);
+  const voiceApplies = voiceEnabled && !creature;
   const redesignable = Boolean(
-    voiceEnabled && casting?.voice_id && casting?.voice_source !== "cloned"
+    voiceApplies && casting?.voice_id && casting?.voice_source !== "cloned"
   );
 
   // only the plate being worked on shows the spinner, not its siblings
@@ -211,7 +215,7 @@ export function CharacterCard({
         {casting && (
           <>
             <Section
-              title="Costume plates"
+              title={creature ? "Reference plates" : "Costume plates"}
               action={
                 <Button
                   size="sm"
@@ -252,7 +256,7 @@ export function CharacterCard({
                               },
                             ]
                           : []),
-                        ...(voiceEnabled && !casting?.voice_id
+                        ...(voiceApplies && !casting?.voice_id
                           ? [
                               {
                                 key: "designVoice",
@@ -282,7 +286,7 @@ export function CharacterCard({
                           ? Boolean(choices?.regenPlates)
                           : true;
                         const redesign = Boolean(choices?.redesignVoice);
-                        const needsVoice = voiceEnabled && !casting?.voice_id;
+                        const needsVoice = voiceApplies && !casting?.voice_id;
                         // everything unticked: nothing to generate, spend nothing
                         if (!regen && !redesign && !needsVoice) return;
                         generatePlates.mutate({
@@ -342,7 +346,7 @@ export function CharacterCard({
               )}
             </Section>
 
-            {voiceEnabled && (
+            {voiceApplies && (
               <Section title="Voice">
                 <VoiceRow
                   characterId={character.id}

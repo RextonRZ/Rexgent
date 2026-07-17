@@ -61,6 +61,11 @@ def allocate_and_generate(db: Session, project_id: str) -> str:
     return dispatch_generation_op(db, project_id)
 
 
+def _bible_is_creature(c) -> bool:
+    from app.services.character_traits import is_creature
+    return is_creature(c)
+
+
 @router.get("/{project_id}")
 def get_bible(project_id: str, db: Session = Depends(get_db)):
     pid = uuid.UUID(project_id)
@@ -71,6 +76,9 @@ def get_bible(project_id: str, db: Session = Depends(get_db)):
         # the frontend voice panel shows only when the TTS overlay is in use
         "tts_overlay": bool(getattr(get_settings(), "tts_overlay", False)),
         "characters": [{"id": str(c.id), "name": c.name,
+            # animals sit in their own Characters-tab section: no voice
+            # panel, and their plates are reference plates, not costumes
+            "creature": _bible_is_creature(c),
             "voice_id": c.voice_id, "voice_source": c.voice_source,
             "voice_design": (voice_design_prompt(c) if c.voice_source == "designed" else None),
             "variants": [{"id": str(v.id), "label": v.label, "outfit_description": v.outfit_description,
@@ -317,6 +325,10 @@ async def generate_character_plates(character_id: str, design_voice: bool = True
 
     from app.websocket.emitter import emit
     from app.websocket.tool_events import tool_event
+    # computed up front: the plate branch AND the voice branch below both key
+    # off it (a voice-only run must still know the character is an animal)
+    from app.services.character_traits import is_creature, is_stylized_style
+    creature = is_creature(c)
     if regen_plates:
         emit("stage:progress", {"stage": "casting", "status": "started",
              "agent": "Casting Director",
@@ -344,9 +356,7 @@ async def generate_character_plates(character_id: str, design_voice: bool = True
         # creatures get a natural full-body reference and skip the ArcFace
         # check (no human face); stylized looks skip the check too — the
         # embeddings are meaningless on cartoon/pixel faces
-        from app.services.character_traits import is_creature, is_stylized_style
         from app.models.style_preset import StylePreset
-        creature = is_creature(c)
         style_row = db.query(StylePreset).filter(
             StylePreset.project_id == c.project_id).first()
         stylized = is_stylized_style(
@@ -371,10 +381,11 @@ async def generate_character_plates(character_id: str, design_voice: bool = True
                 c.reference_image_url, c.face_vector, c.plate_status = url, vector, "ai_generated"
         tool_event(project_id, "characters", "generate_plates", "succeeded",
                    agent="Casting", artifact=f"{len(variants)} plates on {c.name}")
-    if getattr(get_settings(), "tts_overlay", False):
+    if getattr(get_settings(), "tts_overlay", False) and not creature:
         # TTS overlay mode: the spend dialog's ticks decide the voice —
         # designed ($0.20, db to ledger it) vs free preset for a voiceless
-        # character, and redesign replaces a designed/preset voice
+        # character, and redesign replaces a designed/preset voice. Animals
+        # get no sound design here; a talking one is voiced at synth time.
         from app.services.casting_director import assign_voice
         if redesign_voice and c.voice_id and (c.voice_source or "") != "cloned":
             c.voice_id = None

@@ -397,3 +397,26 @@ def test_style_solo_negative_bans_a_second_person():
     n2 = style_plate_negative("blurry, oversaturated")
     assert n2.startswith("blurry, oversaturated")
     assert "two people" in n2
+
+
+def test_assign_cast_voices_skips_creatures(monkeypatch):
+    # animals get no auto voice at casting (no sound design); a talking
+    # cartoon animal still gets one from the synth-time fallback
+    import app.services.casting_director as cd
+    import app.config as config
+    from types import SimpleNamespace
+    monkeypatch.setattr(cd, "get_settings", lambda: _fake_settings())
+    monkeypatch.setattr(config, "get_settings", lambda: _fake_settings())
+    _quiet_ws(monkeypatch, cd)
+    monkeypatch.setattr(cd, "design_voice", MagicMock())
+    rabbit = SimpleNamespace(name="Snowy", voice_id=None, voice_model=None,
+                             voice_source=None, gender=None,
+                             physical_description="a small white rabbit",
+                             visual_description=None, role="SUPPORTING")
+    human = SimpleNamespace(name="Mia", voice_id=None, voice_model=None,
+                            voice_source=None, gender="female",
+                            physical_description="a tall woman",
+                            visual_description=None, role="PROTAGONIST")
+    cd.assign_cast_voices(MagicMock(), "pid", [rabbit, human], design_voice=False)
+    assert rabbit.voice_id is None
+    assert human.voice_id
