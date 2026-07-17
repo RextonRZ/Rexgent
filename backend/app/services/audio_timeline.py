@@ -158,6 +158,42 @@ def warp_output_duration(plan: list[dict], raw_duration: float) -> float:
     return round(total, 3)
 
 
+# tight-cut pads: a beat of air before the line, a breath after it
+_CUT_LEAD_PAD, _CUT_TAIL_PAD = 0.5, 0.4
+# never trim a chunk below this much footage — a sub-2s flash cut reads as
+# a glitch, not a rhythm
+_CUT_FLOOR = 2.0
+
+
+def tight_cut_bounds(tin: float, eff: float, onset_abs, mouth,
+                     lead_pad: float = _CUT_LEAD_PAD,
+                     tail_pad: float = _CUT_TAIL_PAD,
+                     floor: float = _CUT_FLOOR):
+    """TIGHT_CUTS: trim a dialogue chunk to its measured speech span so the
+    cut lands right after the line instead of seconds of silent holding (a 2s
+    line in a 5s clip left 3s of dead air before every transition — the fast
+    2.5s/2.5s rhythm of a vertical drama comes from cutting on the line).
+    tin/eff: the chunk's current trim-in and effective length; onset_abs and
+    mouth: the speech span in ABSOLUTE clip seconds. Returns (new_in, new_out,
+    new_onset_rel, new_eff), or None when speech is unmeasured. Never widens
+    an existing user trim and never cuts below the floor."""
+    if onset_abs is None or not mouth or mouth <= 0.2 or eff <= floor:
+        return None
+    end_abs = tin + eff
+    new_tin = max(tin, float(onset_abs) - lead_pad)
+    new_out = min(end_abs, float(onset_abs) + float(mouth) + tail_pad)
+    if new_out - new_tin < floor:
+        # too tight: extend the tail first, then give back lead trim
+        new_out = min(end_abs, new_tin + floor)
+        if new_out - new_tin < floor:
+            new_tin = max(tin, new_out - floor)
+    new_eff = round(new_out - new_tin, 3)
+    if new_eff >= eff - 0.05:
+        return None  # nothing meaningful to trim
+    new_onset = round(max(0.0, float(onset_abs) - new_tin), 3)
+    return round(new_tin, 3), round(new_out, 3), new_onset, new_eff
+
+
 def speech_windows(entries: list[dict]) -> list[tuple[float, float]]:
     """Global (start, end) spans where the cut's clips speak their own FAKE
     dialogue — the mix gates the bed to near-silence exactly there, so the

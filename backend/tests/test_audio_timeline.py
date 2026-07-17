@@ -332,3 +332,23 @@ def test_place_dialogue_attaches_word_warp():
     assert seg["start"] == 3.0
     assert "warp" in seg and "tempo" not in seg
     assert abs(seg["duration"] - 3.133) < 0.01
+
+
+def test_tight_cut_trims_dead_air_around_the_line():
+    # a 2s line inside a 5s clip left 3s of silent holding before every cut
+    # (the scores never see rhythm) — trim to 0.5s lead + line + 0.4s breath
+    from app.services.audio_timeline import tight_cut_bounds
+    b = tight_cut_bounds(tin=0.0, eff=5.0, onset_abs=1.0, mouth=2.0)
+    assert b == (0.5, 3.4, 0.5, 2.9)  # (new_in, new_out, new_onset, new_eff)
+
+
+def test_tight_cut_respects_floor_and_unmeasured():
+    from app.services.audio_timeline import tight_cut_bounds
+    # unmeasured speech: never touch the chunk
+    assert tight_cut_bounds(0.0, 5.0, None, None) is None
+    # a tiny line still keeps at least 2s of footage on screen
+    b = tight_cut_bounds(0.0, 5.0, 0.2, 0.5)
+    assert b is not None and b[3] >= 2.0
+    # a user trim already tighter than the speech is never widened
+    b2 = tight_cut_bounds(1.0, 2.0, 1.2, 3.5)
+    assert b2 is None or b2[1] <= 3.0

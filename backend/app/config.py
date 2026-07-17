@@ -88,6 +88,10 @@ class Settings(BaseSettings):
     # safe (same scene + non-shrinking cast) — the Blood and Bone continuity,
     # without the duplicate-people failure mode
     prev_frame_guarded: bool = False
+    # trim every dialogue chunk at export to its measured speech span (+pads):
+    # the fast cut-on-the-line rhythm of a vertical drama, instead of seconds
+    # of silent holding after each line
+    tight_cuts: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

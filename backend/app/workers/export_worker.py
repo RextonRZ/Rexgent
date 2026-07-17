@@ -351,35 +351,52 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 else:  # probe failed — fall back to the storyboard estimate
                     eff = duration_by_clip.get(str(seg["clip"].id), 5) if seg["clip"] else 5
                 onset, mouth, mouth_words = None, None, None
-                if use_overlay and meta and meta["dialogue"]:
-                    # overlay: measure where the on-screen mouth actually
-                    # speaks (fun-asr) so the TTS line lands ON the lips and
-                    # paces itself to them, word by word when the grid holds —
-                    # best-effort, line places at the chunk start without it
+                seg_in, seg_out = seg["in"], seg["out"]
+                from app.config import get_settings as _gs
+                tight_on = getattr(_gs(), "tight_cuts", False)
+                profile = None
+                if (use_overlay or tight_on) and meta and meta["dialogue"]:
+                    # measure where the on-screen mouth actually speaks
+                    # (fun-asr): overlay places/paces the TTS line on it, and
+                    # tight cuts trim the chunk to it — best-effort either way
                     try:
-                        from app.services.audio_policy import (BED_VOLUME,
-                                                               speech_profile)
+                        from app.services.audio_policy import speech_profile
                         profile = speech_profile(local)
-                        if profile:
-                            onset = max(0.0, float(profile["onset"]) - tin)
-                            mouth = max(0.0, min(float(profile["mouth"]),
-                                                 max(0.0, eff - onset)))
-                            mouth_words = [
-                                (round(max(0.0, b - tin), 3),
-                                 round(max(0.0, e - tin), 3))
-                                for b, e in (profile.get("words") or [])
-                                if e > tin and (b - tin) < eff] or None
-                            # the speech window is measured, so the mix can
-                            # gate exactly it: keep the clip's music/ambience
-                            # as a quiet bed instead of killing the whole
-                            # soundtrack along with the fake voice
-                            mute, vol = False, BED_VOLUME
                     except Exception as e:  # noqa: BLE001
                         logger.warning(f"Export: mouth probe skipped: {e}")
+                if use_overlay and meta and meta["dialogue"]:
+                    if profile:
+                        # the speech window is measured, so the mix can gate
+                        # exactly it: keep the clip's music/ambience as a
+                        # quiet bed instead of killing the whole soundtrack
+                        # along with the fake voice
+                        from app.services.audio_policy import BED_VOLUME
+                        mute, vol = False, BED_VOLUME
                 elif use_overlay:
                     # scenery/no-dialogue chunks have no fake speech to clash
                     # with the TTS — their ambience always survives
                     mute, vol = False, None
+                if tight_on and profile:
+                    # TIGHT_CUTS: cut on the line — trim the chunk to its
+                    # speech span (+breath pads) so the transition lands right
+                    # after the words instead of seconds of silent holding
+                    from app.services.audio_timeline import tight_cut_bounds
+                    bounds = tight_cut_bounds(tin, eff, profile["onset"],
+                                              profile["mouth"])
+                    if bounds:
+                        seg_in, seg_out, _, new_eff = bounds
+                        logger.info("tight cut: chunk %d %.2fs -> %.2fs",
+                                    i, eff, new_eff)
+                        tin, eff = seg_in, new_eff
+                if profile:
+                    onset = max(0.0, float(profile["onset"]) - tin)
+                    mouth = max(0.0, min(float(profile["mouth"]),
+                                         max(0.0, eff - onset)))
+                    mouth_words = [
+                        (round(max(0.0, b - tin), 3),
+                         round(max(0.0, e - tin), 3))
+                        for b, e in (profile.get("words") or [])
+                        if e > tin and (b - tin) < eff] or None
                 cut_entries.append({
                     "scene_number": meta["scene"] if meta else None,
                     "duration": eff,
@@ -391,7 +408,7 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
                 })
                 # appended LAST so stitch_inputs and cut_entries always align
                 # index-for-index (episode slicing depends on it)
-                stitch_inputs.append({"path": local, "in": seg["in"], "out": seg["out"],
+                stitch_inputs.append({"path": local, "in": seg_in, "out": seg_out,
                                       "mute": mute, "volume": vol})
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Export: could not download {seg['url']}: {e}")
