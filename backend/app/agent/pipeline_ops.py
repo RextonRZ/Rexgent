@@ -64,7 +64,8 @@ async def generate_script_op(
     _progress(project_id, "script", "started", "Screenwriter",
               "Rewriting with the judge's notes" if notes else "Writing your screenplay")
     with track_project(project_id, db):
-        clean_premise = InputSanitizer().sanitize(premise, max_length=300)
+        from app.services.guardrails import PREMISE_MAX
+        clean_premise = InputSanitizer().sanitize(premise, max_length=PREMISE_MAX)
         # writers'-room development before the script — first write only, not
         # a judge-note revision (the story is already shaped by then)
         development = ""

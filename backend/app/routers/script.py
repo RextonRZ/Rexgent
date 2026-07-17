@@ -105,7 +105,8 @@ async def generate_script(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    clean_premise = InputSanitizer().sanitize(request.premise, max_length=300)
+    from app.services.guardrails import PREMISE_MAX
+    clean_premise = InputSanitizer().sanitize(request.premise, max_length=PREMISE_MAX)
 
     pid = str(request.project_id)
     emit("stage:progress", {"stage": "script", "status": "started",

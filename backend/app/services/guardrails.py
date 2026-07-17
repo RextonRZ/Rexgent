@@ -206,6 +206,12 @@ class CostCircuitBreaker:
         return max(0.0, self.ceiling - current_cost)
 
 
+# The premise cap, shared by every path that sanitizes one. MUST stay >= the
+# frontend textarea's own cap (2000): a smaller server cap silently cut real
+# premises mid-sentence at 300 chars and the screenwriter never saw the rest.
+PREMISE_MAX = 2000
+
+
 class InputSanitizer:
     INJECTION_PATTERNS = [
         re.compile(r"ignore\s+(previous|above|all)\s+(instructions|prompts|rules)", re.IGNORECASE),

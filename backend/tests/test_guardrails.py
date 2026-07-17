@@ -308,3 +308,13 @@ def test_canonical_character_refuses_ambiguous_first_name():
     known = ["Mia Chen", "Mia Wong"]
     # two cast members share the first name: do NOT guess
     assert canonical_character("MIA", known) == "MIA"
+
+
+def test_premise_cap_matches_the_frontend_textarea():
+    # the premise box accepts 2000 chars; a silent 300-char sanitize cap cut
+    # real premises mid-sentence and the screenwriter never saw the rest
+    from app.services.guardrails import PREMISE_MAX, InputSanitizer
+    assert PREMISE_MAX >= 2000
+    premise = ("Angeline, a gentle 8-year-old girl, treasures her white "
+               "rabbit Snowy above everything. ") * 8   # ~700 chars
+    assert InputSanitizer().sanitize(premise, max_length=PREMISE_MAX) == premise.strip()
