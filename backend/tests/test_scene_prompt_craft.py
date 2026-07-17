@@ -22,7 +22,9 @@ async def test_craft_returns_prompt_no_names():
     )
     assert "prompt" in result
     assert "Yuki" not in result["prompt"]
-    assert len(result["prompt"].split()) <= 80
+    # bloat guard: deterministic clauses (solo hold, identity lock, emotion)
+    # ride every minimal solo shot — budgeted, but never runaway
+    assert len(result["prompt"].split()) <= 95
 
 
 @pytest.mark.asyncio
@@ -929,3 +931,37 @@ async def test_solo_listener_shot_keeps_near_lens_gaze():
     # ...and the negative bans only the true lens stare, not near-lens gaze
     assert "staring directly into the lens" in result["negative_prompt"]
     assert "looking at the camera" not in result["negative_prompt"]
+
+
+def test_child_scale_clause_pins_the_height_gap():
+    from app.mcp_tools.scene_prompt_craft import child_scale_clause
+    visuals = {"Angeline": {"video_prompt_fragment": "a realistic 8-year-old girl"},
+               "John": {"video_prompt_fragment": "a 17-year-old boy, lean"}}
+    clause = child_scale_clause(visuals)
+    assert "8-year-old" in clause and "shorter" in clause
+    # two adults: no clause
+    adults = {"A": {"video_prompt_fragment": "a woman in her 30s"},
+              "B": {"video_prompt_fragment": "a 40-year-old man"}}
+    assert child_scale_clause(adults) == ""
+
+
+@pytest.mark.asyncio
+async def test_two_person_shot_holds_mutual_gaze_to_the_end():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "Two people arguing in a room",
+        "negative_prompt": "blurry", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "estimated_duration_seconds": 5},
+        character_visuals={"Angeline": {"video_prompt_fragment": "a girl"},
+                           "John": {"video_prompt_fragment": "a boy"}},
+        target_model="happyhorse",
+        blocking={"subjects": [{"character": "Angeline", "eyeline": "off-camera"},
+                               {"character": "John", "eyeline": "off-camera"}]})
+    # both clips ended with the pair turned to the lens: the hold runs to
+    # the final frame and the negative bans the turn outright
+    assert "for the ENTIRE shot" in result["prompt"]
+    assert "final frame" in result["prompt"]
+    assert "turning to face the camera" in result["negative_prompt"]

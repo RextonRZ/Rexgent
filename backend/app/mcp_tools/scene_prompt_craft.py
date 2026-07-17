@@ -15,6 +15,28 @@ _FACIAL_HAIR_RE = re.compile(
     r"clean-shaven|beard|moustache|mustache|stubble|goatee|facial hair", re.I)
 
 _ACTION_CAMERA_RE = re.compile(r"\b(?:the\s+)?camera\b", re.I)
+_AGE_RE = re.compile(r"\b(\d{1,2})\s*[- ]\s*year[- ]old\b", re.I)
+
+
+def child_scale_clause(character_visuals: dict) -> str:
+    """A child sharing the frame with a much older character kept rendering
+    at adult height (an 8-year-old suddenly 'so tall'). When the fragments
+    carry ages and the gap is real, pin the size relation explicitly."""
+    ages = []
+    for v in (character_visuals or {}).values():
+        frag = v.get("video_prompt_fragment") if isinstance(v, dict) else v
+        m = _AGE_RE.search(str(frag or ""))
+        if m:
+            ages.append(int(m.group(1)))
+    if len(ages) < 2:
+        return ""
+    youngest, oldest = min(ages), max(ages)
+    if youngest <= 12 and oldest >= youngest + 5:
+        return (f" The {youngest}-year-old is a small child with a true "
+                f"child's height and body proportions - clearly much shorter "
+                f"than the older characters, the same size relation in every "
+                f"frame.")
+    return ""
 
 
 _ABSORBED_EYELINE = ("on what they are doing - absorbed in the action, "
@@ -405,15 +427,27 @@ class ScenePromptCraft:
         # reference images, so a name here would be the only name in the
         # text (and there is only one person to mean).
         if len(frame_names) == 1:
+            # "to its final frame": clips kept resolving with the subject
+            # turning to the lens in the last second
             if solo_mode["mode"] == "listener":
                 eyelines += (" The subject is alone in the frame, speaking to "
                              "someone OFF-SCREEN just beside the camera - their "
                              "gaze rests close past the lens, never directly "
-                             "into it, and no second person is visible.")
+                             "into it, for the ENTIRE shot to its final frame, "
+                             "and no second person is visible.")
             else:
                 eyelines += (" The subject is alone in the frame, absorbed in "
-                             "what they are doing - never looking at the camera, "
-                             "no eye contact with the viewer.")
+                             "what they are doing for the ENTIRE shot, to its "
+                             "final frame - never looking at the camera, no eye "
+                             "contact with the viewer.")
+        # two-handers ended with BOTH actors rotating to face the lens as the
+        # clip resolved — the mutual gaze holds to the last frame
+        if len(frame_names) == 2:
+            eyelines += (" They keep facing and looking at EACH OTHER for the "
+                         "ENTIRE shot, to its final frame - neither ever turns "
+                         "toward the camera.")
+        # a child beside a teen/adult kept rendering at adult height
+        eyelines += child_scale_clause(character_visuals)
 
         # (2b) BACK STAYS BACK: a subject staged facing away (or a foreground
         # occluder) must not rotate to camera mid-shot — continuation models
@@ -590,6 +624,10 @@ class ScenePromptCraft:
                 result["negative_prompt"] += (
                     ", looking at the camera, direct eye contact with the viewer, "
                     "breaking the fourth wall, presenting to the camera")
+        if len(frame_names) == 2:
+            result["negative_prompt"] += (
+                ", turning to face the camera, both subjects facing the "
+                "viewer, looking into the lens")
         if character_visuals:
             # invented-feature bans (peopled shots): models grow beards on
             # clean-shaven men, glasses and headbands on children, blemishes
@@ -599,7 +637,10 @@ class ScenePromptCraft:
             if not _re.search(r"beard|moustache|mustache|stubble|facial hair|goatee",
                               visuals_text):
                 result["negative_prompt"] += ", beard, mustache, stubble, facial hair"
-            if not _re.search(r"\bglasses|spectacles|sunglasses", visuals_text):
+            # negation-aware: "no glasses" in a fragment means NOT wearing —
+            # the ban must still fire or renders invent specs the text denies
+            from app.services.plate_generator import wears_eyewear
+            if not wears_eyewear(visuals_text):
                 result["negative_prompt"] += (
                     ", eyeglasses, spectacles, glasses on face, sunglasses")
             if not _ACCESSORY_RE.search(visuals_text):

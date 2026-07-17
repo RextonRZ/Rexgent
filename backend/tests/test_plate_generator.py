@@ -270,3 +270,17 @@ def test_creature_negative_keeps_identity_bans_but_allows_natural_poses():
     assert "text, watermark" in n
     assert "sitting" not in n           # animals sit naturally
     assert "human, person" in n         # and never a person instead
+
+
+def test_negated_eyewear_still_bans_glasses_on_the_plate():
+    # the fragment said no glasses, the naive substring match read glasses
+    # and skipped the ban — so the PLATE invented specs while every render
+    # (correctly) obeyed the text, and they disagreed forever
+    from app.services.plate_generator import char_plate_negative, wears_eyewear
+    assert wears_eyewear("thin black rectangular glasses") is True
+    assert wears_eyewear("clean-shaven face, no glasses") is False
+    assert wears_eyewear("without glasses, short hair") is False
+    n = char_plate_negative("an 8-year-old girl, no glasses")
+    assert "eyeglasses" in n
+    n2 = char_plate_negative("a man with thin black glasses")
+    assert "eyeglasses" not in n2

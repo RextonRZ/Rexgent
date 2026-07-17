@@ -226,3 +226,19 @@ def test_default_solo_subject_is_absorbed_not_presenting():
     solo = _default_subjects(["Angeline"])[0]
     assert solo["facing"] != "camera"
     assert "what they are doing" in solo["eyeline"]
+
+
+def test_action_named_cast_joins_the_frame():
+    # 'Angeline, holding Snowy, ...' with in_frame=[Angeline, John] rendered
+    # a generic dog: Snowy's name was in the ACTION but not the cast, so his
+    # plate and species fragment never rode and the sanitizer ate his name
+    from app.services.storyboard_generator import _ensure_action_cast_in_frame
+    out = _ensure_action_cast_in_frame(
+        ["Angeline", "John"], "Angeline, holding Snowy, looks at John.",
+        ["Angeline", "John", "Snowy"])
+    assert out == ["Angeline", "John", "Snowy"]
+    # dialogue-only mentions do NOT add anyone (handled elsewhere), and cast
+    # already present is never duplicated
+    out2 = _ensure_action_cast_in_frame(["Angeline"], "She kneels alone.",
+                                        ["Angeline", "Snowy"])
+    assert out2 == ["Angeline"]

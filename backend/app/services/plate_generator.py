@@ -33,10 +33,27 @@ import re as _re
 _EYEWEAR = _re.compile(r"glasses|spectacles|eyewear|sunglasses|眼镜", _re.I)
 
 
+_EYEWEAR_NEGATED = _re.compile(
+    r"\b(?:no|without|not\s+wearing|never\s+wears?)\s+(?:any\s+)?"
+    r"(?:eye)?(?:glasses|spectacles|eyewear|sunglasses)\b", _re.I)
+
+
+def wears_eyewear(*texts) -> bool:
+    """Whether the character ACTUALLY wears eyewear. A negated mention
+    ('clean-shaven, no glasses') must count as NOT wearing — the naive
+    substring match read it as glasses, skipped the plate's eyewear ban, and
+    the plate invented specs that every render then (correctly) refused."""
+    for x in texts:
+        t = _EYEWEAR_NEGATED.sub("", str(x or ""))
+        if _EYEWEAR.search(t):
+            return True
+    return False
+
+
 def char_plate_negative(*texts, creature: bool = False) -> str:
     if creature:
         return CREATURE_PLATE_NEGATIVE
-    if any(_EYEWEAR.search(x or "") for x in texts):
+    if wears_eyewear(*texts):
         return CHAR_PLATE_NEGATIVE
     return CHAR_PLATE_NEGATIVE + ", eyeglasses, spectacles, glasses on face"
 

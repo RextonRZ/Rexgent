@@ -38,6 +38,26 @@ def fit_duration_to_dialogue(text: str | None, tiers: tuple = DURATION_TIERS) ->
     return tiers[-1]
 
 
+def _ensure_action_cast_in_frame(in_frame, action, cast_names) -> list:
+    """Cast members NAMED in a shot's stage directions are visibly on screen
+    ('Angeline, holding Snowy, ...') — without a cast slot their identity
+    plate never rides and the name sanitizer erases them from the prompt
+    (Snowy rendered as a generic dog). Dialogue mentions add nobody: this
+    scans ACTION text only, where a name means a visible presence."""
+    import re
+    out = [str(n).strip() for n in (in_frame or []) if str(n).strip()]
+    have = {n.upper() for n in out}
+    text = str(action or "")
+    for name in cast_names or []:
+        n = str(name or "").strip()
+        if not n or n.upper() in have:
+            continue
+        if re.search(rf"\b{re.escape(n)}\b", text, re.I):
+            out.append(n)
+            have.add(n.upper())
+    return out
+
+
 def _default_subjects(names) -> list[dict]:
     """Deterministic blocking when the Stager LLM omits `subjects`, so the
     interactive camera plan always has geometry to draw. A two-hander faces each
@@ -610,6 +630,11 @@ class StoryboardGenerator:
                              if 0 <= j < len(lines)]
             sd["characters_in_frame"] = _ensure_speakers_in_frame(
                 sd.get("characters_in_frame"), line_speakers)
+            # a cast member named in the stage directions is ON SCREEN — their
+            # plate must ride ('holding Snowy' with no Snowy slot = a dog)
+            sd["characters_in_frame"] = _ensure_action_cast_in_frame(
+                sd["characters_in_frame"], sd.get("action"),
+                [c.get("name") for c in characters_in_scene])
             # the interactive camera plan draws from blocking `subjects`; the Stager
             # LLM often omits them, so backfill a deterministic default from who is
             # in frame (the stage map then enforces the 180-degree rule across shots)
