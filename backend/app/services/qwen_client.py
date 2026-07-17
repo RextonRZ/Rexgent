@@ -518,7 +518,19 @@ class QwenClient:
 
         api_key, base = self.api_key, self.video_base_url
 
-        use_instruct = bool(instructions) and model == s.qwen_tts_designed_model
+        # Per-line acting notes deliver as an instruction on TWO model families:
+        # the preset flash model (via the instruct-flash variant) AND a DESIGNED
+        # voice, whose vd model instructs ITSELF — the preset instruct model
+        # rejects a designed voice id (400 "Voice not supported"), but the vd
+        # endpoint honors instructions + optimize_instructions (verified live:
+        # an emotional note stretched the read 2.16s -> 2.88s). Without this a
+        # designed voice read every line flat, no matter the beat — the "lack
+        # of 感情" complaint. Cloned/realtime voices have no instruct support.
+        is_vd = "tts-vd" in model
+        instruct_model = (s.qwen_tts_instruct_model
+                          if model == s.qwen_tts_designed_model
+                          else model if is_vd else None)
+        use_instruct = bool(instructions) and instruct_model is not None
 
         def _call() -> bytes:
             if use_instruct:
@@ -526,7 +538,7 @@ class QwenClient:
                 # optimize_instructions is the activator — the installed SDK
                 # drops both, so this goes over raw HTTP (verified live: a
                 # pause-heavy instruction stretched the read 1.7s -> 2.7s)
-                body = {"model": s.qwen_tts_instruct_model,
+                body = {"model": instruct_model,
                         "input": {"text": text, "voice": voice,
                                   "instructions": instructions[:200],
                                   "optimize_instructions": True},

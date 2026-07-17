@@ -204,6 +204,56 @@ async def test_happyhorse_v2v_sends_source_as_video_media(monkeypatch):
     assert captured["media"] == [{"type": "video", "url": "https://oss/original.mp4"}]
 
 
+@pytest.mark.asyncio
+async def test_designed_voice_with_direction_uses_instruct_endpoint(monkeypatch):
+    # a designed (vd) voice reads FLAT unless its per-line acting note is sent
+    # as an instruction. The preset instruct model rejects a designed voice id
+    # (verified live), so the vd model must instruct ITSELF: same voice id,
+    # instructions + optimize_instructions on the multimodal endpoint.
+    import app.services.qwen_client as qc
+    captured = {}
+
+    def fake_post(url, json=None, timeout=None, headers=None):
+        captured["url"] = url
+        captured["body"] = json
+        return MagicMock(status_code=200,
+                         json=lambda: {"output": {"audio": {"data": _b64("hi")}}})
+
+    monkeypatch.setattr(qc.httpx, "post", fake_post)
+    client = make_client()
+    out = await client.synthesize_speech(
+        "You sold Snowy?", voice="qwen-tts-vd-angeline-x",
+        model="qwen3-tts-vd-2026-01-26", instructions="betrayal and heartbreak")
+    assert out == b"hi"
+    assert captured["url"].endswith("/services/aigc/multimodal-generation/generation")
+    # the vd model instructs itself — NOT the preset instruct-flash model
+    assert captured["body"]["model"] == "qwen3-tts-vd-2026-01-26"
+    assert captured["body"]["input"]["voice"] == "qwen-tts-vd-angeline-x"
+    assert captured["body"]["input"]["instructions"] == "betrayal and heartbreak"
+    assert captured["body"]["input"]["optimize_instructions"] is True
+
+
+@pytest.mark.asyncio
+async def test_preset_voice_with_direction_uses_instruct_flash(monkeypatch):
+    # a preset voice keeps routing to the instruct-flash model (unchanged)
+    import app.services.qwen_client as qc
+    captured = {}
+    monkeypatch.setattr(qc.httpx, "post",
+                        lambda url, json=None, timeout=None, headers=None: (
+                            captured.update(body=json)
+                            or MagicMock(status_code=200,
+                                         json=lambda: {"output": {"audio": {"data": _b64("x")}}})))
+    client = make_client()
+    await client.synthesize_speech("hi", voice="Cherry",
+                                   model="qwen3-tts-flash", instructions="cheerful")
+    assert captured["body"]["model"] == "qwen3-tts-instruct-flash"
+
+
+def _b64(s: str) -> str:
+    import base64
+    return base64.b64encode(s.encode()).decode()
+
+
 def test_extract_image_url_wan26_choices_shape():
     from app.services.qwen_client import QwenClient
     out = {"choices": [{"message": {"content": [{"image": "https://x/y.png", "type": "image"}]}}]}
