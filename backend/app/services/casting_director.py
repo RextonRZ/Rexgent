@@ -336,6 +336,16 @@ async def ensure_location_plates(db: Session, project_id) -> int:
     return len(missing)
 
 
+def style_plate_negative(user_negative: str | None) -> str:
+    """The style frame is edited FROM the lead's plate and must stay a SOLO
+    portrait — without this ban the edit invented a second, AI-made person
+    standing beside the real cast face. The user's own negatives ride first."""
+    solo = ("two people, second person, multiple people, another person, "
+            "extra person, crowd, background people")
+    base = (user_negative or "").strip().rstrip(",")
+    return f"{base}, {solo}" if base else solo
+
+
 async def ensure_style_plate(db: Session, project_id) -> bool:
     """Paint the style plate at STORYBOARD time (not casting), image-edited
     FROM the lead character's plate so the style frame shows the real cast
@@ -358,14 +368,14 @@ async def ensure_style_plate(db: Session, project_id) -> bool:
             break
     prompt = ((style.free_text or "cinematic realistic drama").strip()
               + ". A cinematic film still of the SAME person as the reference "
-                "image - keep the identical face and hair - placed in this "
-                "visual style.")
+                "image, ALONE in the frame - keep the identical face and hair "
+                "- placed in this visual style. Exactly ONE person.")
     pid = str(project_id)
     plates = PlateGenerator(db)
     tool_event(pid, "storyboard", "style_plate", "started", agent="Director")
     url, _ = await plates.generate_and_store_plate(
         pid, "style", "style", prompt,
-        negative_prompt=style.negative_prompt or None,
+        negative_prompt=style_plate_negative(style.negative_prompt),
         base_image_url=base_url)
     style.plate_image_url = url
     db.commit()
@@ -462,7 +472,9 @@ class CastingDirector:
                         character_name=c.name, role=c.role or "SUPPORTING",
                         personality=c.personality_summary or "",
                         mbti=getattr(c, "mbti", "") or "",
-                        physical_desc=c.physical_description or "")
+                        physical_desc=c.physical_description or "",
+                        age=str(c.estimated_age or ""),
+                        gender=str(c.gender or ""))
                     c.visual_description = (c.visual_description or "").strip() or look.get("full_description", "")
                     c.video_prompt_fragment = (c.video_prompt_fragment or "").strip() or look.get("video_prompt_fragment", "")
                     clothes = ", ".join(look.get("clothing_keywords") or [])

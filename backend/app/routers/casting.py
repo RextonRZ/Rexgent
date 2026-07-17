@@ -333,7 +333,9 @@ async def generate_character_plates(character_id: str, design_voice: bool = True
                         character_name=c.name, role=c.role or "SUPPORTING",
                         personality=c.personality_summary or "",
                         mbti=getattr(c, "mbti", "") or "",
-                        physical_desc=c.physical_description or "")
+                        physical_desc=c.physical_description or "",
+                        age=str(c.estimated_age or ""),
+                        gender=str(c.gender or ""))
                 c.visual_description = (c.visual_description or "").strip() or look.get("full_description", "")
                 c.video_prompt_fragment = (c.video_prompt_fragment or "").strip() or look.get("video_prompt_fragment", "")
             except Exception:  # noqa: BLE001

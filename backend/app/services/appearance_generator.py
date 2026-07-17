@@ -16,10 +16,17 @@ class AppearanceGenerator:
         setting: str = "",
         mbti: str = "",
         physical_desc: str = "",
+        age: str = "",
+        gender: str = "",
     ) -> dict:
+        # age and gender are NOT optional flavor: without them the model
+        # invented a late-twenties man for a 12-year-old boy, and his height
+        # and build flickered against the script in every shot
         user_content = (
             f"Character name: {character_name}\n"
             f"Role: {role}\n"
+            f"Age: {age or 'unknown'}\n"
+            f"Gender: {gender or 'unknown'}\n"
             f"Setting/period: {setting or 'modern'}\n"
             f"Personality: {personality}\n"
             f"MBTI: {mbti or 'unknown'}\n"

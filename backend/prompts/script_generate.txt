@@ -14,6 +14,8 @@ STORY BRIEF (developed from the premise in the writers' room — this is the dra
 
 Structure requirements:
 - Use standard screenplay format (INT./EXT. headings, character names in caps before dialogue)
+- NAMES ARE FIXED: every character the premise or story brief names keeps EXACTLY that name ("Theo" stays Theo, never renamed to John). The user cast these people; renaming them breaks the drama they asked for. Invent names only for characters the premise did not name.
+- A named animal the premise treats as a main character (a pet the story follows) is a real ON-SCREEN presence: write stage directions that SHOW it (in someone's arms, in its hutch, found under a bush), scene by scene — never reduce it to something only talked about.
 - Match the number of scenes to the target length: roughly one short scene per 15 seconds (so a 30-second episode has about 2 scenes, a 300-second episode about 20). Use at least 1 scene. Keep a short drama tight — do not pad.
 - DIALOGUE BUDGET — screen time is spoken time: one line of dialogue plays about 5 seconds on screen, and every silent action beat adds a few more. Each episode holds AT MOST {line_budget} lines of dialogue TOTAL across all of its scenes, each line under 15 words. When the story wants more, cut or merge lines instead of exceeding the budget — a short drama says less and shows more. An episode that overshoots its budget runs long and gets cut off.
 - Every character introduced must serve the plot

@@ -14,6 +14,20 @@ _ACCESSORY_RE = re.compile(
 _FACIAL_HAIR_RE = re.compile(
     r"clean-shaven|beard|moustache|mustache|stubble|goatee|facial hair", re.I)
 
+_ACTION_CAMERA_RE = re.compile(r"\b(?:the\s+)?camera\b", re.I)
+
+
+def decamera_action(action: str | None) -> str | None:
+    """Boards leak camera-referential staging into ACTION text ("she is now
+    closer to the camera") — rendered literally that pulls a straight
+    into-the-lens stare. Rewrite the camera as the viewer and pin the eyeline
+    off the lens; camera-free actions pass through untouched."""
+    if not action or not _ACTION_CAMERA_RE.search(action):
+        return action
+    out = _ACTION_CAMERA_RE.sub("the viewer", action).rstrip()
+    sep = "" if out.endswith((".", "!", "?", ";")) else ";"
+    return f"{out}{sep} eyes stay just off-camera, never into the lens"
+
 
 class ScenePromptCraft:
     SHOT_VOCABULARY = {
@@ -56,6 +70,12 @@ class ScenePromptCraft:
         environment: dict | None = None,
         to_wan: bool = False,
     ) -> dict:
+        # camera-referential staging in ACTION text renders as a lens stare —
+        # scrub it before ANY block (body, blocking, continuity) is assembled
+        shot = dict(shot)
+        shot["action"] = decamera_action(shot.get("action"))
+        prev_action = decamera_action(prev_action)
+        next_action = decamera_action(next_action)
         # A location named after a character ("Bear's apartment") must not smuggle
         # the character-noun into the background — strip names from the setting text
         # before it reaches the model, or it renders the animal, not the room.
@@ -124,7 +144,7 @@ class ScenePromptCraft:
                     f"screen-{s['screen_side']}" if s.get("screen_side") else None,
                     f"facing {s['facing']}" if s.get("facing") else None,
                     f"eyeline {s['eyeline']}" if s.get("eyeline") else None,
-                    s.get("action"),
+                    decamera_action(s.get("action")),
                 ]
                 rows.append(f"- {s.get('character')}: " + ", ".join(b for b in bits if b))
             nl = "\n"

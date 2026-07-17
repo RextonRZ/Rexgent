@@ -52,6 +52,10 @@ RULES:
   instant jump to tears.
 - CONVERSATION FLOW: while an exchange is live, hold the two-way coverage (OTS / reverse / reaction); an
   environment cutaway may land only at a natural pause — never between a question and its answer.
+- SHOW THE DISCOVERY: when a character finds, sees or points at something (an animal, an object, a person),
+  at least one shot must put THE DISCOVERED THING IN FRAME — an OTS past the discoverer onto it, a POV of
+  it, or a two-element frame holding both. A reaction close-up alone tells the audience nothing was there.
+  The found subject goes into that shot's action with its exact appearance so it renders.
 - Match the look you are given (lighting/colour/lens bias/pace).
 - Set special_effect ONLY on non-dialogue visual shots (an establishing, insert, transition or held beat — a
   tilt-shift establishing, a time-lapse); leave it null on any shot that carries a line.

@@ -387,3 +387,13 @@ def test_voice_design_prompt_says_the_species():
     p = voice_design_prompt(rabbit)
     assert "rabbit" in p.lower()
     assert "non-human" in p.lower() or "animal" in p.lower()
+
+
+def test_style_solo_negative_bans_a_second_person():
+    from app.services.casting_director import style_plate_negative
+    n = style_plate_negative(None)
+    assert "second person" in n and "two people" in n
+    # the user's own negatives survive in front
+    n2 = style_plate_negative("blurry, oversaturated")
+    assert n2.startswith("blurry, oversaturated")
+    assert "two people" in n2

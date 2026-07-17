@@ -832,3 +832,17 @@ async def test_emotional_beat_lands_as_visible_expression():
     p = result["prompt"]
     assert "Confusion and hurt" in p
     assert "facial expressions" in p
+
+
+def test_decamera_action_redirects_lens_stares():
+    # boards leak camera-referential staging into ACTION text; rendered
+    # literally it pulls a straight into the lens stare
+    from app.mcp_tools.scene_prompt_craft import decamera_action
+    out = decamera_action("She is now closer to the camera, still searching.")
+    assert "camera," not in out.split("off-camera")[0] or "viewer" in out
+    assert "the viewer" in out
+    assert "never into the lens" in out
+    # camera-free actions pass through untouched
+    plain = "She kneels by the hutch."
+    assert decamera_action(plain) == plain
+    assert decamera_action(None) is None
