@@ -13,6 +13,7 @@ class ProjectCreate(BaseModel):
     video_ratio: Optional[str] = None  # "9:16" (default) | "16:9"
     episode_count: Optional[int] = None
     target_length: Optional[int] = None  # seconds per episode
+    visual_style: Optional[str] = None  # style_catalog key; None = photoreal
 
 
 class BudgetEstimateRequest(BaseModel):
@@ -30,6 +31,7 @@ class ProjectUpdate(BaseModel):
     video_ratio: Optional[str] = None      # "9:16" | "16:9"
     episode_count: Optional[int] = None
     target_length: Optional[int] = None   # seconds per episode
+    visual_style: Optional[str] = None    # catalog key; "photoreal" clears it
 
 
 class PosterFromClipRequest(BaseModel):
@@ -53,6 +55,7 @@ class ProjectResponse(BaseModel):
     video_ratio: Optional[str] = None
     episode_count: Optional[int] = None
     target_length: Optional[int] = None
+    visual_style: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

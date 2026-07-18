@@ -23,6 +23,11 @@ class Project(Base):
     token_budget = Column(Integer, default=2_000_000)
     # delivery format chosen at creation: "9:16" (vertical, default) or "16:9"
     video_ratio = Column(String(8), default="9:16")
+    # visual look chosen at creation: a style_catalog key ("anime", "pixar",
+    # "claymation"...) or NULL for photoreal. The key itself is a stylized-mode
+    # trigger, so ArcFace skip stays deterministic even after the style LLM
+    # rewrites the StylePreset free_text into brand-free wording.
+    visual_style = Column(String(40), nullable=True)
     # scope chosen at creation; the Script page seeds Full Auto from these so
     # the drama that generates matches the one that was budgeted
     episode_count = Column(Integer, nullable=True)

@@ -147,7 +147,11 @@ async def extract_characters_op(db: Session, script_id: str, infer_mbti: bool = 
               "Reading the cast from the script")
     with track_project(script.project_id, db):
         with tool_run(script.project_id, "characters", "extract_cast", "Casting Director") as t:
-            data = await CharacterExtractor().extract(script.structured_json)
+            # the script's own prose decides the language — the run request's
+            # language never reached this op, so zh casts extracted half-blind
+            from app.services.language import detect_language
+            data = await CharacterExtractor().extract(
+                script.structured_json, language=detect_language(script.raw_text))
             t["artifact"] = f"{len(data)} characters"
     tool_event(script.project_id, "characters", "write_cast_db", "started",
                agent="Casting Director")
@@ -326,6 +330,14 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     if inserted > 0:
                         shots, enriched = with_atmo, True
                         atmo_budget -= inserted
+            # (3) Room lock: a scene that OPENS tight (the hook) gets a brief
+            # silent wide right after it, so later shots chain from real
+            # pixels of the established room instead of only the painted plate
+            if getattr(get_settings(), "reorient_wide", False):
+                from app.services.storyboard_generator import insert_reorient_wide
+                widened = insert_reorient_wide(shots, scene.location)
+                if len(widened) != len(shots):
+                    shots, enriched = widened, True
             if enriched:
                 for idx, sd in enumerate(shots, start=1):
                     sd["shot_number"] = idx
@@ -334,18 +346,29 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # a flagged reverse angle re-establishes the line of action.
             # Subjects are normalized FIRST — the model sometimes returns
             # bare name strings instead of the structured dicts.
-            from app.services.stage_map import enforce_scene_sides, normalize_subjects
+            from app.services.stage_map import (
+                enforce_proximity, enforce_scene_sides, normalize_subjects,
+                thread_held_objects)
             for sd in shots:
                 if isinstance(sd, dict):
                     sd["subjects"] = normalize_subjects(sd.get("subjects"))
-            _, _side_notes = enforce_scene_sides(
-                [{"subjects": sd.get("subjects"),
-                  "reverse_angle": bool(sd.get("reverse_angle"))}
-                 if sd.get("subjects") else None for sd in shots])
-            if _side_notes:
+            _blk = [{"subjects": sd.get("subjects"),
+                     "reverse_angle": bool(sd.get("reverse_angle"))}
+                    if sd.get("subjects") else None for sd in shots]
+            _, _side_notes = enforce_scene_sides(_blk)
+            # a carried prop (a birdcage, a phone) must stay in hand across the
+            # scene's shots — held state lived only in each shot's free text, so
+            # a shot that omitted it dropped the object; thread it forward.
+            _, _held_notes = thread_held_objects(_blk)
+            # you cannot walk toward someone you are already with: an approach
+            # aimed at an established scene partner is a teleport-reset the
+            # board wrote by accident — rewritten to stand with them.
+            _, _prox_notes = enforce_proximity(shots)
+            if _side_notes or _held_notes or _prox_notes:
                 import logging
                 logging.getLogger(__name__).info(
-                    "stage map corrections scene %s: %s", scene.number, _side_notes)
+                    "stage map corrections scene %s: %s", scene.number,
+                    _side_notes + _held_notes + _prox_notes)
             # set dressing: pins props + prop state per scene (enhancement only)
             try:
                 from app.services.set_dresser import SetDresser

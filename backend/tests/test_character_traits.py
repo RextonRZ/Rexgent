@@ -34,3 +34,11 @@ def test_is_stylized_style_flags_non_photoreal_looks():
     assert is_stylized_style("3D Pixar style cartoon") is True
     assert is_stylized_style("cinematic realistic drama") is False
     assert is_stylized_style("", None) is False
+
+
+def test_is_stylized_style_flags_3d_and_cgi_without_a_brand_name():
+    # style_plate.txt strips IP names (pixar, ghibli) into generic phrasing,
+    # so the generic 3D/CGI vocabulary must flip stylized mode on its own
+    assert is_stylized_style("3d animated feature, soft global illumination") is True
+    assert is_stylized_style("stylized CGI characters, rounded features") is True
+    assert is_stylized_style("realistic drama shot in 163 days") is False

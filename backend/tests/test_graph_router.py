@@ -74,3 +74,45 @@ def test_scene_cue_names_canonicalized_for_story_map():
     # unknown names pass through; duplicates collapse
     assert _canonical_names(CAST, ["REN", "Ren Ishida", "GHOST"]) == ["Ren Ishida", "GHOST"]
     assert _canonical_names(CAST, None) == []
+
+
+def test_relationship_build_crash_still_emits_terminal_event():
+    # the stuck-spinner bug: "Mapping character relationships" emitted started,
+    # but the DB region (delete/build/commit/sync) sat outside the try/except -
+    # a commit failure propagated with NO terminal stage event and the strip
+    # (which has no self-heal) spun forever. Any crash must emit failed.
+    import uuid as _uuid
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from app.database import get_db
+
+    pid = _uuid.UUID(ZERO)
+    script = SimpleNamespace(id=pid, project_id=pid,
+                             structured_json={"scenes": []})
+    char = SimpleNamespace(id=pid, project_id=pid, name="ANNA", role="LEAD")
+    db = MagicMock()
+    q = db.query.return_value
+    q.filter.return_value.first.return_value = script
+    q.filter.return_value.all.return_value = [char]
+    q.filter.return_value.delete.return_value = 0
+    db.commit.side_effect = RuntimeError("db exploded")
+    app.dependency_overrides[get_db] = lambda: db
+
+    events = []
+    try:
+        with patch("app.websocket.emitter.emit",
+                   side_effect=lambda name, payload, pid=None:
+                   events.append((name, payload))), \
+             patch("app.routers.graph.RelationshipBuilder") as rb:
+            rb.return_value.extract = AsyncMock(return_value=[])
+            local = TestClient(app, raise_server_exceptions=False)
+            r = local.post("/api/graph/relationship", json={"script_id": ZERO})
+            assert r.status_code == 500
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    stage = [p for (n, p) in events
+             if n == "stage:progress" and p.get("stage") == "relationships"]
+    assert stage and stage[0]["status"] == "started"
+    assert stage[-1]["status"] == "failed", (
+        "a crash after 'started' must still emit a terminal relationships event")

@@ -23,6 +23,28 @@ import type { CharacterRelationship } from "@/lib/types";
 
 // projects that already auto-built relationships this session
 const autoBuiltProjects = new Set<string>();
+// ...and across sessions: a build that SUCCEEDED with zero bonds is a valid
+// final state, but the GET payload can't distinguish "built, found none"
+// from "never built" — so without a persisted marker every hard refresh
+// re-ran the whole build and re-spent tokens. Persist success only:
+// a failed build may retry after refresh.
+const REL_BUILT_KEY = (id: string) => `rexgent:auto-relmap:${id}`;
+const wasAutoBuilt = (id: string) => {
+  if (autoBuiltProjects.has(id)) return true;
+  try {
+    return localStorage.getItem(REL_BUILT_KEY(id)) === "1";
+  } catch {
+    return false;
+  }
+};
+const markAutoBuilt = (id: string) => {
+  autoBuiltProjects.add(id);
+  try {
+    localStorage.setItem(REL_BUILT_KEY(id), "1");
+  } catch {
+    /* storage unavailable — in-session guard still holds */
+  }
+};
 
 export default function CharactersPage({
   params,
@@ -48,14 +70,16 @@ export default function CharactersPage({
     // ONE auto-build per project per SESSION — a useRef here resets on every
     // navigation, so a project whose extraction saved zero relationships
     // re-mapped (and re-spent tokens) on every visit to this page.
-    if (autoBuiltProjects.has(params.id) || buildGraph.isPending) return;
+    if (wasAutoBuilt(params.id) || buildGraph.isPending) return;
     if (
       characters.length >= 2 &&
       graph &&
       (graph.relationships?.length ?? 0) === 0
     ) {
       autoBuiltProjects.add(params.id);
-      buildGraph.mutate(params.id);
+      buildGraph.mutate(params.id, {
+        onSuccess: () => markAutoBuilt(params.id),
+      });
     }
   }, [characters.length, graph, buildGraph, params.id]);
 
@@ -65,7 +89,9 @@ export default function CharactersPage({
       {
         onSuccess: () => {
           autoBuiltProjects.add(params.id);
-          buildGraph.mutate(params.id);
+          buildGraph.mutate(params.id, {
+            onSuccess: () => markAutoBuilt(params.id),
+          });
         },
       }
     );

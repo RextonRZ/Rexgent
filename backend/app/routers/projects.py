@@ -57,6 +57,9 @@ async def create_project(
         project.episode_count = max(1, int(request.episode_count))
     if request.target_length is not None:
         project.target_length = max(10, int(request.target_length))
+    # only known catalog keys are stored; anything else stays photoreal (NULL)
+    from app.services.style_catalog import catalog_key
+    project.visual_style = catalog_key(request.visual_style)
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -360,6 +363,10 @@ async def update_project(
         changes["episode_count"] = max(1, int(changes["episode_count"]))
     if "target_length" in changes and changes["target_length"] is not None:
         changes["target_length"] = max(10, int(changes["target_length"]))
+    if "visual_style" in changes:
+        # canonical catalog key or NULL — "photoreal" (or junk) clears the look
+        from app.services.style_catalog import catalog_key
+        changes["visual_style"] = catalog_key(changes["visual_style"])
     for field, value in changes.items():
         setattr(project, field, value)
     db.commit()
@@ -400,6 +407,7 @@ async def duplicate_project(
         premise=source.premise,
         episode_count=source.episode_count,
         target_length=source.target_length,
+        visual_style=getattr(source, "visual_style", None),
     )
     db.add(copy)
     db.commit()

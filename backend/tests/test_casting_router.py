@@ -52,6 +52,33 @@ def test_run_casting_forwards_design_voice_untick():
         app.dependency_overrides.pop(get_db, None)
 
 
+def test_worker_crash_guard_keys_the_casting_stage():
+    # the stuck-spinner bug: the crash guard emitted stage "generate" (a
+    # copy-paste from generation_worker), the frontend clears spinners by
+    # exact raw stage key, so Casting spun forever while a Generate spinner
+    # that wasn't showing got cleared. The guard must key "casting".
+    from unittest.mock import AsyncMock, MagicMock, patch
+    import pytest
+    with patch("app.workers.casting_worker.CastingDirector") as cd, \
+         patch("app.workers.casting_worker.get_session_factory") as gsf, \
+         patch("app.services.api_keys.use_project_key"), \
+         patch("app.websocket.emitter.emit") as emit:
+        gsf.return_value = MagicMock()
+        cd.return_value.cast_bible = AsyncMock(side_effect=RuntimeError("boom"))
+        from app.workers.casting_worker import run_casting_job
+        with pytest.raises(RuntimeError):
+            run_casting_job.apply(
+                args=("00000000-0000-0000-0000-000000000000",),
+                throw=True).get()
+        stage_events = [c for c in emit.call_args_list
+                        if c.args and c.args[0] == "stage:progress"]
+        assert stage_events, "crash guard must emit a stage:progress"
+        payload = stage_events[-1].args[1]
+        assert payload["stage"] == "casting"     # NOT "generate"
+        assert payload["status"] == "failed"
+        assert "boom" in payload["label"]
+
+
 def test_worker_forwards_design_voice_to_cast_bible():
     from unittest.mock import AsyncMock, MagicMock, patch
     with patch("app.workers.casting_worker.CastingDirector") as cd, \

@@ -242,6 +242,49 @@ def test_duplicate_creates_shallow_copy():
     assert db.added[0].premise == "a premise"
 
 
+def test_create_project_stores_visual_style():
+    db = FakeDB([])
+    _override(db)
+    try:
+        r = client.post(
+            "/api/projects",
+            json={"title": "Toon Tale", "visual_style": "Pixar"},
+        )
+    finally:
+        _clear()
+    assert r.status_code == 200
+    assert db.added[0].visual_style == "pixar"   # stored as the canonical key
+    assert r.json()["visual_style"] == "pixar"
+
+
+def test_create_project_unknown_style_stays_photoreal():
+    db = FakeDB([])
+    _override(db)
+    try:
+        r = client.post(
+            "/api/projects",
+            json={"title": "Plain Drama", "visual_style": "vaporwave-dreams"},
+        )
+    finally:
+        _clear()
+    assert r.status_code == 200
+    assert db.added[0].visual_style is None
+    assert r.json()["visual_style"] is None
+
+
+def test_duplicate_copies_visual_style():
+    project = _project(USER_ID, title="INKED")
+    project.visual_style = "anime"
+    db = FakeDB([project])
+    _override(db)
+    try:
+        r = client.post(f"/api/projects/{project.id}/duplicate")
+    finally:
+        _clear()
+    assert r.status_code == 200
+    assert db.added[0].visual_style == "anime"
+
+
 def test_overview_empty_studio():
     db = FakeDB([])
     _override(db)
@@ -413,3 +456,31 @@ def test_overview_flags_generating_projects():
         _clear()
     assert r.status_code == 200
     assert r.json()["projects"][0]["is_generating"] is True
+
+
+def test_patch_updates_visual_style():
+    project = _project(USER_ID)
+    project.visual_style = None
+    db = FakeDB([project])
+    _override(db)
+    try:
+        r = client.patch(f"/api/projects/{project.id}",
+                         json={"visual_style": "Ghibli"})
+    finally:
+        _clear()
+    assert r.status_code == 200
+    assert project.visual_style == "ghibli"   # canonical key
+
+
+def test_patch_visual_style_photoreal_clears_it():
+    project = _project(USER_ID)
+    project.visual_style = "anime"
+    db = FakeDB([project])
+    _override(db)
+    try:
+        r = client.patch(f"/api/projects/{project.id}",
+                         json={"visual_style": "photoreal"})
+    finally:
+        _clear()
+    assert r.status_code == 200
+    assert project.visual_style is None

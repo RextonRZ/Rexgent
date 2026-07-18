@@ -296,3 +296,58 @@ def test_plate_prompt_strips_inherited_glasses():
     assert "Remove any eyeglasses" in p
     p2 = character_plate_prompt(True, "a 17-year-old boy", "denim jacket")
     assert "Remove any eyeglasses" not in p2
+
+
+def test_subject_descriptor_children_lead_as_kids_not_adults():
+    # the Angeline plate prompt opened "a woman around 8" — the gendered lead
+    # ignored age, gambling that the age number wins over "woman". A minor's
+    # lead must SAY child ("a girl / a boy"), or the plate can render an adult.
+    from app.services.plate_generator import subject_descriptor
+    assert subject_descriptor("female", "8", "freckles").startswith("a girl around 8")
+    assert subject_descriptor("male", "12", "wiry build").startswith("a boy around 12")
+    # adults keep the existing leads
+    assert subject_descriptor("female", "30s", "sharp suit").startswith("a woman around 30s")
+    assert subject_descriptor("male", "45", "grey beard").startswith("a man around 45")
+    # a written-out age counts too
+    assert subject_descriptor("female", "8-year-old", "x").startswith("a girl around 8")
+
+
+def test_character_plate_prompt_carries_the_visual_style():
+    # the style picker's look must reach the COSTUME plates: without a style
+    # clause the plates render photoreal and fight the style frame at video
+    # time (a pixar drama with photographic cast references)
+    from app.services.plate_generator import character_plate_prompt
+    seed = "pixar style 3d animated feature look, soft global illumination"
+    p = character_plate_prompt(False, "a girl around 8", "yellow raincoat",
+                               style=seed)
+    assert seed in p
+    assert "never photorealistic" in p
+
+
+def test_character_plate_prompt_styled_edit_keeps_the_likeness():
+    # uploaded-face path: the edit must RESTYLE the person, not replace them —
+    # the clause says translate the same recognizable face into the art style
+    from app.services.plate_generator import character_plate_prompt
+    seed = "watercolor painting style, soft bleeding washes"
+    p = character_plate_prompt(True, "a woman around 20s", "navy sweater",
+                               style=seed)
+    assert seed in p
+    assert "recognizable" in p
+
+
+def test_character_plate_prompt_without_style_is_unchanged():
+    # photoreal dramas keep today's exact prompt — no stray style clause
+    from app.services.plate_generator import character_plate_prompt
+    p_default = character_plate_prompt(True, "a woman around 20s", "navy sweater")
+    p_empty = character_plate_prompt(True, "a woman around 20s", "navy sweater",
+                                     style="")
+    assert p_default == p_empty
+    assert "art style" not in p_default
+
+
+def test_creature_plate_prompt_carries_the_visual_style_too():
+    from app.services.plate_generator import character_plate_prompt
+    seed = "claymation style, sculpted clay characters"
+    p = character_plate_prompt(False, "a small white rabbit", "",
+                               creature=True, style=seed)
+    assert seed in p

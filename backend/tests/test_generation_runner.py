@@ -1072,3 +1072,28 @@ async def test_no_phantom_legend_on_wan_visual_shot(monkeypatch):
     assert kwargs["image_legend"] == ""
     assert kwargs["to_wan"] is True
 
+
+
+def test_moderation_rejection_is_recognized():
+    # the green-net run: every shot retried an IDENTICAL input against a
+    # DETERMINISTIC moderation verdict — 16 wasted dispatches. The classifier
+    # names the signatures so the runner can fail fast instead.
+    from app.services.generation_runner import is_moderation_rejection
+    assert is_moderation_rejection(
+        "Video task 04c3691f FAILED: Green net check failed for image (input): "
+        "Input data may contain inappropriate content.") is True
+    assert is_moderation_rejection("DataInspectionFailed: input rejected") is True
+    assert is_moderation_rejection("Output data may contain inappropriate content") is True
+    # transient infra errors stay retryable
+    assert is_moderation_rejection("Connection reset by peer") is False
+    assert is_moderation_rejection("Video task abc TIMEOUT after 600s") is False
+    assert is_moderation_rejection("") is False
+
+
+def test_moderation_user_message_names_the_fix():
+    from app.services.generation_runner import moderation_user_message
+    msg = moderation_user_message(
+        "Green net check failed for image (input): Input data may contain "
+        "inappropriate content.")
+    assert "content moderation" in msg
+    assert "plate" in msg  # tells the user WHAT to regenerate, not just "failed"

@@ -59,7 +59,10 @@ async def extract_characters(request: dict, db: Session = Depends(get_db)):
     try:
         with track_project(script.project_id, db):
             with tool_run(pid, "characters", "extract_cast", "Casting Director") as tb:
-                characters_data = await extractor.extract(script.structured_json)
+                from app.services.language import detect_language
+                characters_data = await extractor.extract(
+                    script.structured_json,
+                    language=detect_language(script.raw_text))
                 tb["artifact"] = f"{len(characters_data)} characters"
     except Exception:
         emit("stage:progress", {"stage": "characters", "status": "failed",

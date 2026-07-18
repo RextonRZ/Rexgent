@@ -286,3 +286,57 @@ def test_action_named_cast_joins_the_frame():
     out2 = _ensure_action_cast_in_frame(["Angeline"], "She kneels alone.",
                                         ["Angeline", "Snowy"])
     assert out2 == ["Angeline"]
+
+
+# ── reorient wide: a tight hook opener gets a room-locking wide after it ────
+
+def _tight_opener_scene():
+    return [
+        {"shot_number": 1, "shot_type": "MCU", "characters_in_frame": ["ANGELINE"],
+         "dialogue": None, "action": "Angeline sobs under the bed, searching.",
+         "emotional_beat": "Desperation", "lighting": "NATURAL", "colour_mood": "WARM",
+         "subjects": [{"character": "ANGELINE", "posture": "kneeling",
+                       "screen_side": "center"}]},
+        {"shot_number": 2, "shot_type": "MS", "characters_in_frame": ["CLAIRE", "ANGELINE"],
+         "dialogue": "Sweetheart, what's wrong?", "action": "Claire enters, concerned.",
+         "subjects": [{"character": "CLAIRE"}, {"character": "ANGELINE"}]},
+    ]
+
+
+def test_tight_opener_gets_reorient_wide():
+    # s1: the hook opens under the bed (MCU) and the next MS invented its own
+    # room — with no wide established, fresh r2v shots drift the set. A brief
+    # silent wide after the opener locks the room; later shots chain from it.
+    from app.services.storyboard_generator import insert_reorient_wide
+    shots = _tight_opener_scene()
+    out = insert_reorient_wide(shots, "Angeline's room")
+    assert len(out) == 3
+    wide = out[1]
+    assert wide["shot_type"] == "LS"
+    assert not (wide.get("dialogue") or "")
+    assert wide["characters_in_frame"] == ["ANGELINE"]   # the opener's cast
+    assert "Angeline's room" in wide["action"]
+    # blocking carried over so postures persist, but COPIED, never shared
+    assert wide["subjects"][0]["posture"] == "kneeling"
+    wide["subjects"][0]["posture"] = "standing"
+    assert shots[0]["subjects"][0]["posture"] == "kneeling"
+
+
+def test_wide_opener_is_left_alone():
+    from app.services.storyboard_generator import insert_reorient_wide
+    shots = _tight_opener_scene()
+    shots[0]["shot_type"] = "LS"
+    assert len(insert_reorient_wide(shots, "the room")) == 2
+
+
+def test_no_reorient_when_second_shot_is_already_wide():
+    from app.services.storyboard_generator import insert_reorient_wide
+    shots = _tight_opener_scene()
+    shots[1]["shot_type"] = "FS"
+    assert len(insert_reorient_wide(shots, "the room")) == 2
+
+
+def test_no_reorient_for_single_shot_scene():
+    from app.services.storyboard_generator import insert_reorient_wide
+    shots = [_tight_opener_scene()[0]]
+    assert len(insert_reorient_wide(shots, "the room")) == 1

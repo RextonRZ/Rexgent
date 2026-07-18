@@ -12,6 +12,7 @@ export interface Project {
   video_ratio?: VideoRatio | null;
   episode_count?: number | null;
   target_length?: number | null;
+  visual_style?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -25,6 +26,7 @@ export interface ProjectCreate {
   video_ratio?: VideoRatio;
   episode_count?: number;
   target_length?: number;
+  visual_style?: string;
 }
 
 export interface BudgetEstimate {

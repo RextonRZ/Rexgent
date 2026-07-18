@@ -25,12 +25,14 @@ def run_casting_job(self, project_id: str, design_voice: bool = True,
                                                    redesign_voice=redesign_voice,
                                                    regen_plates=regen_plates))
     except Exception as e:  # noqa: BLE001
-        # surface the crash — otherwise the casting spinner sticks forever
-        # (mirrors generation_worker's guard)
+        # surface the crash — otherwise the casting spinner sticks forever.
+        # The stage key MUST be "casting": the frontend clears spinners by
+        # exact raw stage key, so a "generate"-keyed failure cleared a spinner
+        # that wasn't showing and left Casting spinning forever.
         logger.error(f"Casting job for {project_id} crashed: {e}")
         try:
             from app.websocket.emitter import emit
-            emit("stage:progress", {"stage": "generate", "status": "failed",
+            emit("stage:progress", {"stage": "casting", "status": "failed",
                  "agent": "Casting",
                  "label": f"Casting crashed: {str(e)[:120]}"}, str(project_id))
         except Exception:  # noqa: BLE001

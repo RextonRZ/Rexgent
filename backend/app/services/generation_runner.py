@@ -1,4 +1,5 @@
 import asyncio
+import re
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -54,6 +55,31 @@ def _is_catastrophic(guard: dict, in_frame: list) -> bool:
     if in_frame and guard.get("face_score") is None:         # a face was expected, none found
         return True
     return False
+
+
+# DashScope's content-moderation rejections ("green net" / DataInspection) are
+# DETERMINISTIC: the same input images get the same verdict every time, so a
+# retry with identical references is a guaranteed second failure — the run
+# that surfaced this burned 2x dispatches and 16 prompt-craft calls on shots
+# that could never pass. Recognize the signatures and fail fast instead.
+_MODERATION_RE = re.compile(
+    r"green\s*net|datainspection|inappropriate content", re.IGNORECASE)
+
+
+def is_moderation_rejection(err_text: str) -> bool:
+    """True when the error is a content-moderation verdict (not retryable),
+    as opposed to a transient infra failure (timeout, reset — retryable)."""
+    return bool(_MODERATION_RE.search(str(err_text or "")))
+
+
+def moderation_user_message(err_text: str) -> str:
+    """The actionable version of a moderation rejection: name the fix, not
+    just the failure. An input-image verdict means a reference plate tripped
+    the gate — the unblock is regenerating the flagged character's plates."""
+    detail = str(err_text or "").strip()
+    return ("A reference image was rejected by content moderation - "
+            "regenerate the flagged character's plates (Casting page), then "
+            f"re-run generation. ({detail[:160]})")
 
 
 class GenerationRunner:
@@ -1216,13 +1242,20 @@ class GenerationRunner:
                 return (frame_url, clip_url, spent_usd)
             except Exception as e:  # HARD failure only -> at most one retry
                 logger.error(f"Shot {shot.id} attempt {attempt} hard-failed: {e}")
+                # moderation verdicts on BORDERLINE reference images are
+                # dispatch-flaky (the same refs passed 9 sibling shots and one
+                # got rejected), so the retry is worth its cost — but when BOTH
+                # attempts get moderation-rejected, surface the actionable
+                # message naming the fix instead of a bare failure
+                moderated = is_moderation_rejection(str(e))
                 if attempt < MAX_RETRIES:
                     # the self-correct pass: same shot, fresh attempt
                     tool_event(pid, "generate", "self_correct", "started", agent="Renderer",
                                index=attempt + 1, total=MAX_RETRIES, error=str(e))
                 else:
                     tool_event(pid, "generate", "self_correct", "failed", agent="Renderer",
-                               error=str(e))
+                               error=(moderation_user_message(str(e)) if moderated
+                                      else str(e)))
                 if attempt >= MAX_RETRIES:
                     self.db.add(GeneratedClip(
                         job_id=job.id, shot_id=shot.id,

@@ -136,7 +136,8 @@ async def regenerate_variant(variant_id: str, db: Session = Depends(get_db)):
     if not v:
         raise HTTPException(status_code=404, detail="Variant not found")
     char = db.query(Character).filter(Character.id == v.character_id).first()
-    prompt = _char_plate_prompt(char, v.outfit_description or "")
+    prompt = _char_plate_prompt(char, v.outfit_description or "",
+                                style=_visual_style_seed(db, char.project_id))
     # narrate over the stage channel too — the chat bubble and dock listen to
     # stage:progress, tool events alone light only the crew graph
     from app.websocket.emitter import emit
@@ -184,7 +185,15 @@ async def override_variant(variant_id: str, file: UploadFile = File(...), db: Se
     return {"plate_image_url": url}
 
 
-def _char_plate_prompt(char, outfit: str, creature: bool = False) -> str:
+def _visual_style_seed(db, project_id) -> str:
+    """The style picker's plate clause for this project ("" = photoreal)."""
+    from app.services.style_catalog import seed_for
+    proj = db.query(Project).filter(Project.id == project_id).first()
+    return seed_for(getattr(proj, "visual_style", None)) or ""
+
+
+def _char_plate_prompt(char, outfit: str, creature: bool = False,
+                       style: str = "") -> str:
     from app.services.plate_generator import wears_eyewear
     subject = subject_descriptor(char.gender, char.estimated_age,
                                  char.physical_description or char.visual_description)
@@ -193,7 +202,8 @@ def _char_plate_prompt(char, outfit: str, creature: bool = False) -> str:
     strip = not wears_eyewear(char.visual_description, char.physical_description,
                               char.video_prompt_fragment, outfit)
     return character_plate_prompt(bool(char.reference_image_url), subject, outfit,
-                                  creature=creature, strip_eyewear=strip)
+                                  creature=creature, strip_eyewear=strip,
+                                  style=style)
 
 
 _OUTFIT_READ_PROMPT = (
@@ -266,7 +276,8 @@ async def swap_variant_outfit(variant_id: str, file: UploadFile = File(...),
                 emit("stage:progress", {"stage": "casting", "status": "update",
                      "agent": "Casting Director",
                      "label": f"Re-dressing {char.name} ({v.label}) in the new outfit"}, pid)
-                prompt = _char_plate_prompt(char, outfit)
+                prompt = _char_plate_prompt(char, outfit,
+                                            style=_visual_style_seed(db, char.project_id))
                 url, vector = await PlateGenerator(db).generate_and_store_plate(
                     str(char.project_id), "character", f"{char.name}_{v.label}", prompt,
                     negative_prompt=char_plate_negative(
@@ -364,11 +375,16 @@ async def generate_character_plates(character_id: str, design_voice: bool = True
         from app.models.style_preset import StylePreset
         style_row = db.query(StylePreset).filter(
             StylePreset.project_id == c.project_id).first()
+        proj_row = db.query(Project).filter(Project.id == c.project_id).first()
         stylized = is_stylized_style(
+            getattr(proj_row, "visual_style", None),
             getattr(style_row, "free_text", None),
             " ".join(getattr(style_row, "style_tags", None) or []))
+        from app.services.style_catalog import seed_for
+        style_seed = seed_for(getattr(proj_row, "visual_style", None)) or ""
         for v in variants:
-            prompt = _char_plate_prompt(c, v.outfit_description or "", creature=creature)
+            prompt = _char_plate_prompt(c, v.outfit_description or "",
+                                        creature=creature, style=style_seed)
             url, vector = await pg.generate_and_store_plate(
                 project_id, "character", f"{c.name}_{v.label}", prompt,
                 negative_prompt=char_plate_negative(

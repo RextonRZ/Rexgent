@@ -76,3 +76,22 @@ class TestDropPlaceholderCharacters:
     def test_empty_and_none_input(self):
         assert drop_placeholder_characters([]) == ([], [])
         assert drop_placeholder_characters(None) == ([], [])
+
+
+def test_chinese_proper_names_are_never_placeholders():
+    # the no-letters check read "[a-z]" — a Chinese name has no Latin letters,
+    # so EVERY Chinese cast member was dropped and zh dramas cast nobody
+    for name in ("小雨", "大明", "辛云歌", "秦唳行", "李伟", "小白"):
+        assert ph(name) is False, name
+
+
+def test_chinese_generic_roles_are_placeholders():
+    # the same generic-role rule as English, in the script's own language
+    for name in ("商人", "男人", "女人", "神秘人", "警卫", "路人", "陌生人",
+                 "老人", "服务员", "士兵", "母亲", "爸爸"):
+        assert ph(name) is True, name
+
+
+def test_symbol_only_names_still_dropped():
+    for name in ("???", "——", "123"):
+        assert ph(name) is True, name

@@ -193,3 +193,129 @@ def test_storyboard_giving_both_the_same_side_still_splits():
     fixed, _ = enforce_scene_sides(shots)
     sides = sorted(s["screen_side"] for s in fixed[0]["subjects"])
     assert sides == ["left", "right"]
+
+
+# ── held-object continuity: a carried prop threads across the scene's shots ──
+
+def test_held_object_carries_forward_when_a_shot_omits_it():
+    # the birdcage bug: Angeline holds a cage in shot 1, the board omits it in
+    # shot 2, and the render dropped it. Held objects thread forward like sides.
+    from app.services.stage_map import thread_held_objects
+    shots = [
+        {"subjects": [{"character": "ANGELINE", "holding": "a birdcage"}],
+         "reverse_angle": False},
+        {"subjects": [{"character": "ANGELINE"}], "reverse_angle": False},
+    ]
+    fixed, notes = thread_held_objects(shots)
+    assert fixed[1]["subjects"][0]["holding"] == "a birdcage"
+    assert len(notes) == 1
+
+
+def test_new_held_object_overrides_the_carried_one():
+    # picking up something new replaces what was carried, and that carries on
+    from app.services.stage_map import thread_held_objects
+    shots = [
+        {"subjects": [{"character": "LUCAS", "holding": "a soccer ball"}]},
+        {"subjects": [{"character": "LUCAS", "holding": "a letter"}]},
+        {"subjects": [{"character": "LUCAS"}]},
+    ]
+    fixed, _ = thread_held_objects(shots)
+    assert fixed[2]["subjects"][0]["holding"] == "a letter"
+
+
+def test_held_object_stops_when_set_down():
+    # a visible release (sets it down / hands it off) stops the thread
+    from app.services.stage_map import thread_held_objects
+    shots = [
+        {"subjects": [{"character": "ANGELINE", "holding": "a birdcage"}]},
+        {"subjects": [{"character": "ANGELINE",
+                       "action": "sets the cage down on the table"}]},
+        {"subjects": [{"character": "ANGELINE"}]},
+    ]
+    fixed, _ = thread_held_objects(shots)
+    assert "holding" not in fixed[1]["subjects"][0]        # released this shot
+    assert fixed[2]["subjects"][0].get("holding") is None  # stays released
+
+
+def test_empty_hands_are_never_threaded():
+    from app.services.stage_map import thread_held_objects
+    shots = [
+        {"subjects": [{"character": "MIA"}]},
+        {"subjects": [{"character": "MIA"}]},
+    ]
+    fixed, notes = thread_held_objects(shots)
+    assert "holding" not in fixed[1]["subjects"][0]
+    assert notes == []
+
+
+def test_thread_held_objects_skips_blockless_shots():
+    from app.services.stage_map import thread_held_objects
+    shots = [None,
+             {"subjects": [{"character": "A", "holding": "a lantern"}]},
+             None,
+             {"subjects": [{"character": "A"}]}]
+    fixed, _ = thread_held_objects(shots)
+    assert fixed[3]["subjects"][0]["holding"] == "a lantern"
+
+
+# ── proximity: you cannot walk toward someone you are already with ──────────
+
+def test_approach_to_established_partner_is_rewritten():
+    # the scene-2 bug: shot 2 has them standing together talking, shot 3's
+    # board wrote "Angeline walks to Leo" — a teleport-reset the depth
+    # enforcer allowed because the action claimed movement
+    from app.services.stage_map import enforce_proximity
+    shots = [
+        {"subjects": [{"character": "ANGELINE"}, {"character": "LEO"}],
+         "action": "They stand facing each other, talking."},
+        {"subjects": [{"character": "ANGELINE", "action": "walks over to Leo, reaching out"},
+                      {"character": "LEO"}],
+         "action": "Angeline walks over to Leo, reaching out."},
+    ]
+    fixed, notes = enforce_proximity(shots)
+    assert fixed[1]["subjects"][0]["action"] == "stands with Leo, reaching out"
+    assert fixed[1]["action"] == "Angeline stands with Leo, reaching out."
+    assert len(notes) >= 1
+
+
+def test_first_approach_is_left_alone():
+    # not yet together: the approach is real staging and survives
+    from app.services.stage_map import enforce_proximity
+    shots = [
+        {"subjects": [{"character": "ANGELINE"}],
+         "action": "Angeline stands alone by the fence."},
+        {"subjects": [{"character": "ANGELINE", "action": "walks toward Leo"},
+                      {"character": "LEO"}],
+         "action": "Angeline walks toward Leo."},
+    ]
+    fixed, notes = enforce_proximity(shots)
+    assert fixed[1]["action"] == "Angeline walks toward Leo."
+    assert notes == []
+
+
+def test_separation_resets_proximity():
+    # stepping away breaks the pair: a later approach is legitimate again
+    from app.services.stage_map import enforce_proximity
+    shots = [
+        {"subjects": [{"character": "A"}, {"character": "B"}], "action": "They talk."},
+        {"subjects": [{"character": "A", "action": "turns and walks away from B"}],
+         "action": "A turns and walks away from B."},
+        {"subjects": [{"character": "A", "action": "walks back to B"},
+                      {"character": "B"}],
+         "action": "A walks back to B."},
+    ]
+    fixed, notes = enforce_proximity(shots)
+    assert fixed[2]["action"] == "A walks back to B."
+    assert notes == []
+
+
+def test_proximity_skips_blockless_shots():
+    from app.services.stage_map import enforce_proximity
+    shots = [None,
+             {"subjects": [{"character": "A"}, {"character": "B"}], "action": "They talk."},
+             None,
+             {"subjects": [{"character": "A", "action": "runs to B"}, {"character": "B"}],
+              "action": "A runs to B."}]
+    fixed, notes = enforce_proximity(shots)
+    assert "stands with B" in fixed[3]["action"]
+    assert len(notes) >= 1

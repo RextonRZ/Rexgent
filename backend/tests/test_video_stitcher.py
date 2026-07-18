@@ -193,3 +193,27 @@ def test_mix_tracks_gates_native_speech_windows():
     assert "between(t,0.850,4.150)" in joined
     assert "between(t,10.350,12.650)" in joined
     assert "volume=0.06" in joined
+
+
+def test_tail_hold_clones_last_frame_and_pads_silence():
+    # scene breathing: a boundary chunk holds its final frame for `tail_hold`
+    # seconds with padded silence. The trim must move to the INPUT side —
+    # an output -t would chop the freeze right back off.
+    st = VideoStitcher()
+    with patch("subprocess.run") as run, \
+         patch.object(VideoStitcher, "_duration", return_value=6.0), \
+         patch.object(VideoStitcher, "_has_audio", return_value=True):
+        run.return_value.returncode = 0
+        st.stitch([{"path": "a.mp4", "in": 0.5, "out": 4.5, "mute": False,
+                    "tail_hold": 0.5},
+                   {"path": "b.mp4", "in": None, "out": 4.0, "mute": False}],
+                  "out.mp4", "9:16")
+        cmd_a = " ".join(run.call_args_list[0][0][0])
+        cmd_b = " ".join(run.call_args_list[1][0][0])
+    assert "tpad=stop_mode=clone:stop_duration=0.500" in cmd_a
+    assert "apad=pad_dur=0.500" in cmd_a
+    # trim on the INPUT side: -t precedes -i for the held chunk
+    assert cmd_a.index(" -t 4.000") < cmd_a.index(" -i a.mp4")
+    # a chunk without a hold keeps the original output-side construction
+    assert "tpad" not in cmd_b and "apad" not in cmd_b
+    assert cmd_b.index(" -i b.mp4") < cmd_b.index(" -t 4.000")

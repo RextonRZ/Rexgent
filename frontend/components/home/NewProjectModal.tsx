@@ -13,15 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { GENRES } from "@/lib/genres";
+import { PHOTOREAL, VISUAL_STYLES } from "@/lib/styles";
+import { SampleCard } from "@/components/shared/SampleCard";
 import { errText } from "@/lib/errText";
 import { useBudgetEstimate, useCreateProject } from "@/hooks/useProjects";
 
@@ -42,6 +37,7 @@ export function NewProjectModal({
   const createProject = useCreateProject();
   const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("sci-fi");
+  const [visualStyle, setVisualStyle] = useState(PHOTOREAL);
   const [ratio, setRatio] = useState<"9:16" | "16:9">("9:16");
   const [episodes, setEpisodes] = useState(1);
   const [length, setLength] = useState(30);
@@ -72,6 +68,7 @@ export function NewProjectModal({
       const project = await createProject.mutateAsync({
         title: title.trim() || "Untitled Drama",
         genre,
+        visual_style: visualStyle === PHOTOREAL ? undefined : visualStyle,
         credit_budget: budget,
         token_budget: estimate?.llm_tokens,
         video_ratio: ratio,
@@ -103,26 +100,57 @@ export function NewProjectModal({
               autoFocus
             />
             <p className="text-[11px] text-muted-foreground mt-1">
-              Optional. You will write the premise next, on the Script page. Left
-              blank, the studio names it from your premise.
+              Optional. Left blank, the studio names it from your premise.
             </p>
           </div>
 
           <div>
-            <Label className="text-xs text-muted-foreground">Genre</Label>
-            <Select value={genre} onValueChange={(v) => v && setGenre(v)}>
-              <SelectTrigger className="mt-1 bg-background/50">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {GENRES.map((g) => (
-                  <SelectItem key={g.value} value={g.value}>
-                    <g.icon className="size-3.5 text-muted-foreground" />
-                    {g.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-baseline justify-between">
+              <Label className="text-xs text-muted-foreground">Genre</Label>
+              <span className="text-[11px] font-medium text-primary">
+                {GENRES.find((g) => g.value === genre)?.label}
+              </span>
+            </div>
+            <div className="scroll-clean mt-1.5 flex snap-x gap-2 overflow-x-auto pb-1.5">
+              {GENRES.map((g) => (
+                <SampleCard
+                  key={g.value}
+                  active={genre === g.value}
+                  onClick={() => setGenre(g.value)}
+                  img={`/genres/${g.value.replace(/ /g, "-")}.jpg`}
+                  label={g.label}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* visual style: seeds the style plate and every costume plate, so
+              the whole drama renders in the chosen look. Every sample shows
+              the SAME scene so the cards read as a pure style comparison. */}
+          <div>
+            <div className="flex items-baseline justify-between">
+              <Label className="text-xs text-muted-foreground">
+                Visual style
+              </Label>
+              <span className="text-[11px] font-medium text-primary">
+                {VISUAL_STYLES.find((s) => s.value === visualStyle)?.label}
+              </span>
+            </div>
+            <div className="scroll-clean mt-1.5 flex snap-x gap-2 overflow-x-auto pb-1.5">
+              {VISUAL_STYLES.map((s) => (
+                <SampleCard
+                  key={s.value}
+                  active={visualStyle === s.value}
+                  onClick={() => setVisualStyle(s.value)}
+                  img={`/styles/${s.value}.jpg`}
+                  label={s.label}
+                />
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Every card is the same scene in that style. Your whole drama
+              renders in the look you pick.
+            </p>
           </div>
 
           {/* delivery format: drives generation ratio, export canvas, player */}
@@ -179,9 +207,8 @@ export function NewProjectModal({
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Episodes shape the writing, not the delivery: the script is split
-            into that many arcs and every episode except the last ends on a
-            cliffhanger, then everything renders and exports as one video.
+            Episodes shape the writing: each one ends on a cliffhanger, and
+            everything exports as one video.
           </p>
 
           {/* budget projection for this drama */}

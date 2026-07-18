@@ -287,6 +287,52 @@ def _held_beat(prev: dict, variant: int = 0) -> dict:
     }
 
 
+_TIGHT_OPENERS = {"CU", "ECU", "MCU", "OTS", "POV", "INSERT"}
+_WIDE_TYPES = {"LS", "FS", "EWS", "WS"}
+
+
+def insert_reorient_wide(shots: list[dict], location) -> list[dict]:
+    """A scene that OPENS tight (the 3-second hook) has no established room:
+    every fresh reference-to-video shot invents its own version of the set,
+    so shot 1 and shot 2 render two different rooms around the same people.
+    After the tight opener, a brief silent WIDE re-orients: it renders with
+    the location plate on a room framing, and every later shot chains from
+    its actual pixels via the previous-frame reference instead of only the
+    painted plate. The cold-open-then-establish cut is also how real
+    editors handle a tight hook. Returns a new list; NOT renumbered."""
+    if len(shots) < 2:
+        return list(shots)
+    opener = shots[0]
+    if str(opener.get("shot_type") or "").upper() not in _TIGHT_OPENERS:
+        return list(shots)
+    if str(shots[1].get("shot_type") or "").upper() in _WIDE_TYPES:
+        return list(shots)   # the board already establishes right after
+    import copy
+    where = str(location or "the location").strip()
+    wide = {
+        "shot_number": 0,
+        "shot_type": "LS",
+        "camera_movement": "STATIC",
+        "characters_in_frame": list(opener.get("characters_in_frame") or []),
+        "subject": opener.get("subject"),
+        "foreground_characters": [],
+        # the opener's blocking carries over (postures persist into the wide)
+        # but COPIED - the stage passes mutate subjects in place
+        "subjects": copy.deepcopy(opener.get("subjects") or []),
+        "reverse_angle": False,
+        "action": (f"A wide re-orienting view of {where}: the full space "
+                   f"visible at once, everyone exactly where they were, "
+                   f"holding the moment in silence."),
+        "dialogue": None,
+        "lighting": opener.get("lighting"),
+        "colour_mood": opener.get("colour_mood"),
+        "emotional_beat": opener.get("emotional_beat"),
+        "estimated_duration_seconds": 2,
+        "notes": "re-orient wide (room lock after the tight hook)",
+    }
+    return [shots[0], wide] + list(shots[1:])
+
+
 def insert_silent_holds(shots: list[dict], max_holds: int = 2,
                         last_variant: int = -1) -> tuple[list[dict], int]:
     """Weave silent held beats between consecutive DIALOGUE shots that share a

@@ -63,3 +63,24 @@ async def test_missing_gender_falls_back_to_honorifics():
     assert by["LADY WHISTLE"] == "female"
     assert by["KAITO"] is None
     assert by["GWEN"] == "female"
+
+
+def test_normalize_extracted_maps_chinese_enum_values():
+    # a zh run answers the schema in Chinese; downstream checks compare
+    # against the English enums (voice pick by gender, role ordering)
+    from app.services.character_extractor import normalize_extracted
+    data = [{"name": "小雨", "gender": "女", "role": "主角"},
+            {"name": "大明", "gender": "男性", "role": "配角"},
+            {"name": "Anna", "gender": "female", "role": "protagonist"}]
+    out = normalize_extracted(data)
+    assert out[0]["gender"] == "female" and out[0]["role"] == "PROTAGONIST"
+    assert out[1]["gender"] == "male" and out[1]["role"] == "SUPPORTING"
+    assert out[2]["gender"] == "female" and out[2]["role"] == "PROTAGONIST"
+
+
+def test_normalize_extracted_leaves_unknown_values_alone():
+    from app.services.character_extractor import normalize_extracted
+    data = [{"name": "X", "gender": None, "role": "ANTAGONIST"}]
+    out = normalize_extracted(data)
+    assert out[0]["gender"] is None
+    assert out[0]["role"] == "ANTAGONIST"

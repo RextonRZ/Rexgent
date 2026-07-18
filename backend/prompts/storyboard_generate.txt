@@ -55,7 +55,7 @@ For each shot, return an object in this exact schema:
   "characters_in_frame": ["character_name"],
   "subject": "character_name — the one the shot is primarily about",
   "foreground_characters": ["character_name — in frame only as a back/shoulder, face unseen; usually empty"],
-  "subjects": [{"character": "character_name", "frame_position": "FG|MG|BG", "screen_side": "left|center|right", "facing": "screen-left|screen-right|toward-camera|away-from-camera", "posture": "standing|sitting|lying|collapsed|kneeling", "eyeline": "string — where they look (at the other character, off-camera right, down at the letter)", "action": "string — THIS subject's own motion in absolute terms (stepping backward toward camera), never relational"}],
+  "subjects": [{"character": "character_name", "frame_position": "FG|MG|BG", "screen_side": "left|center|right", "facing": "screen-left|screen-right|toward-camera|away-from-camera", "posture": "standing|sitting|lying|collapsed|kneeling", "eyeline": "string — where they look (at the other character, off-camera right, down at the letter)", "holding": "object in this character's hands this shot (a birdcage, a phone, a letter), or null; once picked up it stays in hand until the text sets it down", "action": "string — THIS subject's own motion in absolute terms (stepping backward toward camera), never relational"}],
   Each subject MUST be a JSON object with those separate keys. Never flatten a subject into one string like "character_name: X, frame_position: FG, ..." — that discards the geometry.
   "reverse_angle": false,
   "action": "string — what happens in this shot, from the scene's stage directions, 1-2 sentences",

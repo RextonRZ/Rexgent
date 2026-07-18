@@ -13,8 +13,42 @@ _ACCESSORY_RE = re.compile(
     r"hair accessor", re.I)
 _FACIAL_HAIR_RE = re.compile(
     r"clean-shaven|beard|moustache|mustache|stubble|goatee|facial hair", re.I)
+# Headwear (rule 22): a cap/beanie/hat is kept OUT of the identity fragment by
+# design (it occludes the face plate) and is unknown to _pin_segments, so it
+# rode on the crafter LLM's whim and flickered shot to shot (the Lucas cap bug).
+_HEADWEAR_RE = re.compile(
+    r"beanie|knit\s*cap|\bcap\b|\bhat\b|\bhood\b|toque|headwear|headscarf|turban",
+    re.I)
 
 _ACTION_CAMERA_RE = re.compile(r"\b(?:the\s+)?camera\b", re.I)
+# An EXIT action ("runs away", "runs out of the frame", "disappearing into
+# the distance") means the character recedes from camera to the last frame.
+# Continuation models love turning the runner to the lens at the clip tail -
+# and the stager's `facing` is too drifty (a literal 'right') to rely on.
+_EXIT_RE = re.compile(
+    r"\b(?:runs?|running|walks?|walking|dash(?:es)?|dashing|storms?|storming|"
+    r"hurries|hurrying|rush(?:es)?|rushing|flees?|fleeing|sprints?|sprinting)\s+"
+    r"(?:away|off|out)\b"
+    r"|\bdisappear(?:s|ing)?\s+into\b", re.I)
+
+
+def exiting_characters(action: str | None, names: list) -> list[str]:
+    """Which in-frame characters EXIT during this shot. A character exits when
+    their name precedes an exit phrase with no OTHER cast name between them
+    ('Claire stands as Angeline runs out' exits Angeline, not Claire)."""
+    text = str(action or "")
+    if not text or not names:
+        return []
+    out = []
+    for name in names:
+        others = [re.escape(str(n)) for n in names if n != name]
+        blocker = rf"(?!\b(?:{'|'.join(others)})\b)" if others else ""
+        pat = re.compile(
+            rf"\b{re.escape(str(name))}\b(?:{blocker}[^.!?])*?(?:{_EXIT_RE.pattern})",
+            re.I)
+        if pat.search(text):
+            out.append(str(name))
+    return out
 _AGE_RE = re.compile(r"\b(\d{1,2})\s*[- ]\s*year[- ]old\b", re.I)
 
 
@@ -36,6 +70,21 @@ def child_scale_clause(character_visuals: dict) -> str:
                 f"child's height and body proportions - clearly much shorter "
                 f"than the older characters, the same size relation in every "
                 f"frame.")
+    return ""
+
+
+def headwear_pin(fragment: str | None, outfit: str | None) -> str:
+    """Headwear (a cap, beanie or hat) is kept OUT of the identity fragment by
+    design and is unknown to _pin_segments, so it rode on the crafter LLM's
+    whim and flickered shot to shot (the Lucas cap bug). Return the wardrobe
+    segment that names the headwear - from the outfit, where it actually
+    lives, or the fragment as a fallback - so the identity lock can re-state
+    it in every shot. Empty when the character wears none."""
+    for source in (outfit, fragment):
+        for seg in re.split(r"[,;.]", str(source or "")):
+            seg = seg.strip()
+            if seg and _HEADWEAR_RE.search(seg):
+                return seg
     return ""
 
 
@@ -216,6 +265,9 @@ class ScenePromptCraft:
                     f"screen-{s['screen_side']}" if s.get("screen_side") else None,
                     f"facing {s['facing']}" if s.get("facing") else None,
                     f"eyeline {s['eyeline']}" if s.get("eyeline") else None,
+                    # a carried prop threaded across the scene by the stage map:
+                    # stated per shot so it never vanishes between cuts
+                    f"holding {s['holding']}" if s.get("holding") else None,
                     decamera_action(s.get("action")),
                 ]
                 rows.append(f"- {s.get('character')}: " + ", ".join(b for b in bits if b))
@@ -461,12 +513,35 @@ class ScenePromptCraft:
         for fgc in (foreground_characters or []):
             if str(fgc).strip().upper() in in_frame_upper and str(fgc) not in backs:
                 backs.append(str(fgc))
+        # an exiting character recedes to the last frame - back to camera,
+        # never turning around (the clip-tail lens turn on "runs away")
+        exit_sources = " ".join(
+            [str(shot.get("action") or "")]
+            + [str(s.get("action") or "") for s in (subs or []) if isinstance(s, dict)])
+        for ex in exiting_characters(exit_sources, frame_names):
+            if ex not in backs:
+                backs.append(ex)
         back_clause = ""
         if backs:
             who = ", ".join(backs)
             keeps = "keep" if len(backs) > 1 else "keeps"
             back_clause = (f" {who} {keeps} their back to the camera for the "
                            "entire shot, never turning around, face never shown.")
+
+        # (2c) REACTION FACE: a silent emotional close-up whose whole point is
+        # the expression must SAY the face is visible — the frame-handoff's
+        # opening state can carry a rear view from the previous shot into a
+        # reaction CU and render the back of a head (s3sh2). A deliberate
+        # back-shot (facing away / foreground occluder / exit) is respected.
+        face_visible = ""
+        _beat_now = (str(shot.get("emotional_beat") or "").strip()
+                     if isinstance(shot, dict) else "")
+        if (len(frame_names) == 1 and _beat_now and not backs
+                and str(shot.get("shot_type") or "").upper() in ("CU", "MCU", "ECU")
+                and not (has_line and not native_talk)):
+            face_visible = (" The subject's face is clearly visible to the "
+                            "camera - a front or three-quarter view, never "
+                            "the back of the head.")
 
         # (3) Setting backstop: never a blank background — if the body names none
         # of the scene's setting, add a concise clause (the location plate may
@@ -536,10 +611,15 @@ class ScenePromptCraft:
                 frag = (cdesc.get("video_prompt_fragment")
                         if isinstance(cdesc, dict) else None)
                 text = str(frag or cdesc or "").strip()
-                if not text:
-                    continue
-                missing = [p for p in _pin_segments(text)
-                           if p.lower() not in body_low]
+                outfit = (cdesc.get("outfit_this_shot")
+                          if isinstance(cdesc, dict) else None)
+                missing = ([p for p in _pin_segments(text)
+                            if p.lower() not in body_low] if text else [])
+                # headwear lives in the outfit, outside _pin_segments' reach,
+                # so pin it here (else the cap flickers shot to shot)
+                hw = headwear_pin(text, outfit)
+                if hw and hw.lower() not in body_low:
+                    missing.append(hw)
                 if not missing:
                     continue
                 use_name = (len(character_visuals) > 1
@@ -586,7 +666,7 @@ class ScenePromptCraft:
         dur = int(shot.get("estimated_duration_seconds", 5))
         assembled = ((front + " ") if front else "") + body.lstrip()
         assembled = (assembled.rstrip() + speech + eyelines + back_clause
-                     + identity_clause + emotion_clause
+                     + face_visible + identity_clause + emotion_clause
                      + setting_clause + wan_sound)
         result["prompt"] = assembled.rstrip().rstrip(",") + f" Duration: {dur} seconds."
 
@@ -612,6 +692,9 @@ class ScenePromptCraft:
         if backs:
             result["negative_prompt"] += (
                 ", turning around to face the camera, revealing the face")
+        if face_visible:
+            result["negative_prompt"] += (
+                ", back of head, seen from behind, face hidden from camera")
         if len(frame_names) == 1:
             if solo_mode["mode"] == "listener":
                 # near-lens gaze is WANTED here — ban only the true lens stare

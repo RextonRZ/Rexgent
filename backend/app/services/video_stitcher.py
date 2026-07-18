@@ -46,13 +46,16 @@ class VideoStitcher:
         norm_paths = []
         for i, clip in enumerate(clips):
             if isinstance(clip, str):
-                path, tin, tout, mute, vol = clip, None, None, False, None
+                path, tin, tout, mute, vol, hold = clip, None, None, False, None, 0.0
             else:
                 path, tin, tout = clip.get("path"), clip.get("in"), clip.get("out")
                 mute = bool(clip.get("mute"))
                 # optional bed level for a KEPT dialogue soundtrack (the real
                 # TTS voice overlays it, so it must sit underneath)
                 vol = clip.get("volume")
+                # scene breathing: hold the final frame this long (cloned
+                # video + padded silence) so a scene change gets air
+                hold = float(clip.get("tail_hold") or 0.0)
             norm = os.path.join(norm_dir, f"n{i:03d}.mp4")
             # effective chunk length places the fade-out; fall back to probe
             if tout is not None:
@@ -64,13 +67,17 @@ class VideoStitcher:
             cmd = ["ffmpeg", "-y"]
             if tin:
                 cmd += ["-ss", f"{float(tin):.3f}"]
+            if hold > 0 and tout is not None and eff > 0:
+                # INPUT-side cap: the decoder stops at eff so tpad clones the
+                # last KEPT frame — an output -t would chop the pad back off
+                cmd += ["-t", f"{eff:.3f}"]
             cmd += ["-i", path]
             if not has_audio:
                 # silent source: manufacture a silence track so every chunk has
                 # a uniform aac stream for the copy-concat
                 cmd += ["-f", "lavfi",
                         "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
-            if tout is not None and eff > 0:
+            if tout is not None and eff > 0 and hold <= 0:
                 cmd += ["-t", f"{eff:.3f}"]
             if mute:
                 # dialogue shot: kill the model's fake speech; TTS carries the voice
@@ -81,7 +88,15 @@ class VideoStitcher:
                 afade = "anull"
             if not mute and vol is not None and float(vol) != 1.0:
                 afade = f"volume={max(0.0, float(vol))},{afade}" if afade != "anull"                     else f"volume={max(0.0, float(vol))}"
-            cmd += ["-vf", self._vf_for(ratio), "-af", afade]
+            vf = self._vf_for(ratio)
+            if hold > 0:
+                # the freeze: clone the last frame for the breath, pad the
+                # audio with silence — the fade-out above already landed at
+                # the end of CONTENT, so sound dips naturally into the hold
+                vf += f",tpad=stop_mode=clone:stop_duration={hold:.3f}"
+                afade = (f"{afade},apad=pad_dur={hold:.3f}" if afade != "anull"
+                         else f"apad=pad_dur={hold:.3f}")
+            cmd += ["-vf", vf, "-af", afade]
             if not has_audio:
                 cmd += ["-map", "0:v", "-map", "1:a", "-shortest"]
             cmd += [

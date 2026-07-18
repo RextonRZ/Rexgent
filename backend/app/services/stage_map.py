@@ -126,6 +126,135 @@ _MOVE_RE = re.compile(
     r"lean|leans|leaning|rise|rises|rising|sits?|sitting|stands? up)\b", re.IGNORECASE)
 
 
+_RELEASE_RE = re.compile(
+    r"\b(?:puts?|sets?|lays?|places?)\s+(?:\w+\s+){0,3}?(?:down|aside|away)\b"
+    r"|\blets?\s+go\b"
+    r"|\bhands?\s+(?:\w+\s+){1,4}?to\b",
+    re.IGNORECASE)
+
+
+def thread_held_objects(shots_blocking: list) -> tuple[list, list[str]]:
+    """A prop a character CARRIES (a birdcage, a phone, a letter) must stay in
+    hand across a scene's shots, but held state lived only in each shot's
+    free-text action - so a later shot that did not restate it dropped the
+    object (the birdcage vanished between two consecutive shots). Thread it
+    deterministically, mirroring enforce_scene_sides: once a character holds
+    something, stamp `holding` onto that character in every later shot until
+    they name a new object or visibly release it (set it down, hand it off).
+
+    Mutates the subject dicts in place, returns (the same list, notes)."""
+    held: dict[str, str] = {}
+    notes: list[str] = []
+    for i, blocking in enumerate(shots_blocking):
+        if not blocking or not blocking.get("subjects"):
+            continue
+        for s in blocking["subjects"]:
+            if not isinstance(s, dict):
+                continue  # defense in depth - normalize_subjects upstream
+            name = str(s.get("character") or "").strip().upper()
+            if not name:
+                continue
+            own = s.get("holding")
+            has_obj = own is not None and str(own).strip() != ""
+            released = bool(_RELEASE_RE.search(str(s.get("action") or "")))
+            if has_obj:
+                # the board named a held object this shot: it wins and carries on
+                held[name] = str(own).strip()
+            elif released:
+                # visibly set down or handed off: stop carrying it forward
+                held.pop(name, None)
+            elif name in held:
+                # the board omitted it but the character was carrying something -
+                # restore it so the object does not vanish between cuts
+                s["holding"] = held[name]
+                notes.append(
+                    f"shot {i + 1}: {s.get('character')} still holding "
+                    f"{held[name]} (restored, board omitted it)")
+    return shots_blocking, notes
+
+
+_APPROACH_VERBS = (r"(?:walks?|walking|runs?|running|steps?|stepping|moves?|"
+                   r"moving|goes|going|comes?|coming|rushes?|rushing|"
+                   r"hurries|hurrying)")
+_AWAY_RE = re.compile(
+    r"\b(?:walks?|steps?|turns?|moves?|backs?|pulls?)\s+(?:\w+\s+){0,2}?away\b"
+    r"|\bleaves\b|\bexits?\b|\bstorms?\s+(?:off|out)\b", re.IGNORECASE)
+
+
+def _approach_re(name: str) -> re.Pattern:
+    """An approach aimed at THIS partner by name: 'walks over to Leo',
+    'runs toward LEO', 'approaches Leo'. Name-gated so 'walks to the
+    window' never matches."""
+    nm = re.escape(name)
+    return re.compile(
+        rf"\b(?:{_APPROACH_VERBS}\s+(?:back\s+)?(?:over\s+|up\s+)?"
+        rf"(?:to|toward|towards)|approach(?:es|ing)?)\s+(?:the\s+)?({nm})\b",
+        re.IGNORECASE)
+
+
+def enforce_proximity(shots: list) -> tuple[list, list[str]]:
+    """You cannot walk toward someone you are already with. Two characters
+    sharing a shot are TOGETHER; while together, a later shot's action that
+    approaches the partner by name ('Angeline walks over to Leo') is a
+    teleport-reset the board wrote by accident — rewrite the approach to
+    'stands with <partner>' in both the shot action and the subject action.
+    A visible separation (walks away, leaves, exits) breaks the pair, after
+    which a fresh approach is legitimate staging again.
+
+    Operates on the storyboard's own shot dicts (action + subjects), mutates
+    in place, returns (the same list, notes) - mirrors the other passes."""
+    together: set[frozenset] = set()
+    notes: list[str] = []
+
+    def _partners(name_u: str) -> list[str]:
+        return [n for pair in together if name_u in pair
+                for n in pair if n != name_u]
+
+    def _rewrite(text: str, partner_u: str, where: str, i: int) -> str:
+        # try the full partner name, then its distinctive tokens
+        candidates = [partner_u] + [t for t in re.split(r"[\s-]+", partner_u)
+                                    if len(t) >= 3 and t not in _NAME_STOPWORDS]
+        for cand in candidates:
+            m = _approach_re(cand).search(text)
+            if m:
+                notes.append(f"shot {i + 1}: approach toward {m.group(1)} but "
+                             f"they are already together - rewritten to stand "
+                             f"with them ({where})")
+                return text[:m.start()] + f"stands with {m.group(1)}" + text[m.end():]
+        return text
+
+    for i, sd in enumerate(shots):
+        if not isinstance(sd, dict):
+            continue
+        subs = [s for s in (sd.get("subjects") or []) if isinstance(s, dict)]
+        names_u = [str(s.get("character") or "").strip().upper() for s in subs]
+        names_u = [n for n in names_u if n]
+        # (1) approaches toward an ALREADY-together partner get rewritten
+        for s, name_u in zip(subs, names_u):
+            act = str(s.get("action") or "")
+            for partner_u in _partners(name_u):
+                new = _rewrite(act, partner_u, "subject", i)
+                if new != act:
+                    s["action"] = act = new
+        shot_act = str(sd.get("action") or "")
+        for pair in list(together):
+            for partner_u in pair:
+                new = _rewrite(shot_act, partner_u, "action", i)
+                if new != shot_act:
+                    sd["action"] = shot_act = new
+        # (2) sharing this shot establishes togetherness (at the cut they
+        # are in one framing - the next shot may not re-approach)
+        for a in range(len(names_u)):
+            for b in range(a + 1, len(names_u)):
+                together.add(frozenset({names_u[a], names_u[b]}))
+        # (3) a visible separation breaks every pair the mover is in
+        for s, name_u in zip(subs, names_u):
+            texts = f"{s.get('action') or ''} {shot_act}"
+            if _AWAY_RE.search(texts):
+                together = {p for p in together if name_u not in p}
+    return shots, notes
+
+
 def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
     """shots_blocking: per shot, {"subjects": [...], "reverse_angle": bool}
     or None for shots without blocking. Mutates screen_side AND frame_position

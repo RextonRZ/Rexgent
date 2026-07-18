@@ -47,6 +47,7 @@ import { AmbientBackdrop } from "@/components/shared/AmbientBackdrop";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SiteFooter } from "@/components/shared/SiteFooter";
 import { cn } from "@/lib/utils";
+import { PHOTOREAL, VISUAL_STYLES } from "@/lib/styles";
 import {
   useDeleteProject,
   useDuplicateProject,
@@ -121,6 +122,7 @@ function Dashboard() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("edited");
   const [genres, setGenres] = useState<string[]>([]);
+  const [looks, setLooks] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>([]);
   const [view, setView] = useState<"grid" | "list">("grid");
 
@@ -152,6 +154,13 @@ function Dashboard() {
     () => Array.from(new Set(projects.map(statusOf))).sort(),
     [projects]
   );
+  const allLooks = useMemo(
+    () =>
+      Array.from(new Set(projects.map((p) => p.visual_style ?? PHOTOREAL))).sort(),
+    [projects]
+  );
+  const lookLabel = (v: string) =>
+    VISUAL_STYLES.find((s) => s.value === v)?.label ?? v;
 
   const filtered = useMemo(() => {
     let list = projects;
@@ -159,6 +168,8 @@ function Dashboard() {
     if (q) list = list.filter((p) => p.title.toLowerCase().includes(q));
     if (genres.length)
       list = list.filter((p) => genres.includes(p.genre?.toLowerCase() ?? ""));
+    if (looks.length)
+      list = list.filter((p) => looks.includes(p.visual_style ?? PHOTOREAL));
     if (statuses.length) list = list.filter((p) => statuses.includes(statusOf(p)));
 
     const sorted = [...list];
@@ -181,9 +192,10 @@ function Dashboard() {
         sorted.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
     }
     return sorted;
-  }, [projects, search, sort, genres, statuses]);
+  }, [projects, search, sort, genres, looks, statuses]);
 
-  const filtersActive = genres.length > 0 || statuses.length > 0 || search !== "";
+  const filtersActive =
+    genres.length > 0 || looks.length > 0 || statuses.length > 0 || search !== "";
 
   const toggle = (list: string[], set: (v: string[]) => void, value: string) =>
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
@@ -337,6 +349,33 @@ function Dashboard() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
+              {allLooks.length > 1 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className={cn(
+                      "flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs outline-none transition-colors",
+                      looks.length > 0
+                        ? "border-violet-500 bg-violet-500/10 text-violet-300"
+                        : "border-white/10 text-zinc-400 hover:border-white/25 hover:text-zinc-300"
+                    )}
+                  >
+                    Style{looks.length > 0 && ` · ${looks.length}`}
+                    <ChevronDown className="size-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48 glass">
+                    {allLooks.map((v) => (
+                      <DropdownMenuCheckboxItem
+                        key={v}
+                        checked={looks.includes(v)}
+                        closeOnClick={false}
+                        onCheckedChange={() => toggle(looks, setLooks, v)}
+                      >
+                        {lookLabel(v)}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               {allStatuses.map((s) => (
                 <Chip
                   key={s}
@@ -350,6 +389,7 @@ function Dashboard() {
                 <button
                   onClick={() => {
                     setGenres([]);
+                    setLooks([]);
                     setStatuses([]);
                     setSearch("");
                   }}

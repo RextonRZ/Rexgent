@@ -21,6 +21,8 @@ import { useAutoRun, type AutoRunResult } from "@/hooks/useAgent";
 import { useProject } from "@/hooks/useProjects";
 import { useBible } from "@/hooks/useCasting";
 import { GENRES } from "@/lib/genres";
+import { PHOTOREAL, VISUAL_STYLES } from "@/lib/styles";
+import { SampleCard } from "@/components/shared/SampleCard";
 import { errText } from "@/lib/errText";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +35,16 @@ const TONES = [
   "lighthearted",
   "comedic",
 ];
+
+// what each preset actually does to the writing, so the pick is informed
+const TONE_NOTES: Record<string, string> = {
+  dramatic: "Big emotions played straight. Confrontations, confessions, high stakes.",
+  dark: "Heavy and unsettling. Grim choices and moral weight over everything.",
+  tense: "Pressure that keeps building. Secrets, deadlines, danger close by.",
+  romantic: "Longing and chemistry lead. Tender beats between the drama.",
+  lighthearted: "Warm and easygoing. Gentle humor and feel good endings.",
+  comedic: "Played for laughs. Timing, banter and awkward situations first.",
+};
 
 export function AutoRunPanel({
   projectId,
@@ -63,6 +75,8 @@ export function AutoRunPanel({
   // default to drama, the platform's home genre: a silent "sci-fi" default
   // injected sci-fi beats into premises that never asked for them
   const [genre, setGenre] = useState(initialGenre || "drama");
+  const [visualStyle, setVisualStyle] = useState<string>(PHOTOREAL);
+  const [ratio, setRatio] = useState<"9:16" | "16:9">("9:16");
   const [tone, setTone] = useState("dramatic");
   // tone reaches the LLM as free prompt text — presets guide, custom frees
   const [customTone, setCustomTone] = useState(false);
@@ -103,6 +117,17 @@ export function AutoRunPanel({
   useEffect(() => {
     if (initialGenre && !touched) setGenre(initialGenre);
   }, [initialGenre, touched]);
+
+  // the look picked at creation arrives with the project; mirror it until
+  // the user changes it here
+  useEffect(() => {
+    if (project && !touched) setVisualStyle(project.visual_style ?? PHOTOREAL);
+  }, [project, touched]);
+
+  useEffect(() => {
+    if (project?.video_ratio === "9:16" || project?.video_ratio === "16:9")
+      setRatio(project.video_ratio);
+  }, [project?.video_ratio]);
 
   // Scope stored on the drama at creation arrives async too.
   useEffect(() => {
@@ -179,41 +204,75 @@ export function AutoRunPanel({
           chat, so nothing runs before you say so. Writing costs a few cents;
           your voucher only goes to plates and video.`}
         </p>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
+        <div>
+          <div className="flex items-baseline justify-between">
             <Label>Genre</Label>
-            <Select
-              value={genre}
-              onValueChange={(v) => {
-                if (v) {
+            <span className="text-[11px] font-medium text-primary">
+              {GENRES.find((g) => g.value === genre)?.label}
+            </span>
+          </div>
+          <div className="scroll-clean mt-1.5 flex snap-x gap-2 overflow-x-auto pb-1.5">
+            {GENRES.map((g) => (
+              <SampleCard
+                key={g.value}
+                active={genre === g.value}
+                onClick={() => {
                   setTouched(true);
-                  setGenre(v);
+                  setGenre(g.value);
                   // persist immediately: the drama's stored genre must follow
                   // this choice, or rewrites and later stages keep the old one
                   api
-                    .patch(`/api/projects/${projectId}`, { genre: v })
+                    .patch(`/api/projects/${projectId}`, { genre: g.value })
                     .then(() =>
                       queryClient.invalidateQueries({
                         queryKey: ["project", projectId],
                       })
                     )
                     .catch(() => {});
-                }
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {GENRES.map((g) => (
-                  <SelectItem key={g.value} value={g.value}>
-                    <g.icon className="size-3.5 text-muted-foreground" />
-                    {g.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                }}
+                img={`/genres/${g.value.replace(/ /g, "-")}.jpg`}
+                label={g.label}
+              />
+            ))}
           </div>
+        </div>
+
+        <div>
+          <div className="flex items-baseline justify-between">
+            <Label>Visual style</Label>
+            <span className="text-[11px] font-medium text-primary">
+              {VISUAL_STYLES.find((s) => s.value === visualStyle)?.label}
+            </span>
+          </div>
+          <div className="scroll-clean mt-1.5 flex snap-x gap-2 overflow-x-auto pb-1.5">
+            {VISUAL_STYLES.map((s) => (
+              <SampleCard
+                key={s.value}
+                active={visualStyle === s.value}
+                onClick={() => {
+                  setTouched(true);
+                  setVisualStyle(s.value);
+                  // persist immediately so casting paints the plates in this
+                  // look; sending photoreal clears the stored style
+                  api
+                    .patch(`/api/projects/${projectId}`, {
+                      visual_style: s.value,
+                    })
+                    .then(() =>
+                      queryClient.invalidateQueries({
+                        queryKey: ["project", projectId],
+                      })
+                    )
+                    .catch(() => {});
+                }}
+                img={`/styles/${s.value}.jpg`}
+                label={s.label}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Tone</Label>
             <Select
@@ -248,6 +307,57 @@ export function AutoRunPanel({
                 autoFocus
               />
             )}
+            <p className="text-[11px] text-muted-foreground">
+              {customTone
+                ? "Describe the mood in your own words. It reaches the writers directly."
+                : TONE_NOTES[tone] ?? "How the story should feel to watch."}
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Format</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["9:16", "16:9"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => {
+                    setRatio(r);
+                    // persist immediately: generation, export canvas and the
+                    // player all read the drama's stored format
+                    api
+                      .patch(`/api/projects/${projectId}`, { video_ratio: r })
+                      .then(() =>
+                        queryClient.invalidateQueries({
+                          queryKey: ["project", projectId],
+                        })
+                      )
+                      .catch(() => {});
+                  }}
+                  className={cn(
+                    "flex items-center justify-center gap-2 rounded-md border px-2 py-2 text-xs transition-all",
+                    ratio === r
+                      ? "border-primary bg-primary/10 font-medium"
+                      : "border-border text-muted-foreground hover:border-primary/40"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-[2px] border",
+                      r === "9:16" ? "h-4 w-2.5" : "h-2.5 w-4",
+                      ratio === r
+                        ? "border-primary bg-primary/25"
+                        : "border-muted-foreground/50"
+                    )}
+                  />
+                  {r === "9:16" ? "Vertical" : "Landscape"}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {ratio === "9:16"
+                ? "Short drama for phones. Recommended."
+                : "Widescreen for desktop and TV."}
+            </p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">

@@ -311,6 +311,13 @@ async def ensure_location_plates(db: Session, project_id) -> int:
     plates = PlateGenerator(db)
     style = db.query(StylePreset).filter(StylePreset.project_id == project_id).first()
     tags = list(style.style_tags or []) if style else []
+    # the picker's seed leads the tag list so location plates paint in the
+    # chosen look even when the LLM's tags went generic
+    from app.services.style_catalog import seed_for
+    _proj = db.query(Project).filter(Project.id == project_id).first()
+    _seed = seed_for(getattr(_proj, "visual_style", None))
+    if _seed:
+        tags.insert(0, _seed)
     # a location like "Bear's apartment" must not paint the animal Bear —
     # neutralize character names in the plate prompt (label stays raw in the DB)
     char_names = [c.name for c in
@@ -443,6 +450,26 @@ class CastingDirector:
     async def cast_bible(self, project_id, design_voice: bool = True,
                          redesign_voice: bool = False,
                          regen_plates: bool = True) -> dict:
+        """Crash guard around the whole casting run: the frontend's Casting
+        spinner clears only on a terminal casting-keyed event, and the Full
+        Auto path has no worker guard - a crash after casting.started used to
+        leave the spinner spinning forever with the error invisible."""
+        try:
+            return await self._cast_bible_inner(
+                project_id, design_voice=design_voice,
+                redesign_voice=redesign_voice, regen_plates=regen_plates)
+        except Exception as e:
+            try:
+                emit("stage:progress",
+                     {"stage": "casting", "status": "failed", "agent": "Casting",
+                      "label": f"Casting failed: {str(e)[:120]}"}, str(project_id))
+            except Exception:  # noqa: BLE001 - the emit must never mask the crash
+                pass
+            raise
+
+    async def _cast_bible_inner(self, project_id, design_voice: bool = True,
+                                redesign_voice: bool = False,
+                                regen_plates: bool = True) -> dict:
         pid = str(project_id)
         emit("casting.started", {}, pid)
         script = (self.db.query(Script).filter(Script.project_id == project_id)
@@ -518,7 +545,12 @@ class CastingDirector:
         # nothing rather than fail everything (plates still image-edit from
         # any uploaded reference — only the face CHECK is skipped)
         from app.services.character_traits import is_creature, is_stylized_style
-        stylized = is_stylized_style(self._style_input(project_id))
+        from app.services.style_catalog import seed_for
+        _proj_row = self.db.query(Project).filter(Project.id == project_id).first()
+        stylized = is_stylized_style(getattr(_proj_row, "visual_style", None),
+                                     self._style_input(project_id))
+        # the picker's look restyles every costume plate (photoreal -> "")
+        style_seed = seed_for(getattr(_proj_row, "visual_style", None)) or ""
 
         faces_locked = 0
         for c in to_paint:
@@ -546,7 +578,8 @@ class CastingDirector:
                 strip = not wears_eyewear(c.visual_description, c.physical_description,
                                           c.video_prompt_fragment, outfit)
                 prompt = character_plate_prompt(bool(c.reference_image_url), subject, outfit,
-                                                creature=creature, strip_eyewear=strip)
+                                                creature=creature, strip_eyewear=strip,
+                                                style=style_seed)
                 url, vector = await self.plates.generate_and_store_plate(
                     pid, "character", f"{c.name}_{v['label']}", prompt,
                     negative_prompt=char_plate_negative(
@@ -613,11 +646,15 @@ class CastingDirector:
 
     def _style_input(self, project_id) -> str:
         existing = self.db.query(StylePreset).filter(StylePreset.project_id == project_id).first()
-        base = (existing.free_text if existing else "") or "cinematic realistic drama"
+        proj = self.db.query(Project).filter(Project.id == project_id).first()
+        # first run: the create-form style picker seeds the look; reruns keep
+        # the LLM-expanded free_text so plates stay consistent
+        from app.services.style_catalog import style_seed_text
+        base = style_seed_text(existing.free_text if existing else "",
+                               getattr(proj, "visual_style", None))
         # Under the Director engine, align the style plate with the genre look so
         # the two style channels (plate image + per-shot stylization) agree.
         if getattr(get_settings(), "director_engine", False):
-            proj = self.db.query(Project).filter(Project.id == project_id).first()
             base = f"{base}. {style_look_clause(getattr(proj, 'genre', None))}"
         return base
 

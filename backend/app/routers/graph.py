@@ -166,55 +166,62 @@ async def build_relationship_graph(request: dict, db: Session = Depends(get_db))
          "agent": "Story Analyst", "label": "Mapping character relationships"}, pid)
     from app.websocket.tool_events import tool_event
     tool_event(pid, "characters", "map_relationships", "started", agent="Story Analyst")
-    builder = RelationshipBuilder()
+    # ONE outer guard owns the terminal stage event: the DB region (delete/
+    # build/commit/sync) used to sit outside any try/except, so a commit
+    # failure propagated after "started" with no terminal event and the
+    # frontend strip (which has no self-heal) spun forever.
     try:
-        relationships = await builder.extract(script.structured_json, chars_json)
-    except Exception as e:
-        tool_event(pid, "characters", "map_relationships", "failed",
-                   agent="Story Analyst", error=str(e))
+        builder = RelationshipBuilder()
+        try:
+            relationships = await builder.extract(script.structured_json, chars_json)
+        except Exception as e:
+            tool_event(pid, "characters", "map_relationships", "failed",
+                       agent="Story Analyst", error=str(e))
+            raise
+        tool_event(pid, "characters", "map_relationships", "succeeded",
+                   agent="Story Analyst", artifact=f"{len(relationships or [])} bonds")
+
+        char_map = {c.name.upper(): c for c in characters}
+
+        # Replace existing relationships for this project.
+        db.query(CharacterRelationship).filter(
+            CharacterRelationship.project_id == script.project_id
+        ).delete()
+
+        created = []
+        for rel in relationships:
+            from_char = _resolve_character(char_map, rel.get("from_character"))
+            to_char = _resolve_character(char_map, rel.get("to_character"))
+            if not from_char or not to_char or from_char is to_char:
+                continue
+
+            rel_type = rel.get("relationship_type", "COLLEAGUE")
+            db_rel = CharacterRelationship(
+                project_id=script.project_id,
+                from_char_id=from_char.id,
+                to_char_id=to_char.id,
+                rel_type=rel_type,
+                strength=rel.get("strength", 5),
+                description=rel.get("description"),
+                first_established_scene=rel.get("first_established_scene"),
+                evidence_quote=rel.get("evidence_quote"),
+                evolution=rel.get("evolution", "STATIC"),
+                evolution_description=rel.get("evolution_description"),
+                stages=_clean_stages(rel.get("stages"), rel_type),
+            )
+            db.add(db_rel)
+            created.append(db_rel)
+
+        db.commit()
+        for r in created:
+            db.refresh(r)
+
+        name_by_id = {str(c.id): c.name for c in characters}
+        sync_relationships(str(script.project_id), created, name_by_id)
+    except Exception:
         emit("stage:progress", {"stage": "relationships", "status": "failed",
              "agent": "Story Analyst", "label": "Relationship mapping failed"}, pid)
         raise
-    tool_event(pid, "characters", "map_relationships", "succeeded",
-               agent="Story Analyst", artifact=f"{len(relationships or [])} bonds")
-
-    char_map = {c.name.upper(): c for c in characters}
-
-    # Replace existing relationships for this project.
-    db.query(CharacterRelationship).filter(
-        CharacterRelationship.project_id == script.project_id
-    ).delete()
-
-    created = []
-    for rel in relationships:
-        from_char = _resolve_character(char_map, rel.get("from_character"))
-        to_char = _resolve_character(char_map, rel.get("to_character"))
-        if not from_char or not to_char or from_char is to_char:
-            continue
-
-        rel_type = rel.get("relationship_type", "COLLEAGUE")
-        db_rel = CharacterRelationship(
-            project_id=script.project_id,
-            from_char_id=from_char.id,
-            to_char_id=to_char.id,
-            rel_type=rel_type,
-            strength=rel.get("strength", 5),
-            description=rel.get("description"),
-            first_established_scene=rel.get("first_established_scene"),
-            evidence_quote=rel.get("evidence_quote"),
-            evolution=rel.get("evolution", "STATIC"),
-            evolution_description=rel.get("evolution_description"),
-            stages=_clean_stages(rel.get("stages"), rel_type),
-        )
-        db.add(db_rel)
-        created.append(db_rel)
-
-    db.commit()
-    for r in created:
-        db.refresh(r)
-
-    name_by_id = {str(c.id): c.name for c in characters}
-    sync_relationships(str(script.project_id), created, name_by_id)
 
     emit("stage:progress", {"stage": "relationships", "status": "completed", "agent": "Story Analyst",
          "label": f"{len(created)} relationship(s) mapped"}, pid)

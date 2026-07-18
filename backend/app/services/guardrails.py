@@ -389,6 +389,23 @@ _GENERIC_PERSON_NOUNS = {
 _UNKNOWN_TOKENS = {"unknown", "unnamed", "unidentified", "n/a", "na", "tbd",
                    "tba", "none", "null", "nil", "placeholder", "character",
                    "unspecified", "anon", "anonymous"}
+# The same generic-role rule for Chinese scripts (no spaces, so exact match on
+# the whole token after stripping extra-numbering like 警卫2 / 警卫甲):
+# bare person nouns, relations, and unnamed one-off roles are extras, never cast.
+_GENERIC_PERSON_NOUNS_CJK = {
+    "男人", "女人", "男子", "女子", "老人", "小孩", "孩子", "婴儿", "青年",
+    "少年", "少女", "人影", "身影", "神秘人", "陌生人", "路人", "行人",
+    "某人", "众人", "人群",
+    # relations
+    "母亲", "父亲", "妈妈", "爸爸", "哥哥", "弟弟", "姐姐", "妹妹",
+    "爷爷", "奶奶", "外公", "外婆", "丈夫", "妻子", "儿子", "女儿",
+    "邻居", "朋友", "老板", "同事",
+    # unnamed one-off roles / extras
+    "商人", "警卫", "保安", "警察", "士兵", "服务员", "店员", "售货员",
+    "医生", "护士", "老师", "学生", "司机", "保镖", "侍者", "乘客",
+    "顾客", "老板娘", "旁白", "声音", "群众", "村民", "工人", "农民",
+    "小贩", "乞丐", "囚犯", "病人", "记者", "秘书", "厨师", "门卫",
+}
 
 
 def is_placeholder_character_name(name) -> bool:
@@ -406,10 +423,17 @@ def is_placeholder_character_name(name) -> bool:
     if not n:
         return True
     low = n.lower()
-    # whole-string unknown marker ('n/a', 'tbd') or no letters at all ('???')
-    if low in _UNKNOWN_TOKENS or not re.search(r"[a-z]", low):
+    # whole-string unknown marker ('n/a', 'tbd') or no letters at all ('???').
+    # Letters means ANY script's letters: the old [a-z] check read Chinese
+    # names as letterless and silently dropped the whole zh cast.
+    if low in _UNKNOWN_TOKENS or not re.search(r"[^\W\d_]", low):
         return True
     tokens = [t for t in re.split(r"[\s\-_/#().,]+", low) if t]
+    # Chinese generic roles: exact match after stripping extra-numbering
+    # suffixes (警卫2, 警卫甲 are numbered extras of a generic role)
+    if any(t.rstrip("0123456789甲乙丙丁") in _GENERIC_PERSON_NOUNS_CJK
+           for t in tokens):
+        return True
     if not tokens:
         return True
     if any(t in _UNKNOWN_TOKENS for t in tokens):

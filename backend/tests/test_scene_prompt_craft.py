@@ -22,9 +22,10 @@ async def test_craft_returns_prompt_no_names():
     )
     assert "prompt" in result
     assert "Yuki" not in result["prompt"]
-    # bloat guard: deterministic clauses (solo hold, identity lock, emotion)
-    # ride every minimal solo shot — budgeted, but never runaway
-    assert len(result["prompt"].split()) <= 95
+    # bloat guard: deterministic clauses (solo hold, identity lock, emotion,
+    # reaction-face visibility) ride every minimal solo shot — budgeted, but
+    # never runaway
+    assert len(result["prompt"].split()) <= 115
 
 
 @pytest.mark.asyncio
@@ -970,6 +971,88 @@ def test_child_scale_clause_pins_the_height_gap():
     assert child_scale_clause(adults) == ""
 
 
+def test_headwear_pin_finds_cap_in_outfit():
+    # the Lucas cap bug: a knit cap lives in the OUTFIT (kept out of the
+    # identity fragment by design), so the pin must read the outfit, not just
+    # the fragment
+    from app.mcp_tools.scene_prompt_craft import headwear_pin
+    pin = headwear_pin("8-year-old boy, short brown hair, no eyewear",
+                       "navy hoodie, blue jeans, a navy knit cap")
+    assert "knit cap" in pin.lower()
+
+
+def test_headwear_pin_matches_common_headwear_words():
+    from app.mcp_tools.scene_prompt_craft import headwear_pin
+    assert headwear_pin("", "a red beanie")
+    assert headwear_pin("", "a straw hat")
+    # a hood counts; a hooded sweatshirt alone does not falsely trigger
+    assert headwear_pin("", "hood pulled up over the head")
+    # neck scarf is not headwear
+    assert headwear_pin("", "a woollen neck scarf") == ""
+
+
+def test_headwear_pin_empty_when_bare_headed():
+    from app.mcp_tools.scene_prompt_craft import headwear_pin
+    assert headwear_pin("a girl, long black hair", "white t-shirt, denim overalls") == ""
+
+
+@pytest.mark.asyncio
+async def test_headwear_pinned_when_body_drops_it():
+    # the Lucas cap bug: on an OTS reverse angle the crafter LLM's body
+    # omitted the knit cap and the render dropped it. The cap lives in
+    # outfit_this_shot, so it must be re-pinned deterministically like the
+    # eyewear/hair pins already are.
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "OTS, a young boy faces a girl across the backyard, overcast light",
+        "negative_prompt": "blurry", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "OTS", "estimated_duration_seconds": 5},
+        character_visuals={"LUCAS": {
+            "video_prompt_fragment": "8-year-old boy, short brown hair, no eyewear",
+            "outfit_this_shot": "navy hoodie, blue jeans, a navy knit cap"}},
+        target_model="happyhorse")
+    assert "knit cap" in result["prompt"].lower()   # re-stated by the identity lock
+
+
+@pytest.mark.asyncio
+async def test_bare_headed_character_gets_no_cap_pin():
+    # a character with no headwear must not have one invented into the lock
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "MS, a girl stands by the fence, warm daylight",
+        "negative_prompt": "blurry", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    result = await crafter.craft(
+        shot={"shot_type": "MS", "estimated_duration_seconds": 5},
+        character_visuals={"ANGELINE": {
+            "video_prompt_fragment": "8-year-old girl, long red hair, no eyewear",
+            "outfit_this_shot": "white t-shirt, denim overalls"}},
+        target_model="happyhorse")
+    import re as _re
+    p = result["prompt"].lower()
+    # word boundaries: "hat" must not false-match "what they are doing"
+    assert not _re.search(r"\b(cap|beanie|hat|hood|toque)\b", p)
+
+
+@pytest.mark.asyncio
+async def test_blocking_surfaces_held_object():
+    # the birdcage bug: a carried object on a subject must reach the prompt so
+    # the model keeps it in hand instead of dropping it between shots
+    crafter = _spc()
+    await crafter.craft(
+        {"shot_type": "MS", "action": "she turns to the boy"},
+        character_visuals={"ANGELINE": "a girl"}, target_model="happyhorse",
+        blocking={"subjects": [
+            {"character": "ANGELINE", "frame_position": "MG", "screen_side": "left",
+             "holding": "a birdcage"}]})
+    sent = crafter.qwen.chat_json.call_args.kwargs["messages"][1]["content"]
+    assert "holding a birdcage" in sent
+
+
 @pytest.mark.asyncio
 async def test_two_person_shot_holds_mutual_gaze_to_the_end():
     crafter = ScenePromptCraft.__new__(ScenePromptCraft)
@@ -990,3 +1073,69 @@ async def test_two_person_shot_holds_mutual_gaze_to_the_end():
     assert "for the ENTIRE shot" in result["prompt"]
     assert "final frame" in result["prompt"]
     assert "turning to face the camera" in result["negative_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_exiting_character_gets_back_stays_back():
+    # s4sh3: "Angeline ... runs away ... runs out of the frame" — the stager
+    # wrote facing 'right' (off-vocab) so the back-clause never fired, and the
+    # model turned her to the lens at the clip tail. An EXIT action is itself
+    # the signal: the runner recedes, back to camera, never turning around.
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "LS", "estimated_duration_seconds": 5,
+         "action": "Angeline, still holding the note, runs away through the "
+                   "backyard, her silhouette disappearing into the distance. "
+                   "Claire stands in the background as Angeline runs out of the frame."},
+        character_visuals={"Angeline": "a girl", "Claire": "a woman"},
+        target_model="wan",
+        blocking={"subjects": [
+            {"character": "Angeline", "facing": "right", "posture": "running"},
+            {"character": "Claire", "facing": "left"}]})
+    # singular "keeps" proves ONLY Angeline exits — Claire stands watching
+    # (a plural join would read "Angeline, Claire keep their back...")
+    assert "Angeline keeps their back to the camera" in out["prompt"]
+    assert "turning around to face the camera" in out["negative_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_walking_to_the_door_is_not_an_exit():
+    # movement inside the room is not an exit — no back-clause forced
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "MS", "estimated_duration_seconds": 5,
+         "action": "Anna runs to the door and stops, listening."},
+        character_visuals={"Anna": "a woman"}, target_model="happyhorse",
+        blocking={"subjects": [{"character": "Anna", "facing": "screen-left"}]})
+    assert "back to the camera" not in out["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_emotional_closeup_pins_the_face_visible():
+    # s3sh2: a reaction CU rendered the back of her head — the whole point of
+    # the shot (her expression) was invisible. A silent emotional close-up
+    # must SAY the face is visible and ban the rear view.
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "CU", "estimated_duration_seconds": 4,
+         "emotional_beat": "Intense emotional pain and confusion",
+         "action": "She processes what she has overheard."},
+        character_visuals={"Angeline": "a girl"}, target_model="happyhorse",
+        blocking={"subjects": [{"character": "Angeline", "facing": "screen"}]})
+    assert "face is clearly visible" in out["prompt"]
+    assert "back of head" in out["negative_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_deliberate_back_shot_keeps_its_back():
+    # an explicitly staged back view (negative-space beat) is not overridden
+    crafter = _spc()
+    out = await crafter.craft(
+        {"shot_type": "CU", "estimated_duration_seconds": 4,
+         "emotional_beat": "quiet grief",
+         "action": "She stands motionless at the window."},
+        character_visuals={"Angeline": "a girl"}, target_model="wan",
+        blocking={"subjects": [{"character": "Angeline",
+                                "facing": "away-from-camera"}]})
+    assert "face is clearly visible" not in out["prompt"]
+    assert "keeps their back to the camera" in out["prompt"]

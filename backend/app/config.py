@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     # All-speech boarding: every shot carries a spoken line — silent beats
     # teleported postures between renders and read as filler. OFF -> unchanged.
     dialogue_only: bool = False
+    # A scene that opens TIGHT (the hook) gets a brief silent wide right
+    # after it: locks the room early so fresh r2v shots stop inventing their
+    # own versions of the set. OFF -> boards unchanged.
+    reorient_wide: bool = False
+    # Held-frame breath (seconds) at every scene boundary in the export:
+    # cuts stay tight within a scene, the scene CHANGE gets air. 0 -> off.
+    scene_breath_seconds: float = 0.0
     # TTS voice overlay (restore in progress — see the 2026-07-16 plan): clips
     # keep rendering with native talk, but export mutes the clip audio and
     # lays per-line TTS (designed voices + instruct acting + mouth pacing).

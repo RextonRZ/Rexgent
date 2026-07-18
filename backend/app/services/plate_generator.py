@@ -141,7 +141,13 @@ def subject_descriptor(gender: str | None = None, age: str | None = None,
     isn't visual). When gender is unknown (e.g. a pet or a child) we lean on the
     appearance so a dog stays a dog rather than becoming 'a person'."""
     b = gender_bucket(gender)
-    lead = "a woman" if b == "female" else "a man" if b == "male" else ""
+    # A minor's lead must SAY child: "a woman around 8" gambled that the age
+    # number wins over "woman" — sometimes it rendered an adult instead.
+    m = _re.search(r"\d+", str(age or ""))
+    if m and int(m.group()) <= 14:
+        lead = "a girl" if b == "female" else "a boy" if b == "male" else "a child"
+    else:
+        lead = "a woman" if b == "female" else "a man" if b == "male" else ""
     # A numeric age ("20s") implies a human even when gender wasn't extracted —
     # dropping it let 'soft/delicate' face text read as a CHILD to the image model.
     if not lead and age and any(ch.isdigit() for ch in str(age)):
@@ -158,7 +164,8 @@ def subject_descriptor(gender: str | None = None, age: str | None = None,
 
 def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
                            creature: bool = False,
-                           strip_eyewear: bool = False) -> str:
+                           strip_eyewear: bool = False,
+                           style: str = "") -> str:
     """A costume-plate prompt for identity + wardrobe: ONE subject in a FIXED
     standing pose on a plain backdrop — face clearly visible, the whole outfit
     readable from head to shoes. `subject` is who they are (gender/age/
@@ -169,8 +176,20 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
     ('sitting by the window, staring at the sea') that would get rendered into
     the plate. creature=True swaps the human pose standard for a natural
     full-body animal/creature reference — a rabbit cannot stand straight with
-    arms at its sides."""
+    arms at its sides. `style` (a style_catalog seed) restyles the whole
+    plate: without it, a stylized drama got photoreal cast references that
+    fought the style frame at video time."""
     outfit = clean_appearance((outfit or "").strip())
+
+    def _styled(p: str) -> str:
+        if not style:
+            return p
+        keep = (" Translate the same recognizable facial features, hair and "
+                "proportions into that art style." if has_face else "")
+        return (f"{p} Render the entire image in this art style: {style}. "
+                f"Subject, backdrop and lighting all in that style, "
+                f"never photorealistic.{keep}")
+
     # a locked face that WEARS glasses beats the negative ban (the edit keeps
     # the face it is shown, specs included) — for a non-wearer the removal
     # must be said positively, or the specs are inherited forever
@@ -187,10 +206,10 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
                  "generation time.")
         base = f"{subject}, wearing {outfit}" if outfit else subject
         if has_face:
-            return (f"The exact same creature as the reference image ({base}) — "
-                    f"keep the identical markings, colors and body proportions. "
-                    f"{frame}")
-        return f"{base}. {frame}"
+            return _styled(f"The exact same creature as the reference image ({base}) — "
+                           f"keep the identical markings, colors and body proportions. "
+                           f"{frame}")
+        return _styled(f"{base}. {frame}")
     frame = ("Solo studio costume-reference photo of ONE subject alone, no other people, "
              "standing straight facing the camera in a fixed reference pose, the whole "
              "outfit visible from head to shoes, arms relaxed at the sides, face clearly "
@@ -204,17 +223,17 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
         anchor = ("Keep the same age and body proportions as the reference — do not make "
                   "them younger or older.")
         if outfit:
-            return (f"The exact same subject as the reference image ({subject}) — keep the "
-                    f"identical face, and the same hair where the outfit does not cover it. "
-                    f"{anchor} Wearing {outfit}. Render EVERY item of the outfit, including "
-                    f"any headwear, eyewear and accessories.{strip} {frame}")
+            return _styled(f"The exact same subject as the reference image ({subject}) — keep the "
+                           f"identical face, and the same hair where the outfit does not cover it. "
+                           f"{anchor} Wearing {outfit}. Render EVERY item of the outfit, including "
+                           f"any headwear, eyewear and accessories.{strip} {frame}")
         # no story costume: preserve the reference's own clothing too
-        return (f"The exact same subject as the reference image ({subject}) — keep the identical "
-                f"face, hair and the same clothing as the reference. {anchor}{strip} {frame}")
+        return _styled(f"The exact same subject as the reference image ({subject}) — keep the identical "
+                       f"face, hair and the same clothing as the reference. {anchor}{strip} {frame}")
     if outfit:
-        return (f"{subject}, wearing {outfit}. Render every item of the outfit, "
-                f"including any headwear and accessories. {frame}")
-    return f"{subject}. {frame}"
+        return _styled(f"{subject}, wearing {outfit}. Render every item of the outfit, "
+                       f"including any headwear and accessories. {frame}")
+    return _styled(f"{subject}. {frame}")
 
 
 class PlateGenerator:

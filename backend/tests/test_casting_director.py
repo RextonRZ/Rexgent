@@ -420,3 +420,25 @@ def test_assign_cast_voices_skips_creatures(monkeypatch):
     cd.assign_cast_voices(MagicMock(), "pid", [rabbit, human], design_voice=False)
     assert rabbit.voice_id is None
     assert human.voice_id
+
+
+@pytest.mark.asyncio
+async def test_cast_bible_crash_emits_terminal_casting_event(monkeypatch):
+    # the stuck-spinner bug, service side: a crash anywhere in cast_bible after
+    # casting.started left the Casting spinner spinning forever (the Full Auto
+    # path has no worker guard). Any exception must emit a casting-keyed
+    # terminal stage event before propagating.
+    import app.services.casting_director as cd_mod
+    events = []
+    monkeypatch.setattr(cd_mod, "emit",
+                        lambda name, payload, pid=None: events.append((name, payload)))
+    cd = cd_mod.CastingDirector.__new__(cd_mod.CastingDirector)
+    db = MagicMock()
+    db.query.side_effect = RuntimeError("db exploded")
+    cd.db = db
+    with pytest.raises(RuntimeError):
+        await cd.cast_bible("00000000-0000-0000-0000-000000000000")
+    stage_events = [p for (n, p) in events if n == "stage:progress"]
+    assert stage_events, "cast_bible must emit a terminal stage event on crash"
+    assert stage_events[-1]["stage"] == "casting"
+    assert stage_events[-1]["status"] == "failed"

@@ -21,7 +21,7 @@ _SPECIES = (
 _SPECIES_RE = re.compile(rf"\b({_SPECIES})s?\b(?!-)", re.I)
 
 _STYLIZED_RE = re.compile(
-    r"\b(cartoon|anime|manga|toon|cel[ -]?shaded|2d|pixel|8[ -]?bit|"
+    r"\b(cartoon|anime|manga|toon|cel[ -]?shaded|2d|3[ -]?d|cgi|pixel|8[ -]?bit|"
     r"16[ -]?bit|claymation|stop[ -]?motion|comic|illustrated|illustration|"
     r"hand[ -]?drawn|watercolor|watercolour|sketch|low[ -]?poly|voxel|chibi|"
     r"ghibli|pixar|disney)\b", re.I)

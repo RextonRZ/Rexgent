@@ -173,6 +173,33 @@ def build_cut_plan(entries: list[dict]) -> list[dict]:
     return plan
 
 
+def apply_scene_breath(cut_entries: list, stitch_inputs: list,
+                       hold: float) -> int:
+    """Scene changes landed instantly - tight cuts trim the trailing air, so
+    a conversation flowing across a scene boundary cut jarringly hard. Give
+    the LAST chunk of each scene a short held-frame breath: the stitcher
+    clones its final frame for `hold` seconds (with silence, a natural audio
+    dip), and the entry's duration grows by the same amount so the dialogue
+    and caption placement math stays consistent without special cases.
+
+    Mutates both lists IN PLACE (no insertions - the index alignment episode
+    slicing depends on is untouched). The very last chunk is the episode
+    end, owned by the held-ending machinery. Imported media (scene None)
+    never takes a breath. Returns how many chunks were padded."""
+    if not hold or hold <= 0:
+        return 0
+    padded = 0
+    for i in range(len(cut_entries) - 1):
+        a, b = cut_entries[i], cut_entries[i + 1]
+        if (a.get("scene_number") is not None
+                and b.get("scene_number") is not None
+                and a["scene_number"] != b["scene_number"]):
+            a["duration"] = float(a.get("duration") or 0.0) + hold
+            stitch_inputs[i]["tail_hold"] = hold
+            padded += 1
+    return padded
+
+
 def assign_episodes(cut_entries: list, episode_by_scene: dict) -> list[int]:
     """Which episode each cut chunk belongs to. Scene-less chunks (imported
     media) ride the episode currently playing; anything unknown is episode 1,
@@ -417,6 +444,16 @@ def run_export(self, project_id: str, job_id: str, clips: list | None = None,
             logger.error("Export: no segments could be downloaded; aborting")
             _stage(project_id, "failed", "Could not download any footage")
             return
+
+        # scene breathing: a short held-frame breath at every scene boundary,
+        # so cuts stay tight WITHIN a scene but the scene change gets air
+        from app.config import get_settings as _gs2
+        _breath = float(getattr(_gs2(), "scene_breath_seconds", 0.0) or 0.0)
+        if _breath > 0:
+            n_padded = apply_scene_breath(cut_entries, stitch_inputs, _breath)
+            if n_padded:
+                logger.info("scene breath: %d boundary chunk(s) held %.2fs",
+                            n_padded, _breath)
 
         # The drama's delivery format (chosen at creation) sets the canvas.
         from app.models.project import Project
