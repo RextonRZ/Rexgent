@@ -28,16 +28,18 @@ export function ScriptImport({ projectId, onSuccess }: ScriptImportProps) {
   const updateProject = useUpdateProject();
 
   // local state answers clicks instantly; the effect re-seeds it whenever the
-  // saved project changes (first load, or a PATCH round trip)
+  // saved project changes (first load, or a PATCH round trip), but only
+  // until the user has made an unsaved pick of their own
   const [genre, setGenre] = useState("sci-fi");
   const [visualStyle, setVisualStyle] = useState<string>(PHOTOREAL);
   const [ratio, setRatio] = useState<VideoRatio>("9:16");
+  const [touched, setTouched] = useState(false);
   useEffect(() => {
-    if (!project) return;
+    if (!project || touched) return;
     setGenre(project.genre ?? "sci-fi");
     setVisualStyle(project.visual_style ?? PHOTOREAL);
     setRatio(project.video_ratio === "16:9" ? "16:9" : "9:16");
-  }, [project]);
+  }, [project, touched]);
 
   // instant save: the backend PATCH validates the ratio and normalizes the
   // style ("photoreal" clears it to NULL, the classic cinematic look)
@@ -45,7 +47,13 @@ export function ScriptImport({ projectId, onSuccess }: ScriptImportProps) {
     genre?: string;
     visual_style?: string;
     video_ratio?: VideoRatio;
-  }) => updateProject.mutate({ projectId, ...body });
+  }) =>
+    updateProject.mutate(
+      { projectId, ...body },
+      // a failed PATCH must not leave the UI claiming an unsaved pick:
+      // dropping the touched guard lets the next refetch restore server truth
+      { onError: () => setTouched(false) }
+    );
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
@@ -127,14 +135,17 @@ export function ScriptImport({ projectId, onSuccess }: ScriptImportProps) {
         visualStyle={visualStyle}
         ratio={ratio}
         onGenre={(v) => {
+          setTouched(true);
           setGenre(v);
           save({ genre: v });
         }}
         onStyle={(v) => {
+          setTouched(true);
           setVisualStyle(v);
           save({ visual_style: v });
         }}
         onRatio={(v) => {
+          setTouched(true);
           setRatio(v);
           save({ video_ratio: v });
         }}
@@ -144,6 +155,11 @@ export function ScriptImport({ projectId, onSuccess }: ScriptImportProps) {
         save as you pick them. The spend cap still applies and can be changed
         on the storyboard page.
       </p>
+      {updateProject.isError && (
+        <p className="text-center text-xs text-bad">
+          That pick did not save. Showing the last saved settings instead.
+        </p>
+      )}
 
       {selectedFile && (
         <Button
