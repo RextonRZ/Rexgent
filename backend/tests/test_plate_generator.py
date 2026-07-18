@@ -325,14 +325,19 @@ def test_character_plate_prompt_carries_the_visual_style():
 
 
 def test_character_plate_prompt_styled_edit_keeps_the_likeness():
-    # uploaded-face path: the edit must RESTYLE the person, not replace them —
-    # the clause says translate the same recognizable face into the art style
+    # uploaded-face path: the edit must RESTYLE the person, not replace them.
+    # PROVEN LIVE: a style clause APPENDED to the photo-preserving prompt is
+    # ignored (the plate stays a photograph); the edit model only restyles
+    # when the prompt LEADS with the repaint instruction.
     from app.services.plate_generator import character_plate_prompt
     seed = "watercolor painting style, soft bleeding washes"
     p = character_plate_prompt(True, "a woman around 20s", "navy sweater",
                                style=seed)
-    assert seed in p
+    assert p.startswith(f"Repaint this entire image as {seed}")
+    assert "NOT look like a photograph" in p
     assert "recognizable" in p
+    assert "navy sweater" in p
+    assert "head to shoes" in p
 
 
 def test_character_plate_prompt_without_style_is_unchanged():
@@ -351,3 +356,28 @@ def test_creature_plate_prompt_carries_the_visual_style_too():
     p = character_plate_prompt(False, "a small white rabbit", "",
                                creature=True, style=seed)
     assert seed in p
+
+
+def test_clean_appearance_drops_emotional_states():
+    # "visibly distressed and tearful" survived (regex knew tears, not
+    # tearful) and the ghibli repaint painted a crying reference plate
+    from app.services.plate_generator import clean_appearance
+    out = clean_appearance(
+        "An 8-year-old girl with red eyes from crying, visibly distressed "
+        "and tearful, long dark hair")
+    assert "tearful" not in out
+    assert "distressed" not in out
+    assert "long dark hair" in out
+
+
+def test_styled_edit_keeps_plate_backdrop_plain():
+    # the ghibli seed says "lush natural backgrounds" — correct for shots,
+    # wrong for a reference plate; the repaint lead must filter background
+    # words from the seed and pin the studio backdrop
+    from app.services.plate_generator import character_plate_prompt
+    seed = "ghibli inspired hand-painted animation style, lush natural backgrounds, soft warm light"
+    p = character_plate_prompt(True, "a girl around 8", "blue denim dress",
+                               style=seed)
+    assert "natural backgrounds" not in p
+    assert "hand-painted animation style" in p
+    assert "do not paint scenery" in p

@@ -99,7 +99,11 @@ CREATURE_PLATE_NEGATIVE = (
 _NON_APPEARANCE = _re.compile(
     r"\b(hold(ing)?|clutch(ing)?|carry(ing)?|grasp(ing)?|grip(ping)?|"
     r"photo|photograph|picture|frame|phone|letter|note|"
-    r"cry(ing)?|cried|tears?|teary|sob(bing)?|weep(ing)?|"
+    r"cry(ing)?|cried|tears?|teary|tearful|sob(bing)?|weep(ing)?|"
+    # transient emotional states — a plate is neutral; the shot sets emotion
+    r"distress(ed)?|anguish(ed)?|grie(f|ving)|panick?(ed|ing|y)?|terrified|"
+    r"frightened|scared|fearful|angry|furious|upset|"
+    r"smil(e|es|ing)|laugh(s|ing)?|grin(s|ning)?|frown(s|ing)?|scowl(s|ing)?|"
     r"soaked?|soaking|wet|drenched|dripping|damp|"
     r"tremb(le|ling)|shak(e|ing)|shiver(ing)?|puffy|"
     # postures and scene surroundings: 'sitting by the window, staring at the
@@ -182,13 +186,29 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
     outfit = clean_appearance((outfit or "").strip())
 
     def _styled(p: str) -> str:
+        # generation (t2i) path: an appended style clause is obeyed
         if not style:
             return p
-        keep = (" Translate the same recognizable facial features, hair and "
-                "proportions into that art style." if has_face else "")
         return (f"{p} Render the entire image in this art style: {style}. "
                 f"Subject, backdrop and lighting all in that style, "
-                f"never photorealistic.{keep}")
+                f"never photorealistic.")
+
+    def _repaint_lead() -> str:
+        # EDIT path: the style must LEAD the prompt. Proven live — appended
+        # to the photo-preserving wording it is silently ignored and the
+        # plate stays a photograph; leading with the repaint instruction
+        # produced a true style transfer of the same person. Background
+        # words in the seed ("lush natural backgrounds") are for SHOTS —
+        # in a plate they beat the plain-backdrop rule and painted a forest,
+        # so they are filtered out here and the studio backdrop is pinned.
+        look = ", ".join(c for c in (s.strip() for s in style.split(","))
+                         if c and not _re.search(
+                             r"backgrounds?|scenery|environments?", c, _re.I)
+                         ) or style
+        return (f"Repaint this entire image as {look}. This must NOT look "
+                f"like a photograph - it is a character reference rendered "
+                f"fully in that art style. Keep the plain seamless neutral "
+                f"studio backdrop - do not paint scenery. ")
 
     # a locked face that WEARS glasses beats the negative ban (the edit keeps
     # the face it is shown, specs included) — for a non-wearer the removal
@@ -206,9 +226,10 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
                  "generation time.")
         base = f"{subject}, wearing {outfit}" if outfit else subject
         if has_face:
-            return _styled(f"The exact same creature as the reference image ({base}) — "
-                           f"keep the identical markings, colors and body proportions. "
-                           f"{frame}")
+            core = (f"The exact same creature as the reference image ({base}) — "
+                    f"keep the identical markings, colors and body proportions. "
+                    f"{frame}")
+            return _repaint_lead() + core if style else core
         return _styled(f"{base}. {frame}")
     frame = ("Solo studio costume-reference photo of ONE subject alone, no other people, "
              "standing straight facing the camera in a fixed reference pose, the whole "
@@ -222,14 +243,22 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
     if has_face:
         anchor = ("Keep the same age and body proportions as the reference — do not make "
                   "them younger or older.")
+        if style:
+            wear = (f" Wearing {outfit}. Render EVERY item of the outfit, including "
+                    f"any headwear, eyewear and accessories." if outfit
+                    else " Keep the same clothing as the reference.")
+            return (_repaint_lead()
+                    + f"Keep the same recognizable person ({subject}): the same "
+                      f"facial features, hair and proportions, translated into "
+                      f"the drawn style. {anchor}{wear}{strip} {frame}")
         if outfit:
-            return _styled(f"The exact same subject as the reference image ({subject}) — keep the "
-                           f"identical face, and the same hair where the outfit does not cover it. "
-                           f"{anchor} Wearing {outfit}. Render EVERY item of the outfit, including "
-                           f"any headwear, eyewear and accessories.{strip} {frame}")
+            return (f"The exact same subject as the reference image ({subject}) — keep the "
+                    f"identical face, and the same hair where the outfit does not cover it. "
+                    f"{anchor} Wearing {outfit}. Render EVERY item of the outfit, including "
+                    f"any headwear, eyewear and accessories.{strip} {frame}")
         # no story costume: preserve the reference's own clothing too
-        return _styled(f"The exact same subject as the reference image ({subject}) — keep the identical "
-                       f"face, hair and the same clothing as the reference. {anchor}{strip} {frame}")
+        return (f"The exact same subject as the reference image ({subject}) — keep the identical "
+                f"face, hair and the same clothing as the reference. {anchor}{strip} {frame}")
     if outfit:
         return _styled(f"{subject}, wearing {outfit}. Render every item of the outfit, "
                        f"including any headwear and accessories. {frame}")
