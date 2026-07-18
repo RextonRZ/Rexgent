@@ -51,7 +51,8 @@ export function ScriptImport({ projectId, onSuccess }: ScriptImportProps) {
     updateProject.mutate(
       { projectId, ...body },
       // a failed PATCH must not leave the UI claiming an unsaved pick:
-      // dropping the touched guard lets the next refetch restore server truth
+      // dropping the touched guard re-seeds from the cached project, the
+      // last state the server actually confirmed
       { onError: () => setTouched(false) }
     );
 
