@@ -20,7 +20,7 @@ class ScriptParser:
             raise ValueError("Legacy .doc is not supported. Save it as .docx "
                              "or PDF and upload again.")
         elif ext in self._TEXT_EXTENSIONS:
-            return data.decode("utf-8", errors="replace")
+            return self._decode_text(data)
         else:
             raise ValueError(f"Unsupported file format: {ext}")
 
@@ -29,6 +29,16 @@ class ScriptParser:
         if ext not in self.SUPPORTED_EXTENSIONS:
             raise ValueError(f"Unsupported file format: {ext}")
         return ext
+
+    def _decode_text(self, data: bytes) -> str:
+        # Windows editors save text as UTF-16 with a BOM; decoded as UTF-8
+        # that becomes NUL-riddled mush that sails silently into the
+        # structurer — sniff the BOM before assuming UTF-8
+        if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+            return data.decode("utf-16", errors="replace")
+        if data[:3] == b"\xef\xbb\xbf":
+            return data.decode("utf-8-sig", errors="replace")
+        return data.decode("utf-8", errors="replace")
 
     def _extract_pdf_text(self, data: bytes) -> str:
         doc = fitz.open(stream=data, filetype="pdf")

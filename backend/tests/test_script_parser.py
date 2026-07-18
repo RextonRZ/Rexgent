@@ -50,3 +50,12 @@ def test_scanned_pdf_gets_a_clear_error(monkeypatch):
                         lambda self, data: "   \n  \n")
     with pytest.raises(ValueError, match="selectable text"):
         parser.parse_bytes(b"%PDF-1.4 fake", "scan.pdf")
+
+
+def test_utf16_text_file_decodes_readably():
+    # Windows editors default to UTF-16 with a BOM; decoded as UTF-8 the
+    # content became NUL-riddled mush — the BOM sniff must recover the text
+    parser = ScriptParser()
+    result = parser.parse_bytes("INT. 咖啡馆 - 夜\n\n对白。".encode("utf-16"), "script.txt")
+    assert "咖啡馆" in result
+    assert "\x00" not in result
