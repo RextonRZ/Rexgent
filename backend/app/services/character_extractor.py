@@ -54,6 +54,42 @@ def normalize_extracted(characters: list) -> list:
     return characters
 
 
+def missing_from_cast(script_json: dict, characters: list) -> list[str]:
+    """Names the structurer's scene rosters (characters_present) carry that the
+    extracted cast is missing. The one-pass extraction sometimes skips a real
+    cast member outright — an imported zh script lost its pet 雪球 — and the
+    rosters are an independent signal of who is on screen. The script-level
+    characters_mentioned list counts too — a real import listed the pet 雪球
+    ONLY there while every scene roster omitted it (the retry pass still
+    arbitrates on-screen presence, so a merely-mentioned name stays out).
+    Placeholder names (路人, Man) and stage-qualified variants of extracted
+    names ('KERRY (ON SCREEN)') don't count as missing. Order preserved."""
+    from app.services.guardrails import (canonical_character,
+                                         is_placeholder_character_name)
+    cast_names = [str(c.get("name") or "") for c in (characters or [])
+                  if isinstance(c, dict)]
+    cast_upper = {n.strip().upper() for n in cast_names if n.strip()}
+    out: list[str] = []
+    seen: set[str] = set()
+    sources = [sc for sc in (script_json or {}).get("scenes") or []
+               if isinstance(sc, dict)]
+    sources.append({"characters_present":
+                    (script_json or {}).get("characters_mentioned") or []})
+    for sc in sources:
+        for n in sc.get("characters_present") or []:
+            nm = str(n or "").strip()
+            key = nm.upper()
+            if not nm or key in seen:
+                continue
+            seen.add(key)
+            if key in cast_upper or is_placeholder_character_name(nm):
+                continue
+            if canonical_character(nm, cast_names).upper() in cast_upper:
+                continue
+            out.append(nm)
+    return out
+
+
 class CharacterExtractor:
     def __init__(self):
         self.qwen = QwenClient(get_settings())
@@ -77,6 +113,38 @@ class CharacterExtractor:
         result = await self.qwen.chat_json(messages=messages, temperature=0.2, task="characters")
         # JSON mode may wrap the array in an object — unwrap it
         characters = normalize_extracted(QwenClient.as_list(result))
+        # Completeness backstop: the one-pass extraction sometimes skips a name
+        # the scene rosters carry (an imported zh script dropped the pet 雪球).
+        # ONE follow-up pass confronts the model with exactly the names it
+        # missed — it still arbitrates on-screen presence by the same rules
+        # (an absent, only-talked-about animal stays out).
+        missing = missing_from_cast(script_json, characters)
+        if missing:
+            import logging
+            logging.getLogger(__name__).warning(
+                "extraction missed scene-roster names, retrying: %s", missing)
+            retry_note = (
+                "\n\nA previous extraction pass of this screenplay MISSED these "
+                "names, which the scenes' characters_present rosters list as ON "
+                "SCREEN: " + json.dumps(missing, ensure_ascii=False) + ". "
+                "Re-read the screenplay for EXACTLY these names and apply the "
+                "rules above — especially: a NAMED ANIMAL or pet that physically "
+                "appears on screen IS a cast member, even if its name reads like "
+                "an object. Return a JSON array with a full character object for "
+                "each of these names that qualifies as cast (and ONLY these "
+                "names); return [] if none qualify.")
+            retry = await self.qwen.chat_json(messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content":
+                    json.dumps(script_json, ensure_ascii=False) + retry_note},
+            ], temperature=0.2, task="characters")
+            have = {str(c.get("name") or "").strip().upper()
+                    for c in characters if isinstance(c, dict)}
+            for c in normalize_extracted(QwenClient.as_list(retry)):
+                nm = str(c.get("name") or "").strip().upper() if isinstance(c, dict) else ""
+                if nm and nm not in have:
+                    characters.append(c)
+                    have.add(nm)
         # gender drives voice matching and plate prompts downstream — a null
         # slips a male character into the female-first voice pool, so backstop
         # the prompt's REQUIRED rule with the honorific heuristic

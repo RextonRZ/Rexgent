@@ -49,7 +49,11 @@ async def parse_script(
     structurer = ScriptStructurer()
     with track_project(project_id, db):
         with tool_run(project_id, "script", "structure_scenes", "Screenwriter") as tb:
-            structured = await structurer.structure(raw_text)
+            # an import has no request.language — read it off the script itself,
+            # or a zh screenplay structures in en mode (summaries/rosters drift)
+            from app.services.language import detect_language
+            structured = await structurer.structure(
+                raw_text, language=detect_language(raw_text))
             tb["artifact"] = f"{len(structured.get('scenes', []))} scenes"
     emit("stage:progress", {"stage": "script", "status": "completed", "agent": "Screenwriter",
          "label": f"Imported: {len(structured.get('scenes', []))} scene(s) found"}, project_id)

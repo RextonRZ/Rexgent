@@ -92,7 +92,11 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
         # bumps the version but never re-parses). Structure the CURRENT text
         # and materialize the scenes before giving up.
         with track_project(script.project_id, db):
-            structured = await ScriptStructurer().structure(script.raw_text)
+            # the script's own prose decides the language — a zh screenplay
+            # must not self-heal through an en-mode structuring pass
+            from app.services.language import detect_language
+            structured = await ScriptStructurer().structure(
+                script.raw_text, language=detect_language(script.raw_text))
 
         if not structured.get("scenes"):
             # The text isn't a screenplay at all — premise notes, character
@@ -112,7 +116,8 @@ async def generate_storyboard(request: dict, db: Session = Depends(get_db)):
                     notes=script.raw_text,
                     target_length=target_length,
                 )
-                structured = await ScriptStructurer().structure(screenplay)
+                structured = await ScriptStructurer().structure(
+                    screenplay, language=detect_language(screenplay))
             if structured.get("scenes"):
                 script = Script(
                     project_id=script.project_id,
