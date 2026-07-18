@@ -446,7 +446,7 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # MCU produced a second person) — dropped before the Shot persists
             # so the board display and the prompt both read sane
             from app.services.storyboard_generator import (
-                strip_noncast_action, widen_tight_two_shots)
+                face_the_speaker, strip_noncast_action, widen_tight_two_shots)
             for sd in shots:
                 sd["action"] = strip_noncast_action(
                     sd.get("action"), sd.get("characters_in_frame"), known_names)
@@ -455,6 +455,14 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # listener's shoulder); otherwise it widens to MS so the render
             # matches the stage diagram instead of dropping a face
             widen_tight_two_shots(shots, dialogue_lines=scene.dialogue_json)
+            # LLM-boarded OTS shots sometimes hang the camera behind the
+            # SPEAKER — the line goes into the back of a head; re-hang over
+            # the listener so the speaker's face carries it
+            _fs_notes = face_the_speaker(shots, dialogue_lines=scene.dialogue_json)
+            if _fs_notes:
+                import logging
+                logging.getLogger(__name__).info("face_the_speaker: %s",
+                                                 "; ".join(_fs_notes))
             for sd in shots:
                 # clamp bounded enum columns (shot_type, camera_movement) so one
                 # over-long LLM value can't fail the whole scene's batch insert

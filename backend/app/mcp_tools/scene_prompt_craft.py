@@ -187,6 +187,7 @@ class ScenePromptCraft:
         lipsync: bool = False,
         native_talk: bool = False,
         speaker: str = "",
+        bridge_from_prev: bool = False,
         image_legend: str = "",
         environment: dict | None = None,
         to_wan: bool = False,
@@ -230,6 +231,17 @@ class ScenePromptCraft:
         if prev_action:
             continuity_parts.append(
                 f"Previous shot (already shown — do NOT replay this): {prev_action}")
+        if bridge_from_prev:
+            # the shot-to-shot teleport killer: the clip literally OPENS on
+            # the previous shot's last frame (attached as the final reference
+            # image), holds it a beat, then moves into this shot's staging as
+            # one continuous on-camera transition
+            continuity_parts.append(
+                "CONTINUITY BRIDGE: this clip OPENS on exactly the "
+                "composition of the final reference image (the previous "
+                "shot's last frame) — hold that image motionless for the "
+                "first half second, then move the camera and subjects into "
+                "this shot's staging as ONE continuous move, never a cut.")
         if prev_frame_report or prev_action:
             # each clip renders independently and no frame is chained, so the
             # OPENING pose must be stated or she teleports from sitting to
@@ -316,13 +328,23 @@ class ScenePromptCraft:
             # syncs the mouth to its own generated speech. That voice ships as
             # the clip's real audio (no TTS overlay exists), so the words must
             # be the exact scripted line. Opposite of coverage.
+            # In a multi-person shot the delivery text alone never said WHOSE
+            # face carries the line, so speakers rendered as the back of a
+            # head — pin the named speaker front/three-quarter.
+            _who = (speaker or "").strip()
+            speaker_face = (
+                f" {_who}'s face stays clearly visible to the camera while "
+                f"delivering the line — a front or three-quarter view, never "
+                f"the back of the head; only a listener may be seen from "
+                f"behind." if _who and len(character_visuals) >= 2 else "")
             dialogue_block = (
                 "Dialogue delivery (the speaker says THIS line ALOUD on camera: the "
                 "character audibly speaks it with natural mouth movement precisely "
                 "synced to the spoken words, front-facing and readable is fine, warm "
                 "conversational delivery over the full shot. Generate the spoken "
-                "dialogue in the character's own voice so the lips match the words. "
-                "NO on-screen text or subtitles): "
+                "dialogue in the character's own voice so the lips match the words."
+                + speaker_face
+                + " NO on-screen text or subtitles): "
                 + json.dumps(str(shot.get("dialogue")), ensure_ascii=False)
                 + "\n\n"
             )

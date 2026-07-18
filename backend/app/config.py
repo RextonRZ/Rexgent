@@ -99,6 +99,11 @@ class Settings(BaseSettings):
     # the fast cut-on-the-line rhythm of a vertical drama, instead of seconds
     # of silent holding after each line
     tight_cuts: bool = False
+    # Continuity bridge: when the guarded prev-frame reference rides a shot,
+    # the prompt orders the clip to OPEN on that exact frame, hold it a beat,
+    # then move into the new staging as one continuous on-camera transition.
+    # Rides prev_frame_guarded's safety condition; OFF -> prompts unchanged.
+    bridge_shots: bool = False
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.

@@ -340,3 +340,73 @@ def test_no_reorient_for_single_shot_scene():
     from app.services.storyboard_generator import insert_reorient_wide
     shots = [_tight_opener_scene()[0]]
     assert len(insert_reorient_wide(shots, "the room")) == 1
+
+
+def _ots_shot(speaker_fg=True):
+    subs = [
+        {"character": "Claire", "frame_position": "foreground" if speaker_fg else "background",
+         "screen_side": "left", "facing": "right"},
+        {"character": "Angeline", "frame_position": "background" if speaker_fg else "foreground",
+         "screen_side": "right", "facing": "left"},
+    ]
+    return {"shot_type": "OTS", "dialogue": "Angeline, wait!",
+            "characters_in_frame": ["Claire", "Angeline"],
+            "foreground_characters": ["Claire"] if speaker_fg else ["Angeline"],
+            "blocking_json": {"subjects": subs}}
+
+
+def test_face_the_speaker_moves_speaker_off_the_ots_shoulder():
+    # LLM-boarded OTS put the SPEAKER in the foreground — the foreground of
+    # an OTS is the back-of-head shoulder, so Claire pleaded her line as the
+    # back of a head. The pass flips the geometry: listener is the shoulder,
+    # the speaker faces camera.
+    from app.services.storyboard_generator import face_the_speaker
+    s = _ots_shot(speaker_fg=True)
+    notes = face_the_speaker([s], dialogue_lines=[{"character": "Claire"}])
+    assert s["foreground_characters"] == ["Angeline"]
+    subs = {x["character"]: x for x in s["blocking_json"]["subjects"]}
+    assert subs["Claire"]["frame_position"] != "foreground"
+    assert subs["Angeline"]["frame_position"] == "foreground"
+    assert notes
+
+
+def test_face_the_speaker_leaves_correct_ots_alone():
+    from app.services.storyboard_generator import face_the_speaker
+    s = _ots_shot(speaker_fg=False)
+    notes = face_the_speaker([s], dialogue_lines=[{"character": "Claire"}])
+    assert s["foreground_characters"] == ["Angeline"]
+    subs = {x["character"]: x for x in s["blocking_json"]["subjects"]}
+    assert subs["Angeline"]["frame_position"] == "foreground"
+    assert notes == []
+
+
+def test_face_the_speaker_ignores_non_ots_and_silent_shots():
+    from app.services.storyboard_generator import face_the_speaker
+    ms = {"shot_type": "MS", "dialogue": "hello",
+          "characters_in_frame": ["A", "B"],
+          "blocking_json": {"subjects": [
+              {"character": "A", "frame_position": "foreground"},
+              {"character": "B", "frame_position": "background"}]}}
+    silent = _ots_shot(speaker_fg=True)
+    silent["dialogue"] = ""
+    notes = face_the_speaker([ms, silent], dialogue_lines=[{"character": "A"}])
+    assert ms["blocking_json"]["subjects"][0]["frame_position"] == "foreground"
+    assert notes == []
+
+
+def test_face_the_speaker_reads_board_level_subjects():
+    # at the pipeline call point the board dicts carry top-level "subjects";
+    # blocking_json is only assembled at row creation
+    from app.services.storyboard_generator import face_the_speaker
+    s = {"shot_type": "OTS", "dialogue": "Angeline, wait!",
+         "characters_in_frame": ["Claire", "Angeline"],
+         "foreground_characters": ["Claire"],
+         "subjects": [
+             {"character": "Claire", "frame_position": "foreground"},
+             {"character": "Angeline", "frame_position": "background"}]}
+    notes = face_the_speaker([s], dialogue_lines=[{"character": "Claire"}])
+    subs = {x["character"]: x for x in s["subjects"]}
+    assert subs["Claire"]["frame_position"] == "background"
+    assert subs["Angeline"]["frame_position"] == "foreground"
+    assert s["foreground_characters"] == ["Angeline"]
+    assert notes

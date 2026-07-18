@@ -1139,3 +1139,76 @@ async def test_deliberate_back_shot_keeps_its_back():
                                 "facing": "away-from-camera"}]})
     assert "face is clearly visible" not in out["prompt"]
     assert "keeps their back to the camera" in out["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_two_person_native_talk_pins_the_speakers_face():
+    # "the cast most of it facing back when talk": in two-person dialogue
+    # shots nothing said WHOSE face must be on camera, so speakers delivered
+    # lines as the back of a head. The craft must pin the named speaker
+    # front/three-quarter and allow only a listener to be seen from behind.
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "p", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    await crafter.craft(
+        shot={"shot_type": "OTS", "dialogue": "Angeline, wait!",
+              "estimated_duration_seconds": 5, "action": "pleads"},
+        character_visuals={"CLAIRE": {"video_prompt_fragment": "a woman"},
+                           "ANGELINE": {"video_prompt_fragment": "a girl"}},
+        target_model="happyhorse", native_talk=True, speaker="Claire")
+    content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Claire's face" in content
+    assert "never the back of the head" in content
+
+
+@pytest.mark.asyncio
+async def test_solo_native_talk_needs_no_speaker_name_clause():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "p", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    await crafter.craft(
+        shot={"shot_type": "MCU", "dialogue": "Snowy, where are you?",
+              "estimated_duration_seconds": 5, "action": "searches"},
+        character_visuals={"ANGELINE": {"video_prompt_fragment": "a girl"}},
+        target_model="happyhorse", native_talk=True, speaker="Angeline")
+    content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "Angeline's face" not in content   # solo framing already covers it
+
+
+@pytest.mark.asyncio
+async def test_bridge_from_prev_opens_on_the_last_frame():
+    # the shot-to-shot teleport fix: the clip opens on exactly the previous
+    # shot's final frame, holds it a beat, then moves into this shot's staging
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "p", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    await crafter.craft(
+        shot={"shot_type": "MS", "dialogue": "", "estimated_duration_seconds": 5,
+              "action": "Claire stands in the doorway"},
+        character_visuals={"CLAIRE": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse", bridge_from_prev=True)
+    content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "motionless" in content
+    assert "final reference image" in content
+
+
+@pytest.mark.asyncio
+async def test_no_bridge_without_the_flag():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "p", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    await crafter.craft(
+        shot={"shot_type": "MS", "dialogue": "", "estimated_duration_seconds": 5,
+              "action": "Claire stands in the doorway"},
+        character_visuals={"CLAIRE": {"video_prompt_fragment": "a woman"}},
+        target_model="happyhorse")
+    content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "motionless" not in content

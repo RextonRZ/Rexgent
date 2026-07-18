@@ -548,7 +548,7 @@ class GenerationRunner:
                             environment=None,
                             outfits=None, blocking=None, lipsync=False,
                             native_talk=False, speaker="", image_legend="",
-                            to_wan=False) -> str:
+                            to_wan=False, bridge_from_prev=False) -> str:
         from app.services.guardrails import canonical_character, mask_offscreen_names
         in_frame = [canonical_character(n, char_by_name)
                     for n in (shot.characters_in_frame or [])]
@@ -586,6 +586,7 @@ class GenerationRunner:
             image_legend=image_legend,
             environment=environment,
             to_wan=to_wan,
+            bridge_from_prev=bridge_from_prev,
         )
         return result
 
@@ -1039,7 +1040,12 @@ class GenerationRunner:
                     native_talk=native_talk,
                     speaker=(native_speaker if native_talk else ""),
                     image_legend=image_legend, environment=environment,
-                    to_wan=to_wan)
+                    to_wan=to_wan,
+                    # bridge only when the prev frame actually rides as a
+                    # reference — the prompt promises "the final reference
+                    # image" and must never promise one that is not attached
+                    bridge_from_prev=(prev_frame_allowed and getattr(
+                        get_settings(), "bridge_shots", False)))
                 prompt = crafted.get("prompt", "")
                 # the crafter has ALWAYS produced a negative prompt; until now
                 # it was dropped on the floor before dispatch

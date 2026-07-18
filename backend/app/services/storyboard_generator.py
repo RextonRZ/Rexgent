@@ -514,6 +514,57 @@ def widen_tight_two_shots(shots: list[dict],
     return notes
 
 
+def face_the_speaker(shots: list[dict],
+                     dialogue_lines: list[dict] | None = None) -> list[str]:
+    """An OTS whose FOREGROUND subject is the SPEAKER films the line into the
+    back of a head: the foreground of an over-the-shoulder shot is the
+    shoulder. The camera belongs behind the LISTENER — the speaker is the one
+    seen past it, face readable. widen_tight_two_shots already builds its
+    OTS conversions this way; this pass fixes the OTS shots the boarding LLM
+    staged directly (Claire pleaded 'Angeline, wait!' as a foreground back).
+    Speaker pairing follows the same dialogue_lines order convention. Mutates
+    in place, returns correction notes."""
+    notes: list[str] = []
+    speakers = iter([str(l.get("character") or "").strip()
+                     for l in (dialogue_lines or [])])
+    for i, s in enumerate(shots or []):
+        if not str(s.get("dialogue") or "").strip():
+            continue
+        speaker = next(speakers, "")
+        if str(s.get("shot_type") or "").upper() != "OTS" or not speaker:
+            continue
+        cast = s.get("characters_in_frame") or []
+        cast_up = {str(c).strip().upper() for c in cast}
+        if speaker.upper() not in cast_up or len(cast) < 2:
+            continue
+        listeners = [c for c in cast
+                     if str(c).strip().upper() != speaker.upper()]
+        # board dicts carry top-level "subjects"; persisted rows carry them
+        # inside blocking_json — accept both shapes
+        subs = (((s.get("blocking_json") or {}).get("subjects"))
+                or s.get("subjects") or [])
+        by_name = {str(x.get("character") or "").strip().upper(): x
+                   for x in subs if isinstance(x, dict)}
+        sp = by_name.get(speaker.upper())
+        fg = [str(c).strip().upper()
+              for c in (s.get("foreground_characters") or [])]
+        speaker_is_shoulder = (
+            (sp is not None
+             and str(sp.get("frame_position") or "").lower() == "foreground")
+            or speaker.upper() in fg)
+        if not speaker_is_shoulder:
+            continue
+        if sp is not None:
+            sp["frame_position"] = "background"
+            li = by_name.get(str(listeners[0]).strip().upper())
+            if li is not None:
+                li["frame_position"] = "foreground"
+        s["foreground_characters"] = [listeners[0]]
+        notes.append(f"shot {i + 1}: OTS re-hung over {listeners[0]}'s "
+                     f"shoulder — {speaker} faces camera for the line")
+    return notes
+
+
 def strip_noncast_action(action: str | None, cast: list | None,
                          known_names: list | None) -> str:
     """An action sentence staging a character who is NOT in the shot's cast
