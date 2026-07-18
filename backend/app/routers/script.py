@@ -41,7 +41,12 @@ async def parse_script(
 
     content = await file.read()
     parser = ScriptParser()
-    raw_text = parser.parse_bytes(content, file.filename)
+    try:
+        raw_text = parser.parse_bytes(content, file.filename)
+    except ValueError as e:
+        # the parser's messages are user-facing (legacy .doc, scanned PDF,
+        # unsupported extension) — surface them instead of an opaque 500
+        raise HTTPException(status_code=400, detail=str(e))
 
     emit("stage:progress", {"stage": "script", "status": "started",
          "agent": "Screenwriter", "label": "Reading your imported script"}, project_id)
