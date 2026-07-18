@@ -7,11 +7,10 @@ import { VISUAL_STYLES } from "@/lib/styles";
 import { SampleCard } from "@/components/shared/SampleCard";
 import type { VideoRatio } from "@/lib/types/project";
 
-export type { VideoRatio };
-
 /* The look of the whole drama: genre, visual style and delivery format.
    Shared by the create modal (local state until Create) and the Import tab
-   (instant PATCH per pick), so the two surfaces never drift apart. */
+   (instant PATCH per pick), so the two surfaces never drift apart.
+   Parent must provide vertical spacing (both consumers wrap in space-y-4). */
 export function DramaLookFields({
   genre,
   visualStyle,
@@ -100,7 +99,7 @@ export function DramaLookFields({
   );
 }
 
-export function FormatCard({
+function FormatCard({
   active,
   onClick,
   title,

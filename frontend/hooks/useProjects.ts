@@ -61,6 +61,9 @@ export function useUpdateProject() {
       title?: string;
       poster_url?: string;
       credit_budget?: number;
+      genre?: string;
+      visual_style?: string;
+      video_ratio?: "9:16" | "16:9";
     }) => {
       const { projectId, ...body } = params;
       const { data } = await api.patch<Project>(
@@ -71,6 +74,9 @@ export function useUpdateProject() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      // single-project consumers (the Import tab's look fields) must see the
+      // saved value too, not a stale cache
+      queryClient.invalidateQueries({ queryKey: ["project"] });
     },
   });
 }

@@ -1,10 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { UploadCloud, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useParseScript } from "@/hooks/useScript";
+import { useProject, useUpdateProject } from "@/hooks/useProjects";
+import { DramaLookFields } from "@/components/shared/DramaLookFields";
+import { PHOTOREAL } from "@/lib/styles";
+import type { VideoRatio } from "@/lib/types/project";
 import { errText } from "@/lib/errText";
 
 interface ScriptImportProps {
@@ -20,6 +24,28 @@ interface ScriptImportProps {
 export function ScriptImport({ projectId, onSuccess }: ScriptImportProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const parseScript = useParseScript();
+  const { data: project } = useProject(projectId);
+  const updateProject = useUpdateProject();
+
+  // local state answers clicks instantly; the effect re-seeds it whenever the
+  // saved project changes (first load, or a PATCH round trip)
+  const [genre, setGenre] = useState("sci-fi");
+  const [visualStyle, setVisualStyle] = useState<string>(PHOTOREAL);
+  const [ratio, setRatio] = useState<VideoRatio>("9:16");
+  useEffect(() => {
+    if (!project) return;
+    setGenre(project.genre ?? "sci-fi");
+    setVisualStyle(project.visual_style ?? PHOTOREAL);
+    setRatio(project.video_ratio === "16:9" ? "16:9" : "9:16");
+  }, [project]);
+
+  // instant save: the backend PATCH validates the ratio and normalizes the
+  // style ("photoreal" clears it to NULL, the classic cinematic look)
+  const save = (body: {
+    genre?: string;
+    visual_style?: string;
+    video_ratio?: VideoRatio;
+  }) => updateProject.mutate({ projectId, ...body });
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
@@ -33,7 +59,8 @@ export function ScriptImport({ projectId, onSuccess }: ScriptImportProps) {
       "application/pdf": [".pdf"],
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         [".docx"],
-      "text/plain": [".txt"],
+      "text/plain": [".txt", ".fountain"],
+      "text/markdown": [".md"],
     },
     maxFiles: 1,
   });
@@ -86,19 +113,36 @@ export function ScriptImport({ projectId, onSuccess }: ScriptImportProps) {
                   : "Drag & drop your script"}
               </p>
               <p className="text-xs text-muted-foreground">
-                or click to browse — PDF, DOCX, TXT
+                or click to browse: PDF, DOCX, TXT, MD, Fountain
               </p>
             </>
           )}
         </div>
       </div>
 
-      {/* imports need no extra settings: the script itself carries the story,
-          tone and length; the genre, format and spend cap picked at creation
-          still shape everything downstream */}
+      {/* the look picked at creation, editable here: an imported drama should
+          not be stuck with rushed create-time defaults */}
+      <DramaLookFields
+        genre={genre}
+        visualStyle={visualStyle}
+        ratio={ratio}
+        onGenre={(v) => {
+          setGenre(v);
+          save({ genre: v });
+        }}
+        onStyle={(v) => {
+          setVisualStyle(v);
+          save({ visual_style: v });
+        }}
+        onRatio={(v) => {
+          setRatio(v);
+          save({ video_ratio: v });
+        }}
+      />
       <p className="text-center text-xs text-muted-foreground">
-        No other settings needed. Your script sets the story and length; the
-        genre, format and spend cap you picked at creation still apply.
+        Your script sets the story and length. Genre, visual style and format
+        save as you pick them. The spend cap still applies and can be changed
+        on the storyboard page.
       </p>
 
       {selectedFile && (
