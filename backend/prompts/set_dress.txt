@@ -15,3 +15,4 @@ Rules:
 - Add a state_change ONLY when the scene's action physically alters the set: something breaks, spills, burns, falls, is knocked over or taken away. "state" describes the AFTER state ("the blue ceramic vase lies shattered beside the table") and applies from that shot to the end of the scene.
 - If nothing changes, return an empty state_changes list. Return empty set_items only if the scene has no fixed environment (open sky, abstract space).
 - Never invent props that contradict the scene description.
+- CHARACTERS ARE NOT PROPS. When a CHARACTERS list is provided, never output any of those names — or a paraphrase of them — as a set_item, hero prop, or state_change. They are living beings (people AND animals/pets) handled by casting, even when a name reads like an object: a pet named "Snowball" (雪球) is a living animal, NOT a fluffy white ball; a cat named "Shadow" is not a shadow. Dress only the inanimate environment around them.

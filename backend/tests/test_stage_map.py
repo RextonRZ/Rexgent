@@ -319,3 +319,168 @@ def test_proximity_skips_blockless_shots():
     fixed, notes = enforce_proximity(shots)
     assert "stands with B" in fixed[3]["action"]
     assert len(notes) >= 1
+
+
+# ── Chinese verb coverage: the zh drama's actions were invisible to every ────
+# ── verb regex, so proximity resets, moves and exits all slipped through ─────
+
+def test_zh_approach_to_established_partner_is_rewritten():
+    # scene 2: shot 1 stages 安吉琳+玛丽 together; shot 2's "玛丽向安吉琳走去"
+    # is a teleport-reset — the prev frame already shows them side by side, so
+    # the render spawned a SECOND 玛丽 walking in. Must rewrite like the
+    # English pass does.
+    from app.services.stage_map import enforce_proximity
+    shots = [
+        {"action": "安吉琳和玛丽站在花园外。",
+         "subjects": [{"character": "安吉琳"}, {"character": "玛丽"}]},
+        {"action": "玛丽向安吉琳走去，安慰她。",
+         "subjects": [{"character": "安吉琳"}, {"character": "玛丽"}]},
+    ]
+    _, notes = enforce_proximity(shots)
+    assert notes, "zh approach toward an established partner must be rewritten"
+    assert "走去" not in shots[1]["action"]
+    assert "站在安吉琳身旁" in shots[1]["action"]
+
+
+def test_zh_approach_verb_variants_are_rewritten():
+    from app.services.stage_map import enforce_proximity
+    for phrase in ("玛丽走向安吉琳", "玛丽朝安吉琳跑来", "玛丽靠近安吉琳"):
+        shots = [
+            {"action": "两人并肩而立。",
+             "subjects": [{"character": "安吉琳"}, {"character": "玛丽"}]},
+            {"action": phrase,
+             "subjects": [{"character": "安吉琳"}, {"character": "玛丽"}]},
+        ]
+        _, notes = enforce_proximity(shots)
+        assert notes, phrase
+
+
+def test_zh_turn_toward_is_not_an_approach():
+    # 转向玛丽 (turns toward) is legitimate staging, not a walk-over reset
+    from app.services.stage_map import enforce_proximity
+    shots = [
+        {"action": "安吉琳和玛丽站在一起。",
+         "subjects": [{"character": "安吉琳"}, {"character": "玛丽"}]},
+        {"action": "安吉琳转向玛丽，手指着前方。",
+         "subjects": [{"character": "安吉琳"}, {"character": "玛丽"}]},
+    ]
+    _, notes = enforce_proximity(shots)
+    assert notes == []
+    assert shots[1]["action"] == "安吉琳转向玛丽，手指着前方。"
+
+
+def test_zh_separation_breaks_the_pair():
+    # after 玛丽转身离开, a fresh approach is legitimate staging again
+    from app.services.stage_map import enforce_proximity
+    shots = [
+        {"action": "两人站在一起。",
+         "subjects": [{"character": "安吉琳"}, {"character": "玛丽"}]},
+        {"action": "玛丽转身离开了花园。",
+         "subjects": [{"character": "玛丽"}]},
+        {"action": "玛丽走向安吉琳。",
+         "subjects": [{"character": "安吉琳"}, {"character": "玛丽"}]},
+    ]
+    _, notes = enforce_proximity(shots)
+    assert notes == []
+    assert "走向" in shots[2]["action"]
+
+
+def test_zh_movement_allows_depth_change():
+    # 翻过栅栏 is real movement — the depth change must be KEPT, not snapped
+    from app.services.stage_map import enforce_scene_sides as ess
+    shots = [
+        {"subjects": [{"character": "安吉琳", "screen_side": "left",
+                       "frame_position": "MG"}], "reverse_angle": False},
+        {"subjects": [{"character": "安吉琳", "screen_side": "left",
+                       "frame_position": "BG",
+                       "action": "安吉琳翻过栅栏，走进花园"}],
+         "reverse_angle": False},
+    ]
+    fixed, notes = ess(shots)
+    assert fixed[1]["subjects"][0]["frame_position"] == "BG"
+    assert notes == []
+
+
+def test_zh_release_stops_held_threading():
+    from app.services.stage_map import thread_held_objects
+    shots = [
+        {"subjects": [{"character": "安吉琳", "holding": "一个鸟笼"}]},
+        {"subjects": [{"character": "安吉琳", "action": "安吉琳把鸟笼放下"}]},
+        {"subjects": [{"character": "安吉琳"}]},
+    ]
+    _, notes = thread_held_objects(shots)
+    assert shots[1]["subjects"][0].get("holding") is None
+    assert shots[2]["subjects"][0].get("holding") is None
+
+
+# ── barrier depth: a character SEEN THROUGH a fence/window is on its far ─────
+# ── side, staged deep background — never beside the onlookers ────────────────
+
+def test_seen_through_barrier_stages_far_background():
+    # 安吉琳透过栅栏看到雪球 — 雪球 rendered BESIDE the two women instead of
+    # beyond the fence: nothing carried the far-side depth into blocking
+    from app.services.stage_map import enforce_barrier_depth
+    shots = [{
+        "action": "安吉琳透过栅栏看到雪球被拴在树旁，她的眼睛瞪大了。",
+        "subjects": [
+            {"character": "安吉琳", "frame_position": "MG", "screen_side": "left"},
+            {"character": "雪球", "frame_position": "MG", "screen_side": "right"},
+        ]}]
+    _, notes = enforce_barrier_depth(shots)
+    pos = shots[0]["subjects"][1]["frame_position"]
+    assert "far background" in pos and "栅栏" in pos
+    assert shots[0]["subjects"][0]["frame_position"] == "MG"   # onlooker untouched
+    assert notes
+
+
+def test_barrier_depth_threads_until_a_crossing():
+    # the far-side placement persists into later shots of the scene (shot 2
+    # still shows 雪球 beyond the fence) until someone crosses (翻过栅栏)
+    from app.services.stage_map import enforce_barrier_depth
+    shots = [
+        {"action": "安吉琳透过栅栏看到雪球。",
+         "subjects": [{"character": "安吉琳", "frame_position": "MG"},
+                      {"character": "雪球", "frame_position": "MG"}]},
+        {"action": "安吉琳转向玛丽，手指着雪球。",
+         "subjects": [{"character": "安吉琳", "frame_position": "MG"},
+                      {"character": "雪球", "frame_position": "MG"}]},
+        {"action": "安吉琳翻过栅栏，跑向雪球。",
+         "subjects": [{"character": "安吉琳", "frame_position": "MG"},
+                      {"character": "雪球", "frame_position": "MG"}]},
+    ]
+    _, _ = enforce_barrier_depth(shots)
+    assert "far background" in shots[1]["subjects"][1]["frame_position"]
+    # after the crossing the barrier no longer separates them
+    assert shots[2]["subjects"][1]["frame_position"] == "MG"
+
+
+def test_english_seen_through_barrier_also_stages_far_background():
+    from app.services.stage_map import enforce_barrier_depth
+    shots = [{
+        "action": "Angeline sees Snowy through the fence, tied to a tree.",
+        "subjects": [
+            {"character": "Angeline", "frame_position": "MG"},
+            {"character": "Snowy", "frame_position": "MG"},
+        ]}]
+    _, notes = enforce_barrier_depth(shots)
+    pos = shots[0]["subjects"][1]["frame_position"]
+    assert "far background" in pos and "fence" in pos
+    assert notes
+
+
+def test_barrier_separated_pair_may_still_approach_after_crossing():
+    # sharing a frame ACROSS the fence is not togetherness: after 安吉琳
+    # climbs over, her 跑向雪球 is legitimate staging, never a teleport-reset
+    from app.services.stage_map import enforce_barrier_depth, enforce_proximity
+    shots = [
+        {"action": "安吉琳透过栅栏看到雪球被拴在树旁。",
+         "subjects": [{"character": "安吉琳", "frame_position": "MG"},
+                      {"character": "雪球", "frame_position": "MG"}]},
+        {"action": "安吉琳翻过栅栏，跑向雪球。",
+         "subjects": [{"character": "安吉琳", "frame_position": "MG"},
+                      {"character": "雪球", "frame_position": "MG"}]},
+    ]
+    _, _ = enforce_barrier_depth(shots)
+    _, notes = enforce_proximity(shots)
+    assert notes == []
+    assert "跑向雪球" in shots[1]["action"]

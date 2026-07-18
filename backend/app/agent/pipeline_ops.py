@@ -227,6 +227,14 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                       f"Scene {scene.number}: staging shots and set dressing",
                       index=scene_index, total=len(scenes))
             scene_chars = [char_map.get(str(n).upper(), {"name": n}) for n in (scene.characters_json or [])]
+            # The structurer's characters_present drops on-screen pets and
+            # object-like names (雪球 = "snowball") — leaving them out of every
+            # shot AND letting the set dresser mistake the pet for a prop. Add
+            # back any real cast member NAMED in the scene's own prose (CJK-safe).
+            from app.services.stage_map import cast_named_in_prose
+            _scene_prose = " ".join(str(x) for x in
+                                    ([scene.description or ""] + list(scene.stage_directions or [])))
+            scene_chars = cast_named_in_prose(scene_chars, list(char_map.values()), _scene_prose)
             # ── narrative memory READ: before staging this scene, the Director
             # recalls everything the story has already established (Neo4j) ──
             from app.graph.sync import recall_facts_before_scene, sync_scene_facts
@@ -347,8 +355,8 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # Subjects are normalized FIRST — the model sometimes returns
             # bare name strings instead of the structured dicts.
             from app.services.stage_map import (
-                enforce_proximity, enforce_scene_sides, normalize_subjects,
-                thread_held_objects)
+                enforce_barrier_depth, enforce_proximity, enforce_scene_sides,
+                normalize_subjects, thread_held_objects)
             for sd in shots:
                 if isinstance(sd, dict):
                     sd["subjects"] = normalize_subjects(sd.get("subjects"))
@@ -360,15 +368,21 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # scene's shots — held state lived only in each shot's free text, so
             # a shot that omitted it dropped the object; thread it forward.
             _, _held_notes = thread_held_objects(_blk)
+            # a character SEEN THROUGH a fence/window stands on its far side:
+            # staged deep background beyond the barrier (threaded across the
+            # scene until a crossing), never beside the onlookers. Runs after
+            # the depth-snap pass (which would overwrite the far-side string)
+            # and BEFORE proximity, which must not pair a barrier-separated duo.
+            _, _barrier_notes = enforce_barrier_depth(shots)
             # you cannot walk toward someone you are already with: an approach
             # aimed at an established scene partner is a teleport-reset the
             # board wrote by accident — rewritten to stand with them.
             _, _prox_notes = enforce_proximity(shots)
-            if _side_notes or _held_notes or _prox_notes:
+            if _side_notes or _held_notes or _prox_notes or _barrier_notes:
                 import logging
                 logging.getLogger(__name__).info(
                     "stage map corrections scene %s: %s", scene.number,
-                    _side_notes + _held_notes + _prox_notes)
+                    _side_notes + _held_notes + _prox_notes + _barrier_notes)
             # set dressing: pins props + prop state per scene (enhancement only)
             try:
                 from app.services.set_dresser import SetDresser
@@ -379,7 +393,9 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                      "location": scene.location, "description": scene.description,
                      "stage_directions": scene.stage_directions or []},
                     [{"shot_number": sd.get("shot_number"), "action": sd.get("action"),
-                      "dialogue": sd.get("dialogue")} for sd in shots])
+                      "dialogue": sd.get("dialogue")} for sd in shots],
+                    # the cast (incl. the pet) must never be dressed as a prop
+                    cast_names=[c.get("name") for c in scene_chars if c.get("name")])
                 dressed += 1
                 # ── narrative memory WRITE: prop-state changes become Facts,
                 # known by everyone in the scene — recalled by later scenes ──

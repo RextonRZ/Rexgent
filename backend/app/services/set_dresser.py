@@ -37,11 +37,23 @@ class SetDresser:
         self.qwen = QwenClient(get_settings())
         self.prompt_template = load_prompt("set_dress.txt")
 
-    async def dress(self, scene: dict, shots: list[dict]) -> dict:
+    async def dress(self, scene: dict, shots: list[dict],
+                    cast_names: list | None = None) -> dict:
         user = (
             f"Scene:\n{json.dumps(scene, ensure_ascii=False)}\n\n"
             f"Shots:\n{json.dumps(shots, ensure_ascii=False)}"
         )
+        # The dresser sees the action text but not the cast, so a character whose
+        # NAME reads like an object (a pet 雪球 / "Snowball") gets dressed as a
+        # prop. Naming the scene's living characters forbids that outright.
+        names = [str(n).strip() for n in (cast_names or []) if str(n).strip()]
+        if names:
+            user += ("\n\nCHARACTERS present in this scene — these are LIVING "
+                     "characters (people and animals/pets) handled by casting. "
+                     "NEVER output any of them, or a paraphrase of them, as a "
+                     "set_item, prop or hero prop, even if a name reads like an "
+                     "object (a pet named 'Snowball' is a living animal, not a "
+                     f"ball): {json.dumps(names, ensure_ascii=False)}")
         result = await self.qwen.chat_json(messages=[
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": user},

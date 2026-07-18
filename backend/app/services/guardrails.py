@@ -19,9 +19,12 @@ def strip_character_names(text: str, names) -> str:
     result = text
     # longest name first so "Bear Junior" is consumed before "Bear"
     for name in sorted((n for n in names if n and str(n).strip()), key=len, reverse=True):
-        # eat an optional trailing possessive with the name — including the
-        # apostrophe-less typo the LLM writes ("Catherines face")
-        result = re.sub(r"\b" + re.escape(str(name)) + r"(?:['’]?s)?\b",
+        # eat an optional trailing possessive with the name — the English 's
+        # (including the apostrophe-less typo "Catherines face") and the
+        # Chinese 的 (雪球的项圈 -> 项圈). The boundary forbids only ASCII word
+        # chars: \b never fires between CJK characters, so a zh name (雪球 in
+        # 看到雪球) survived every strip and Wan rendered the name literally.
+        result = re.sub(r"(?<![A-Za-z0-9])" + re.escape(str(name)) + r"(?:['’]?s|的)?(?![A-Za-z0-9])",
                         "", result, flags=re.IGNORECASE)
     result = re.sub(r"['’]s\b", "", result)        # any orphaned possessive
     result = repair_grammar_holes(result)

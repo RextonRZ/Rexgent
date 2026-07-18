@@ -201,6 +201,17 @@ def test_strip_noncast_action_never_returns_empty():
     assert out  # a fully-dropped action falls back to the original
 
 
+def test_strip_noncast_action_drops_the_offscreen_zh_sentence():
+    # zh sentences end in 。！？ with NO following space, and \b never matched
+    # a CJK name — so a sentence staging off-frame 玛丽 rode into the prompt
+    # and rendered a second person
+    from app.services.storyboard_generator import strip_noncast_action
+    action = "安吉琳擦干眼泪站起来。玛丽也跟着站起来，点头同意。"
+    out = strip_noncast_action(action, ["安吉琳"], ["安吉琳", "玛丽"])
+    assert "玛丽" not in out
+    assert "安吉琳" in out
+
+
 def test_tight_two_shot_widens_to_ms():
     # an MCU cannot hold two people: the render showed one while the stage
     # diagram promised both — tight framings with 2+ cast widen to MS
@@ -286,6 +297,20 @@ def test_action_named_cast_joins_the_frame():
     out2 = _ensure_action_cast_in_frame(["Angeline"], "She kneels alone.",
                                         ["Angeline", "Snowy"])
     assert out2 == ["Angeline"]
+
+
+def test_action_named_chinese_cast_joins_the_frame():
+    # 雪球 (Snowball) named in Chinese action was dropped: \b never fires
+    # between CJK characters, so its identity plate and species fragment never
+    # rode and the pet was cast out of the shots it appears in
+    from app.services.storyboard_generator import _ensure_action_cast_in_frame
+    out = _ensure_action_cast_in_frame(
+        ["安吉琳"], "安吉琳紧紧抱着雪球，眼里含着泪水。", ["安吉琳", "雪球"])
+    assert out == ["安吉琳", "雪球"]
+    # a pet not named in THIS shot's action is not forced in
+    out2 = _ensure_action_cast_in_frame(
+        ["安吉琳"], "她独自跪在空荡荡的房间里。", ["安吉琳", "雪球"])
+    assert out2 == ["安吉琳"]
 
 
 # ── reorient wide: a tight hook opener gets a room-locking wide after it ────

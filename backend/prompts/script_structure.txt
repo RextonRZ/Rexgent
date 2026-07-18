@@ -40,6 +40,10 @@ Heading rules:
 - "INT." is ONLY for enclosed indoor spaces (rooms, huts, offices, vehicles). Streets, alleys, rooftops, courtyards, squares and any open air space are "EXT.".
 - The SAME location must keep the SAME INT./EXT. prefix in every scene it appears.
 
+Character rules:
+- characters_present MUST list EVERY character physically on screen in the scene, INCLUDING a named animal or pet that appears (a dog, cat, rabbit...). A named pet is a CHARACTER, not a prop or scenery — never omit it, and never omit it just because its name reads like an object (a pet named "Snowball" / 雪球 is a living animal, not a ball).
+- Do NOT list a character in characters_present who is only mentioned or talked about but never appears on screen in that scene.
+
 Return ONLY the JSON. No explanation, no markdown fences.
 
 SCREENPLAY TEXT:

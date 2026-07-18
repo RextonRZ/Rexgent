@@ -44,7 +44,10 @@ def _ensure_action_cast_in_frame(in_frame, action, cast_names) -> list:
     plate never rides and the name sanitizer erases them from the prompt
     (Snowy rendered as a generic dog). Dialogue mentions add nobody: this
     scans ACTION text only, where a name means a visible presence."""
-    import re
+    # _name_in_text is the shared, CJK-safe "is this cast member named here"
+    # check: a bare \b never fires between Chinese characters, so a pet like
+    # 雪球 named in Chinese action ("安吉琳抱着雪球") was silently left out.
+    from app.services.stage_map import _name_in_text
     out = [str(n).strip() for n in (in_frame or []) if str(n).strip()]
     have = {n.upper() for n in out}
     text = str(action or "")
@@ -52,7 +55,7 @@ def _ensure_action_cast_in_frame(in_frame, action, cast_names) -> list:
         n = str(name or "").strip()
         if not n or n.upper() in have:
             continue
-        if re.search(rf"\b{re.escape(n)}\b", text, re.I):
+        if _name_in_text(n, text):
             out.append(n)
             have.add(n.upper())
     return out
@@ -579,12 +582,15 @@ def strip_noncast_action(action: str | None, cast: list | None,
               if str(n).strip() and str(n).strip().upper() not in cast_up]
     if not text or not others:
         return text
-    def _mentions(name_up: str, sentence_up: str) -> bool:
-        return bool(re.search(r"\b" + re.escape(name_up) + r"\b", sentence_up))
+    # CJK-safe mention check: \b never fires between Chinese characters, so a
+    # zh sentence staging an off-cast character was silently kept (and rendered)
+    from app.services.stage_map import _mentions
     kept = []
     # honorific periods (Mrs. Jones) are not sentence ends — splitting there
-    # orphaned the title from the name and broke the cast match
-    splitter = re.compile(r"(?<!Mr\.)(?<!Mrs\.)(?<!Ms\.)(?<!Dr\.)(?<!Jr\.)(?<!Sr\.)(?<=[.!?])\s+")
+    # orphaned the title from the name and broke the cast match. Chinese
+    # sentences end in 。！？ with NO following space — split after those too.
+    splitter = re.compile(r"(?<!Mr\.)(?<!Mrs\.)(?<!Ms\.)(?<!Dr\.)(?<!Jr\.)(?<!Sr\.)(?<=[.!?])\s+"
+                          r"|(?<=[。！？；])\s*")
     for sentence in splitter.split(text):
         up = sentence.upper()
         if any(_mentions(o, up) for o in others) and not any(

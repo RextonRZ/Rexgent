@@ -22,3 +22,25 @@ def test_all_names_kept_when_everyone_is_in_frame():
 def test_empty_and_none_action_are_safe():
     assert mask_offscreen_names("", ["Deok-hyun"], _CAST) == ""
     assert mask_offscreen_names(None, ["Deok-hyun"], _CAST) == ""
+
+
+_CAST_ZH = ["安吉琳", "玛丽", "雪球"]
+
+
+def test_offscreen_chinese_name_is_stripped():
+    # \b never fires between CJK characters, so an off-frame zh name survived
+    # into the prompt and Wan rendered it literally (雪球 = a white fluffy ball
+    # painted beside the cast)
+    action = "安吉琳透过栅栏看到雪球，显得很惊讶。"
+    out = mask_offscreen_names(action, ["安吉琳"], _CAST_ZH)
+    assert "雪球" not in out
+    assert "安吉琳" in out          # in-frame -> kept
+
+
+def test_chinese_possessive_is_eaten_with_the_name():
+    # 雪球的项圈 -> 项圈, not an orphaned 的项圈 (mirrors "Bear's" -> "")
+    from app.services.guardrails import strip_character_names
+    out = strip_character_names("镜头扫过雪球的项圈", ["雪球"])
+    assert "雪球" not in out
+    assert "的项圈" not in out
+    assert "项圈" in out

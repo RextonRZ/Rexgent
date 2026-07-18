@@ -81,6 +81,17 @@ def normalize_subjects(raw) -> list | None:
 _NAME_STOPWORDS = {"THE", "AND", "HIS", "HER", "VON", "VAN", "DER", "MAN", "WOMAN"}
 
 
+def _mentions(token: str, text_up: str) -> bool:
+    r"""Whole-token containment that works for BOTH Latin and CJK scripts. \b
+    fails between Chinese characters — 抱着 and 雪球 are all \w with no boundary
+    between them — which dropped a Chinese-named pet from the shots that name
+    it. Forbid only ASCII word chars on either side: a Latin name still can't
+    glue onto adjacent letters/digits ('Ann' inside 'Anna'), while a CJK name's
+    neighbours are never ASCII word chars, so it matches run together in prose."""
+    return re.search(rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])",
+                     text_up) is not None
+
+
 def _name_in_text(name: str, text: str) -> bool:
     """Is this character named in the text? Full name on a word boundary, else
     any distinctive name token (>=3 chars, not a stopword). A name that is ITSELF
@@ -94,10 +105,33 @@ def _name_in_text(name: str, text: str) -> bool:
     toks = re.split(r"[\s-]+", full)
     if len(toks) == 1 and full in _NAME_STOPWORDS:
         return False
-    if re.search(r"\b" + re.escape(full) + r"\b", up):
+    if _mentions(full, up):
         return True
     distinctive = [t for t in toks if len(t) >= 3 and t not in _NAME_STOPWORDS]
-    return any(re.search(r"\b" + re.escape(t) + r"\b", up) for t in distinctive)
+    return any(_mentions(t, up) for t in distinctive)
+
+
+def cast_named_in_prose(scene_chars: list, all_cast: list, prose: str) -> list:
+    """Add any project cast member NAMED in the scene's prose but missing from
+    the structurer's per-scene list. The structurer drops an on-screen pet and
+    object-like names (雪球 = 'snowball') from characters_present, and a bare \\b
+    never matched a CJK name — so the pet never entered the scene's cast, was
+    left out of every shot, and then the set dresser (not knowing it is a
+    character) dressed it as a prop. Existing entries keep their order/dicts;
+    found ones are appended in all_cast order. Matched CJK-safely against the
+    prose (description + stage directions) ONLY — a character merely talked
+    about in dialogue is not necessarily on screen."""
+    present = {str((c or {}).get("name", "")).strip().upper()
+               for c in (scene_chars or []) if isinstance(c, dict)}
+    out = list(scene_chars or [])
+    for c in (all_cast or []):
+        if not isinstance(c, dict):
+            continue
+        nm = str(c.get("name") or "").strip()
+        if nm and nm.upper() not in present and _name_in_text(nm, prose):
+            out.append(c)
+            present.add(nm.upper())
+    return out
 
 
 def reconcile_frame_with_subjects(in_frame: list, subjects, action: str) -> list:
@@ -119,17 +153,24 @@ def reconcile_frame_with_subjects(in_frame: list, subjects, action: str) -> list
             if str(n).strip().upper() in subj_names or _name_in_text(n, action)]
 
 
+# zh alternations ride the same regexes with NO \b (CJK has no word
+# boundaries): a zh drama's actions were invisible to every verb pattern, so
+# legitimate movement was snapped back, held props never released, and pairs
+# never separated.
 _MOVE_RE = re.compile(
     r"\b(walk|walks|walking|step|steps|stepping|move|moves|moving|approach|"
     r"approaches|approaching|cross|crosses|crossing|closer|away|toward|"
     r"towards|retreat|retreats|backs?|backing|rush|rushes|rushing|"
-    r"lean|leans|leaning|rise|rises|rising|sits?|sitting|stands? up)\b", re.IGNORECASE)
+    r"lean|leans|leaning|rise|rises|rising|sits?|sitting|stands? up)\b"
+    r"|走|跑|奔|冲过|移动|靠近|远离|后退|退后|上前|起身|站起|坐下|蹲下|"
+    r"跪下|翻过|爬|越过|跨过|穿过|挪", re.IGNORECASE)
 
 
 _RELEASE_RE = re.compile(
     r"\b(?:puts?|sets?|lays?|places?)\s+(?:\w+\s+){0,3}?(?:down|aside|away)\b"
     r"|\blets?\s+go\b"
-    r"|\bhands?\s+(?:\w+\s+){1,4}?to\b",
+    r"|\bhands?\s+(?:\w+\s+){1,4}?to\b"
+    r"|放下|放开|松开|搁下|递给|交给|放到|放进|塞给",
     re.IGNORECASE)
 
 
@@ -178,7 +219,9 @@ _APPROACH_VERBS = (r"(?:walks?|walking|runs?|running|steps?|stepping|moves?|"
                    r"hurries|hurrying)")
 _AWAY_RE = re.compile(
     r"\b(?:walks?|steps?|turns?|moves?|backs?|pulls?)\s+(?:\w+\s+){0,2}?away\b"
-    r"|\bleaves\b|\bexits?\b|\bstorms?\s+(?:off|out)\b", re.IGNORECASE)
+    r"|\bleaves\b|\bexits?\b|\bstorms?\s+(?:off|out)\b"
+    r"|离开|走开|跑开|离去|退出|退下|冲出|跑出|走出|夺门而出|消失在",
+    re.IGNORECASE)
 
 
 def _approach_re(name: str) -> re.Pattern:
@@ -190,6 +233,17 @@ def _approach_re(name: str) -> re.Pattern:
         rf"\b(?:{_APPROACH_VERBS}\s+(?:back\s+)?(?:over\s+|up\s+)?"
         rf"(?:to|toward|towards)|approach(?:es|ing)?)\s+(?:the\s+)?({nm})\b",
         re.IGNORECASE)
+
+
+def _approach_re_zh(name: str) -> re.Pattern:
+    """The zh forms of the same name-gated approach: 向NAME走去 / 朝NAME跑来
+    (coverb + name + motion verb) and 走向NAME / 靠近NAME (verb + name).
+    转向NAME (turns toward) deliberately does NOT match — turning in place is
+    legitimate staging, only closing distance is a teleport-reset."""
+    nm = re.escape(name)
+    return re.compile(
+        rf"(?:[向朝往]({nm})(?:身边|这边|那边)?[走跑冲奔扑凑迎靠][了去来近过]*)"
+        rf"|(?:(?:走向|走近|跑向|冲向|奔向|扑向|凑近|靠近|迎向|走到)({nm}))")
 
 
 def enforce_proximity(shots: list) -> tuple[list, list[str]]:
@@ -221,6 +275,16 @@ def enforce_proximity(shots: list) -> tuple[list, list[str]]:
                              f"they are already together - rewritten to stand "
                              f"with them ({where})")
                 return text[:m.start()] + f"stands with {m.group(1)}" + text[m.end():]
+            # the zh drama wrote the same teleport-reset in Chinese (向玛丽走去)
+            # and the English pattern never saw it — the render then spawned a
+            # SECOND copy of the partner walking in from off-screen
+            m = _approach_re_zh(cand).search(text)
+            if m:
+                who = m.group(1) or m.group(2)
+                notes.append(f"shot {i + 1}: approach toward {who} but they "
+                             f"are already together - rewritten to stand "
+                             f"with them ({where})")
+                return text[:m.start()] + f"站在{who}身旁" + text[m.end():]
         return text
 
     for i, sd in enumerate(shots):
@@ -243,15 +307,87 @@ def enforce_proximity(shots: list) -> tuple[list, list[str]]:
                 if new != shot_act:
                     sd["action"] = shot_act = new
         # (2) sharing this shot establishes togetherness (at the cut they
-        # are in one framing - the next shot may not re-approach)
+        # are in one framing - the next shot may not re-approach). Sharing it
+        # ACROSS a barrier does NOT: a character staged on the far side of a
+        # fence (enforce_barrier_depth, which must run FIRST) is seen with the
+        # onlookers but not WITH them — approaching them after a crossing is
+        # legitimate staging, never a teleport-reset.
+        far_u = {n for s, n in zip(subs, names_u)
+                 if "far side" in str(s.get("frame_position") or "")}
         for a in range(len(names_u)):
             for b in range(a + 1, len(names_u)):
+                if names_u[a] in far_u or names_u[b] in far_u:
+                    continue
                 together.add(frozenset({names_u[a], names_u[b]}))
         # (3) a visible separation breaks every pair the mover is in
         for s, name_u in zip(subs, names_u):
             texts = f"{s.get('action') or ''} {shot_act}"
             if _AWAY_RE.search(texts):
                 together = {p for p in together if name_u not in p}
+    return shots, notes
+
+
+# A physical divider the camera can see through. The seen character stands on
+# its FAR side — without depth staging the render put the pet 雪球, seen
+# 透过栅栏 (through the fence), shoulder to shoulder with the onlookers.
+_BARRIER_ZH = "栅栏|篱笆|围栏|栏杆|铁丝网|围墙|矮墙|窗户|车窗|玻璃|门缝|大门"
+_BARRIER_EN = "fence|railing|gate|wall|window|windshield|glass|bars|hedge"
+_SEE_ZH = "看到|看见|望见|望着|注视着?|盯着|凝视着?|发现"
+# zh: 透过/隔着 + barrier ... see-verb + (seen segment)
+_THROUGH_SEE_ZH = re.compile(
+    rf"(?:透过|隔着)[^，。！？]*?({_BARRIER_ZH})[^，。！？]*?(?:{_SEE_ZH})([^，。！？]*)")
+_SEE_EN = r"(?:sees?|seeing|watches|watching|spots?|spotting|glimpses?|notices?)"
+# en, both orders: "sees (X) through the fence" / "through the fence ... sees (X)"
+_THROUGH_SEE_EN = re.compile(
+    rf"\b{_SEE_EN}\s+([^.!?]*?)\s+through\s+(?:the\s+|a\s+)?({_BARRIER_EN})\b"
+    rf"|\bthrough\s+(?:the\s+|a\s+)?({_BARRIER_EN})\b[^.!?]*?\b{_SEE_EN}\s+([^.!?]*)",
+    re.IGNORECASE)
+_CROSS_RE = re.compile(
+    r"\b(?:climbs?|climbing|jumps?|jumping|vaults?|hops?)\s+(?:over|across)\b"
+    r"|\b(?:crosses|crossing|enters?|entering)\b"
+    r"|\bsteps?\s+(?:inside|into|through)\b|\bopens?\s+the\s+gate\b"
+    r"|翻过|爬过|越过|跨过|穿过|钻过|走进|跑进|冲进|进入|推开|打开",
+    re.IGNORECASE)
+
+
+def enforce_barrier_depth(shots: list) -> tuple[list, list[str]]:
+    """A character SEEN THROUGH a barrier (安吉琳透过栅栏看到雪球 / 'sees Snowy
+    through the fence') is on the barrier's FAR side: stage them deep
+    background beyond it, never beside the onlookers — the blocking said only
+    'MG right', so the render grouped the pet with the two women. The far-side
+    depth THREADS into the scene's later shots (like held props) until a
+    crossing (翻过栅栏 / climbs over) dissolves the barrier. Operates on the
+    storyboard's shot dicts, mutates subjects in place, returns (shots, notes)."""
+    far: dict[str, str] = {}   # subject name upper -> barrier word
+    notes: list[str] = []
+    for i, sd in enumerate(shots):
+        if not isinstance(sd, dict):
+            continue
+        action = str(sd.get("action") or "")
+        subs = [s for s in (sd.get("subjects") or []) if isinstance(s, dict)]
+        # a crossing dissolves the divide for the whole scene BEFORE this
+        # shot's staging applies (she is through the fence now)
+        if far and _CROSS_RE.search(action):
+            far = {}
+        m = _THROUGH_SEE_ZH.search(action)
+        barrier, seen = (m.group(1), m.group(2)) if m else (None, "")
+        if not barrier:
+            m = _THROUGH_SEE_EN.search(action)
+            if m:
+                barrier = m.group(2) or m.group(3)
+                seen = m.group(1) or m.group(4) or ""
+        if barrier and seen.strip():
+            for s in subs:
+                nm = str(s.get("character") or "").strip()
+                if nm and _name_in_text(nm, seen):
+                    far[nm.upper()] = barrier
+        for s in subs:
+            nm = str(s.get("character") or "").strip().upper()
+            if nm in far:
+                s["frame_position"] = (f"far background, on the far side of "
+                                       f"the {far[nm]}, seen through it")
+                notes.append(f"shot {i + 1}: {s.get('character')} staged beyond "
+                             f"the {far[nm]} (seen through it)")
     return shots, notes
 
 

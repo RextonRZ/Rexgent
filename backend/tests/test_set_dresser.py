@@ -26,6 +26,27 @@ async def test_dress_returns_items_and_changes():
 
 
 @pytest.mark.asyncio
+async def test_dress_warns_off_dressing_characters_as_props():
+    # a pet whose name reads like an object (雪球 = "Snowball") was dressed as a
+    # prop; passing the cast forbids it, and the names ride into the prompt
+    d = _dresser(SET_JSON)
+    await d.dress({"scene_number": 1}, [{"shot_number": 1}],
+                  cast_names=["安吉琳", "雪球"])
+    msg = d.qwen.chat_json.call_args.kwargs["messages"][1]["content"]
+    assert "雪球" in msg
+    assert "NEVER" in msg and "prop" in msg
+
+
+@pytest.mark.asyncio
+async def test_dress_without_cast_is_unchanged():
+    # cast_names is optional — omitting it keeps the original message shape
+    d = _dresser(SET_JSON)
+    await d.dress({"scene_number": 1}, [{"shot_number": 1}])
+    msg = d.qwen.chat_json.call_args.kwargs["messages"][1]["content"]
+    assert "CHARACTERS present" not in msg
+
+
+@pytest.mark.asyncio
 async def test_dress_tolerates_garbage():
     d = _dresser(["not", "a", "dict"])
     out = await d.dress({}, [])
