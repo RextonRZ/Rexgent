@@ -59,3 +59,13 @@ def test_utf16_text_file_decodes_readably():
     result = parser.parse_bytes("INT. 咖啡馆 - 夜\n\n对白。".encode("utf-16"), "script.txt")
     assert "咖啡馆" in result
     assert "\x00" not in result
+
+
+def test_corrupt_docx_and_pdf_get_clear_errors():
+    # a truncated upload raises BadZipFile (docx) / a fitz error (pdf) — both
+    # must normalize to the parser's own ValueError so the route can 400 it
+    parser = ScriptParser()
+    with pytest.raises(ValueError, match="could not be read"):
+        parser.parse_bytes(b"PK\x03\x04 truncated zip", "broken.docx")
+    with pytest.raises(ValueError, match="could not be read|selectable text"):
+        parser.parse_bytes(b"%PDF-1.4 then garbage that is not a pdf", "broken.pdf")

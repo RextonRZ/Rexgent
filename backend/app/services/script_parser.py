@@ -41,7 +41,14 @@ class ScriptParser:
         return data.decode("utf-8", errors="replace")
 
     def _extract_pdf_text(self, data: bytes) -> str:
-        doc = fitz.open(stream=data, filetype="pdf")
+        try:
+            doc = fitz.open(stream=data, filetype="pdf")
+        except Exception:
+            # a truncated or garbled upload — fitz raises its own error type,
+            # which the route can only surface if it is our ValueError
+            raise ValueError("This PDF could not be read. The file may be "
+                             "corrupted or incomplete. Export it again and "
+                             "re-upload.")
         try:
             return "\n".join(page.get_text() for page in doc)
         finally:
@@ -57,5 +64,11 @@ class ScriptParser:
         return text
 
     def _parse_docx(self, data: bytes) -> str:
-        doc = Document(io.BytesIO(data))
+        try:
+            doc = Document(io.BytesIO(data))
+        except Exception:
+            # python-docx raises BadZipFile on a truncated/garbled upload
+            raise ValueError("This DOCX could not be read. The file may be "
+                             "corrupted or incomplete. Save it again and "
+                             "re-upload.")
         return "\n".join(para.text for para in doc.paragraphs)
