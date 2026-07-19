@@ -607,6 +607,55 @@ def test_anchor_english_forms():
     assert "gate" in shots[2]["subjects"][0]["anchor"]
 
 
+def test_anchor_never_crosses_into_another_characters_clause():
+    # "玛丽问安吉琳站在花园外做什么" anchored BOTH at the garbage place
+    # "花园外做什么" — the gap must not span another subject's name, and a
+    # capture containing a question word is not a place
+    from app.services.stage_map import thread_anchors
+    shots = [{"action": "玛丽问安吉琳站在花园外做什么。",
+              "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]}]
+    _, _ = thread_anchors(shots)
+    assert shots[0]["subjects"][0].get("anchor") is None
+    assert shots[0]["subjects"][1].get("anchor") is None
+
+
+def test_anchor_ignores_non_places_and_person_anchors():
+    from app.services.stage_map import thread_anchors
+    shots = [
+        {"action": "玛丽和安吉琳站在一起。",
+         "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]},
+        {"action": "玛丽站在安吉琳身旁，紧紧抱住她。",
+         "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]},
+    ]
+    _, _ = thread_anchors(shots)
+    assert shots[0]["subjects"][0].get("anchor") is None   # 一起 is not a place
+    assert shots[1]["subjects"][0].get("anchor") is None   # a person is not a landmark
+
+
+def test_departure_clears_the_anchor():
+    from app.services.stage_map import thread_anchors
+    shots = [
+        {"action": "玛丽站在花园外。", "subjects": [{"character": "玛丽"}]},
+        {"action": "玛丽转身离开，走向大门。", "subjects": [{"character": "玛丽"}]},
+        {"action": "玛丽低头不语。", "subjects": [{"character": "玛丽"}]},
+    ]
+    _, _ = thread_anchors(shots)
+    assert shots[0]["subjects"][0]["anchor"] == "花园外"
+    assert shots[1]["subjects"][0].get("anchor") is None
+    assert shots[2]["subjects"][0].get("anchor") is None
+
+
+def test_english_departure_clears_too():
+    from app.services.stage_map import thread_anchors
+    shots = [
+        {"action": "Mary stands by the gate.", "subjects": [{"character": "Mary"}]},
+        {"action": "Mary storms off angrily.", "subjects": [{"character": "Mary"}]},
+    ]
+    _, _ = thread_anchors(shots)
+    assert "gate" in shots[0]["subjects"][0]["anchor"]
+    assert shots[1]["subjects"][0].get("anchor") is None
+
+
 # ── framing visibility: who can PHYSICALLY be in this framing ────────────────
 
 def test_far_side_character_dropped_from_tight_framings():

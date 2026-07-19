@@ -295,11 +295,49 @@ def _anchor_res(name: str) -> list[re.Pattern]:
     ]
 
 
+# A "place" that is actually another clause's leftovers: 一起/这里/那里/原地/
+# 一旁/一边 are positions relative to someone, not landmarks, and a capture
+# containing 什么/哪 means the gap ran past the place into a trailing question
+# ("花园外做什么").
+_ANCHOR_STOPLIST = {"一起", "这里", "那里", "原地", "一旁", "一边"}
+
+
+def _place_is_bogus(place: str) -> bool:
+    return place in _ANCHOR_STOPLIST or "什么" in place or "哪" in place
+
+
+def _crosses_other_subject(match_text: str, nm: str, other_names: list) -> bool:
+    """The matched span bridged into another subject's clause ('玛丽问安吉琳
+    站在...' anchoring 玛丽 at Angeline's spot) or the 'place' captured is
+    itself a person ('站在安吉琳身旁' — a person is not a landmark)."""
+    return any(other and other != nm and other in match_text
+               for other in other_names)
+
+
+# A departure means the character is mid-motion AWAY from their anchor, not
+# arriving somewhere new — 转身离开/走向大门 must CLEAR the stale anchor
+# instead of re-anchoring to the destination named in the same breath.
+_ANCHOR_CLEAR_ZH = r"走向|跑向|冲向|奔向|走出|跑出|冲出|离开|转身离"
+_ANCHOR_CLEAR_EN = (r"\b(?:walks?|runs?|storms?|heads?)\s+(?:away|off|out)\b"
+                    r"|\b(?:leaves?|exits?)\b")
+
+
+def _anchor_clear_res(name: str) -> list[re.Pattern]:
+    nm = re.escape(name)
+    return [
+        re.compile(rf"{nm}[^，。！？]{{0,4}}?(?:{_ANCHOR_CLEAR_ZH})"),
+        re.compile(rf"{nm}[^.!?]{{0,20}}?(?:{_ANCHOR_CLEAR_EN})", re.IGNORECASE),
+    ]
+
+
 def thread_anchors(shots: list) -> tuple[list, list[str]]:
     """Stamp each subject's WORLD anchor (站在花园外 / stands by the gate)
     onto their blocking in every shot until the prose moves them somewhere
-    else. Scene-scoped: the caller passes one scene's shots. Mutates subject
-    dicts in place, returns (shots, notes)."""
+    else. A departure (转身离开, walks off) CLEARS the anchor instead of
+    re-anchoring to wherever they are headed - checked BEFORE this shot's own
+    establish patterns, so "转身离开，走到门口" still re-anchors at the new
+    spot within the same shot. Scene-scoped: the caller passes one scene's
+    shots. Mutates subject dicts in place, returns (shots, notes)."""
     anchors: dict[str, str] = {}
     notes: list[str] = []
     for i, sd in enumerate(shots):
@@ -307,18 +345,27 @@ def thread_anchors(shots: list) -> tuple[list, list[str]]:
             continue
         action = str(sd.get("action") or "")
         subs = [s for s in (sd.get("subjects") or []) if isinstance(s, dict)]
+        names = [n for n in (str(s.get("character") or "").strip() for s in subs) if n]
         for s in subs:
             nm = str(s.get("character") or "").strip()
             if not nm:
                 continue
+            others = [n for n in names if n != nm]
+            if any(pat.search(action) for pat in _anchor_clear_res(nm)):
+                anchors.pop(nm.upper(), None)
             for pat in _anchor_res(nm):
                 m = pat.search(action)
-                if m:
-                    place = next((g for g in m.groups() if g), "").strip()
-                    if place and anchors.get(nm.upper()) != place:
-                        anchors[nm.upper()] = place
-                        notes.append(f"shot {i + 1}: {nm} anchored at {place}")
-                    break
+                if not m:
+                    continue
+                if _crosses_other_subject(m.group(0), nm, others):
+                    continue
+                place = next((g for g in m.groups() if g), "").strip()
+                if not place or _place_is_bogus(place):
+                    continue
+                if anchors.get(nm.upper()) != place:
+                    anchors[nm.upper()] = place
+                    notes.append(f"shot {i + 1}: {nm} anchored at {place}")
+                break
         for s in subs:
             nm = str(s.get("character") or "").strip().upper()
             if nm in anchors:
