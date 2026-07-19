@@ -256,6 +256,23 @@ def design_voice(char, db=None, project_id=None) -> bool:
         return False
 
 
+async def probe_plate_as_reference(qwen, plate_url: str) -> str:
+    """Can this PLATE actually ride as a reference input? drama916's
+    discovery: an image can generate fine as OUTPUT yet be rejected as a
+    reference INPUT — then every keyframe/r2v call that carries it dies
+    mid-generation. One cheap probe surfaces that at casting time.
+    Returns "rejected" | "ok" | "unknown" (transient - never condemn)."""
+    try:
+        await qwen.generate_image_with_refs(
+            "The same character standing in a neutral pose, soft light.",
+            [plate_url], size="1280*1280")
+        return "ok"
+    except Exception as e:  # noqa: BLE001
+        if "DataInspection" in str(e):
+            return "rejected"
+        return "unknown"
+
+
 def assign_voice(char, index: int = 0, db=None, project_id=None) -> None:
     """Give the character a voice: DESIGN one from their character sheet
     (age/gender/personality matched); fall back to a gender-matched preset
@@ -644,6 +661,28 @@ class CastingDirector:
         if faces_locked:
             tool_event(pid, "characters", "face_lock", "succeeded", agent="Casting",
                        artifact=f"{faces_locked} identities locked")
+
+            # Reference-input probe: an image can generate fine as OUTPUT yet
+            # be rejected as a reference INPUT — every keyframe/r2v call that
+            # later carries it would die mid-generation. One cheap probe per
+            # locked face surfaces that HERE, at casting time, instead of
+            # mid-drama. Never blocks casting; a probe failure is swallowed.
+            from app.services.cost_ledger import record_image
+            for c in characters:
+                if not c.reference_image_url or c.plate_status == "ref_rejected":
+                    continue
+                try:
+                    verdict = await probe_plate_as_reference(
+                        self.plates.qwen, c.reference_image_url)
+                    record_image(self.db, pid, n=1, stage="casting_probe")
+                    if verdict == "rejected":
+                        c.plate_status = "ref_input_flagged"
+                        emit("casting.plate.warning",
+                             {"kind": "character", "key": c.name,
+                              "reason": "plate is refused as a reference "
+                                        "input by the content filter"}, pid)
+                except Exception as e:  # noqa: BLE001 — casting must never block on a probe
+                    logger.warning("reference-input probe failed for %s: %s", c.name, e)
 
         # TTS overlay mode gives every character a voice here; design_voice
         # carries the spend dialog's tick (unticked = free presets), and

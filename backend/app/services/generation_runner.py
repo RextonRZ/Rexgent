@@ -19,6 +19,7 @@ from app.services.clip_store import persist_clip_url
 from app.services.frame_sampler import extract_last_frame
 from app.services.cost_ledger import record_video
 from app.services.continuity_repair import repair_steps
+from app.services.prompt_loader import load_prompt
 from app.websocket.emitter import emit
 from app.websocket.tool_events import tool_event
 from app.agents.reporter import report_agent
@@ -70,6 +71,12 @@ def is_moderation_rejection(err_text: str) -> bool:
     """True when the error is a content-moderation verdict (not retryable),
     as opposed to a transient infra failure (timeout, reset — retryable)."""
     return bool(_MODERATION_RE.search(str(err_text or "")))
+
+
+def is_inspection_error(e: BaseException) -> bool:
+    """Content-inspection failures: retrying the SAME prompt fails again."""
+    s = str(e)
+    return "DataInspection" in s or "IPInfringement" in s
 
 
 def moderation_user_message(err_text: str) -> str:
@@ -1030,6 +1037,15 @@ class GenerationRunner:
         emit("clip:started", {"shot_id": str(shot.id),
              "model": shot.quality_tier or "happyhorse"}, pid)
 
+        # A content-inspection rejection is deterministic on the SAME prompt —
+        # the retry below only stands a real chance once the wording has been
+        # sanitized. moderation_sanitized guards it to at most one rewrite per
+        # shot; sanitized_prompt (once set) overrides every attempt after it,
+        # including a keyframe render, which consumes `prompt` further down
+        # this same loop body.
+        moderation_sanitized = False
+        sanitized_prompt = None
+
         for attempt in range(MAX_RETRIES + 1):
             try:
                 ratio = getattr(self, "_video_ratio", VIDEO_RATIO)
@@ -1082,15 +1098,25 @@ class GenerationRunner:
                     bridge_from_prev=(prev_frame_allowed and getattr(
                         get_settings(), "bridge_shots", False)))
                 prompt = crafted.get("prompt", "")
+                # a prior inspection failure sanitized this shot's wording —
+                # override whatever this attempt just crafted so the retry
+                # (and any keyframe render further down this loop body, which
+                # consumes `prompt` after this point) sends the safer text,
+                # not the wording that already failed moderation
+                if sanitized_prompt:
+                    prompt = sanitized_prompt
                 # the crafter has ALWAYS produced a negative prompt; until now
                 # it was dropped on the floor before dispatch
                 negative = (crafted.get("negative_prompt") or "").strip() or None
                 # persist the transformation so the UI can show beat -> prompt
                 # -> negative -> resolved environment (and why it won)
+                repairs = list(crafted.get("repairs") or [])
+                if sanitized_prompt and "moderation sanitize" not in repairs:
+                    repairs.append("moderation sanitize")
                 shot.prompt_json = {"action": shot.action, "prompt": prompt,
                                     "negative_prompt": negative,
                                     "environment": environment,
-                                    "repairs": crafted.get("repairs")}
+                                    "repairs": repairs}
                 tool_event(pid, "generate", "prompt_craft", "succeeded", agent="Director")
                 # a wan-planned shot demoted to happyhorse (newcomer / no-frame)
                 # must RECORD happyhorse, not its planned tier
@@ -1283,6 +1309,34 @@ class GenerationRunner:
                 return (frame_url, clip_url, spent_usd)
             except Exception as e:  # HARD failure only -> at most one retry
                 logger.error(f"Shot {shot.id} attempt {attempt} hard-failed: {e}")
+                # A content-inspection failure retried with the SAME prompt
+                # just fails again — one cheap sanitize rewrite gives the
+                # retry a real chance. At most once per shot; best-effort, so
+                # a sanitize-call failure just falls through to the normal
+                # (unsanitized) retry/give-up handling below.
+                if (is_inspection_error(e) and not moderation_sanitized
+                        and attempt < MAX_RETRIES):
+                    moderation_sanitized = True
+                    try:
+                        sanitize_system = load_prompt("moderation_sanitize.txt")
+                        rewrite = await self.qwen.chat(
+                            messages=[{"role": "system", "content": sanitize_system},
+                                      {"role": "user", "content": prompt}],
+                            temperature=0.2, task="moderation_sanitize")
+                        rewrite = (rewrite or "").strip()
+                        if rewrite:
+                            sanitized_prompt = rewrite
+                            shot.prompt_json = shot.prompt_json or {}
+                            shot.prompt_json.setdefault("repairs", []).append(
+                                "moderation sanitize")
+                        tool_event(pid, "generate", "self_correct", "started",
+                                   agent="Renderer", index=attempt + 1,
+                                   total=MAX_RETRIES,
+                                   error="moderation sanitize retry")
+                        continue
+                    except Exception as se:  # noqa: BLE001 — sanitize is best-effort
+                        logger.warning("moderation sanitize failed for shot %s: %s",
+                                       shot.id, se)
                 # moderation verdicts on BORDERLINE reference images are
                 # dispatch-flaky (the same refs passed 9 sibling shots and one
                 # got rejected), so the retry is worth its cost — but when BOTH

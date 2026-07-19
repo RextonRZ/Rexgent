@@ -13,7 +13,7 @@ from app.services.plate_generator import (PlateGenerator, character_plate_prompt
 from app.services.oss_manager import OSSManager
 from app.services.face_embedder import FaceEmbedder
 from app.services.qwen_client import QwenClient
-from app.services.casting_director import voice_design_prompt
+from app.services.casting_director import voice_design_prompt, probe_plate_as_reference
 from app.config import get_settings
 
 from app.deps import get_current_user
@@ -400,6 +400,25 @@ async def generate_character_plates(character_id: str, design_voice: bool = True
             # seed identity from the default plate only when no face exists yet
             if v.is_default and not c.reference_image_url:
                 c.reference_image_url, c.face_vector, c.plate_status = url, vector, "ai_generated"
+        # Reference-input probe: an image can generate fine as OUTPUT yet be
+        # rejected as a reference INPUT — surfaced here instead of failing
+        # every later render that carries it. Never blocks this endpoint.
+        if c.reference_image_url and c.plate_status != "ref_rejected":
+            try:
+                from app.services.cost_ledger import record_image
+                verdict = await probe_plate_as_reference(
+                    QwenClient(get_settings()), c.reference_image_url)
+                record_image(db, project_id, n=1, stage="casting_probe")
+                if verdict == "rejected":
+                    c.plate_status = "ref_input_flagged"
+                    emit("casting.plate.warning",
+                         {"kind": "character", "key": c.name,
+                          "reason": "plate is refused as a reference input "
+                                    "by the content filter"}, project_id)
+            except Exception:  # noqa: BLE001 — casting must never block on a probe
+                import logging
+                logging.getLogger(__name__).warning(
+                    "reference-input probe failed for %s", c.name)
         tool_event(project_id, "characters", "generate_plates", "succeeded",
                    agent="Casting", artifact=f"{len(variants)} plates on {c.name}")
     if getattr(get_settings(), "tts_overlay", False) and not creature:

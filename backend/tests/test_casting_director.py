@@ -477,3 +477,20 @@ def test_zh_place_names_ending_in_suffix_chars_stay_whole():
     # real qualifiers still strip
     assert location_family("花园外") == location_family("花园")
     assert location_view("花园外") == "ext"
+
+
+def test_probe_plate_as_reference_flags_inspection_failures():
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+    from app.services.casting_director import probe_plate_as_reference
+
+    qwen = MagicMock()
+    qwen.generate_image_with_refs = AsyncMock(
+        side_effect=RuntimeError("DataInspectionFailed: blocked"))
+    assert asyncio.run(probe_plate_as_reference(qwen, "https://oss/p.png")) == "rejected"
+
+    qwen.generate_image_with_refs = AsyncMock(return_value="https://x/ok.png")
+    assert asyncio.run(probe_plate_as_reference(qwen, "https://oss/p.png")) == "ok"
+
+    qwen.generate_image_with_refs = AsyncMock(side_effect=RuntimeError("429 throttled"))
+    assert asyncio.run(probe_plate_as_reference(qwen, "https://oss/p.png")) == "unknown"

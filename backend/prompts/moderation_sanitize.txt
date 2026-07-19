@@ -1,0 +1,1 @@
+Rewrite the video generation prompt so it passes strict content moderation. Keep the scene, the characters, their staging, the camera and the mood exactly. Remove or soften anything violent, gory, dark, brand-specific or person-specific, and rewrite physically intimate or suggestive wording into innocent, G-rated staging. Reply with the rewritten prompt only - no explanations.
