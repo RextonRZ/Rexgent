@@ -52,3 +52,6 @@ docs/
 05_QWEN_PROMPTS.md
 06_MCP_TOOLS.md
 08_NARRATIVE_MEMORY_GRAPH.md
+
+# landing style samples: ~5MB each, regenerable via backend/scripts/generate_style_samples.py
+frontend/public/style-samples/
