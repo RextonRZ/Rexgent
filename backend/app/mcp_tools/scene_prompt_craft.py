@@ -7,18 +7,20 @@ from app.config import get_settings
 
 # Identity-pin vocabularies (rule 22): what a character wears on the face and
 # hair must be stated in EVERY shot's prompt, or the render coin-flips it.
-_EYEWEAR_RE = re.compile(r"glasses|spectacles|eyewear|sunglasses", re.I)
+_EYEWEAR_RE = re.compile(
+    r"glasses|spectacles|eyewear|sunglasses|眼镜|墨镜|太阳镜", re.I)
 _ACCESSORY_RE = re.compile(
     r"headband|hairpin|hair\s*clip|hair\s*bow|bow\s+headband|ribbon|tiara|"
-    r"hair accessor", re.I)
+    r"hair accessor|发箍|发带|发夹|发绳|蝴蝶结|头饰|丝带|头绳", re.I)
 _FACIAL_HAIR_RE = re.compile(
-    r"clean-shaven|beard|moustache|mustache|stubble|goatee|facial hair", re.I)
+    r"clean-shaven|beard|moustache|mustache|stubble|goatee|facial hair|"
+    r"胡子|胡须|络腮胡|山羊胡|八字胡", re.I)
 # Headwear (rule 22): a cap/beanie/hat is kept OUT of the identity fragment by
 # design (it occludes the face plate) and is unknown to _pin_segments, so it
 # rode on the crafter LLM's whim and flickered shot to shot (the Lucas cap bug).
 _HEADWEAR_RE = re.compile(
-    r"beanie|knit\s*cap|\bcap\b|\bhat\b|\bhood\b|toque|headwear|headscarf|turban",
-    re.I)
+    r"beanie|knit\s*cap|\bcap\b|\bhat\b|\bhood\b|toque|headwear|headscarf|"
+    r"turban|帽子|棒球帽|毛线帽|鸭舌帽|头巾|兜帽", re.I)
 
 _ACTION_CAMERA_RE = re.compile(r"\b(?:the\s+)?camera\b", re.I)
 # An EXIT action ("runs away", "runs out of the frame", "disappearing into
@@ -154,6 +156,23 @@ def headwear_pin(fragment: str | None, outfit: str | None) -> str:
             if seg and _HEADWEAR_RE.search(seg):
                 return seg
     return ""
+
+
+def _pin_segments(text: str) -> list[str]:
+    segs = [t.strip() for t in re.split(r"[,;.，、。；]", text) if t.strip()]
+    pins: list[str] = []
+    hair = next((t for t in segs if re.search(r"\bhair\b", t, re.I)
+                 and not _ACCESSORY_RE.search(t)), None)
+    if hair:
+        pins.append(hair)
+    eye = next((t for t in segs if _EYEWEAR_RE.search(t)), None)
+    pins.append(eye or "no eyewear")
+    face = next((t for t in segs if _FACIAL_HAIR_RE.search(t)), None)
+    if face:
+        pins.append(face)
+    acc = next((t for t in segs if _ACCESSORY_RE.search(t)), None)
+    pins.append(acc or "no hair accessories")
+    return pins
 
 
 _ABSORBED_EYELINE = ("on what they are doing - absorbed in the action, "
@@ -697,22 +716,6 @@ class ScenePromptCraft:
         # trope instead, and glasses/headbands flicker in and out between
         # shots. Re-state per character whatever the body dropped; whatever
         # nobody wears is banned in the negative below.
-        def _pin_segments(text: str) -> list[str]:
-            segs = [t.strip() for t in _re.split(r"[,;.]", text) if t.strip()]
-            pins: list[str] = []
-            hair = next((t for t in segs if _re.search(r"\bhair\b", t, _re.I)
-                         and not _ACCESSORY_RE.search(t)), None)
-            if hair:
-                pins.append(hair)
-            eye = next((t for t in segs if _EYEWEAR_RE.search(t)), None)
-            pins.append(eye or "no eyewear")
-            face = next((t for t in segs if _FACIAL_HAIR_RE.search(t)), None)
-            if face:
-                pins.append(face)
-            acc = next((t for t in segs if _ACCESSORY_RE.search(t)), None)
-            pins.append(acc or "no hair accessories")
-            return pins
-
         identity_clause = ""
         if character_visuals:
             body_low = body.lower()
@@ -841,7 +844,8 @@ class ScenePromptCraft:
             # in close-ups. Each is banned ONLY when no cast description
             # wears it; skin artifacts are never a wardrobe choice, always banned.
             visuals_text = " ".join(str(v) for v in character_visuals.values()).lower()
-            if not _re.search(r"beard|moustache|mustache|stubble|facial hair|goatee",
+            if not _re.search(r"beard|moustache|mustache|stubble|facial hair|goatee|"
+                              r"胡子|胡须|络腮胡|山羊胡|八字胡",
                               visuals_text):
                 result["negative_prompt"] += ", beard, mustache, stubble, facial hair"
             # negation-aware: "no glasses" in a fragment means NOT wearing —

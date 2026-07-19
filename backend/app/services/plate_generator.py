@@ -30,22 +30,31 @@ import re as _re
 # invented pair gets locked into the identity forever (the default plate seeds
 # the face reference). Ban eyewear UNLESS the character's own description or
 # outfit actually calls for it.
-_EYEWEAR = _re.compile(r"glasses|spectacles|eyewear|sunglasses|眼镜", _re.I)
+_EYEWEAR = _re.compile(r"glasses|spectacles|eyewear|sunglasses|眼镜|墨镜|太阳镜", _re.I)
 
 
 _EYEWEAR_NEGATED = _re.compile(
     r"\b(?:no|without|not\s+wearing|never\s+wears?)\s+(?:any\s+)?"
     r"(?:eye)?(?:glasses|spectacles|eyewear|sunglasses)\b", _re.I)
 
+# zh negation precedes the noun ("不戴眼镜") instead of substituting cleanly
+# like the English forms above — a zh eyewear match is negated when one of
+# these sits within 4 characters before it.
+_ZH_EYEWEAR_NEGATION_RE = _re.compile(r"不戴|没戴|没有戴|无")
+
 
 def wears_eyewear(*texts) -> bool:
     """Whether the character ACTUALLY wears eyewear. A negated mention
-    ('clean-shaven, no glasses') must count as NOT wearing — the naive
-    substring match read it as glasses, skipped the plate's eyewear ban, and
-    the plate invented specs that every render then (correctly) refused."""
+    ('clean-shaven, no glasses' / '不戴眼镜') must count as NOT wearing — the
+    naive substring match read it as glasses, skipped the plate's eyewear
+    ban, and the plate invented specs that every render then (correctly)
+    refused."""
     for x in texts:
         t = _EYEWEAR_NEGATED.sub("", str(x or ""))
-        if _EYEWEAR.search(t):
+        for m in _EYEWEAR.finditer(t):
+            prefix = t[max(0, m.start() - 4):m.start()]
+            if _ZH_EYEWEAR_NEGATION_RE.search(prefix):
+                continue
             return True
     return False
 

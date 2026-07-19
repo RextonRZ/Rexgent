@@ -1312,3 +1312,79 @@ async def test_blocking_row_states_the_anchor():
                                 "anchor": "花园外"}]})
     user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "position: 花园外" in user_msg
+
+
+def test_zh_hairband_is_pinned_not_banned():
+    # 发箍 was invisible to the English-only accessory regex, so the identity
+    # lock claimed "no hair accessories" AND the negative banned headbands —
+    # our own prompt stripped her hairband in half the shots
+    from app.mcp_tools.scene_prompt_craft import _pin_segments
+    pins = _pin_segments("十岁女孩，黑色双马尾，戴着红色发箍，蓝色连衣裙")
+    joined = " ".join(pins)
+    assert "发箍" in joined
+    assert "no hair accessories" not in joined
+
+
+@pytest.mark.asyncio
+async def test_zh_accessory_wearer_gets_no_headband_ban():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    out = await crafter.craft(
+        shot={"shot_type": "MS", "action": "安吉琳低头哭泣。"},
+        character_visuals={"安吉琳": {"video_prompt_fragment":
+                                      "十岁女孩，戴着红色发箍"}},
+        target_model="happyhorse")
+    assert "headband" not in out["negative_prompt"]
+
+
+def test_zh_exit_verbs_detected():
+    from app.mcp_tools.scene_prompt_craft import exiting_characters
+    out = exiting_characters("安吉琳试图挣脱玛丽的手，走向花园。", ["安吉琳", "玛丽"])
+    assert out == ["安吉琳"]          # she breaks free; 玛丽 stays
+
+
+@pytest.mark.asyncio
+async def test_separation_suppresses_mutual_gaze():
+    # "look at EACH OTHER the ENTIRE shot" contradicted the break-free action
+    # and the model resolved it with a lens turn at the clip tail
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    out = await crafter.craft(
+        shot={"shot_type": "MS",
+              "action": "玛丽用力拉着安吉琳；安吉琳试图挣脱玛丽的手，走向花园。"},
+        character_visuals={"安吉琳": {"video_prompt_fragment": "十岁女孩"},
+                           "玛丽": {"video_prompt_fragment": "母亲"}},
+        target_model="happyhorse")
+    assert "EACH OTHER" not in out["prompt"]
+    assert "back to the camera" in out["prompt"]   # the exit clause owns the end
+
+
+@pytest.mark.asyncio
+async def test_far_staged_subject_kills_mutual_gaze_and_aims_the_near_one():
+    # 安吉琳 rendered staring into the lens while 雪球 stood far behind her —
+    # geometrically impossible to also "look at each other"
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    out = await crafter.craft(
+        shot={"shot_type": "MS", "action": "安吉琳望着远处的雪球。"},
+        character_visuals={"安吉琳": {"video_prompt_fragment": "十岁女孩"},
+                           "雪球": {"video_prompt_fragment": "白色小兔子"}},
+        target_model="happyhorse",
+        blocking={"subjects": [
+            {"character": "安吉琳", "frame_position": "MG"},
+            {"character": "雪球",
+             "frame_position": "far background, on the far side of the 栅栏, seen through it"},
+        ]})
+    assert "EACH OTHER" not in out["prompt"]
+    assert "in the distance" in out["prompt"]
+    assert "away from the lens" in out["prompt"]
+    assert "position: 花园外" in user_msg

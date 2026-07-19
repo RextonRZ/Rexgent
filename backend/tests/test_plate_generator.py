@@ -381,3 +381,10 @@ def test_styled_edit_keeps_plate_backdrop_plain():
     assert "natural backgrounds" not in p
     assert "hand-painted animation style" in p
     assert "do not paint scenery" in p
+
+
+def test_wears_eyewear_reads_chinese():
+    from app.services.plate_generator import wears_eyewear
+    assert wears_eyewear("一位戴着眼镜的中年教师") is True
+    assert wears_eyewear("一位不戴眼镜的年轻人") is False
+    assert wears_eyewear("十岁女孩，红色发箍") is False
