@@ -115,6 +115,14 @@ class TestPromptSanitizer:
         assert "INT." not in result
         assert "woman sits at desk" in result
 
+    def test_corner_quoted_text_is_stripped(self):
+        # 「...」/『...』 quoted dialogue leaked into video prompts and rendered
+        # as garbled on-screen glyphs, exactly like straight-quoted text
+        out = self.sanitizer.sanitize("她轻声说「那是雪球！它在这里！」然后微笑")
+        assert "它在这里" not in out
+        out2 = self.sanitizer.sanitize("他喊道『快跑！离开这里！』并转身")
+        assert "快跑" not in out2
+
 
 class TestJsonOutputValidator:
     def setup_method(self):

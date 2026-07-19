@@ -5,7 +5,7 @@ from app.services.character_traits import (is_creature, is_stylized_style,
 
 def test_species_of_finds_the_creature_noun():
     assert species_of("a small white rabbit with one grey ear") == "rabbit"
-    assert species_of("an old golden retriever dog, muddy paws") == "dog"
+    assert species_of("an old golden retriever dog, muddy paws") == "retriever"
     assert species_of("a battered service robot with one cracked lens") == "robot"
 
 

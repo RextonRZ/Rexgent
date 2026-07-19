@@ -86,7 +86,7 @@ class PromptSanitizer:
     # List markers at line start OR inline (", 2. ", " 3) ") — requires trailing
     # whitespace so decimals like "5.5" are never touched.
     NUMBERING_PATTERN = re.compile(r"(?:^|\s)\d+[\.\)]\s+", re.MULTILINE)
-    QUOTED_TEXT_PATTERN = re.compile(r"[\"“”][^\"“”]{2,}[\"“”]")
+    QUOTED_TEXT_PATTERN = re.compile(r'[\”””][^\”””]{2,}[\”””]|[^]{2,}|[^]{2,}')
     SINGLE_QUOTED_PATTERN = re.compile(r"['‘’][^'‘’]{2,}['‘’]")
     YEAR_PATTERN = re.compile(r"\b(19|20)\d{2}\b")
     NUMBER_GROUP_PATTERN = re.compile(
