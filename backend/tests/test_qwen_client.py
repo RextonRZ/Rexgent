@@ -333,3 +333,45 @@ async def test_videoedit_sends_video_plus_reference_images(monkeypatch):
     assert captured["model"] == get_settings().qwen_wan_videoedit_model
     assert captured["media"][0] == {"type": "video", "url": "https://oss/clip.mp4"}
     assert {"type": "reference_image", "url": "outfit.png"} in captured["media"]
+
+
+@pytest.mark.asyncio
+async def test_generate_image_with_refs_builds_multimodal_content(monkeypatch):
+    # keyframe path: each reference image rides as its own content item
+    # ahead of the text, on the same sync multimodal endpoint edit_image uses.
+    from app.services.qwen_client import QwenClient
+    from app.config import get_settings
+    import app.services.qwen_client as qc
+    client = QwenClient(get_settings())
+    captured = {}
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"output": {"choices": [{"message": {"content": [
+                {"image": "https://example/img.png"}]}}]}}
+
+    class FakeAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None, timeout=None):
+            captured["url"] = url
+            captured["json"] = json
+            return FakeResp()
+
+    monkeypatch.setattr(qc.httpx, "AsyncClient", lambda *a, **k: FakeAsyncClient())
+    out = await client.generate_image_with_refs(
+        "the opening frame", ["https://a/plate1.png", "https://a/loc.png"],
+        size="1280*1280")
+    assert out == "https://example/img.png"
+    assert captured["url"].endswith("/services/aigc/multimodal-generation/generation")
+    content = captured["json"]["input"]["messages"][0]["content"]
+    assert content[0] == {"image": "https://a/plate1.png"}
+    assert content[1] == {"image": "https://a/loc.png"}
+    assert content[2]["text"] == "the opening frame"
+    assert captured["json"]["parameters"]["size"] == "1280*1280"

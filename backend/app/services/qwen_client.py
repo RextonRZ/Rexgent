@@ -482,6 +482,43 @@ class QwenClient:
             raise RuntimeError(f"Image edit returned no URL: {output}")
         return url
 
+    async def generate_image_with_refs(
+        self,
+        prompt: str,
+        ref_urls: list[str],
+        size: str = "1280*1280",
+    ) -> str:
+        """Multi-reference image generation on the SYNCHRONOUS multimodal
+        endpoint (same one edit_image uses): each reference image rides as
+        its own content item ahead of the text. This is the keyframe path —
+        an image model holds faces far better than any video model, so the
+        shot's opening frame is drawn here and only ANIMATED by video."""
+        s = get_settings()
+        content: list[dict] = [{"image": u} for u in (ref_urls or [])]
+        content.append({"text": prompt})
+        payload = {
+            "model": s.qwen_image_edit_model,
+            "input": {"messages": [{"role": "user", "content": content}]},
+            "parameters": {"watermark": False, "size": size},
+        }
+        async with httpx.AsyncClient() as http:
+            response = await http.post(
+                self.video_base_url + s.qwen_image_edit_path,
+                headers={"Authorization": f"Bearer {self.api_key}",
+                         "Content-Type": "application/json"},
+                json=payload,
+                timeout=180.0,
+            )
+            if response.status_code >= 400:
+                raise RuntimeError(
+                    f"DashScope multi-ref image {response.status_code}: "
+                    f"{response.text[:600]}")
+            output = response.json().get("output", {})
+        url = self._extract_image_url(output)
+        if not url:
+            raise RuntimeError(f"Multi-ref image returned no URL: {output}")
+        return url
+
     async def check_face_reference(self, image_url: str) -> str:
         """Preflight a face reference against the edit model's content
         inspection AT UPLOAD TIME — before any casting money. DashScope
