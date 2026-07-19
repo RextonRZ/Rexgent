@@ -605,3 +605,78 @@ def test_anchor_english_forms():
     assert "fence" in shots[0]["subjects"][0]["anchor"]
     assert "fence" in shots[1]["subjects"][0]["anchor"]
     assert "gate" in shots[2]["subjects"][0]["anchor"]
+
+
+# ── framing visibility: who can PHYSICALLY be in this framing ────────────────
+
+def test_far_side_character_dropped_from_tight_framings():
+    # 雪球 staged beyond the fence was listed in an MCU of 安吉琳 — its plate
+    # rode and the model pasted it in close. Out of the framing's field: drop.
+    from app.services.stage_map import filter_frame_by_framing
+    shots = [{
+        "shot_type": "MCU", "dialogue": None,
+        "characters_in_frame": ["安吉琳", "雪球"],
+        "subjects": [
+            {"character": "安吉琳", "frame_position": "MG"},
+            {"character": "雪球",
+             "frame_position": "far background, on the far side of the 栅栏, seen through it"},
+        ]}]
+    _, notes = filter_frame_by_framing(shots)
+    assert shots[0]["characters_in_frame"] == ["安吉琳"]
+    assert [s["character"] for s in shots[0]["subjects"]] == ["安吉琳"]
+    assert notes
+
+
+def test_bg_dropped_from_cu_but_kept_in_mcu():
+    from app.services.stage_map import filter_frame_by_framing
+    cu = [{"shot_type": "CU", "dialogue": None,
+           "characters_in_frame": ["A", "B"],
+           "subjects": [{"character": "A", "frame_position": "FG"},
+                        {"character": "B", "frame_position": "BG"}]}]
+    _, _ = filter_frame_by_framing(cu)
+    assert cu[0]["characters_in_frame"] == ["A"]
+    mcu = [{"shot_type": "MCU", "dialogue": None,
+            "characters_in_frame": ["A", "B"],
+            "subjects": [{"character": "A", "frame_position": "FG"},
+                         {"character": "B", "frame_position": "BG"}]}]
+    _, _ = filter_frame_by_framing(mcu)
+    assert mcu[0]["characters_in_frame"] == ["A", "B"]   # plain BG reads in an MCU
+
+
+def test_speaker_and_foreground_are_never_dropped():
+    from app.services.stage_map import filter_frame_by_framing
+    shots = [{
+        "shot_type": "CU", "dialogue": "那是雪球！",
+        "characters_in_frame": ["安吉琳", "玛丽"],
+        "foreground_characters": ["玛丽"],
+        "subjects": [{"character": "安吉琳", "frame_position": "BG"},
+                     {"character": "玛丽", "frame_position": "FG"}]}]
+    lines = [{"character": "安吉琳", "line": "那是雪球！"}]
+    _, _ = filter_frame_by_framing(shots, dialogue_lines=lines)
+    assert "安吉琳" in shots[0]["characters_in_frame"]   # the speaker stays
+    assert "玛丽" in shots[0]["characters_in_frame"]     # the OTS shoulder stays
+
+
+def test_insert_narrows_to_action_named_cast():
+    # the scene-2 INSERT carried three cast for a two-hand detail shot
+    from app.services.stage_map import filter_frame_by_framing
+    shots = [{
+        "shot_type": "INSERT", "dialogue": None,
+        "action": "安吉琳抱起雪球，眼中满是失望。",
+        "characters_in_frame": ["安吉琳", "雪球", "玛丽"],
+        "subjects": [{"character": "安吉琳"}, {"character": "雪球"},
+                     {"character": "玛丽"}]}]
+    _, notes = filter_frame_by_framing(shots)
+    assert shots[0]["characters_in_frame"] == ["安吉琳", "雪球"]
+    assert notes
+
+
+def test_wide_framings_untouched():
+    from app.services.stage_map import filter_frame_by_framing
+    shots = [{"shot_type": "MS", "dialogue": None,
+              "characters_in_frame": ["A", "B"],
+              "subjects": [{"character": "A", "frame_position": "FG"},
+                           {"character": "B", "frame_position": "BG"}]}]
+    _, notes = filter_frame_by_framing(shots)
+    assert shots[0]["characters_in_frame"] == ["A", "B"]
+    assert notes == []

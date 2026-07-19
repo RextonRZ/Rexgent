@@ -636,3 +636,76 @@ def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
                 f"shot {i + 1}: two subjects shared screen-{side}; "
                 f"{name} re-established at screen-{other}")
     return shots_blocking, notes
+
+
+# Which framings can PHYSICALLY show whom: a character staged far beyond a
+# barrier (or deep background in a close-up) cannot be visible at that
+# framing, yet their listed presence sent their identity plate as a reference
+# and the model pasted them in close. Drop them from the frame instead.
+_FILTER_FRAMINGS = {"CU", "ECU", "MCU", "INSERT"}
+
+
+def _far_staged(subject: dict) -> bool:
+    pos = str((subject or {}).get("frame_position") or "").lower()
+    return "far background" in pos or "far side" in pos
+
+
+def filter_frame_by_framing(shots: list,
+                            dialogue_lines: list[dict] | None = None) -> tuple[list, list[str]]:
+    """Drop cast a shot's framing cannot physically show: far-staged subjects
+    from CU/ECU/MCU (plain BG additionally from CU/ECU), and INSERT shots
+    narrow to cast named in their own action. The dialogue speaker (paired in
+    speaking order, the widen_tight_two_shots convention), the shot's
+    `subject`, and foreground occluders are never dropped. Subjects and
+    foreground_characters stay consistent with the new cast. Mutates in
+    place, returns (shots, notes)."""
+    notes: list[str] = []
+    speakers = iter([str(l.get("character") or "").strip()
+                     for l in (dialogue_lines or [])])
+    for i, sd in enumerate(shots):
+        if not isinstance(sd, dict):
+            continue
+        speaker = ""
+        if str(sd.get("dialogue") or "").strip():
+            speaker = next(speakers, "")
+        stype = str(sd.get("shot_type") or "").upper()
+        cast = [str(c) for c in (sd.get("characters_in_frame") or [])]
+        if stype not in _FILTER_FRAMINGS or not cast:
+            continue
+        keep = {speaker.strip().upper()} if speaker.strip() else set()
+        subj_name = str(sd.get("subject") or "").strip()
+        if subj_name:
+            keep.add(subj_name.upper())
+        keep |= {str(c).strip().upper()
+                 for c in (sd.get("foreground_characters") or [])}
+        by_name = {str(s.get("character") or "").strip().upper(): s
+                   for s in (sd.get("subjects") or []) if isinstance(s, dict)}
+
+        def visible(name: str) -> bool:
+            up = name.strip().upper()
+            if up in keep:
+                return True
+            if stype == "INSERT":
+                return _name_in_text(name, str(sd.get("action") or ""))
+            s = by_name.get(up) or {}
+            if _far_staged(s):
+                return False
+            if stype in ("CU", "ECU"):
+                return str(s.get("frame_position") or "").strip().upper() != "BG"
+            return True
+
+        new = [c for c in cast if visible(c)]
+        if new == cast:
+            continue
+        dropped = [c for c in cast if c not in new]
+        sd["characters_in_frame"] = new
+        new_up = {c.strip().upper() for c in new}
+        sd["subjects"] = [s for s in (sd.get("subjects") or [])
+                          if not isinstance(s, dict)
+                          or str(s.get("character") or "").strip().upper() in new_up]
+        sd["foreground_characters"] = [
+            c for c in (sd.get("foreground_characters") or [])
+            if str(c).strip().upper() in new_up]
+        notes.append(f"shot {i + 1}: {stype} cannot show "
+                     f"{', '.join(dropped)} - dropped from the frame")
+    return shots, notes
