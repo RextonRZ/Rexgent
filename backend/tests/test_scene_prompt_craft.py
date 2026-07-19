@@ -1412,3 +1412,48 @@ def test_exit_never_credited_to_a_substring_name():
                               ["Sam", "Samantha"]) == ["Samantha"]
     assert exiting_characters("小玛丽跑出了房间，玛丽还站在原地。",
                               ["玛丽", "小玛丽"]) == ["小玛丽"]
+
+
+@pytest.mark.asyncio
+async def test_synthetic_hold_never_learns_the_next_action():
+    # the re-orient wide was told "end where the next shot begins: Alex
+    # presses the button and vanishes" — so the model pre-performed the
+    # vanish inside the hold, and the audience saw it happen twice
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    await crafter.craft(
+        shot={"shot_type": "LS", "action": "A wide re-orienting view, holding the moment.",
+              "notes": "re-orient wide (room lock after the tight hook)"},
+        character_visuals={"Alex": {"video_prompt_fragment": "a young man"}},
+        target_model="happyhorse",
+        next_action="Alex presses a button on the watch and vanishes.")
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "vanishes" not in user_msg          # the future stays unknown
+    assert "Next shot" not in user_msg
+    assert "HOLD ONLY" in user_msg
+
+
+@pytest.mark.asyncio
+async def test_ots_binds_the_back_and_the_facing_identity():
+    # reverse-OTS in a stylized drama: the foreground is an anonymous back,
+    # ArcFace can't police it, and the model swapped Noah into Alex mid-shot
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    out = await crafter.craft(
+        shot={"shot_type": "OTS", "action": "Alex pleads with Noah.",
+              "dialogue": "No, it's not. I did it.",
+              "estimated_duration_seconds": 5},
+        character_visuals={"Alex": {"video_prompt_fragment": "a young man"},
+                           "Noah": {"video_prompt_fragment": "his brother"}},
+        target_model="happyhorse", native_talk=True, speaker="Alex",
+        foreground_characters=["Noah"])
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "near-camera back is Noah" in user_msg
+    assert "Alex is the person FACING" in user_msg
+    assert "turning into" in out["negative_prompt"] or "swapping" in out["negative_prompt"]

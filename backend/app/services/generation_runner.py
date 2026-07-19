@@ -581,6 +581,9 @@ class GenerationRunner:
         clean_action = mask_offscreen_names(shot.action, in_frame, all_cast)
         result = await self.prompt_crafter.craft(
             shot={"shot_type": shot.shot_type, "camera_movement": shot.camera_movement,
+                  # notes mark SYNTHETIC holds (re-orient wide, held beat) —
+                  # the crafter must not feed those the next shot's action
+                  "notes": getattr(shot, "notes", None),
                   "action": clean_action, "lighting": shot.lighting,
                   "colour_mood": shot.colour_mood, "emotional_beat": shot.emotional_beat,
                   "dialogue": shot.dialogue, "notes": getattr(shot, "notes", None),

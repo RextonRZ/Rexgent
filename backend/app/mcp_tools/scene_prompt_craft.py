@@ -296,6 +296,15 @@ class ScenePromptCraft:
         shot["action"] = decamera_action(shot.get("action"))
         prev_action = decamera_action(prev_action)
         next_action = decamera_action(next_action)
+        # a SYNTHETIC hold (re-orient wide, silent held beat, establishing or
+        # atmosphere insert) exists to HOLD the moment — telling it the next
+        # shot's action made the model pre-perform it (the watch press and
+        # vanish played inside the hold, then again in its own shot)
+        synthetic_hold = bool(re.search(
+            r"re-orient wide|held beat|establishing shot|atmosphere cutaway",
+            str(shot.get("notes") or ""), re.I))
+        if synthetic_hold:
+            next_action = None
         # A location named after a character ("Bear's apartment") must not smuggle
         # the character-noun into the background — strip names from the setting text
         # before it reaches the model, or it renders the animal, not the room.
@@ -362,6 +371,11 @@ class ScenePromptCraft:
         if next_action:
             continuity_parts.append(
                 f"Next shot (end this shot where that begins): {next_action}")
+        if synthetic_hold:
+            continuity_parts.append(
+                "HOLD ONLY: no new action begins in this shot - nobody "
+                "presses, uses, picks up or reaches for anything; the moment "
+                "simply holds, breathing, until the cut.")
         continuity_block = (
             "Continuity with adjacent shots (rule 14):\n"
             + "\n".join(continuity_parts) + "\n\n"
@@ -413,6 +427,17 @@ class ScenePromptCraft:
             f"do NOT make them a co-subject): {json.dumps(list(foreground_characters), ensure_ascii=False)}\n\n"
             if foreground_characters else ""
         )
+        # reverse-OTS identity binding: the foreground is an anonymous BACK,
+        # and on stylized dramas (no face verification) the model swapped the
+        # two people mid-shot. Say by NAME who is the back and who faces.
+        fg_binding = bool(foreground_characters and (speaker or "").strip())
+        if fg_binding:
+            _fgs = ", ".join(str(x) for x in foreground_characters)
+            foreground_block += (
+                f"IDENTITY BINDING: the near-camera back is {_fgs} and ONLY "
+                f"{_fgs}, face never shown; {speaker} is the person FACING "
+                f"the camera. The two are distinct people and neither ever "
+                f"turns into or becomes the other.\n\n")
         # every listed character exists from frame one: without this, the video
         # model sometimes invents an ARRIVAL — a person rising out of the
         # ground, or popping into existence as the framing tightens
@@ -835,6 +860,10 @@ class ScenePromptCraft:
         if backs:
             result["negative_prompt"] += (
                 ", turning around to face the camera, revealing the face")
+        if fg_binding:
+            result["negative_prompt"] += (
+                ", one character turning into another, swapping identities "
+                "mid-shot, morphing into a different person")
         if face_visible:
             result["negative_prompt"] += (
                 ", back of head, seen from behind, face hidden from camera")
