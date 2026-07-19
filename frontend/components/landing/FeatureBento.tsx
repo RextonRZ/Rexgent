@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
+  FileText,
   Pencil,
+  PenLine,
   RefreshCw,
   Shirt,
   Trash2,
@@ -251,26 +253,61 @@ function BudgetMeterMini({ reduced }: { reduced: boolean }) {
   );
 }
 
-/** Agent pipeline chips lighting up in sequence: write, judge, cast, board. */
-function PipelineTrace({ reduced }: { reduced: boolean }) {
-  const steps = ["Write", "Judge", "Cast", "Board"];
+/** Two ways in (a typed premise, an imported script file) feeding one agent
+ * pipeline: the input chips take turns lighting, then the steps run in
+ * sequence beneath them. Fills the wide tile with its own story. */
+function TwoDoorsPipeline({ reduced }: { reduced: boolean }) {
+  const steps = ["Write", "Judge", "Cast", "Board", "Render"];
+  const door =
+    "flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] text-zinc-300";
+  const fmt = "rounded bg-white/10 px-1 py-px text-[9px] text-zinc-400";
   return (
-    <div className="mt-5 flex flex-wrap items-center gap-1.5">
-      {steps.map((s, i) => (
+    <div className="mt-5 space-y-2.5">
+      <div className="flex flex-wrap items-center gap-2">
         <span
-          key={s}
-          className={cn(
-            "rounded-full px-2.5 py-1 text-[10px] font-medium",
-            reduced && i === 0
-              ? "bg-violet-500/25 text-violet-300"
-              : "bg-white/5 text-zinc-400",
-            !reduced && "animate-[step-glow_4.8s_linear_infinite]"
-          )}
-          style={!reduced ? { animationDelay: `${i * 1.2}s` } : undefined}
+          className={cn(door, !reduced && "animate-[step-glow_6s_linear_infinite]")}
         >
-          {s}
+          <PenLine className="size-3 text-violet-300/80" />
+          Type a premise
         </span>
-      ))}
+        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          or
+        </span>
+        <span
+          className={cn(door, !reduced && "animate-[step-glow_6s_linear_infinite]")}
+          style={!reduced ? { animationDelay: "3s" } : undefined}
+        >
+          <FileText className="size-3 text-violet-300/80" />
+          Import a script
+          <span className={fmt}>PDF</span>
+          <span className={fmt}>DOCX</span>
+          <span className={fmt}>Fountain</span>
+        </span>
+      </div>
+      {/* both doors land in the same pipeline */}
+      <div className="flex items-center gap-2 pl-1">
+        <span aria-hidden className="h-3 w-px bg-white/15" />
+        <span className="text-[10px] text-muted-foreground">
+          either way, the studio takes it from here
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {steps.map((s, i) => (
+          <span
+            key={s}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[10px] font-medium",
+              reduced && i === 0
+                ? "bg-violet-500/25 text-violet-300"
+                : "bg-white/5 text-zinc-400",
+              !reduced && "animate-[step-glow_6s_linear_infinite]"
+            )}
+            style={!reduced ? { animationDelay: `${i * 1.2}s` } : undefined}
+          >
+            {s}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -437,7 +474,7 @@ export function FeatureBento() {
 
         <GlowCard className="md:col-span-7">
           <CardText {...WOWS[3]} />
-          <PipelineTrace reduced={reduced} />
+          <TwoDoorsPipeline reduced={reduced} />
         </GlowCard>
 
         <GlowCard className="md:col-span-4">
