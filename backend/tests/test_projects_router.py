@@ -484,3 +484,32 @@ def test_patch_visual_style_photoreal_clears_it():
         _clear()
     assert r.status_code == 200
     assert project.visual_style is None
+
+
+def test_overview_fronts_featured_demo_dramas():
+    # the recap shelf window is 6 clips by recency — the frontend sorted
+    # WITHIN that window, so featured dramas older than 3 recent projects
+    # never appeared at all. The pin must happen where the window is built.
+    featured = _project(USER_ID, title="The Last Call")
+    recent_a = _project(USER_ID, title="Newer Drama A")
+    recent_b = _project(USER_ID, title="Newer Drama B")
+    recent_c = _project(USER_ID, title="Newer Drama C")
+    jobs, clips = [], []
+    # newest clips first (the query orders desc): three recent dramas fill
+    # the window before the featured one's older clips
+    for p in (recent_a, recent_b, recent_c, featured):
+        j = SimpleNamespace(id=uuid.uuid4(), project_id=p.id, status="COMPLETE")
+        jobs.append(j)
+        clips += [SimpleNamespace(job_id=j.id, url=f"https://oss/{p.title}-{i}.mp4")
+                  for i in range(2)]
+    db = FakeDB([featured, recent_a, recent_b, recent_c], jobs=jobs, clips=clips)
+    _override(db)
+    try:
+        r = client.get("/api/projects/overview")
+    finally:
+        _clear()
+    assert r.status_code == 200
+    shelf = r.json()["recent_clips"]
+    assert shelf[0]["project_title"] == "The Last Call"
+    assert shelf[1]["project_title"] == "The Last Call"
+    assert len(shelf) == 6
