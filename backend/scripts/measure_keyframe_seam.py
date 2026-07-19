@@ -256,18 +256,15 @@ async def hybrid(keyframe_url: str) -> None:
               {"type": "reference_image", "url": plate_url}]
              + ([{"type": "reference_image", "url": location_url}]
                 if location_url else []))
-    model_used = "happyhorse r2v"
-    try:
-        task = await qwen.generate_video_happyhorse(
-            prompt=prompt, duration=5, mode="r2v",
-            reference_media=media, ratio=ratio)
-    except Exception as e:  # noqa: BLE001 — HH r2v may refuse first_frame media
-        print(f"happyhorse r2v rejected the mixed media ({str(e)[:120]}) - "
-              f"falling back to wan r2v (documented refs + first_frame)")
-        model_used = "wan r2v"
-        task = await qwen.generate_video_wan_r2v(
-            prompt=prompt, duration=5,
-            reference_media=media, ratio=ratio)
+    # MEASURED FACT (task e93fa7e2, async validation failure): happyhorse
+    # r2v refuses any media type but reference_image — "Input should be
+    # 'reference_image': input.media.0.type". The hybrid can only exist on
+    # wan r2v, which documentedly takes refs PLUS a first_frame — and that
+    # is what a production hybrid route would ride too.
+    model_used = "wan r2v"
+    task = await qwen.generate_video_wan_r2v(
+        prompt=prompt, duration=5,
+        reference_media=media, ratio=ratio)
     print(f"hybrid task ({model_used}): {task}")
     url = await qwen.poll_video_task(task, timeout=900)
     print(f"hybrid clip: {url}")
