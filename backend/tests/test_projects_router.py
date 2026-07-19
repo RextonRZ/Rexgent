@@ -510,6 +510,7 @@ def test_overview_fronts_featured_demo_dramas():
         _clear()
     assert r.status_code == 200
     shelf = r.json()["recent_clips"]
-    assert shelf[0]["project_title"] == "The Last Call"
-    assert shelf[1]["project_title"] == "The Last Call"
-    assert len(shelf) == 6
+    # DEMO MODE: the shelf is EXCLUSIVELY the featured dramas when any of
+    # them has clips — recents don't share it
+    assert len(shelf) == 2
+    assert all(c["project_title"] == "The Last Call" for c in shelf)

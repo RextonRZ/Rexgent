@@ -157,17 +157,21 @@ async def projects_overview(
                 clips_by_project.setdefault(pid, []).append(c.url)
 
     title_by_id = {p.id: p.title for p in projects}
-    # Demo pinning: these dramas front the recap shelf whenever they have
-    # clips. The shelf window is 6 clips — sorting client-side (RecapShelf's
-    # FEATURED_TITLES, keep the two lists in sync) cannot surface a drama the
-    # window already dropped, so the pin lives HERE where the window is built.
+    # ── DEMO MODE (revert before release): the recap shelf shows ONLY these
+    # three dramas whenever any of them has clips — their frames present
+    # best. Falls back to the normal recency shelf when none has clips.
+    # Mirrors FEATURED_TITLES in frontend RecapShelf.tsx.
     _featured = ("echoes of tomorrow", "winter shadow of loyalty", "the last call")
 
     def _feat_rank(pid) -> int:
         t = (title_by_id.get(pid) or "").strip().lower()
         return _featured.index(t) if t in _featured else len(_featured)
 
-    for pid in sorted(clips_by_project, key=_feat_rank):  # stable: recency within ranks
+    _featured_pids = sorted(
+        (pid for pid in clips_by_project if _feat_rank(pid) < len(_featured)),
+        key=_feat_rank)
+    _pool = _featured_pids if _featured_pids else list(clips_by_project)
+    for pid in _pool:
         for url in clips_by_project[pid][:2]:  # at most 2 per drama so one can't hog the shelf
             recent_clips.append(
                 {"url": url, "project_id": str(pid), "project_title": title_by_id[pid]}
