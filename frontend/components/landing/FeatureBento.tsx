@@ -369,10 +369,10 @@ function SpeechWave({ reduced }: { reduced: boolean }) {
 }
 
 /** The same scene cycling through the style catalog: a REAL rendered sample
- * video per style when one exists under /style-samples (same prompt, same
- * face and rabbit references, only the style seed differs), falling back to
- * the catalog still for styles without a sample. Reduced motion shows a
- * static four-up. */
+ * video per style (same prompt, same face and rabbit references, only the
+ * style seed differs). Pure footage — no catalog stills; a style whose
+ * sample is missing or unplayable simply drops out of the rotation. Reduced
+ * motion shows a static four-up of catalog stills instead of autoplay. */
 function StyleReel({ reduced }: { reduced: boolean }) {
   const [idx, setIdx] = useState(0);
   // per style: undefined = untried, false = no sample (404/decode error)
@@ -380,19 +380,17 @@ function StyleReel({ reduced }: { reduced: boolean }) {
   const [videoReady, setVideoReady] = useState(false);
   // hovering holds the reel so a look can actually be studied
   const [hovered, setHovered] = useState(false);
-  const active = STYLE_REEL[idx];
-  const next = STYLE_REEL[(idx + 1) % STYLE_REEL.length];
-  const tryVideo = videoOk[active.value] !== false;
+  const playable = STYLE_REEL.filter((s) => videoOk[s.value] !== false);
+  const active = playable[idx % Math.max(1, playable.length)] ?? STYLE_REEL[0];
+  const next =
+    playable[(idx + 1) % Math.max(1, playable.length)] ?? active;
   useEffect(() => {
     setVideoReady(false);
   }, [idx]);
   useEffect(() => {
     if (reduced || hovered) return;
     // 6s per look: the 5s sample plays through before the reel moves on
-    const t = window.setInterval(
-      () => setIdx((i) => (i + 1) % STYLE_REEL.length),
-      6000
-    );
+    const t = window.setInterval(() => setIdx((i) => i + 1), 6000);
     return () => window.clearInterval(t);
   }, [reduced, hovered]);
 
@@ -420,43 +418,25 @@ function StyleReel({ reduced }: { reduced: boolean }) {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        {STYLE_REEL.map((s, i) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={s.value}
-            src={`/styles/${s.value}.jpg`}
-            alt=""
-            loading={i < 3 ? "eager" : "lazy"}
-            className={cn(
-              "absolute inset-0 h-full w-full object-cover transition-opacity duration-700",
-              i === idx ? "opacity-100" : "opacity-0"
-            )}
-          />
-        ))}
-        {/* the real rendered sample plays over the still once it can; a style
-            without a sample silently keeps its still */}
-        {tryVideo && (
-          <video
-            key={active.value}
-            src={`/style-samples/${active.value}.mp4`}
-            muted
-            loop
-            playsInline
-            autoPlay
-            preload="auto"
-            onCanPlay={() => setVideoReady(true)}
-            onError={() =>
-              setVideoOk((m) => ({ ...m, [active.value]: false }))
-            }
-            className={cn(
-              "absolute inset-0 h-full w-full object-cover transition-opacity duration-700",
-              videoReady ? "opacity-100" : "opacity-0"
-            )}
-          />
-        )}
+        {/* pure footage: the active sample, fading in as it becomes playable */}
+        <video
+          key={active.value}
+          src={`/style-samples/${active.value}.mp4`}
+          muted
+          loop
+          playsInline
+          autoPlay
+          preload="auto"
+          onCanPlay={() => setVideoReady(true)}
+          onError={() => setVideoOk((m) => ({ ...m, [active.value]: false }))}
+          className={cn(
+            "absolute inset-0 h-full w-full object-cover transition-opacity duration-700",
+            videoReady ? "opacity-100" : "opacity-0"
+          )}
+        />
         {/* warm the NEXT look's sample while this one plays, so the swap
-            lands on footage instead of flashing through the still */}
-        {!reduced && videoOk[next.value] !== false && next.value !== active.value && (
+            lands on footage instead of a blank beat */}
+        {next.value !== active.value && (
           <video
             key={`preload-${next.value}`}
             src={`/style-samples/${next.value}.mp4`}
@@ -470,16 +450,18 @@ function StyleReel({ reduced }: { reduced: boolean }) {
           />
         )}
         <span className="absolute bottom-1.5 left-1.5 z-10 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-sm">
-          {STYLE_REEL[idx].label}
+          {active.label}
         </span>
-        {/* the reel's progress dots, one per look, active one lit */}
+        {/* the reel's progress dots, active one lit */}
         <span className="absolute bottom-2 right-2 z-10 flex gap-[3px]">
-          {STYLE_REEL.slice(0, 8).map((_, i) => (
+          {playable.slice(0, 8).map((_, i) => (
             <span
               key={i}
               className={cn(
                 "h-1 w-1 rounded-full",
-                i === idx % 8 ? "bg-violet-300" : "bg-white/25"
+                i === idx % Math.min(8, Math.max(1, playable.length))
+                  ? "bg-violet-300"
+                  : "bg-white/25"
               )}
             />
           ))}
