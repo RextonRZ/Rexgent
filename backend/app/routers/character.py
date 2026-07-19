@@ -140,7 +140,14 @@ async def create_character(request: CharacterCreate, db: Session = Depends(get_d
 @router.get("/project/{project_id}")
 async def list_characters(project_id: str, db: Session = Depends(get_db)):
     characters = db.query(Character).filter(Character.project_id == uuid.UUID(project_id)).all()
-    return {"characters": [CharacterResponse.model_validate(c) for c in characters]}
+    # creature rides THIS response so the Characters page splits humans from
+    # animals on first paint — reading it only from the casting bible made the
+    # pet jump sections when that slower query landed
+    from app.services.character_traits import is_creature
+    return {"characters": [
+        CharacterResponse.model_validate(c).model_copy(
+            update={"creature": is_creature(c)})
+        for c in characters]}
 
 
 @router.get("/{character_id}", response_model=CharacterResponse)

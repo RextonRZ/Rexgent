@@ -23,9 +23,14 @@ export function CharacterList({
   }
 
   // animals and creatures get their own section: no voice design, and their
-  // plates are identity references rather than costumes
-  const humans = characters.filter((c) => !castingByCharId?.[c.id]?.creature);
-  const creatures = characters.filter((c) => castingByCharId?.[c.id]?.creature);
+  // plates are identity references rather than costumes. The characters list
+  // itself carries the flag so the split is right on FIRST paint; the bible
+  // (which loads later) only confirms it — waiting for it made the pet
+  // visibly jump from the humans grid into this section
+  const isCreature = (c: Character) =>
+    Boolean(castingByCharId?.[c.id]?.creature ?? c.creature);
+  const humans = characters.filter((c) => !isCreature(c));
+  const creatures = characters.filter((c) => isCreature(c));
 
   const grid = (list: Character[]) => {
     // 1-2 characters fill the row (no orphan gap); 3+ pack three per row

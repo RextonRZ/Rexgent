@@ -18,6 +18,10 @@ export interface Character {
   /** "ref_rejected" = the uploaded photo was refused by the image service's
    *  content filter (recognizable public figures are blocked) */
   plate_status: string | null;
+  /** non-human cast member, computed server-side; rides the characters list
+   *  so the humans/animals split is right on FIRST paint (the casting bible
+   *  resolves later and used to make the pet visibly jump sections) */
+  creature?: boolean;
   created_at: string;
 }
 

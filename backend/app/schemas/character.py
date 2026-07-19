@@ -33,6 +33,11 @@ class CharacterResponse(BaseModel):
     # "ref_rejected" = the uploaded photo was refused by the image service's
     # content filter (recognizable public figure) — warn before casting money
     plate_status: Optional[str] = None
+    # non-human cast member (computed by the router from the descriptions, not
+    # a DB column): the Characters page splits humans from creatures at FIRST
+    # paint with this — waiting for the casting bible made the pet visibly
+    # jump sections when the bible query landed later
+    creature: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
