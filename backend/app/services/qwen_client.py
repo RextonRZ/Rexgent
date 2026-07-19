@@ -266,6 +266,9 @@ class QwenClient:
         seed: int | None = None,
         ratio: str | None = None,
         negative_prompt: str | None = None,
+        # the extender paraphrases the prompt; a stylized render whose style
+        # wording gets rewritten drifts photoreal — callers may pin it off
+        prompt_extend: bool = True,
     ) -> str:
         model_map = {
             "t2v": "happyhorse-1.1-t2v",
@@ -289,7 +292,7 @@ class QwenClient:
         params: dict = {
             "resolution": "1080P",
             "duration": duration,
-            "prompt_extend": True,
+            "prompt_extend": prompt_extend,
             "watermark": False,
         }
         if seed is not None:

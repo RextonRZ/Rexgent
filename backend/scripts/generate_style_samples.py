@@ -88,13 +88,26 @@ async def ensure_refs(qwen: QwenClient, oss: OSSManager, st: dict) -> tuple[str,
 
 
 async def render_style(qwen: QwenClient, sem: asyncio.Semaphore, key: str,
-                       seed_text: str, face_url: str, rabbit_url: str) -> None:
+                       seed_text: str, face_url: str, rabbit_url: str,
+                       hardened: bool = False) -> None:
     dest = os.path.join(OUT_DIR, f"{key}.mp4")
-    if os.path.exists(dest) and os.path.getsize(dest) > 0:
+    if not hardened and os.path.exists(dest) and os.path.getsize(dest) > 0:
         print(f"[skip] {key} (exists)")
         return
     async with sem:
         prompt = f"{seed_text}. {BASE_PROMPT}"
+        negative = NEGATIVE
+        if hardened:
+            # the photo references pull stylized renders back to realism and
+            # the extender paraphrases the style away — restate the style at
+            # BOTH ends, demand a full repaint, and ban the photographic look
+            prompt = (f"{seed_text}. THE ENTIRE FRAME is rendered in this "
+                      f"style, every element fully repainted — the reference "
+                      f"person and the reference rabbit are style-converted, "
+                      f"never photographic. {BASE_PROMPT} "
+                      f"Style, restated and binding: {seed_text}.")
+            negative = (NEGATIVE + ", photorealistic, photographic, live "
+                        "action, realistic skin texture, realistic fur")
         try:
             task = await qwen.generate_video_happyhorse(
                 prompt=prompt, duration=5, mode="r2v",
@@ -102,7 +115,8 @@ async def render_style(qwen: QwenClient, sem: asyncio.Semaphore, key: str,
                     {"type": "reference_image", "url": face_url},
                     {"type": "reference_image", "url": rabbit_url},
                 ],
-                ratio="16:9", negative_prompt=NEGATIVE)
+                ratio="16:9", negative_prompt=negative,
+                prompt_extend=not hardened)
             print(f"[submitted] {key}")
             url = await qwen.poll_video_task(task, timeout=900)
             async with httpx.AsyncClient(timeout=300) as h:
@@ -121,13 +135,22 @@ async def main() -> None:
     st = _state()
     face_url, rabbit_url = await ensure_refs(qwen, oss, st)
 
+    # --redo a,b,c re-renders EXACTLY those styles with the hardened
+    # style-locked recipe (extender off, anti-photographic negative)
+    redo: set[str] = set()
+    if len(sys.argv) > 2 and sys.argv[1] == "--redo":
+        redo = {s.strip() for s in sys.argv[2].split(",") if s.strip()}
+
     styles: list[tuple[str, str]] = [("photoreal", PHOTOREAL_SEED)]
     styles += list(STYLE_SEEDS.items())
+    if redo:
+        styles = [(k, s) for k, s in styles if k in redo]
     sem = asyncio.Semaphore(CONCURRENCY)
-    await asyncio.gather(*(render_style(qwen, sem, k, s, face_url, rabbit_url)
+    await asyncio.gather(*(render_style(qwen, sem, k, s, face_url, rabbit_url,
+                                        hardened=bool(redo))
                            for k, s in styles))
     have = [f for f in os.listdir(OUT_DIR) if f.endswith(".mp4")]
-    print(f"finished: {len(have)}/{len(styles)} samples in {OUT_DIR}")
+    print(f"finished: {len(have)} samples present in {OUT_DIR}")
 
 
 if __name__ == "__main__":
