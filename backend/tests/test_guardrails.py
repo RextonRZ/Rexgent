@@ -120,8 +120,22 @@ class TestPromptSanitizer:
         # as garbled on-screen glyphs, exactly like straight-quoted text
         out = self.sanitizer.sanitize("她轻声说「那是雪球！它在这里！」然后微笑")
         assert "它在这里" not in out
+        assert "她轻声说" in out       # ONLY the quoted span goes, never the prose
         out2 = self.sanitizer.sanitize("他喊道『快跑！离开这里！』并转身")
         assert "快跑" not in out2
+        assert "他喊道" in out2
+
+    def test_smart_quoted_text_still_stripped(self):
+        # a broken corner-quote pattern once dropped the smart-quote forms
+        out = self.sanitizer.sanitize("she says “hello there my friend” and smiles")
+        assert "hello there" not in out
+        assert "smiles" in out
+
+    def test_stray_closing_corner_quote_eats_nothing(self):
+        # without the opening 「 requirement, any 」 ate ALL prose before it
+        out = self.sanitizer.sanitize("奇怪的符号」在这里出现")
+        assert "在这里出现" in out
+        assert "奇怪的符号" in out
 
 
 class TestJsonOutputValidator:
