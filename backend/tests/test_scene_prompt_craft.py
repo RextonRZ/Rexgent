@@ -1295,3 +1295,20 @@ async def test_fullwidth_parenthetical_is_tone_not_spoken():
     spoken = prompt.split('"')[1] if '"' in prompt else ""
     assert "哽咽着" not in spoken          # not read aloud
     assert "哽咽着" in prompt              # rides as the delivery tone
+
+
+@pytest.mark.asyncio
+async def test_blocking_row_states_the_anchor():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    await crafter.craft(
+        shot={"shot_type": "MS", "action": "玛丽绝望地喊叫。"},
+        character_visuals={"玛丽": {"video_prompt_fragment": "母亲"}},
+        target_model="happyhorse",
+        blocking={"subjects": [{"character": "玛丽", "screen_side": "right",
+                                "anchor": "花园外"}]})
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "position: 花园外" in user_msg

@@ -362,6 +362,9 @@ class ScenePromptCraft:
                     # rendered lying unattached and the collar flickered
                     (f"on a leash, collar connected to a rope ({s['tethered']})"
                      if s.get("tethered") else None),
+                    # the subject's WORLD position, threaded by the stage map —
+                    # camera-relative blocking alone let renders relocate people
+                    (f"position: {s['anchor']}" if s.get("anchor") else None),
                     decamera_action(s.get("action")),
                 ]
                 rows.append(f"- {s.get('character')}: " + ", ".join(b for b in bits if b))

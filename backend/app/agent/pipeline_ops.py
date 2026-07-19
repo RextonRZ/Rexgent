@@ -383,11 +383,13 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # and a grab already made continues as a hold instead of being
             # re-performed with an awkward re-approach
             from app.services.stage_map import (continue_restated_contact,
-                                                thread_tethered)
+                                                thread_anchors, thread_tethered)
             _, _tether_notes = thread_tethered(shots)
+            _, _anchor_notes = thread_anchors(shots)
             _, _grip_notes = continue_restated_contact(shots)
             _all_notes = (_side_notes + _held_notes + _prox_notes
-                          + _barrier_notes + _tether_notes + _grip_notes)
+                          + _barrier_notes + _tether_notes + _anchor_notes
+                          + _grip_notes)
             if _all_notes:
                 import logging
                 logging.getLogger(__name__).info(

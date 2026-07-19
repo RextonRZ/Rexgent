@@ -270,6 +270,62 @@ def thread_tethered(shots: list) -> tuple[list, list[str]]:
     return shots, notes
 
 
+# WORLD position: camera-relative blocking (MG, screen-right) is satisfied by
+# many spots in the room — 玛丽 "midground right" renders inside OR outside the
+# fence at the model's whim. An anchor stated in the prose (站在花园外, stands
+# by the gate) threads across the scene like held props and is restated in
+# every blocking row, so renders stop relocating people between shots.
+_ANCHOR_ZH = re.compile(
+    r"(?:站在|坐在|蹲在|跪在|靠在|停在|留在|守在|躲在|走到|跑到|来到|回到|冲到|奔到)"
+    r"([^，。！？\s]{1,10})")
+_ANCHOR_EN_STAND = (r"\b(?:stands?|sits?|waits?|stays?|remains?|leans?|"
+                    r"kneels?|crouch(?:es)?)\s+"
+                    r"(?:at|by|beside|near|outside|inside|behind|in\s+front\s+of)\s+"
+                    r"(?:the\s+|a\s+|an\s+)?([\w'-]+(?:\s[\w'-]+)?)")
+_ANCHOR_EN_MOVE = (r"\b(?:walks?|runs?|comes?|returns?|goes|moves?|rushes?)\s+"
+                   r"(?:back\s+)?to\s+(?:the\s+|a\s+)?([\w'-]+(?:\s[\w'-]+)?)")
+
+
+def _anchor_res(name: str) -> list[re.Pattern]:
+    nm = re.escape(name)
+    return [
+        re.compile(rf"{nm}[^，。！？]{{0,4}}?{_ANCHOR_ZH.pattern}"),
+        re.compile(rf"{nm}[^.!?]{{0,20}}?{_ANCHOR_EN_STAND}", re.IGNORECASE),
+        re.compile(rf"{nm}[^.!?]{{0,20}}?{_ANCHOR_EN_MOVE}", re.IGNORECASE),
+    ]
+
+
+def thread_anchors(shots: list) -> tuple[list, list[str]]:
+    """Stamp each subject's WORLD anchor (站在花园外 / stands by the gate)
+    onto their blocking in every shot until the prose moves them somewhere
+    else. Scene-scoped: the caller passes one scene's shots. Mutates subject
+    dicts in place, returns (shots, notes)."""
+    anchors: dict[str, str] = {}
+    notes: list[str] = []
+    for i, sd in enumerate(shots):
+        if not isinstance(sd, dict):
+            continue
+        action = str(sd.get("action") or "")
+        subs = [s for s in (sd.get("subjects") or []) if isinstance(s, dict)]
+        for s in subs:
+            nm = str(s.get("character") or "").strip()
+            if not nm:
+                continue
+            for pat in _anchor_res(nm):
+                m = pat.search(action)
+                if m:
+                    place = next((g for g in m.groups() if g), "").strip()
+                    if place and anchors.get(nm.upper()) != place:
+                        anchors[nm.upper()] = place
+                        notes.append(f"shot {i + 1}: {nm} anchored at {place}")
+                    break
+        for s in subs:
+            nm = str(s.get("character") or "").strip().upper()
+            if nm in anchors:
+                s["anchor"] = anchors[nm]
+    return shots, notes
+
+
 # A grip already made must not be re-performed: the board restates 抓住 as a
 # fresh action in the next shot and the render replays the grab with an
 # awkward re-approach. Rewrite the restated grab into a held state (仍...抓着).

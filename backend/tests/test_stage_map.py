@@ -558,3 +558,50 @@ def test_first_grab_is_never_rewritten():
     _, notes = continue_restated_contact(shots)
     assert "抓住" in shots[0]["action"]
     assert notes == []
+
+
+# ── world anchors: camera blocking says MG-right, which is satisfied both ────
+# ── inside and outside the fence — the WORLD position must thread too ────────
+
+def test_anchor_establishes_and_threads():
+    from app.services.stage_map import thread_anchors
+    shots = [
+        {"action": "玛丽站在花园外，脸色苍白。",
+         "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]},
+        {"action": "玛丽绝望地喊叫。",
+         "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]},
+    ]
+    _, notes = thread_anchors(shots)
+    assert shots[0]["subjects"][0].get("anchor") == "花园外"
+    assert shots[1]["subjects"][0].get("anchor") == "花园外"   # threads
+    assert shots[0]["subjects"][1].get("anchor") is None        # unplaced stays free
+    assert notes
+
+
+def test_anchor_moves_with_movement_verbs():
+    from app.services.stage_map import thread_anchors
+    shots = [
+        {"action": "安吉琳站在栅栏旁。", "subjects": [{"character": "安吉琳"}]},
+        {"action": "安吉琳跑到大树下，蹲下身。", "subjects": [{"character": "安吉琳"}]},
+        {"action": "安吉琳低头不语。", "subjects": [{"character": "安吉琳"}]},
+    ]
+    _, _ = thread_anchors(shots)
+    assert shots[0]["subjects"][0]["anchor"] == "栅栏旁"
+    assert shots[1]["subjects"][0]["anchor"] == "大树下"
+    assert shots[2]["subjects"][0]["anchor"] == "大树下"
+
+
+def test_anchor_english_forms():
+    from app.services.stage_map import thread_anchors
+    shots = [
+        {"action": "Mary stands outside the fence, pale.",
+         "subjects": [{"character": "Mary"}]},
+        {"action": "Mary shouts desperately.",
+         "subjects": [{"character": "Mary"}]},
+        {"action": "Mary walks to the gate.",
+         "subjects": [{"character": "Mary"}]},
+    ]
+    _, _ = thread_anchors(shots)
+    assert "fence" in shots[0]["subjects"][0]["anchor"]
+    assert "fence" in shots[1]["subjects"][0]["anchor"]
+    assert "gate" in shots[2]["subjects"][0]["anchor"]
