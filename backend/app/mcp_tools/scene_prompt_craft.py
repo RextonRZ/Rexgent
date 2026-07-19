@@ -31,7 +31,8 @@ _EXIT_RE = re.compile(
     r"\b(?:runs?|running|walks?|walking|dash(?:es)?|dashing|storms?|storming|"
     r"hurries|hurrying|rush(?:es)?|rushing|flees?|fleeing|sprints?|sprinting)\s+"
     r"(?:away|off|out)\b"
-    r"|\bdisappear(?:s|ing)?\s+into\b", re.I)
+    r"|\bdisappear(?:s|ing)?\s+into\b"
+    r"|挣脱|离开|走开|跑开|走出|跑出|冲出|转身离|头也不回|夺门而出", re.I)
 
 
 def exiting_characters(action: str | None, names: list) -> list[str]:
@@ -43,11 +44,11 @@ def exiting_characters(action: str | None, names: list) -> list[str]:
         return []
     out = []
     for name in names:
-        others = [re.escape(str(n)) for n in names if n != name]
-        blocker = rf"(?!\b(?:{'|'.join(others)})\b)" if others else ""
+        others = "|".join(re.escape(str(n)) for n in names if n != name)
+        gap = (rf"(?:(?!(?:{others}))[^.!?。！？；])*?" if others
+               else r"[^.!?。！？；]*?")
         pat = re.compile(
-            rf"\b{re.escape(str(name))}\b(?:{blocker}[^.!?])*?(?:{_EXIT_RE.pattern})",
-            re.I)
+            rf"{re.escape(str(name))}{gap}(?:{_EXIT_RE.pattern})", re.I)
         if pat.search(text):
             out.append(str(name))
     return out
@@ -623,7 +624,22 @@ class ScenePromptCraft:
                              "contact with the viewer.")
         # two-handers ended with BOTH actors rotating to face the lens as the
         # clip resolved — the mutual gaze holds to the last frame
-        if len(frame_names) == 2:
+        action_text = str(shot.get("action") or "")
+        separation = bool(_EXIT_RE.search(action_text)
+                          or _re.search(r"松开|甩开|推开", action_text))
+        far_names = [str(s.get("character")) for s in (subs or [])
+                     if isinstance(s, dict) and s.get("character")
+                     and str(s.get("character")).strip().upper() in in_frame_upper
+                     and ("far background" in str(s.get("frame_position") or "").lower()
+                          or "far side" in str(s.get("frame_position") or "").lower())]
+        if len(frame_names) == 2 and far_names and len(far_names) < 2:
+            near = next(n for n in frame_names
+                        if n not in far_names)
+            far = far_names[0]
+            eyelines += (f" {near} faces and looks toward {far} in the "
+                         f"distance - angled away from the lens; {far} is far "
+                         f"away and small in the frame, never beside {near}.")
+        elif len(frame_names) == 2 and not separation:
             eyelines += (" They keep facing and looking at EACH OTHER for the "
                          "ENTIRE shot, to its final frame - neither ever turns "
                          "toward the camera.")

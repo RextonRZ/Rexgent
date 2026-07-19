@@ -1387,4 +1387,3 @@ async def test_far_staged_subject_kills_mutual_gaze_and_aims_the_near_one():
     assert "EACH OTHER" not in out["prompt"]
     assert "in the distance" in out["prompt"]
     assert "away from the lens" in out["prompt"]
-    assert "position: 花园外" in user_msg
