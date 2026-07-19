@@ -214,5 +214,74 @@ async def main() -> None:
     print(f"frames saved under: {OUT_DIR}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and not (len(sys.argv) > 1 and sys.argv[1] == "--hybrid"):
     asyncio.run(main())
+
+
+async def hybrid(keyframe_url: str) -> None:
+    """The M3 hybrid: the VERIFIED keyframe rides as r2v's first_frame WHILE
+    the identity plates stay attached as references — verified opening pixels
+    plus sustained anchoring for the whole clip. Decision rule (user's gate):
+    hybrid last-frame vs vector must BEAT plain r2v's 0.44, else keyframes
+    add cost for no gain. The prompt now carries the character's identity
+    fragment + lock clause, matching what the production crafter appends."""
+    os.makedirs(OUT_DIR, exist_ok=True)
+    case = _fetch_case()
+    if case is None:
+        print("BLOCKED: no photoreal subject found.")
+        return
+    face_vector = _parse_vector(case["face_vector"])
+    plate_url = case["plate_image_url"]
+    location_url = case.get("location_plate_url")
+    ratio = case.get("video_ratio") or "9:16"
+
+    frag = ""
+    settings = get_settings()
+    db_url = getattr(settings, "database_url", None) or _FALLBACK_DB_URL
+    eng = create_engine(db_url)
+    with eng.connect() as conn:
+        r = conn.execute(text(
+            "SELECT video_prompt_fragment FROM characters WHERE id = :i"),
+            {"i": case["character_id"]}).first()
+        frag = (r[0] or "") if r else ""
+
+    # production-faithful prompt: beat + identity fragment + lock clause
+    prompt = (f"{BEAT_PROMPT} {frag[:400]}. Identity lock (IDENTICAL in "
+              f"every frame): the SAME person as the reference images - same "
+              f"face, same hair, never drifting, never changing.")
+    print(f"hybrid subject: {case['character_name']}  keyframe={keyframe_url[:70]}")
+
+    qwen = QwenClient(get_settings())
+    media = ([{"type": "first_frame", "url": keyframe_url},
+              {"type": "reference_image", "url": plate_url}]
+             + ([{"type": "reference_image", "url": location_url}]
+                if location_url else []))
+    model_used = "happyhorse r2v"
+    try:
+        task = await qwen.generate_video_happyhorse(
+            prompt=prompt, duration=5, mode="r2v",
+            reference_media=media, ratio=ratio)
+    except Exception as e:  # noqa: BLE001 — HH r2v may refuse first_frame media
+        print(f"happyhorse r2v rejected the mixed media ({str(e)[:120]}) - "
+              f"falling back to wan r2v (documented refs + first_frame)")
+        model_used = "wan r2v"
+        task = await qwen.generate_video_wan_r2v(
+            prompt=prompt, duration=5,
+            reference_media=media, ratio=ratio)
+    print(f"hybrid task ({model_used}): {task}")
+    url = await qwen.poll_video_task(task, timeout=900)
+    print(f"hybrid clip: {url}")
+
+    last = extract_last_frame(url)
+    _save("hybrid_last.jpg", last)
+    emb = _embed(last)
+    print()
+    print(f"=== HYBRID (model: {model_used}) ===")
+    _print_score("hybrid_last_vs_vector", emb, face_vector)
+    print(f"decision baseline: plain r2v last frame scored 0.4419; "
+          f"threshold {IDENTITY_MATCH_SIM}")
+
+
+if __name__ == "__main__" and len(sys.argv) > 2 and sys.argv[1] == "--hybrid":
+    asyncio.run(hybrid(sys.argv[2]))
+    sys.exit(0)
