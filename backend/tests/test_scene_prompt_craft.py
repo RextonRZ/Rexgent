@@ -1387,3 +1387,17 @@ async def test_far_staged_subject_kills_mutual_gaze_and_aims_the_near_one():
     assert "EACH OTHER" not in out["prompt"]
     assert "in the distance" in out["prompt"]
     assert "away from the lens" in out["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_excluded_species_banned_in_negative():
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    out = await crafter.craft(
+        shot={"shot_type": "MS", "action": "安吉琳抱着空兔笼哭泣。"},
+        character_visuals={"安吉琳": {"video_prompt_fragment": "十岁女孩"}},
+        target_model="happyhorse", excluded_species=["兔"])
+    assert "rabbit" in out["negative_prompt"]

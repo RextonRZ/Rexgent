@@ -279,6 +279,7 @@ class ScenePromptCraft:
         image_legend: str = "",
         environment: dict | None = None,
         to_wan: bool = False,
+        excluded_species: list | None = None,
     ) -> dict:
         # camera-referential staging in ACTION text renders as a lens stare —
         # scrub it before ANY block (body, blocking, continuity) is assembled
@@ -854,6 +855,11 @@ class ScenePromptCraft:
             # the positive clause pins true size; the negative bans the drift
             result["negative_prompt"] += (
                 ", giant animal, oversized pet, animal as large as a person")
+        for sp in (excluded_species or []):
+            sp_en = _SPECIES_EN.get(str(sp), str(sp))
+            # a creature deliberately excluded from this shot must not sneak
+            # back in as a generic animal painted from a text mention
+            result["negative_prompt"] += f", {sp_en}"
         if character_visuals:
             # invented-feature bans (peopled shots): models grow beards on
             # clean-shaven men, glasses and headbands on children, blemishes

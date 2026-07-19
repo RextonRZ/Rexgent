@@ -102,19 +102,25 @@ class GenerationRunner:
     def _shape_bible(characters, locations, style_url):
         chars = {}
         for c in characters:
-            chars[c.name] = {"variants": [
-                {"plate_image_url": v.plate_image_url, "scene_numbers": v.scene_numbers or [],
-                 "is_default": v.is_default,
-                 # the wardrobe TEXT rides along: the prompt must dress the
-                 # character in this scene's outfit, or a swapped costume only
-                 # exists in the reference image and the render ignores it
-                 "outfit_description": getattr(v, "outfit_description", None),
-                 # the continuity agent's face-lock check reads THIS — without
-                 # it every clip scores face=None and the check is dead.
-                 # list() so a pgvector numpy array survives `if not ref`.
-                 "face_vector": (list(v.face_vector)
-                                 if v.face_vector is not None else None)}
-                for v in getattr(c, "costume_variants", [])]}
+            chars[c.name] = {
+                # carried so per-shot species checks (excluded_species) can
+                # tell a creature cast member from a human one without a
+                # separate DB round-trip
+                "physical_description": getattr(c, "physical_description", None),
+                "visual_description": getattr(c, "visual_description", None),
+                "variants": [
+                    {"plate_image_url": v.plate_image_url, "scene_numbers": v.scene_numbers or [],
+                     "is_default": v.is_default,
+                     # the wardrobe TEXT rides along: the prompt must dress the
+                     # character in this scene's outfit, or a swapped costume only
+                     # exists in the reference image and the render ignores it
+                     "outfit_description": getattr(v, "outfit_description", None),
+                     # the continuity agent's face-lock check reads THIS — without
+                     # it every clip scores face=None and the check is dead.
+                     # list() so a pgvector numpy array survives `if not ref`.
+                     "face_vector": (list(v.face_vector)
+                                     if v.face_vector is not None else None)}
+                    for v in getattr(c, "costume_variants", [])]}
         loc_by_scene = {}
         for l in locations:
             for n in (l.scene_numbers or []):
@@ -548,7 +554,8 @@ class GenerationRunner:
                             environment=None,
                             outfits=None, blocking=None, lipsync=False,
                             native_talk=False, speaker="", image_legend="",
-                            to_wan=False, bridge_from_prev=False) -> str:
+                            to_wan=False, bridge_from_prev=False,
+                            excluded_species=None) -> str:
         from app.services.guardrails import canonical_character, mask_offscreen_names
         in_frame = [canonical_character(n, char_by_name)
                     for n in (shot.characters_in_frame or [])]
@@ -587,6 +594,7 @@ class GenerationRunner:
             environment=environment,
             to_wan=to_wan,
             bridge_from_prev=bridge_from_prev,
+            excluded_species=excluded_species,
         )
         return result
 
@@ -841,6 +849,23 @@ class GenerationRunner:
         from app.services.guardrails import canonical_character
         in_frame = [canonical_character(n, bible["characters"])
                     for n in (shot.characters_in_frame or [])]
+        # A creature cast member deliberately left OUT of this shot (the empty
+        # hutch, the missing pet) must not sneak back in as a generic animal
+        # painted from a text mention — ban its species in the negative,
+        # UNLESS a same-species creature is genuinely present (two rabbits,
+        # one on screen) so the ban never fights a creature that IS here.
+        from app.services.character_traits import species_of
+        excluded_species = []
+        for nm, ch in bible["characters"].items():
+            if nm in in_frame:
+                continue
+            sp = species_of(ch.get("physical_description"),
+                            ch.get("visual_description"))
+            if sp and not any(
+                    species_of((bible["characters"].get(p) or {}).get("physical_description"),
+                               (bible["characters"].get(p) or {}).get("visual_description")) == sp
+                    for p in in_frame):
+                excluded_species.append(sp)
         foreground = [canonical_character(n, bible["characters"])
                       for n in (getattr(shot, "foreground_characters", None) or [])]
         foreground = [n for n in foreground if n in in_frame]
@@ -1050,7 +1075,7 @@ class GenerationRunner:
                     native_talk=native_talk,
                     speaker=(native_speaker if native_talk else ""),
                     image_legend=image_legend, environment=environment,
-                    to_wan=to_wan,
+                    to_wan=to_wan, excluded_species=excluded_species,
                     # bridge only when the prev frame actually rides as a
                     # reference — the prompt promises "the final reference
                     # image" and must never promise one that is not attached
