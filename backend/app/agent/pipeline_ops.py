@@ -478,6 +478,24 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                 logging.getLogger(__name__).info(
                     "framing visibility scene %s: %s", scene.number,
                     _abs_notes + _vis_notes)
+            # LLM cast audit: catches non-visible cast the regex guards can't
+            # (reported speech, elsewhere-in-the-house) — one cheap call per
+            # scene, never blocks boarding on failure
+            if getattr(get_settings(), "cast_audit", False):
+                try:
+                    from app.services.cast_auditor import CastAuditor, apply_cast_audit
+                    _removals = await CastAuditor().audit(
+                        {"scene_number": scene.number,
+                         "description": scene.description}, shots)
+                    _audit_notes = apply_cast_audit(
+                        shots, _removals, dialogue_lines=scene.dialogue_json)
+                    if _audit_notes:
+                        import logging
+                        logging.getLogger(__name__).info(
+                            "cast audit scene %s: %s", scene.number, _audit_notes)
+                except Exception as e:  # noqa: BLE001 — audit is best-effort
+                    import logging
+                    logging.getLogger(__name__).warning("cast audit skipped: %s", e)
             # faceless framing normalization runs on the FINAL cast — the
             # reconciliation above can empty a shot's cast (a detail insert of
             # "Anna's hand" whose only listed figure wasn't real cast), and a

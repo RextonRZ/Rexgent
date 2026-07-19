@@ -104,6 +104,12 @@ class Settings(BaseSettings):
     # then move into the new staging as one continuous on-camera transition.
     # Rides prev_frame_guarded's safety condition; OFF -> prompts unchanged.
     bridge_shots: bool = False
+    # LLM cast audit: one cheap call per scene reviews each shot's cast
+    # against its action/dialogue and removes characters only TALKED ABOUT
+    # (reported speech, sent away, elsewhere) but never shown on screen — the
+    # semantic cases the deterministic absence/framing guards can't catch.
+    # Never blocks boarding: any failure is caught and logged. ON by default.
+    cast_audit: bool = True
     # Bring-your-own-key: when true, users MUST paste their own DashScope key
     # in Settings — the server key above is never used for their work. Set
     # this on any public deployment so visitors bill their own accounts.
