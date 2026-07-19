@@ -729,3 +729,46 @@ def test_wide_framings_untouched():
     _, notes = filter_frame_by_framing(shots)
     assert shots[0]["characters_in_frame"] == ["A", "B"]
     assert notes == []
+
+
+# ── absence: a name mentioned because the character is GONE is not on screen ─
+
+def test_absent_mention_is_not_a_visible_presence():
+    from app.services.stage_map import mention_is_absent
+    a = "安吉琳坐在地板上，抱着空兔笼，哽咽着告诉母亲雪球不见了。"
+    assert mention_is_absent("雪球", a) is True
+    assert mention_is_absent("安吉琳", a) is False          # she IS on screen
+    assert mention_is_absent("雪球", "安吉琳紧紧抱着雪球。") is False
+    # one visible mention outweighs an absent one in the same action
+    assert mention_is_absent(
+        "雪球", "她说雪球不见了，此时雪球从灌木丛里钻了出来。") is False
+    assert mention_is_absent("Snowy", "she tells her mother Snowy is gone.") is True
+    assert mention_is_absent("Snowy", "Angeline holds Snowy close.") is False
+
+
+def test_drop_absent_cast_removes_the_missing_pet():
+    # the "pet is gone" shot listed 雪球 as cast — its plate would render the
+    # rabbit into a scene about the EMPTY cage
+    from app.services.stage_map import drop_absent_cast
+    shots = [{
+        "shot_type": "MS", "dialogue": "妈妈，雪球不见了。",
+        "action": "安吉琳坐在地板上，抱着空兔笼，哽咽着告诉母亲雪球不见了。",
+        "characters_in_frame": ["安吉琳", "雪球"],
+        "subjects": [{"character": "安吉琳"}, {"character": "雪球"}]}]
+    lines = [{"character": "安吉琳", "line": "妈妈，雪球不见了。"}]
+    _, notes = drop_absent_cast(shots, dialogue_lines=lines)
+    assert shots[0]["characters_in_frame"] == ["安吉琳"]
+    assert [s["character"] for s in shots[0]["subjects"]] == ["安吉琳"]
+    assert notes
+
+
+def test_drop_absent_cast_never_drops_the_speaker_or_present_cast():
+    from app.services.stage_map import drop_absent_cast
+    shots = [{
+        "shot_type": "MS", "dialogue": "我在这里。",
+        "action": "雪球不见了……安吉琳这样以为，但雪球其实就在她脚边。",
+        "characters_in_frame": ["安吉琳", "雪球"],
+        "subjects": [{"character": "安吉琳"}, {"character": "雪球"}]}]
+    _, notes = drop_absent_cast(shots)
+    assert shots[0]["characters_in_frame"] == ["安吉琳", "雪球"]
+    assert notes == []

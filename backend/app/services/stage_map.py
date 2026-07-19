@@ -685,6 +685,80 @@ def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
     return shots_blocking, notes
 
 
+# A name mentioned because the character is GONE is not a visible presence:
+# "告诉母亲雪球不见了" names the pet precisely because it is missing, yet the
+# named-in-action rule added it to the frame and its identity plate rendered
+# the rabbit into the empty-cage shot. Every mention must be absence-marked
+# for the character to count as absent; one plain mention means visible.
+_ABSENT_AFTER_RE = re.compile(
+    r"^[^，。！？.!?]{0,2}?(?:不见了|不见|不在|失踪|丢了|走丢|走失|被送走|"
+    r"送走|离开了|没了|死了|不知去向)"
+    r"|^\s*(?:is|was|has)\s+(?:gone|missing|lost|nowhere)"
+    r"|^\s*(?:disappeared|vanished)", re.IGNORECASE)
+_ABSENT_BEFORE_RE = re.compile(
+    r"(?:找不到|寻找|想念|思念|梦见|提起|提到|说起|回忆起?)$"
+    r"|(?:missing|looking\s+for|searching\s+for|dreams?\s+of|mentions?)\s*$",
+    re.IGNORECASE)
+
+
+def mention_is_absent(name: str, text: str) -> bool:
+    """True when EVERY mention of the name in the text sits in an absence
+    context (gone / missing / only talked about); False when any mention is a
+    plain, visible one — a reveal line beats an absence line."""
+    t = str(text or "")
+    nm = str(name or "").strip()
+    if not nm or not t:
+        return False
+    found = False
+    for m in re.finditer(re.escape(nm), t, re.IGNORECASE):
+        found = True
+        if _ABSENT_AFTER_RE.search(t[m.end():]):
+            continue
+        if _ABSENT_BEFORE_RE.search(t[: m.start()]):
+            continue
+        return False   # a plain mention: visibly present
+    return found
+
+
+def drop_absent_cast(shots: list,
+                     dialogue_lines: list[dict] | None = None) -> tuple[list, list[str]]:
+    """Remove cast whose only mentions in the shot's action are absence-marked
+    (雪球不见了 / Snowy is gone) — the character is being talked about, not
+    shown, and their plate must not ride. The dialogue speaker is never
+    dropped (same pairing convention as the other passes). Mutates in place,
+    returns (shots, notes)."""
+    notes: list[str] = []
+    speakers = iter([str(l.get("character") or "").strip()
+                     for l in (dialogue_lines or [])])
+    for i, sd in enumerate(shots):
+        if not isinstance(sd, dict):
+            continue
+        speaker = ""
+        if str(sd.get("dialogue") or "").strip():
+            speaker = next(speakers, "")
+        action = str(sd.get("action") or "")
+        cast = [str(c) for c in (sd.get("characters_in_frame") or [])]
+        if not cast or not action:
+            continue
+        gone = [c for c in cast
+                if c.strip().upper() != speaker.strip().upper()
+                and mention_is_absent(c, action)]
+        if not gone:
+            continue
+        keep = [c for c in cast if c not in gone]
+        sd["characters_in_frame"] = keep
+        keep_up = {c.strip().upper() for c in keep}
+        sd["subjects"] = [s for s in (sd.get("subjects") or [])
+                          if not isinstance(s, dict)
+                          or str(s.get("character") or "").strip().upper() in keep_up]
+        sd["foreground_characters"] = [
+            c for c in (sd.get("foreground_characters") or [])
+            if str(c).strip().upper() in keep_up]
+        notes.append(f"shot {i + 1}: {', '.join(gone)} only spoken of as "
+                     f"absent - removed from the frame")
+    return shots, notes
+
+
 # Which framings can PHYSICALLY show whom: a character staged far beyond a
 # barrier (or deep background in a close-up) cannot be visible at that
 # framing, yet their listed presence sent their identity plate as a reference

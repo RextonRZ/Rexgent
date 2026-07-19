@@ -55,7 +55,10 @@ def _ensure_action_cast_in_frame(in_frame, action, cast_names) -> list:
     # _name_in_text is the shared, CJK-safe "is this cast member named here"
     # check: a bare \b never fires between Chinese characters, so a pet like
     # 雪球 named in Chinese action ("安吉琳抱着雪球") was silently left out.
-    from app.services.stage_map import _name_in_text
+    # An ABSENCE mention is the opposite: "告诉母亲雪球不见了" names the pet
+    # because it is GONE — adding it rendered the rabbit into the
+    # empty-cage shot.
+    from app.services.stage_map import _name_in_text, mention_is_absent
     out = [str(n).strip() for n in (in_frame or []) if str(n).strip()]
     have = {n.upper() for n in out}
     text = str(action or "")
@@ -63,7 +66,7 @@ def _ensure_action_cast_in_frame(in_frame, action, cast_names) -> list:
         n = str(name or "").strip()
         if not n or n.upper() in have:
             continue
-        if _name_in_text(n, text):
+        if _name_in_text(n, text) and not mention_is_absent(n, text):
             out.append(n)
             have.add(n.upper())
     return out

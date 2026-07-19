@@ -460,17 +460,24 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
                     n for n in (canonical_character(x, known_names)
                                 for x in (sd.get("foreground_characters") or []))
                     if n in in_frame]
+            # a character only SPOKEN OF as absent (雪球不见了) is not on
+            # screen — their plate must not render them into the shot whose
+            # whole point is that they are gone
+            from app.services.stage_map import (drop_absent_cast,
+                                                filter_frame_by_framing)
+            _, _abs_notes = drop_absent_cast(
+                shots, dialogue_lines=scene.dialogue_json)
             # a framing that cannot physically show a character must not carry
             # them: far-staged cast leave CU/ECU/MCU, INSERTs narrow to their
             # action's participants — otherwise their identity plate rides and
             # the model pastes them in close
-            from app.services.stage_map import filter_frame_by_framing
             _, _vis_notes = filter_frame_by_framing(
                 shots, dialogue_lines=scene.dialogue_json)
-            if _vis_notes:
+            if _abs_notes or _vis_notes:
                 import logging
                 logging.getLogger(__name__).info(
-                    "framing visibility scene %s: %s", scene.number, _vis_notes)
+                    "framing visibility scene %s: %s", scene.number,
+                    _abs_notes + _vis_notes)
             # faceless framing normalization runs on the FINAL cast — the
             # reconciliation above can empty a shot's cast (a detail insert of
             # "Anna's hand" whose only listed figure wasn't real cast), and a
