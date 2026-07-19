@@ -34,6 +34,7 @@ def fit_duration_to_dialogue(text: str | None, tiers: tuple = DURATION_TIERS) ->
     timed per character, English per word, mixed lines sum both."""
     t = str(text or "")
     cjk = len(_CJK_CHAR_RE.findall(t))
+    # punctuation-only tokens ("--", "...") are pauses, not speech — uncounted
     latin_words = [w for w in _CJK_CHAR_RE.sub(" ", t).split()
                    if re.search(r"[A-Za-z0-9]", w)]
     if cjk == 0 and not latin_words:

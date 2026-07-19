@@ -58,8 +58,10 @@ def location_family(name: str) -> str:
                 trimmed = trimmed[len(q):].strip()
                 break
         else:
+            # for/else: zh SUFFIXES are only tried when no English PREFIX matched
             for sfx in _VIEW_SUFFIXES_ZH:
-                if len(trimmed) > len(sfx) and trimmed.endswith(sfx):
+                # remainder >= 2 chars: 台中/关外 are PLACE NAMES, not 台+里面 qualifiers
+                if len(trimmed) >= len(sfx) + 2 and trimmed.endswith(sfx):
                     trimmed = trimmed[: -len(sfx)].strip()
                     break
         if trimmed == low:
@@ -79,7 +81,8 @@ def location_view(location: str, heading=None) -> str | None:
         if trimmed.startswith(q + " "):
             return "ext" if q in _EXT_QUALIFIERS else "int"
     for sfx in _VIEW_SUFFIXES_ZH:
-        if len(trimmed) > len(sfx) and trimmed.endswith(sfx):
+        # remainder >= 2 chars: 台中/关外 are PLACE NAMES, not 台+里面 qualifiers
+        if len(trimmed) >= len(sfx) + 2 and trimmed.endswith(sfx):
             return "ext" if sfx in _EXT_SUFFIXES_ZH else "int"
     up = str(heading or "").strip().upper()
     if up.startswith("INT"):

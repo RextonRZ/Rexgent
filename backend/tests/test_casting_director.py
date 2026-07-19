@@ -463,3 +463,17 @@ def test_zh_view_suffixes_group_one_place_per_side():
     assert location_view("花园门口") == "ext"
     assert location_view("卧室里") == "int"
     assert location_view("花园") is None
+
+
+def test_zh_place_names_ending_in_suffix_chars_stay_whole():
+    # 台中/关外 are proper nouns, not 台+qualifier: the strip needs a
+    # remainder of at least 2 chars
+    from app.services.casting_director import location_family, location_view
+    assert location_family("台中") == location_family("台中")
+    assert location_family("台中") != ""
+    assert len(location_family("台中")) == 2
+    assert location_view("台中") is None
+    assert location_view("关外") is None
+    # real qualifiers still strip
+    assert location_family("花园外") == location_family("花园")
+    assert location_view("花园外") == "ext"
