@@ -85,6 +85,10 @@ def _fetch_case() -> dict | None:
                 WHERE cv.is_default IS TRUE
                   AND cv.plate_image_url IS NOT NULL
                   AND c.face_vector IS NOT NULL
+                  -- PHOTOREAL only: ArcFace is meaningless on stylized faces,
+                  -- and the keyframe route excludes stylized dramas anyway —
+                  -- measuring the seam on an anime face measures nothing
+                  AND p.visual_style IS NULL
                 ORDER BY p.created_at DESC
                 LIMIT 1
             """)).mappings().first()
