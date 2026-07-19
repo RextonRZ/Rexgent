@@ -21,7 +21,9 @@ from app.websocket.tool_events import tool_event, tool_run
 
 
 def _key(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", (name or "").strip().lower()).strip("_")
+    # CJK chars are word characters here: the ASCII-only slug reduced every
+    # zh location to "" and the whole drama painted ONE location plate
+    return re.sub(r"[^a-z0-9一-鿿]+", "_", (name or "").strip().lower()).strip("_")
 
 
 # View/position qualifiers the structurer prepends to a place name, split by
@@ -34,6 +36,13 @@ _EXT_QUALIFIERS = (
 _INT_QUALIFIERS = ("interior of", "inside of", "inside")
 _VIEW_QUALIFIERS = tuple(sorted(_EXT_QUALIFIERS + _INT_QUALIFIERS,
                                 key=len, reverse=True))
+
+# zh view/position qualifiers are SUFFIXES (花园外, 卧室里, 花园门口), unlike
+# the English prefixes. Longest first so 外面 wins over 外.
+_EXT_SUFFIXES_ZH = ("外面", "门口", "门前", "附近", "旁边", "外", "前", "旁")
+_INT_SUFFIXES_ZH = ("里面", "内部", "里", "内", "中")
+_VIEW_SUFFIXES_ZH = tuple(sorted(_EXT_SUFFIXES_ZH + _INT_SUFFIXES_ZH,
+                                 key=len, reverse=True))
 
 
 def location_family(name: str) -> str:
@@ -48,6 +57,11 @@ def location_family(name: str) -> str:
             if trimmed.startswith(q + " "):
                 trimmed = trimmed[len(q):].strip()
                 break
+        else:
+            for sfx in _VIEW_SUFFIXES_ZH:
+                if len(trimmed) > len(sfx) and trimmed.endswith(sfx):
+                    trimmed = trimmed[: -len(sfx)].strip()
+                    break
         if trimmed == low:
             break
         low = trimmed
@@ -64,6 +78,9 @@ def location_view(location: str, heading=None) -> str | None:
     for q in _VIEW_QUALIFIERS:
         if trimmed.startswith(q + " "):
             return "ext" if q in _EXT_QUALIFIERS else "int"
+    for sfx in _VIEW_SUFFIXES_ZH:
+        if len(trimmed) > len(sfx) and trimmed.endswith(sfx):
+            return "ext" if sfx in _EXT_SUFFIXES_ZH else "int"
     up = str(heading or "").strip().upper()
     if up.startswith("INT"):
         return "int"

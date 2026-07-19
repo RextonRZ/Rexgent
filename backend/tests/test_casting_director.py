@@ -442,3 +442,24 @@ async def test_cast_bible_crash_emits_terminal_casting_event(monkeypatch):
     assert stage_events, "cast_bible must emit a terminal stage event on crash"
     assert stage_events[-1]["stage"] == "casting"
     assert stage_events[-1]["status"] == "failed"
+
+
+def test_zh_locations_key_to_distinct_nonempty_families():
+    # _key slugged through [^a-z0-9]: every CJK name reduced to "" and ALL zh
+    # locations collapsed into one family -> the whole drama painted ONE plate
+    from app.services.casting_director import location_family
+    assert location_family("花园") != ""
+    assert location_family("卧室") != ""
+    assert location_family("花园") != location_family("卧室")
+
+
+def test_zh_view_suffixes_group_one_place_per_side():
+    # zh qualifiers are SUFFIXES: 花园外 is the ext view of the 花园 family
+    from app.services.casting_director import location_family, location_view
+    assert location_family("花园外") == location_family("花园")
+    assert location_family("花园门口") == location_family("花园")
+    assert location_family("卧室里") == location_family("卧室")
+    assert location_view("花园外") == "ext"
+    assert location_view("花园门口") == "ext"
+    assert location_view("卧室里") == "int"
+    assert location_view("花园") is None
