@@ -109,6 +109,9 @@ _SPECIES_EN = {
     "兔": "rabbit", "兔子": "rabbit", "猫": "cat", "狗": "dog", "鸟": "bird",
     "鼠": "mouse", "仓鼠": "hamster", "鸭": "duck", "鹅": "goose",
     "鸡": "chicken", "龟": "turtle", "蛙": "frog", "宠物": "pet",
+    "犬": "dog", "博美": "dog", "柯基": "dog", "哈士奇": "dog", "金毛": "dog",
+    "泰迪": "dog", "吉娃娃": "dog", "柴犬": "dog", "贵宾": "dog",
+    "拉布拉多": "dog", "萨摩耶": "dog", "边牧": "dog",
 }
 
 

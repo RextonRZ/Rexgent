@@ -1246,6 +1246,14 @@ def test_creature_scale_clause_silent_without_creatures_or_humans():
         {"雪球": {"video_prompt_fragment": "一只白色小兔子"}}) == ""
 
 
+def test_zh_breeds_scale_as_dogs():
+    from app.mcp_tools.scene_prompt_craft import creature_scale_clause
+    visuals = {"安吉琳": {"video_prompt_fragment": "10岁的小女孩"},
+               "雪球": {"video_prompt_fragment": "一只蓬松的博美犬"}}
+    clause = creature_scale_clause(visuals)
+    assert "dog" in clause
+
+
 @pytest.mark.asyncio
 async def test_prev_shot_movement_is_declared_finished():
     # the last frame is a frozen snapshot: a shot ending MID-MOTION (walking

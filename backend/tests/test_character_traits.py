@@ -66,3 +66,12 @@ def test_is_stylized_style_flags_3d_and_cgi_without_a_brand_name():
     assert is_stylized_style("3d animated feature, soft global illumination") is True
     assert is_stylized_style("stylized CGI characters, rounded features") is True
     assert is_stylized_style("realistic drama shot in 163 days") is False
+
+
+def test_breed_names_are_creatures():
+    # a breed-described pet (博美犬, corgi) had no species word and was cast
+    # as a human — the original 雪球 bug through a side door
+    assert species_of("一只活泼的博美犬") is not None
+    assert species_of("一只金毛，毛色发亮") is not None
+    assert species_of("a stubby-legged corgi with a red collar") == "corgi"
+    assert species_of("an old husky with one blue eye") == "husky"

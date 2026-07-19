@@ -14,6 +14,8 @@ _SPECIES = (
     "panda|penguin|duck|chicken|rooster|frog|turtle|snake|lizard|dragon|"
     "monkey|gorilla|elephant|giraffe|deer|squirrel|hedgehog|otter|seal|"
     "dolphin|whale|shark|fish|octopus|crab|spider|bee|butterfly|"
+    "corgi|husky|poodle|pomeranian|labrador|retriever|chihuahua|shiba|"
+    "samoyed|beagle|terrier|bulldog|dachshund|"
     "robot|android|alien|monster|creature|ghost|fairy|goblin|elf|troll"
 )
 # "cat-like reflexes" describes a person, not a cat: the bare noun only,
@@ -33,7 +35,8 @@ _SPECIES_ZH_RE = re.compile(
     "螃蟹|蜘蛛|蜜蜂|蝴蝶|青蛙|乌龟|蜥蜴|鹦鹉|企鹅|公鸡|狐狸|狮子|老虎|恐龙|"
     "兔子|小马|马驹|骏马|斑马|奶牛|水牛|小牛|山羊|绵羊|大象|小象|机器人|机械人|"
     "外星人|怪兽|怪物|幽灵|精灵|妖精|巨魔|猴子|宠物|"
-    "兔|猫|狗|熊|鸟|鹰|狼|猪|鸭|鹅|鸡|鹿|羊|蛇|龟|蛙|鱼|龙|猴|鬼|鼠")
+    "博美|柯基|哈士奇|金毛|泰迪|吉娃娃|柴犬|贵宾|拉布拉多|萨摩耶|边牧|"
+    "兔|猫|狗|熊|鸟|鹰|狼|猪|鸭|鹅|鸡|鹿|羊|蛇|龟|蛙|鱼|龙|猴|鬼|鼠|犬")
 
 _STYLIZED_RE = re.compile(
     r"\b(cartoon|anime|manga|toon|cel[ -]?shaded|2d|3[ -]?d|cgi|pixel|8[ -]?bit|"
