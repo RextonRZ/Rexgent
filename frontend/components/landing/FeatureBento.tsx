@@ -435,24 +435,36 @@ function StyleReel({ reduced }: { reduced: boolean }) {
 }
 
 /** Two consecutive frames from a real finished drama (scene 1, the MS and its
- * OTS reverse) — the pipeline's output sitting right beside its diagram. */
-function SampleFrames() {
+ * OTS reverse) — the pipeline's output sitting right beside its diagram.
+ * They take turns "playing": shot 3 drifts like live footage while its border
+ * lights, then shot 4 takes its turn, on a shared 6s cycle. */
+function SampleFrames({ reduced }: { reduced: boolean }) {
   const frames = [
-    { src: "/sample-shot3.jpg", label: "Shot 3 · MS" },
-    { src: "/sample-shot4.jpg", label: "Shot 4 · OTS" },
+    { src: "/sample-shot3.jpg", label: "Shot 3 · MS", delay: "0s" },
+    { src: "/sample-shot4.jpg", label: "Shot 4 · OTS", delay: "3s" },
   ];
   return (
     <div className="hidden shrink-0 sm:block">
       <div className="flex gap-2">
         {frames.map((f) => (
           <figure key={f.src} className="w-[92px]">
-            <div className="overflow-hidden rounded-md border border-white/10">
+            <div
+              className={cn(
+                "overflow-hidden rounded-md border border-white/10",
+                !reduced && "animate-[take-glow_6s_ease-in-out_infinite]"
+              )}
+              style={!reduced ? { animationDelay: f.delay } : undefined}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={f.src}
                 alt=""
                 loading="lazy"
-                className="aspect-[9/16] w-full object-cover"
+                className={cn(
+                  "aspect-[9/16] w-full object-cover",
+                  !reduced && "animate-[take-turn_6s_ease-in-out_infinite]"
+                )}
+                style={!reduced ? { animationDelay: f.delay } : undefined}
               />
             </div>
             <figcaption className="mt-1 text-center text-[9px] uppercase tracking-widest text-muted-foreground">
@@ -512,7 +524,7 @@ export function FeatureBento() {
               <CardText {...WOWS[3]} />
               <TwoDoorsPipeline reduced={reduced} />
             </div>
-            <SampleFrames />
+            <SampleFrames reduced={reduced} />
           </div>
         </GlowCard>
 
