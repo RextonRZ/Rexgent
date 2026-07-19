@@ -23,18 +23,25 @@ def plan_shot_budget(num_scenes: int, target_length: int) -> tuple[int, int]:
 # more — raise the top tier once the models are confirmed to accept it.
 DURATION_TIERS = (5, 10)
 _WORDS_PER_SEC = 2.6  # natural drama delivery pace
+_CJK_CHAR_RE = re.compile(r"[一-鿿]")
+_CHARS_PER_SEC = 4.2  # natural Mandarin drama delivery pace
 
 
 def fit_duration_to_dialogue(text: str | None, tiers: tuple = DURATION_TIERS) -> int:
     """Smallest clip tier that comfortably holds the spoken line; the base tier
-    for an action beat with no dialogue."""
-    words = len((text or "").split())
-    if words == 0:
+    for an action beat with no dialogue. zh has no spaces — a 39-char line
+    counted as ONE word and got the 5s tier for ~9s of speech — so CJK is
+    timed per character, English per word, mixed lines sum both."""
+    t = str(text or "")
+    cjk = len(_CJK_CHAR_RE.findall(t))
+    latin_words = [w for w in _CJK_CHAR_RE.sub(" ", t).split()
+                   if re.search(r"[A-Za-z0-9]", w)]
+    if cjk == 0 and not latin_words:
         return tiers[0]
-    needed = words / _WORDS_PER_SEC + 0.8  # small pad for breath/pauses
-    for t in tiers:
-        if needed <= t:
-            return t
+    needed = len(latin_words) / _WORDS_PER_SEC + cjk / _CHARS_PER_SEC + 0.8
+    for tier in tiers:
+        if needed <= tier:
+            return tier
     return tiers[-1]
 
 

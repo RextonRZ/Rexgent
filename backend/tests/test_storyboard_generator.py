@@ -435,3 +435,15 @@ def test_face_the_speaker_reads_board_level_subjects():
     assert subs["Angeline"]["frame_position"] == "foreground"
     assert s["foreground_characters"] == ["Angeline"]
     assert notes
+
+
+def test_zh_dialogue_duration_counts_characters():
+    # whitespace word-counting saw a 39-char zh line as ONE word -> 5s tier
+    # for ~9s of speech, and the clip cut the line off
+    long_zh = "我从来没有想过会发生这样的事情，真的对不起，这些年我一直都在想念着你和这个家。"
+    assert fit_duration_to_dialogue(long_zh) == 10
+    assert fit_duration_to_dialogue("对不起。") == 5      # short stays short
+    # English behavior unchanged
+    assert fit_duration_to_dialogue("I am sorry.") == 5
+    assert fit_duration_to_dialogue(
+        "I never meant for any of this to happen, and I am so sorry it did.") == 10
