@@ -378,19 +378,23 @@ function StyleReel({ reduced }: { reduced: boolean }) {
   // per style: undefined = untried, false = no sample (404/decode error)
   const [videoOk, setVideoOk] = useState<Record<string, boolean>>({});
   const [videoReady, setVideoReady] = useState(false);
+  // hovering holds the reel so a look can actually be studied
+  const [hovered, setHovered] = useState(false);
   const active = STYLE_REEL[idx];
+  const next = STYLE_REEL[(idx + 1) % STYLE_REEL.length];
   const tryVideo = videoOk[active.value] !== false;
   useEffect(() => {
     setVideoReady(false);
   }, [idx]);
   useEffect(() => {
-    if (reduced) return;
+    if (reduced || hovered) return;
+    // 6s per look: the 5s sample plays through before the reel moves on
     const t = window.setInterval(
       () => setIdx((i) => (i + 1) % STYLE_REEL.length),
-      3500
+      6000
     );
     return () => window.clearInterval(t);
-  }, [reduced]);
+  }, [reduced, hovered]);
 
   if (reduced) {
     return (
@@ -411,7 +415,11 @@ function StyleReel({ reduced }: { reduced: boolean }) {
 
   return (
     <div className="mt-6">
-      <div className="relative aspect-[16/8] overflow-hidden rounded-lg border border-white/10">
+      <div
+        className="relative aspect-[16/8] overflow-hidden rounded-lg border border-white/10"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
         {STYLE_REEL.map((s, i) => (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -435,15 +443,30 @@ function StyleReel({ reduced }: { reduced: boolean }) {
             loop
             playsInline
             autoPlay
-            preload="metadata"
+            preload="auto"
             onCanPlay={() => setVideoReady(true)}
             onError={() =>
               setVideoOk((m) => ({ ...m, [active.value]: false }))
             }
             className={cn(
-              "absolute inset-0 h-full w-full object-cover transition-opacity duration-500",
+              "absolute inset-0 h-full w-full object-cover transition-opacity duration-700",
               videoReady ? "opacity-100" : "opacity-0"
             )}
+          />
+        )}
+        {/* warm the NEXT look's sample while this one plays, so the swap
+            lands on footage instead of flashing through the still */}
+        {!reduced && videoOk[next.value] !== false && next.value !== active.value && (
+          <video
+            key={`preload-${next.value}`}
+            src={`/style-samples/${next.value}.mp4`}
+            muted
+            playsInline
+            preload="auto"
+            onError={() =>
+              setVideoOk((m) => ({ ...m, [next.value]: false }))
+            }
+            className="hidden"
           />
         )}
         <span className="absolute bottom-1.5 left-1.5 z-10 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-sm">
