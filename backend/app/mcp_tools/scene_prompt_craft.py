@@ -14,7 +14,7 @@ _ACCESSORY_RE = re.compile(
     r"hair accessor|发箍|发带|发夹|发绳|蝴蝶结|头饰|丝带|头绳", re.I)
 _FACIAL_HAIR_RE = re.compile(
     r"clean-shaven|beard|moustache|mustache|stubble|goatee|facial hair|"
-    r"胡子|胡须|络腮胡|山羊胡|八字胡", re.I)
+    r"胡子|胡须|络腮胡|山羊胡|八字胡|干净的下巴", re.I)
 # Headwear (rule 22): a cap/beanie/hat is kept OUT of the identity fragment by
 # design (it occludes the face plate) and is unknown to _pin_segments, so it
 # rode on the crafter LLM's whim and flickered shot to shot (the Lucas cap bug).
@@ -44,13 +44,22 @@ def exiting_characters(action: str | None, names: list) -> list[str]:
         return []
     out = []
     for name in names:
+        nm = str(name)
+        # a nickname pair (Sam/Samantha, 玛丽/小玛丽) must never credit the
+        # LONGER name's exit to the shorter one: mask every other cast name
+        # that contains this one before scanning (\b can't do this for CJK)
+        masked = text
+        for other in names:
+            o = str(other)
+            if o != nm and nm in o:
+                masked = masked.replace(o, "\x00" * len(o))
         others = "|".join(re.escape(str(n)) for n in names if n != name)
         gap = (rf"(?:(?!(?:{others}))[^.!?。！？；])*?" if others
                else r"[^.!?。！？；]*?")
         pat = re.compile(
-            rf"{re.escape(str(name))}{gap}(?:{_EXIT_RE.pattern})", re.I)
-        if pat.search(text):
-            out.append(str(name))
+            rf"{re.escape(nm)}{gap}(?:{_EXIT_RE.pattern})", re.I)
+        if pat.search(masked):
+            out.append(nm)
     return out
 _AGE_RE = re.compile(r"\b(\d{1,2})\s*[- ]\s*year[- ]old\b", re.I)
 # zh fragments write ages as 10岁 or 三十八岁 — the English-only pattern never
@@ -855,10 +864,11 @@ class ScenePromptCraft:
             # the positive clause pins true size; the negative bans the drift
             result["negative_prompt"] += (
                 ", giant animal, oversized pet, animal as large as a person")
-        for sp in (excluded_species or []):
-            sp_en = _SPECIES_EN.get(str(sp), str(sp))
-            # a creature deliberately excluded from this shot must not sneak
-            # back in as a generic animal painted from a text mention
+        # deduped AFTER mapping: 兔 and 兔子 both become "rabbit" — ban it once.
+        # a creature deliberately excluded from this shot must not sneak back
+        # in as a generic animal painted from a text mention
+        for sp_en in dict.fromkeys(_SPECIES_EN.get(str(sp), str(sp))
+                                   for sp in (excluded_species or [])):
             result["negative_prompt"] += f", {sp_en}"
         if character_visuals:
             # invented-feature bans (peopled shots): models grow beards on

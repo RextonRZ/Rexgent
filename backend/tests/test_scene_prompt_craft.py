@@ -1401,3 +1401,14 @@ async def test_excluded_species_banned_in_negative():
         character_visuals={"安吉琳": {"video_prompt_fragment": "十岁女孩"}},
         target_model="happyhorse", excluded_species=["兔"])
     assert "rabbit" in out["negative_prompt"]
+
+
+def test_exit_never_credited_to_a_substring_name():
+    # dropping \b for CJK also dropped English boundary safety: Samantha's
+    # exit was credited to Sam too (and 小玛丽's to 玛丽) — a nickname pair
+    # misattributes the back-to-camera clause onto whoever stays
+    from app.mcp_tools.scene_prompt_craft import exiting_characters
+    assert exiting_characters("Samantha runs away as Sam watches.",
+                              ["Sam", "Samantha"]) == ["Samantha"]
+    assert exiting_characters("小玛丽跑出了房间，玛丽还站在原地。",
+                              ["玛丽", "小玛丽"]) == ["小玛丽"]
