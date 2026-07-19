@@ -37,6 +37,10 @@ class ProjectUpdate(BaseModel):
 class PosterFromClipRequest(BaseModel):
     clip_url: str
     timestamp: float = 0.0
+    # vertical crop focus (0..100, percent from the top) for portrait clips:
+    # the poster is cropped server-side to the card's 16:10 window at this
+    # height, so what the picker previews is what the card shows
+    focus_y: float = 25.0
 
 
 class TitleSuggestRequest(BaseModel):

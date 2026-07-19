@@ -106,10 +106,16 @@ export function useSetPosterFromClip() {
       projectId: string;
       clipUrl: string;
       timestamp: number;
+      /** vertical crop focus for portrait clips, 0..100 from the top */
+      focusY?: number;
     }) => {
       const { data } = await api.post<{ poster_url: string }>(
         `/api/projects/${params.projectId}/poster/from_clip`,
-        { clip_url: params.clipUrl, timestamp: params.timestamp }
+        {
+          clip_url: params.clipUrl,
+          timestamp: params.timestamp,
+          focus_y: params.focusY ?? 25,
+        }
       );
       return data;
     },

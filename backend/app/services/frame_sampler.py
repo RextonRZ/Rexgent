@@ -29,16 +29,31 @@ def sample_frames(clip_path_or_url: str, duration: float, count: int = 3) -> lis
     return frames
 
 
-def extract_frame_at(clip_url: str, timestamp: float) -> bytes | None:
+def _poster_crop_filter(focus_y: float) -> str:
+    """A 16:10 crop window slid down a PORTRAIT frame: focus_y (0..100) is how
+    far down the window sits. Landscape sources pass through untouched (the
+    min() collapses to full height and y becomes 0), so one filter serves both
+    orientations."""
+    f = min(max(float(focus_y), 0.0), 100.0) / 100.0
+    return f"crop=w=iw:h=min(ih\\,iw*10/16):x=0:y=(ih-oh)*{f:.4f}"
+
+
+def extract_frame_at(clip_url: str, timestamp: float,
+                     focus_y: float | None = None) -> bytes | None:
     """Return the frame at `timestamp` seconds as JPEG bytes (or None).
     ffmpeg reads http(s) URLs directly — no download step needed. This is the
     server-side poster capture: OSS serves clips without CORS headers, so a
-    browser canvas capture would be tainted and unreadable."""
+    browser canvas capture would be tainted and unreadable. focus_y (0..100)
+    crops a vertical clip to the card's 16:10 window at that height, so the
+    poster IS the frame the user framed in the picker."""
     out = tempfile.mktemp(suffix=".jpg")
     cmd = [
         "ffmpeg", "-y", "-ss", str(max(0.0, timestamp)), "-i", clip_url,
-        "-vframes", "1", "-q:v", "2", out,
+        "-vframes", "1", "-q:v", "2",
     ]
+    if focus_y is not None:
+        cmd += ["-vf", _poster_crop_filter(focus_y)]
+    cmd.append(out)
     try:
         subprocess.run(cmd, capture_output=True, timeout=30)
         if os.path.exists(out):

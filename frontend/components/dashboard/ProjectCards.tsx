@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, MoreVertical, Plus, Sparkles } from "lucide-react";
 import { genreDef, posterGradient } from "@/lib/genres";
+import { styleAccent } from "@/lib/styles";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -238,6 +239,7 @@ export function ProjectCard({
   const suggest = useSuggestTitle();
   const update = useUpdateProject();
   const [suggestion, setSuggestion] = useState<string | null>(null);
+  const accent = styleAccent(project.visual_style);
 
   return (
     <div
@@ -264,6 +266,24 @@ export function ProjectCard({
         onMouseLeave={() => onPreview(null)}
       >
         <PosterImage project={project} detailed className={hero ? "absolute inset-0" : undefined} />
+        {/* stylized dramas wear their look quietly: a tinted top hairline and
+            a small chip naming the style; photoreal keeps the plain card */}
+        {accent && (
+          <>
+            <span
+              aria-hidden
+              className={cn("absolute inset-x-0 top-0 z-10 h-[2px]", accent.bar)}
+            />
+            <span
+              className={cn(
+                "absolute left-2 top-2 z-10 rounded-full px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm",
+                accent.chip
+              )}
+            >
+              {accent.label}
+            </span>
+          </>
+        )}
         {/* poster gradient scrim so the title area reads on busy stills */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         {previewing && project.preview_clip_url && (

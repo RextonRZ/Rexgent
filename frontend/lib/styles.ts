@@ -8,6 +8,27 @@ export interface VisualStyleDef {
 
 export const PHOTOREAL = "photoreal";
 
+/** Per style family, a quiet card accent within the house design system: the
+ * chip labels the look, the bar tints the card's top hairline. Photoreal (and
+ * unknown styles) return null and keep the plain house card. */
+export function styleAccent(
+  style?: string | null
+): { label: string; chip: string; bar: string } | null {
+  const s = (style ?? "").toLowerCase();
+  if (!s || s === PHOTOREAL) return null;
+  const label = VISUAL_STYLES.find((v) => v.value === s)?.label ?? s;
+  if (["anime", "manga", "chibi"].includes(s))
+    return { label, chip: "bg-pink-500/15 text-pink-300", bar: "bg-pink-400/50" };
+  if (["ghibli", "watercolor", "illustrated", "hand-drawn", "sketch"].includes(s))
+    return { label, chip: "bg-emerald-500/15 text-emerald-300", bar: "bg-emerald-400/50" };
+  if (["pixel", "8-bit", "16-bit", "voxel", "low-poly"].includes(s))
+    return { label, chip: "bg-amber-500/15 text-amber-300", bar: "bg-amber-400/50" };
+  if (["claymation", "stop-motion"].includes(s))
+    return { label, chip: "bg-orange-500/15 text-orange-300", bar: "bg-orange-400/50" };
+  // pixar, disney, cartoon, cel-shaded, 2d, comic and friends
+  return { label, chip: "bg-sky-500/15 text-sky-300", bar: "bg-sky-400/50" };
+}
+
 export const VISUAL_STYLES: VisualStyleDef[] = [
   { value: PHOTOREAL, label: "Photoreal cinematic" },
   { value: "pixar", label: "Pixar style 3D" },

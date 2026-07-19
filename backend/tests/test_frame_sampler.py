@@ -73,3 +73,15 @@ def test_extract_first_frame_returns_first_frame_bytes(sample_clip):
     assert len(data) > 500
     # really frame 0, not the last: on an animated clip the two frames differ
     assert data != extract_last_frame(sample_clip)
+
+
+def test_poster_crop_filter_slides_a_16_10_window():
+    # portrait posters were cropped at a FIXED 25% — the picker now sends the
+    # user's own focus, and landscape sources must pass through untouched
+    from app.services.frame_sampler import _poster_crop_filter
+    f = _poster_crop_filter(60)
+    assert "iw*10/16" in f            # the card's 16:10 window
+    assert "0.6000" in f              # the chosen height
+    assert "min(ih" in f              # landscape collapses to a no-op
+    assert "0.0000" in _poster_crop_filter(-5)    # clamped
+    assert "1.0000" in _poster_crop_filter(150)   # clamped

@@ -11,6 +11,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { VISUAL_STYLES } from "@/lib/styles";
+
+// every non-photoreal look, cycled on the styles tile
+const STYLE_REEL = VISUAL_STYLES.filter((s) => s.value !== "photoreal");
 
 // Numbered in reading order: large row first, then the compact row.
 const WOWS = [
@@ -26,21 +30,26 @@ const WOWS = [
   },
   {
     k: "03",
-    title: "One premise, a whole drama",
-    body: "An autonomous agent writes the script, judges its own draft, casts the characters, storyboards every scene and reports back. You watch a studio work for you.",
+    title: `${VISUAL_STYLES.length} visual styles`,
+    body: "Photoreal cinema, Ghibli softness, anime, pixel art, claymation. Pick a look when you create the drama and every plate, poster and clip renders in it.",
   },
   {
     k: "04",
+    title: "A premise or a script, a whole drama",
+    body: "Type one line and an autonomous agent writes the screenplay, or import the script you already have as PDF, DOCX or Fountain. Either way it judges the draft, casts the characters, storyboards every scene and reports back.",
+  },
+  {
+    k: "05",
     title: "Wardrobe built in",
     body: "Every character gets costume plates for each look in the story, so the same person walks through every scene wearing the right outfit.",
   },
   {
-    k: "05",
+    k: "06",
     title: "Characters that speak",
     body: "Every character speaks their lines with the mouth moving in time, generated with the shot so the voice lands on the picture instead of being dubbed on afterward.",
   },
   {
-    k: "06",
+    k: "07",
     title: "You stay the director",
     body: "Edit the script, swap faces, redo plates, delete shots, regenerate clips. The agent runs the pipeline while you keep creative control.",
   },
@@ -322,6 +331,72 @@ function SpeechWave({ reduced }: { reduced: boolean }) {
   );
 }
 
+/** The same drama cycling through the style catalog: crossfading stills with
+ * the active look named beneath. Reduced motion shows a static four-up. */
+function StyleReel({ reduced }: { reduced: boolean }) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (reduced) return;
+    const t = window.setInterval(
+      () => setIdx((i) => (i + 1) % STYLE_REEL.length),
+      1800
+    );
+    return () => window.clearInterval(t);
+  }, [reduced]);
+
+  if (reduced) {
+    return (
+      <div className="mt-6 grid grid-cols-4 gap-1.5">
+        {STYLE_REEL.slice(0, 4).map((s) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={s.value}
+            src={`/styles/${s.value}.jpg`}
+            alt={s.label}
+            loading="lazy"
+            className="aspect-video w-full rounded-[3px] border border-white/10 object-cover"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6">
+      <div className="relative aspect-[16/8] overflow-hidden rounded-lg border border-white/10">
+        {STYLE_REEL.map((s, i) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={s.value}
+            src={`/styles/${s.value}.jpg`}
+            alt=""
+            loading={i < 3 ? "eager" : "lazy"}
+            className={cn(
+              "absolute inset-0 h-full w-full object-cover transition-opacity duration-700",
+              i === idx ? "opacity-100" : "opacity-0"
+            )}
+          />
+        ))}
+        <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-sm">
+          {STYLE_REEL[idx].label}
+        </span>
+        {/* the reel's progress dots, one per look, active one lit */}
+        <span className="absolute bottom-2 right-2 flex gap-[3px]">
+          {STYLE_REEL.slice(0, 8).map((_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-1 w-1 rounded-full",
+                i === idx % 8 ? "bg-violet-300" : "bg-white/25"
+              )}
+            />
+          ))}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /** The director's toolbar: edit, recast, regenerate, cut. */
 function DirectorTools() {
   const tools = [Pencil, UserRound, RefreshCw, Trash2];
@@ -355,23 +430,28 @@ export function FeatureBento() {
           <BudgetMeterMini reduced={reduced} />
         </GlowCard>
 
-        <GlowCard className="md:col-span-3">
+        <GlowCard className="md:col-span-5">
           <CardText {...WOWS[2]} />
+          <StyleReel reduced={reduced} />
+        </GlowCard>
+
+        <GlowCard className="md:col-span-7">
+          <CardText {...WOWS[3]} />
           <PipelineTrace reduced={reduced} />
         </GlowCard>
 
-        <GlowCard className="md:col-span-3">
-          <CardText {...WOWS[3]} />
+        <GlowCard className="md:col-span-4">
+          <CardText {...WOWS[4]} />
           <WardrobeRow />
         </GlowCard>
 
-        <GlowCard className="md:col-span-3">
-          <CardText {...WOWS[4]} />
+        <GlowCard className="md:col-span-4">
+          <CardText {...WOWS[5]} />
           <SpeechWave reduced={reduced} />
         </GlowCard>
 
-        <GlowCard className="md:col-span-3">
-          <CardText {...WOWS[5]} />
+        <GlowCard className="md:col-span-4">
+          <CardText {...WOWS[6]} />
           <DirectorTools />
         </GlowCard>
       </div>

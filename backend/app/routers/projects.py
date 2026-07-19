@@ -430,7 +430,8 @@ async def set_poster_from_clip(
     from app.services.oss_manager import OSSManager
 
     project = _get_owned_project(project_id, db, current_user)
-    frame = extract_frame_at(request.clip_url, request.timestamp)
+    frame = extract_frame_at(request.clip_url, request.timestamp,
+                             focus_y=request.focus_y)
     if not frame:
         raise HTTPException(status_code=422, detail="Could not extract a frame from that clip")
 

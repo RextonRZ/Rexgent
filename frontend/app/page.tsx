@@ -123,7 +123,7 @@ export default function LandingPage() {
             Your first drama is one idea away.
           </h2>
           <p className="mt-4 text-muted-foreground">
-            Type a premise. Watch a studio go to work.
+            Type a premise or import your script. Watch a studio go to work.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3">
             <Link href={isAuthenticated ? "/projects" : "/signup"}>
