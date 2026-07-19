@@ -740,7 +740,10 @@ export function StudioStatsDrawer({
                           )}
                         </div>
                         {h && (
-                          <div className="flex shrink-0 items-center gap-1.5 pt-1">
+                          <div
+                            className="flex shrink-0 items-center gap-1.5 pt-1"
+                            title="Average confidence this crew member reported for its own decisions. For the Reviser this tracks the judge scores of drafts it was asked to fix, so a low number means hard drafts, not a broken agent."
+                          >
                             {h.tier === "ok" ? (
                               <Check
                                 aria-label="Reliable"
@@ -765,8 +768,8 @@ export function StudioStatsDrawer({
                                   )}
                                 >
                                   {h.tier === "good"
-                                    ? "Good"
-                                    : "Needs attention"}
+                                    ? "Solid"
+                                    : "Low confidence"}
                                 </span>
                                 <span className="text-[10px] tabular-nums text-zinc-600">
                                   {h.pct}%
