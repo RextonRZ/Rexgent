@@ -15,8 +15,8 @@ import { cn } from "@/lib/utils";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { VISUAL_STYLES } from "@/lib/styles";
 
-// every non-photoreal look, cycled on the styles tile
-const STYLE_REEL = VISUAL_STYLES.filter((s) => s.value !== "photoreal");
+// the full catalog, photoreal included — each look has a rendered sample
+const STYLE_REEL = VISUAL_STYLES;
 
 // Numbered in reading order: large row first, then the compact row.
 const WOWS = [
@@ -368,15 +368,26 @@ function SpeechWave({ reduced }: { reduced: boolean }) {
   );
 }
 
-/** The same drama cycling through the style catalog: crossfading stills with
- * the active look named beneath. Reduced motion shows a static four-up. */
+/** The same scene cycling through the style catalog: a REAL rendered sample
+ * video per style when one exists under /style-samples (same prompt, same
+ * face and rabbit references, only the style seed differs), falling back to
+ * the catalog still for styles without a sample. Reduced motion shows a
+ * static four-up. */
 function StyleReel({ reduced }: { reduced: boolean }) {
   const [idx, setIdx] = useState(0);
+  // per style: undefined = untried, false = no sample (404/decode error)
+  const [videoOk, setVideoOk] = useState<Record<string, boolean>>({});
+  const [videoReady, setVideoReady] = useState(false);
+  const active = STYLE_REEL[idx];
+  const tryVideo = videoOk[active.value] !== false;
+  useEffect(() => {
+    setVideoReady(false);
+  }, [idx]);
   useEffect(() => {
     if (reduced) return;
     const t = window.setInterval(
       () => setIdx((i) => (i + 1) % STYLE_REEL.length),
-      1800
+      3500
     );
     return () => window.clearInterval(t);
   }, [reduced]);
@@ -414,11 +425,32 @@ function StyleReel({ reduced }: { reduced: boolean }) {
             )}
           />
         ))}
-        <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-sm">
+        {/* the real rendered sample plays over the still once it can; a style
+            without a sample silently keeps its still */}
+        {tryVideo && (
+          <video
+            key={active.value}
+            src={`/style-samples/${active.value}.mp4`}
+            muted
+            loop
+            playsInline
+            autoPlay
+            preload="metadata"
+            onCanPlay={() => setVideoReady(true)}
+            onError={() =>
+              setVideoOk((m) => ({ ...m, [active.value]: false }))
+            }
+            className={cn(
+              "absolute inset-0 h-full w-full object-cover transition-opacity duration-500",
+              videoReady ? "opacity-100" : "opacity-0"
+            )}
+          />
+        )}
+        <span className="absolute bottom-1.5 left-1.5 z-10 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-sm">
           {STYLE_REEL[idx].label}
         </span>
         {/* the reel's progress dots, one per look, active one lit */}
-        <span className="absolute bottom-2 right-2 flex gap-[3px]">
+        <span className="absolute bottom-2 right-2 z-10 flex gap-[3px]">
           {STYLE_REEL.slice(0, 8).map((_, i) => (
             <span
               key={i}
