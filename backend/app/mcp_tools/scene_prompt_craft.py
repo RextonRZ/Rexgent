@@ -516,8 +516,11 @@ class ScenePromptCraft:
             raw = str(shot.get("dialogue") or "").strip()
             # words said ALOUD: strip any (parenthetical) so the model doesn't read
             # the stage direction out loud; the parenthetical becomes the delivery TONE
-            spoken = _re.sub(r"\s{2,}", " ", _re.sub(r"\([^)]*\)", " ", raw)).strip() or raw
-            tone = ", ".join(p.strip() for p in _re.findall(r"\(([^)]+)\)", raw) if p.strip())
+            spoken = _re.sub(r"\s{2,}", " ",
+                             _re.sub(r"\([^)]*\)|（[^）]*）", " ", raw)).strip() or raw
+            tone = ", ".join(p.strip() for pair in
+                             _re.findall(r"\(([^)]+)\)|（([^）]+)）", raw)
+                             for p in pair if p.strip())
             if spoken:
                 who = (speaker or "").strip()
                 tone_clause = f", {tone}," if tone else ""

@@ -1274,3 +1274,24 @@ async def test_prev_shot_movement_is_declared_finished():
     assert "FINISHED" in user_msg
     assert "already arrived" in user_msg
     assert "never REPEATS" in user_msg
+
+
+@pytest.mark.asyncio
+async def test_fullwidth_parenthetical_is_tone_not_spoken():
+    # zh scripts write stage directions as （哽咽着）— the ASCII-only strip
+    # left it in the spoken words and the model read it aloud
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+    out = await crafter.craft(
+        shot={"shot_type": "MCU", "action": "安吉琳哭着道歉。",
+              "dialogue": "（哽咽着）雪球，对不起。",
+              "estimated_duration_seconds": 5},
+        character_visuals={"安吉琳": {"video_prompt_fragment": "10岁的小女孩"}},
+        target_model="happyhorse", native_talk=True, speaker="安吉琳")
+    prompt = out["prompt"]
+    spoken = prompt.split('"')[1] if '"' in prompt else ""
+    assert "哽咽着" not in spoken          # not read aloud
+    assert "哽咽着" in prompt              # rides as the delivery tone
