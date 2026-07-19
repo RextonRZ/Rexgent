@@ -5,5 +5,7 @@ Describe purely what is VISIBLE, present tense, 2-4 short sentences:
 - Key furniture and props and their state (door open or closed, cup on the table, chair pushed back).
 - The light and general placement of the room as seen.
 
+MID-MOTION RULE: a frozen frame cannot show where a movement was going. If someone appears mid-step or mid-reach, describe them as HAVING JUST STOPPED at that spot ("the woman stands just inside the gate, one hand still raised") — never as walking or reaching somewhere, or the next clip re-performs the whole movement.
+
 Do NOT interpret emotions or story. Do NOT invent anything outside the frame.
 Return ONLY JSON: {"description": "..."}

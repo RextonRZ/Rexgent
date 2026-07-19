@@ -1244,3 +1244,25 @@ def test_creature_scale_clause_silent_without_creatures_or_humans():
     # a creature alone in frame has no human to scale against
     assert creature_scale_clause(
         {"雪球": {"video_prompt_fragment": "一只白色小兔子"}}) == ""
+
+
+@pytest.mark.asyncio
+async def test_prev_shot_movement_is_declared_finished():
+    # the last frame is a frozen snapshot: a shot ending MID-MOTION (walking
+    # to the gate) showed a walking pose but nothing said the walk was DONE,
+    # so the next shot re-performed the same movement. The continuity block
+    # must declare every previous movement complete and arrived.
+    crafter = ScenePromptCraft.__new__(ScenePromptCraft)
+    crafter.qwen = MagicMock()
+    crafter.qwen.chat_json = AsyncMock(return_value={
+        "prompt": "x", "negative_prompt": "", "model_parameters": {}})
+    crafter.prompt_template = "placeholder"
+
+    await crafter.craft(
+        shot={"shot_type": "MS", "action": "玛丽绝望地喊叫。"},
+        character_visuals={}, target_model="happyhorse",
+        prev_action="玛丽抓住安吉琳的手臂，拉着她走向大门。")
+    user_msg = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
+    assert "FINISHED" in user_msg
+    assert "already arrived" in user_msg
+    assert "never REPEATS" in user_msg

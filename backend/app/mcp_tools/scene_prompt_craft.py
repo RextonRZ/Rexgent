@@ -294,8 +294,17 @@ class ScenePromptCraft:
                 "The previous clip actually ENDED like this (read from its "
                 f"final frame): {prev_frame_report}")
         if prev_action:
+            # the previous frame is a FROZEN snapshot: a shot that ended
+            # mid-motion (walking to the gate) shows a walking pose but nothing
+            # says the walk is DONE — the render re-performed the same walk.
+            # Declare every previous movement complete and arrived.
             continuity_parts.append(
-                f"Previous shot (already shown — do NOT replay this): {prev_action}")
+                f"Previous shot (already shown — do NOT replay this): {prev_action}. "
+                "Every movement in it is FINISHED: anyone who was walking, "
+                "reaching or turning there has already arrived and now HOLDS "
+                "that end position at frame one of this shot. Do not "
+                "re-perform, continue or mirror that movement unless THIS "
+                "shot's action explicitly asks for it.")
         if bridge_from_prev:
             # the shot-to-shot teleport killer: the clip literally OPENS on
             # the previous shot's last frame (attached as the final reference
@@ -315,7 +324,8 @@ class ScenePromptCraft:
                 "OPENING STATE: this shot begins exactly where the previous "
                 "clip ended — same positions and postures (someone seated is "
                 "STILL seated at frame one). Any change of pose or position "
-                "happens ON CAMERA during this shot, never before it.")
+                "happens ON CAMERA during this shot, never before it — and it "
+                "never REPEATS a movement the previous shot already showed.")
         if next_action:
             continuity_parts.append(
                 f"Next shot (end this shot where that begins): {next_action}")
