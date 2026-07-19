@@ -92,3 +92,10 @@ def test_readable_text_props_removed():
     assert "a worn leather couch" in out
     assert not any("3B" in i for i in out)
     assert not any("reading" in i.lower() for i in out)
+
+
+def test_prompt_requires_fixed_positions():
+    from app.services.prompt_loader import load_prompt
+    t = load_prompt("set_dress.txt")
+    assert "FIXED position" in t
+    assert "SAME stated position in every shot" in t

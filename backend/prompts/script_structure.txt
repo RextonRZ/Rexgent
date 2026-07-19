@@ -44,6 +44,9 @@ Character rules:
 - characters_present MUST list EVERY character physically on screen in the scene, INCLUDING a named animal or pet that appears (a dog, cat, rabbit...). A named pet is a CHARACTER, not a prop or scenery — never omit it, and never omit it just because its name reads like an object (a pet named "Snowball" / 雪球 is a living animal, not a ball).
 - Do NOT list a character in characters_present who is only mentioned or talked about but never appears on screen in that scene.
 
+Scene rules:
+- Consecutive beats at the SAME location and the SAME time of day are ONE scene. Never split a continuous moment into multiple scenes: every scene boundary re-establishes the world on screen and breaks visual continuity. Start a new scene ONLY when the location or the time of day changes.
+
 Return ONLY the JSON. No explanation, no markdown fences.
 
 SCREENPLAY TEXT:

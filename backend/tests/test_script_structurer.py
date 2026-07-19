@@ -34,3 +34,10 @@ async def test_structure_script_returns_valid_json():
     assert result["title"] == "The Last Signal"
     assert len(result["scenes"]) == 1
     assert result["scenes"][0]["characters_present"] == ["YUKI"]
+
+
+def test_prompt_forbids_splitting_continuous_moments():
+    from app.services.prompt_loader import load_prompt
+    t = load_prompt("script_structure.txt")
+    assert "SAME location" in t
+    assert "ONE scene" in t
