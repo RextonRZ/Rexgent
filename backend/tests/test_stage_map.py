@@ -484,3 +484,77 @@ def test_barrier_separated_pair_may_still_approach_after_crossing():
     _, notes = enforce_proximity(shots)
     assert notes == []
     assert "跑向雪球" in shots[1]["action"]
+
+
+# ── tether: a pet tied to something stays tied, and the tie reaches blocking ─
+
+def test_tethered_pet_threads_until_picked_up():
+    # 雪球被拴在树旁 rendered with the rope lying unattached and the collar
+    # flickering: the tie lived only in one shot's prose. Thread it like held
+    # props so every shot's blocking states the leash, until a release.
+    from app.services.stage_map import thread_tethered
+    shots = [
+        {"action": "雪球被拴在树旁，项圈连着一根麻绳。",
+         "subjects": [{"character": "雪球"}, {"character": "安吉琳"}]},
+        {"action": "安吉琳隔着栅栏看着雪球。",
+         "subjects": [{"character": "雪球"}, {"character": "安吉琳"}]},
+        {"action": "安吉琳抱起雪球，紧紧搂在怀里。",
+         "subjects": [{"character": "雪球"}, {"character": "安吉琳"}]},
+    ]
+    _, notes = thread_tethered(shots)
+    assert "树旁" in (shots[0]["subjects"][0].get("tethered") or "")
+    assert shots[1]["subjects"][0].get("tethered")          # threads forward
+    assert not shots[2]["subjects"][0].get("tethered")      # picked up -> free
+    assert shots[0]["subjects"][1].get("tethered") is None  # others untouched
+    assert notes
+
+
+def test_tethered_english_form_works_too():
+    from app.services.stage_map import thread_tethered
+    shots = [{"action": "Snowy is tied to the tree by a worn rope.",
+              "subjects": [{"character": "Snowy"}]}]
+    _, _ = thread_tethered(shots)
+    assert "tree" in (shots[0]["subjects"][0].get("tethered") or "")
+
+
+# ── restated contact: a grab already made must not be re-performed ───────────
+
+def test_restated_grab_becomes_still_holding():
+    # shot 3 grabbed the arm; shot 4 restated 抓住 as a fresh action, so the
+    # render replayed the grab with an awkward re-approach
+    from app.services.stage_map import continue_restated_contact
+    shots = [
+        {"action": "玛丽慌张地抓住安吉琳的手臂，阻止她进入花园。",
+         "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]},
+        {"action": "玛丽绝望地喊叫，手紧紧抓住安吉琳的手臂。",
+         "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]},
+    ]
+    _, notes = continue_restated_contact(shots)
+    assert "抓住安吉琳" not in shots[1]["action"]
+    assert "抓着安吉琳" in shots[1]["action"]
+    assert "仍" in shots[1]["action"]
+    assert notes
+
+
+def test_released_grip_may_grab_again():
+    from app.services.stage_map import continue_restated_contact
+    shots = [
+        {"action": "玛丽抓住安吉琳的手臂。",
+         "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]},
+        {"action": "玛丽松开了手，退后一步。",
+         "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]},
+        {"action": "玛丽再次抓住安吉琳的手臂。",
+         "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]},
+    ]
+    _, notes = continue_restated_contact(shots)
+    assert "抓住安吉琳" in shots[2]["action"]   # legitimate fresh grab
+    assert notes == []
+
+
+def test_first_grab_is_never_rewritten():
+    from app.services.stage_map import continue_restated_contact
+    shots = [{"action": "玛丽一把抓住安吉琳的手腕。",
+              "subjects": [{"character": "玛丽"}, {"character": "安吉琳"}]}]
+    _, notes = continue_restated_contact(shots)
+    assert "抓住" in shots[0]["action"]
+    assert notes == []

@@ -214,6 +214,122 @@ def thread_held_objects(shots_blocking: list) -> tuple[list, list[str]]:
     return shots_blocking, notes
 
 
+# A tie to a fixed anchor (a rope to a tree). The tie lived only in one shot's
+# prose, so later shots rendered the rope lying unattached and the collar
+# flickering — thread it like held props, and print it in every blocking row.
+_TETHER_RELEASE_RE = re.compile(
+    r"抱起|抱走|解开|松开|放开|挣脱|挣开"
+    r"|\b(?:picks?\s+up|unties?|unleash(?:es)?|frees?|releases?)\b",
+    re.IGNORECASE)
+
+
+def _tether_re(name: str) -> re.Pattern:
+    """NAME 被拴在 X / NAME is tied to the X — the anchor captured."""
+    nm = re.escape(name)
+    return re.compile(
+        rf"{nm}被?[拴绑系]在([^，。！？\s]{{1,10}})"
+        rf"|{nm}\s+(?:is\s+|was\s+)?(?:tied|leashed|chained|tethered)\s+"
+        rf"(?:to|at)\s+(?:the\s+|a\s+)?([\w'-]+)",
+        re.IGNORECASE)
+
+
+def thread_tethered(shots: list) -> tuple[list, list[str]]:
+    """Once a character (usually a pet) is TIED to an anchor, stamp `tethered`
+    onto their subject in every shot until a visible release (picked up,
+    untied, breaks free). The blocking row then states the leash per shot, so
+    the rope stays attached to the collar instead of lying on the ground.
+    Mutates subject dicts in place, returns (shots, notes)."""
+    tied: dict[str, str] = {}
+    notes: list[str] = []
+    for i, sd in enumerate(shots):
+        if not isinstance(sd, dict):
+            continue
+        action = str(sd.get("action") or "")
+        subs = [s for s in (sd.get("subjects") or []) if isinstance(s, dict)]
+        for s in subs:
+            nm = str(s.get("character") or "").strip()
+            if not nm:
+                continue
+            m = _tether_re(nm).search(action)
+            if m:
+                anchor = (m.group(1) or m.group(2) or "").strip()
+                if anchor:
+                    tied[nm.upper()] = anchor
+            elif (nm.upper() in tied
+                  and _TETHER_RELEASE_RE.search(action)
+                  and _mentions(nm.upper(), action.upper())):
+                # released in THIS shot's action (抱起雪球 / picks Snowy up)
+                tied.pop(nm.upper(), None)
+        for s in subs:
+            nm = str(s.get("character") or "").strip().upper()
+            if nm in tied:
+                s["tethered"] = f"拴在{tied[nm]}" if re.search(
+                    r"[一-鿿]", tied[nm]) else f"tied to the {tied[nm]}"
+                notes.append(f"shot {i + 1}: {s.get('character')} stays "
+                             f"tethered ({s['tethered']})")
+    return shots, notes
+
+
+# A grip already made must not be re-performed: the board restates 抓住 as a
+# fresh action in the next shot and the render replays the grab with an
+# awkward re-approach. Rewrite the restated grab into a held state (仍...抓着).
+_GRIP_VERBS_ZH = "抓住|抓紧|握住|拉住|拽住|捉住|抱住"
+_GRIP_RELEASE_RE = re.compile(
+    r"松开|放开|甩开|挣脱|松手|放下"
+    r"|\b(?:lets?\s+go|releases?|drops?\s+(?:her|his|their)\s+grip)\b",
+    re.IGNORECASE)
+
+
+def _grip_re(target: str) -> re.Pattern:
+    nm = re.escape(target)
+    return re.compile(
+        rf"(紧紧|一把|死死)?({_GRIP_VERBS_ZH})({nm})"
+        rf"|\b(grabs?|seizes?|clutch(?:es)?|grips?)\s+({nm})",
+        re.IGNORECASE)
+
+
+def continue_restated_contact(shots: list) -> tuple[list, list[str]]:
+    """Track who is gripping whom; a LATER shot restating the same grab is
+    rewritten to a continued hold (紧紧抓住 -> 仍紧紧抓着; grabs -> still
+    gripping). A visible release ends the contact, after which a fresh grab is
+    legitimate again. Mutates shot actions in place, returns (shots, notes)."""
+    gripped: set[str] = set()   # target names (upper) currently held
+    notes: list[str] = []
+    for i, sd in enumerate(shots):
+        if not isinstance(sd, dict):
+            continue
+        action = str(sd.get("action") or "")
+        subs = [s for s in (sd.get("subjects") or []) if isinstance(s, dict)]
+        names = [str(s.get("character") or "").strip() for s in subs]
+        names = [n for n in names if n]
+        # (1) rewrite restated grabs on targets already held
+        for target in names:
+            if target.upper() not in gripped:
+                continue
+            m = _grip_re(target).search(action)
+            if not m:
+                continue
+            if m.group(2):   # zh form
+                adverb = m.group(1) or ""
+                verb = m.group(2)
+                held = verb[:-1] + "着" if verb.endswith("住") else verb
+                new = f"仍{adverb}{held}{m.group(3)}"
+            else:            # en form
+                new = f"still gripping {m.group(5)}"
+            sd["action"] = action = (action[:m.start()] + new
+                                     + action[m.end():])
+            notes.append(f"shot {i + 1}: restated grab of {target} rewritten "
+                         f"to a continued hold")
+        # (2) a release ends every contact in this shot
+        if gripped and _GRIP_RELEASE_RE.search(action):
+            gripped = set()
+        # (3) fresh grabs establish contact
+        for target in names:
+            if target.upper() not in gripped and _grip_re(target).search(action):
+                gripped.add(target.upper())
+    return shots, notes
+
+
 _APPROACH_VERBS = (r"(?:walks?|walking|runs?|running|steps?|stepping|moves?|"
                    r"moving|goes|going|comes?|coming|rushes?|rushing|"
                    r"hurries|hurrying)")

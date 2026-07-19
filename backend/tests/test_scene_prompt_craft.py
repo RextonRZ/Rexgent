@@ -1212,3 +1212,35 @@ async def test_no_bridge_without_the_flag():
         target_model="happyhorse")
     content = crafter.qwen.chat_json.await_args.kwargs["messages"][1]["content"]
     assert "motionless" not in content
+
+
+def test_child_scale_clause_reads_chinese_ages():
+    # zh fragments write 10岁 / 三十八岁 — the English-only age regex never
+    # matched, so the height pin silently skipped zh casts and the girl
+    # rendered taller than her mother
+    from app.mcp_tools.scene_prompt_craft import child_scale_clause
+    visuals = {"安吉琳": {"video_prompt_fragment": "10岁的小女孩，扎着马尾辫"},
+               "玛丽": {"video_prompt_fragment": "三十八岁的母亲，围着围裙"}}
+    clause = child_scale_clause(visuals)
+    assert "10" in clause
+    assert "shorter" in clause
+
+
+def test_creature_scale_clause_pins_small_pets():
+    # the rendered rabbit ballooned to half the girl's height — nothing pinned
+    # a creature's real-world size the way child_scale_clause pins children
+    from app.mcp_tools.scene_prompt_craft import creature_scale_clause
+    visuals = {"安吉琳": {"video_prompt_fragment": "10岁的小女孩"},
+               "雪球": {"video_prompt_fragment": "一只蓬松的白色小兔子，戴着红色项圈"}}
+    clause = creature_scale_clause(visuals)
+    assert "rabbit" in clause
+    assert "small" in clause
+    assert "every frame" in clause
+
+
+def test_creature_scale_clause_silent_without_creatures_or_humans():
+    from app.mcp_tools.scene_prompt_craft import creature_scale_clause
+    assert creature_scale_clause({"A": {"video_prompt_fragment": "a tall man"}}) == ""
+    # a creature alone in frame has no human to scale against
+    assert creature_scale_clause(
+        {"雪球": {"video_prompt_fragment": "一只白色小兔子"}}) == ""

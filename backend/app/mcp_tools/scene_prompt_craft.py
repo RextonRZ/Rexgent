@@ -50,6 +50,38 @@ def exiting_characters(action: str | None, names: list) -> list[str]:
             out.append(str(name))
     return out
 _AGE_RE = re.compile(r"\b(\d{1,2})\s*[- ]\s*year[- ]old\b", re.I)
+# zh fragments write ages as 10岁 or 三十八岁 — the English-only pattern never
+# matched, so the height pin silently skipped zh casts (the girl rendered
+# taller than her mother)
+_AGE_DIGIT_ZH_RE = re.compile(r"(\d{1,2})\s*岁")
+_AGE_NUMERAL_ZH_RE = re.compile(r"([一二两三四五六七八九十]{1,3})岁")
+_ZH_DIGITS = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
+              "六": 6, "七": 7, "八": 8, "九": 9}
+
+
+def _zh_numeral(s: str) -> int | None:
+    """三十八 -> 38, 十 -> 10, 十二 -> 12; None for anything else."""
+    if not s:
+        return None
+    if "十" in s:
+        left, _, right = s.partition("十")
+        tens = _ZH_DIGITS.get(left, 1) if left else 1
+        ones = _ZH_DIGITS.get(right, 0) if right else 0
+        if (left and left not in _ZH_DIGITS) or (right and right not in _ZH_DIGITS):
+            return None
+        return tens * 10 + ones
+    return _ZH_DIGITS.get(s)
+
+
+def _ages_in(text: str) -> list[int]:
+    """Every age stated in a fragment, English or Chinese forms."""
+    ages = [int(m) for m in _AGE_RE.findall(text)]
+    ages += [int(m) for m in _AGE_DIGIT_ZH_RE.findall(text)]
+    for m in _AGE_NUMERAL_ZH_RE.findall(text):
+        n = _zh_numeral(m)
+        if n is not None:
+            ages.append(n)
+    return ages
 
 
 def child_scale_clause(character_visuals: dict) -> str:
@@ -59,9 +91,7 @@ def child_scale_clause(character_visuals: dict) -> str:
     ages = []
     for v in (character_visuals or {}).values():
         frag = v.get("video_prompt_fragment") if isinstance(v, dict) else v
-        m = _AGE_RE.search(str(frag or ""))
-        if m:
-            ages.append(int(m.group(1)))
+        ages.extend(_ages_in(str(frag or "")))
     if len(ages) < 2:
         return ""
     youngest, oldest = min(ages), max(ages)
@@ -71,6 +101,41 @@ def child_scale_clause(character_visuals: dict) -> str:
                 f"than the older characters, the same size relation in every "
                 f"frame.")
     return ""
+
+
+# zh species words mapped to the English noun the scale clause names (the
+# clause itself stays English for the video model); en species pass through
+_SPECIES_EN = {
+    "兔": "rabbit", "兔子": "rabbit", "猫": "cat", "狗": "dog", "鸟": "bird",
+    "鼠": "mouse", "仓鼠": "hamster", "鸭": "duck", "鹅": "goose",
+    "鸡": "chicken", "龟": "turtle", "蛙": "frog", "宠物": "pet",
+}
+
+
+def creature_scale_clause(character_visuals: dict) -> str:
+    """An animal sharing the frame with people kept inflating (the pet rabbit
+    rendered half the girl's height) - nothing pinned its real-world size the
+    way child_scale_clause pins children. For each creature in a peopled
+    frame, state its species at true scale. Empty when the frame has no
+    creature or no human to scale against."""
+    from app.services.character_traits import species_of
+    species: list[str] = []
+    humans = 0
+    for v in (character_visuals or {}).values():
+        frag = v.get("video_prompt_fragment") if isinstance(v, dict) else v
+        sp = species_of(str(frag or ""))
+        if sp:
+            species.append(_SPECIES_EN.get(sp, sp))
+        else:
+            humans += 1
+    if not species or not humans:
+        return ""
+    bits = []
+    for sp in dict.fromkeys(species):
+        bits.append(f" The {sp} is a real {sp} at true real-world size - "
+                    f"small beside the people, never enlarged, the same size "
+                    f"relation in every frame.")
+    return "".join(bits)
 
 
 def headwear_pin(fragment: str | None, outfit: str | None) -> str:
@@ -280,6 +345,10 @@ class ScenePromptCraft:
                     # a carried prop threaded across the scene by the stage map:
                     # stated per shot so it never vanishes between cuts
                     f"holding {s['holding']}" if s.get("holding") else None,
+                    # a leash/tie threaded by the stage map: without it the rope
+                    # rendered lying unattached and the collar flickered
+                    (f"on a leash, collar connected to a rope ({s['tethered']})"
+                     if s.get("tethered") else None),
                     decamera_action(s.get("action")),
                 ]
                 rows.append(f"- {s.get('character')}: " + ", ".join(b for b in bits if b))
@@ -522,6 +591,10 @@ class ScenePromptCraft:
                          "toward the camera.")
         # a child beside a teen/adult kept rendering at adult height
         eyelines += child_scale_clause(character_visuals)
+        # a pet beside people kept inflating (a rabbit at half the girl's
+        # height) — pin every creature to its species' true size
+        creature_scale = creature_scale_clause(character_visuals)
+        eyelines += creature_scale
 
         # (2b) BACK STAYS BACK: a subject staged facing away (or a foreground
         # occluder) must not rotate to camera mid-shot — continuation models
@@ -739,6 +812,10 @@ class ScenePromptCraft:
             result["negative_prompt"] += (
                 ", duplicate person, the same person twice, identical twins, "
                 "extra copy of a character")
+        if creature_scale:
+            # the positive clause pins true size; the negative bans the drift
+            result["negative_prompt"] += (
+                ", giant animal, oversized pet, animal as large as a person")
         if character_visuals:
             # invented-feature bans (peopled shots): models grow beards on
             # clean-shaven men, glasses and headbands on children, blemishes

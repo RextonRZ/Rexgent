@@ -378,11 +378,21 @@ async def generate_storyboard_op(db: Session, script_id: str, target_length: int
             # aimed at an established scene partner is a teleport-reset the
             # board wrote by accident — rewritten to stand with them.
             _, _prox_notes = enforce_proximity(shots)
-            if _side_notes or _held_notes or _prox_notes or _barrier_notes:
+            # a pet tied to an anchor stays tied shot after shot (the rope
+            # rendered unattached when the tie lived in one shot's prose),
+            # and a grab already made continues as a hold instead of being
+            # re-performed with an awkward re-approach
+            from app.services.stage_map import (continue_restated_contact,
+                                                thread_tethered)
+            _, _tether_notes = thread_tethered(shots)
+            _, _grip_notes = continue_restated_contact(shots)
+            _all_notes = (_side_notes + _held_notes + _prox_notes
+                          + _barrier_notes + _tether_notes + _grip_notes)
+            if _all_notes:
                 import logging
                 logging.getLogger(__name__).info(
                     "stage map corrections scene %s: %s", scene.number,
-                    _side_notes + _held_notes + _prox_notes + _barrier_notes)
+                    _all_notes)
             # set dressing: pins props + prop state per scene (enhancement only)
             try:
                 from app.services.set_dresser import SetDresser

@@ -35,3 +35,16 @@ def angle_changed(prev_shot_type, cur_shot_type, reverse_angle: bool) -> bool:
 
 def _norm(shot_type) -> str:
     return str(shot_type or "").strip().upper()
+
+
+def prev_frame_may_ride(*, guarded_on: bool, same_scene: bool,
+                        has_prev_frame: bool, cast_safe: bool,
+                        is_angle_change: bool) -> bool:
+    """Whether the previous clip's last frame may seed this shot as a reference
+    image. Only for a SAME-ANGLE continuation: an angle change is a CUT, and
+    seeding the old composition into the new angle made props and cast morph
+    mid-shot (雪球 materialized in her hands on an MS->OTS cut). On cuts the
+    VL frame-text handoff carries continuity instead — poses and prop states in
+    words, no pixels to fight the new framing."""
+    return bool(guarded_on and same_scene and has_prev_frame and cast_safe
+                and not is_angle_change)

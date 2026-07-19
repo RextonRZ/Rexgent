@@ -881,16 +881,20 @@ class GenerationRunner:
                             "than wan, rendering there with the bible stack",
                             shot.id, newcomers, not frame_anchor_pre)
             is_wan = False
+        # computed for EVERY shot (not just v2): the prev-frame gate below cuts
+        # on angle changes regardless of the routing flag
+        from app.services.shot_roles import angle_changed
+        is_angle_change = angle_changed(
+            prev_shot_type, shot.shot_type,
+            bool((getattr(shot, "blocking_json", None) or {}).get("reverse_angle")))
         role = None
         if settings_v2:
-            from app.services.shot_roles import classify_shot_role, angle_changed
+            from app.services.shot_roles import classify_shot_role
             has_locked_newcomer = bool(newcomers)
             role = classify_shot_role(
                 has_frame_anchor=bool(frame_anchor_pre),
                 has_locked_newcomer=has_locked_newcomer,
-                is_angle_change=angle_changed(
-                    prev_shot_type, shot.shot_type,
-                    bool((getattr(shot, "blocking_json", None) or {}).get("reverse_angle"))))
+                is_angle_change=is_angle_change)
             # continue_hold is the only role that stays on wan i2v — reangles
             # always go to the reference model (angle changes must not ride
             # continuation), so there is no same-cast demotion here.
@@ -940,12 +944,18 @@ class GenerationRunner:
         # this shot's cast (people may enter, never vanish). This is the
         # Blood and Bone continuity without the duplicate-people bug.
         from app.services.reference_stack import prev_frame_safe
+        from app.services.shot_roles import prev_frame_may_ride
         prev_canonical = [canonical_character(n, bible["characters"])
                           for n in (prev_in_frame or [])]
-        prev_frame_allowed = bool(
-            getattr(get_settings(), "prev_frame_guarded", False)
-            and prev_frame_same_scene and prev_last_frame_url
-            and prev_frame_safe(prev_canonical, in_frame))
+        # ... and ONLY on a same-angle continuation: an angle change is a CUT.
+        # Seeding the old composition into a new angle made props/cast morph
+        # mid-shot; on cuts the VL text handoff below carries continuity.
+        prev_frame_allowed = prev_frame_may_ride(
+            guarded_on=bool(getattr(get_settings(), "prev_frame_guarded", False)),
+            same_scene=bool(prev_frame_same_scene),
+            has_prev_frame=bool(prev_last_frame_url),
+            cast_safe=prev_frame_safe(prev_canonical, in_frame),
+            is_angle_change=is_angle_change)
         # ground-truth frame handoff, COMPLEMENTARY to the prev-frame image: the
         # VL reads the previous clip's ACTUAL final frame (poses, props, door
         # states) into an OPENING STATE clause ONLY when the image can't ride
