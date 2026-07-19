@@ -434,6 +434,40 @@ function StyleReel({ reduced }: { reduced: boolean }) {
   );
 }
 
+/** Two consecutive frames from a real finished drama (scene 1, the MS and its
+ * OTS reverse) — the pipeline's output sitting right beside its diagram. */
+function SampleFrames() {
+  const frames = [
+    { src: "/sample-shot3.jpg", label: "Shot 3 · MS" },
+    { src: "/sample-shot4.jpg", label: "Shot 4 · OTS" },
+  ];
+  return (
+    <div className="hidden shrink-0 sm:block">
+      <div className="flex gap-2">
+        {frames.map((f) => (
+          <figure key={f.src} className="w-[92px]">
+            <div className="overflow-hidden rounded-md border border-white/10">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={f.src}
+                alt=""
+                loading="lazy"
+                className="aspect-[9/16] w-full object-cover"
+              />
+            </div>
+            <figcaption className="mt-1 text-center text-[9px] uppercase tracking-widest text-muted-foreground">
+              {f.label}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
+        straight from a finished drama
+      </p>
+    </div>
+  );
+}
+
 /** The director's toolbar: edit, recast, regenerate, cut. */
 function DirectorTools() {
   const tools = [Pencil, UserRound, RefreshCw, Trash2];
@@ -473,8 +507,13 @@ export function FeatureBento() {
         </GlowCard>
 
         <GlowCard className="md:col-span-7">
-          <CardText {...WOWS[3]} />
-          <TwoDoorsPipeline reduced={reduced} />
+          <div className="flex gap-5">
+            <div className="min-w-0 flex-1">
+              <CardText {...WOWS[3]} />
+              <TwoDoorsPipeline reduced={reduced} />
+            </div>
+            <SampleFrames />
+          </div>
         </GlowCard>
 
         <GlowCard className="md:col-span-4">
