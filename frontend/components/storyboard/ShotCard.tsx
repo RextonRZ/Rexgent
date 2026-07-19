@@ -5,7 +5,12 @@ import { Clock, Users, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ShotEditor } from "./ShotEditor";
 import { useDeleteShot } from "@/hooks/useStoryboard";
-import { explainFilmTerm, fullShotType } from "@/lib/filmTerms";
+import {
+  cameraMoveLabel,
+  explainFilmTerm,
+  fullShotType,
+  hasCJK,
+} from "@/lib/filmTerms";
 import { tierLabel, isFullTier, modelLabel } from "@/lib/qualityTier";
 import type { Shot, ShotPromptEngineering } from "@/lib/types";
 
@@ -114,6 +119,10 @@ export function ShotCard({ shot }: { shot: Shot }) {
   const isFull = isFullTier(tier);
   const model = renderPlan?.model ? modelLabel(renderPlan.model) : null;
   const showTierTag = Boolean(tier);
+  // a zh drama's card chrome (shot type, camera move, est, Beat) renders in
+  // Chinese so the storyboard reads in one language; keyed off the shot's own
+  // prose, so mixed projects stay per-shot correct
+  const zh = hasCJK(shot.action) || hasCJK(shot.emotional_beat);
 
   return (
     <Card className="group">
@@ -122,19 +131,19 @@ export function ShotCard({ shot }: { shot: Shot }) {
         <div className="flex items-start justify-between gap-2">
           <p className="text-xs flex items-center gap-2">
             <span className="rounded bg-primary/15 text-primary px-1.5 py-0.5 font-semibold">
-              Shot {shot.number}
+              {zh ? `镜头 ${shot.number}` : `Shot ${shot.number}`}
             </span>
             {shot.shot_type && (
               <span
                 className="text-muted-foreground cursor-help underline decoration-dotted decoration-white/20 underline-offset-2"
-                title={explainFilmTerm(shot.shot_type)}
+                title={explainFilmTerm(shot.shot_type, zh)}
               >
-                {fullShotType(shot.shot_type)}
+                {fullShotType(shot.shot_type, zh)}
               </span>
             )}
             {shot.camera_movement && (
               <span className="text-muted-foreground">
-                {shot.camera_movement.toLowerCase().replace(/_/g, " ")}
+                {cameraMoveLabel(shot.camera_movement, zh)}
               </span>
             )}
           </p>
@@ -186,7 +195,7 @@ export function ShotCard({ shot }: { shot: Shot }) {
             )}
             {renderPlan?.lipsync && (
               <span className="rounded-full bg-primary/10 text-primary/90 px-2 py-0.5 text-[10px] font-medium">
-                Lipsync
+                {zh ? "对口型" : "Lipsync"}
               </span>
             )}
           </div>
@@ -204,8 +213,16 @@ export function ShotCard({ shot }: { shot: Shot }) {
             they live once on the SceneSection header, not on every shot */}
         <div className="flex items-center gap-3 pt-1 pb-1 text-[11px] text-muted-foreground flex-wrap">
           <Meta icon={Clock}>
-            <span title="Estimated planning duration. The rendered clip can differ.">
-              est. {shot.estimated_duration_seconds}s
+            <span
+              title={
+                zh
+                  ? "规划时长估计，实际渲染的片段可能不同。"
+                  : "Estimated planning duration. The rendered clip can differ."
+              }
+            >
+              {zh
+                ? `约 ${shot.estimated_duration_seconds} 秒`
+                : `est. ${shot.estimated_duration_seconds}s`}
             </span>
           </Meta>
           {shot.characters_in_frame && shot.characters_in_frame.length > 0 && (
@@ -213,7 +230,7 @@ export function ShotCard({ shot }: { shot: Shot }) {
           )}
           {shot.emotional_beat && (
             <span className="ml-auto rounded bg-primary/10 text-primary/90 px-1.5 py-0.5 text-[10px]">
-              Beat · {shot.emotional_beat}
+              {zh ? "节拍" : "Beat"} · {shot.emotional_beat}
             </span>
           )}
         </div>
