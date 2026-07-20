@@ -246,9 +246,16 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
              "visible, neutral relaxed expression (calm and natural, mouth closed, not "
              "emoting), plain seamless neutral backdrop, soft even lighting. Never "
              "sitting, kneeling or leaning; no chair, no furniture, no scenery. Ignore "
-             "any location, action or scene — plain background only. This is an identity "
+             "any location, action or scene — plain background only. The outfit is the "
+             "same design on the front, the back, and BOTH the left and right sides — no "
+             "pattern, logo or detail that shows on only one side — so a later shot from "
+             "behind or in profile stays the same clothing. This is an identity "
              "and wardrobe reference, not a performance — the emotion of each shot is "
              "set later at generation time.")
+    # Hair length is the single most-ignored trait on the plate (the model
+    # defaults young girls to long). LEAD with it so it is obeyed, not buried.
+    hair_lead = ("Render the hair at EXACTLY the length and style stated in the "
+                 "description — do not lengthen, shorten or restyle it. ")
     if has_face:
         anchor = ("Keep the same age and body proportions as the reference — do not make "
                   "them younger or older.")
@@ -256,17 +263,19 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
             wear = (f" Wearing {outfit}. Render EVERY item of the outfit, including "
                     f"any headwear, eyewear and accessories." if outfit
                     else " Keep the same clothing as the reference.")
-            return (_repaint_lead()
+            return (_repaint_lead() + hair_lead
                     + f"Keep the same recognizable person ({subject}): the same "
                       f"facial features, hair and proportions, translated into "
                       f"the drawn style. {anchor}{wear}{strip} {frame}")
         if outfit:
-            return (f"The exact same subject as the reference image ({subject}) — keep the "
+            return (hair_lead
+                    + f"The exact same subject as the reference image ({subject}) — keep the "
                     f"identical face, and the same hair where the outfit does not cover it. "
                     f"{anchor} Wearing {outfit}. Render EVERY item of the outfit, including "
                     f"any headwear, eyewear and accessories.{strip} {frame}")
         # no story costume: preserve the reference's own clothing too
-        return (f"The exact same subject as the reference image ({subject}) — keep the identical "
+        return (hair_lead
+                + f"The exact same subject as the reference image ({subject}) — keep the identical "
                 f"face, hair and the same clothing as the reference. {anchor}{strip} {frame}")
     if outfit:
         return _styled(f"{subject}, wearing {outfit}. Render every item of the outfit, "
