@@ -262,21 +262,32 @@ def character_plate_prompt(has_face: bool, subject: str, outfit: str = "",
     if has_face:
         anchor = ("Keep the same age and body proportions as the reference — do not make "
                   "them younger or older.")
+        # The EDIT path inherits the reference photo's FRAMING: a chest-up
+        # anchor photo produced chest-up plates with the outfit invisible, no
+        # matter what the tail said (and the edit endpoint takes no negative
+        # prompt). The recompose order must LEAD: the photo defines the face,
+        # never the crop.
+        full_body_lead = ("Recompose to a FULL-BODY standing view from head to "
+                          "shoes — zoom out and extend the frame beyond the "
+                          "reference's crop; the reference defines the FACE, "
+                          "not the framing. ")
         if style:
             wear = (f" Wearing {outfit}. Render EVERY item of the outfit, including "
                     f"any headwear, eyewear and accessories." if outfit
                     else " Keep the same clothing as the reference.")
-            return (_repaint_lead()
+            return (_repaint_lead() + full_body_lead
                     + f"Keep the same recognizable person ({subject}): the same "
                       f"facial features, hair and proportions, translated into "
                       f"the drawn style. {anchor}{wear}{strip} {hair_lead}{frame}")
         if outfit:
-            return (f"The exact same subject as the reference image ({subject}) — keep the "
+            return (full_body_lead
+                    + f"The exact same subject as the reference image ({subject}) — keep the "
                     f"identical face, and the same hair where the outfit does not cover it. "
                     f"{anchor} Wearing {outfit}. Render EVERY item of the outfit, including "
                     f"any headwear, eyewear and accessories.{strip} {hair_lead}{frame}")
         # no story costume: preserve the reference's own clothing too
-        return (f"The exact same subject as the reference image ({subject}) — keep the identical "
+        return (full_body_lead
+                + f"The exact same subject as the reference image ({subject}) — keep the identical "
                 f"face, hair and the same clothing as the reference. {anchor}{strip} "
                 f"{hair_lead}{frame}")
     if outfit:
