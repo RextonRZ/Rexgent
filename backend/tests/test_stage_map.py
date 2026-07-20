@@ -840,3 +840,16 @@ def test_drop_absent_cast_never_drops_the_speaker_or_present_cast():
     _, notes = drop_absent_cast(shots)
     assert shots[0]["characters_in_frame"] == ["安吉琳", "雪球"]
     assert notes == []
+
+
+def test_en_search_with_gap_and_finding_are_absent():
+    from app.services.stage_map import mention_is_absent
+    # the deployed drama's exact lines
+    assert mention_is_absent(
+        "Snowy", "Angeline is on her knees, frantically searching under the couch for Snowy, her face full of panic.") is True
+    assert mention_is_absent(
+        "Snowy", "both now focused on finding Snowy.") is True
+    assert mention_is_absent("Snowy", "Theo looks everywhere for Snowy.") is True
+    # controls: present or successfully found stays present
+    assert mention_is_absent("Snowy", "Angeline found Snowy under the couch, hugging him tight.") is False
+    assert mention_is_absent("Snowy", "she sets a bowl of food down for Snowy.") is False

@@ -721,7 +721,13 @@ _ABSENT_BEFORE_RE = re.compile(
     r"|(?:失踪|走失|丢失|不见了)(?:的)?(?:宠物|爱宠)?$"
     r"|(?:missing|look(?:s|ing|ed)?\s+for|search(?:es|ing|ed)?\s+for|"
     r"call(?:s|ing|ed)?\s+(?:out\s+)?for|cr(?:y|ies|ied)\s+(?:out\s+)?for|"
-    r"dreams?\s+of|mentions?|sold|gave\s+away)\s*$",
+    r"dreams?\s+of|mentions?|sold|gave\s+away"
+    # a search verb with words in between before "for": "searching under the
+    # couch for Snowy", "looks everywhere for Snowy" — the verb, not the bare
+    # "for", carries the absence (so "sets food down for Snowy" stays present)
+    r"|(?:look|search|hunt|scan|call|cries|cry)\w*\s+[\w' ,]{0,40}\bfor"
+    # actively trying to FIND them = not on screen ("found" = success, present)
+    r"|\bfind(?:ing)?)\s*$",
     re.IGNORECASE)
 
 
