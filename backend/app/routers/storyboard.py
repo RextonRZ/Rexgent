@@ -200,6 +200,8 @@ def shots_with_render_plan(shots: list[Shot], bible: dict) -> list[dict]:
         happyhorse_native_talk=settings.happyhorse_native_talk,
         route_continuation_to_happyhorse=settings.route_continuation_to_happyhorse,
         wan_primary=settings.wan_primary,
+        multishot_enabled=settings.multishot_enabled,
+        multishot_max_shots=settings.multishot_max_shots,
     )
     out = []
     for shot, plan in zip(shots, plans):

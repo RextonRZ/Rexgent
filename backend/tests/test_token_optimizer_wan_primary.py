@@ -92,3 +92,32 @@ def test_silent_non_anchor_goes_to_wan_and_faceless_anchor_too():
     assert by_id["hold"] == "wan"
     assert by_id["empty"] == "wan"
     assert res["wan_shots"] == 2 and res["happyhorse_shots"] == 1
+
+
+def test_multishot_silent_beat_prices_as_wan():
+    # Five Minutes Back scene 1: a dialogue MCU, then a silent re-orient LS and
+    # a silent MS. Role routing alone says HappyHorse for both reangles, but
+    # the runner merges the silent pair into ONE wan multi-shot beat — the plan
+    # must price and count them as Wan, or the chip reads "9 HappyHorse" while
+    # the ledger records 2 Wan clips.
+    shots = [
+        _shot("s1", 1, 1, dialogue="I have to save him.", stype="MCU"),
+        _shot("s2", 1, 2, stype="LS"),
+        _shot("s3", 1, 3, stype="MS"),
+    ]
+    res = TokenOptimizer().allocate(shots, budget_usd=40.0, wan_primary=True,
+                                    multishot=True, multishot_max_shots=3)
+    by = {s["shot_id"]: s["quality_tier"] for s in res["scored_shots"]}
+    assert by == {"s1": "happyhorse", "s2": "wan", "s3": "wan"}
+    assert res["wan_shots"] == 2 and res["happyhorse_shots"] == 1
+
+
+def test_multishot_off_keeps_reangles_on_happyhorse():
+    # same scene without multishot: the beat override must not fire
+    shots = [
+        _shot("s1", 1, 1, dialogue="line", stype="MCU"),
+        _shot("s2", 1, 2, stype="LS"),
+        _shot("s3", 1, 3, stype="MS"),
+    ]
+    res = TokenOptimizer().allocate(shots, budget_usd=40.0, wan_primary=True)
+    assert res["wan_shots"] == 0 and res["happyhorse_shots"] == 3

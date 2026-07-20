@@ -20,7 +20,9 @@ def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
                        lipsync_enabled,
                        happyhorse_native_talk=False,
                        route_continuation_to_happyhorse=False,
-                       wan_primary=False):
+                       wan_primary=False,
+                       multishot_enabled=False,
+                       multishot_max_shots=0):
     """Per-shot {model, lipsync} for one scene's ordered shots. Mirrors runtime routing."""
     out = []
     prev = None
@@ -67,4 +69,18 @@ def predict_scene_plan(shots, bible, *, identity_routing_v2, anchor_ref_model,
         lipsync = lipsync_enabled and talk
         out.append({"model": model, "lipsync": bool(lipsync)})
         prev = shot
+    # Multishot beats OVERRIDE the per-shot routing: the runner groups the
+    # scene with the SAME group_beats call and renders every >=2-shot beat as
+    # ONE wan multi-shot clip (_process_beat), so those shots' badges must say
+    # Wan no matter what the role routing above picked. A wan beat never
+    # speaks, so lipsync drops with it.
+    if multishot_enabled and multishot_max_shots >= 2:
+        from app.services.multishot import group_beats
+        idx = 0
+        for unit in group_beats(list(shots), multishot_max_shots,
+                                wan_primary=wan_primary):
+            if len(unit) >= 2:
+                for k in range(idx, idx + len(unit)):
+                    out[k] = {"model": "wan", "lipsync": False}
+            idx += len(unit)
     return out

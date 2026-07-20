@@ -82,6 +82,7 @@ def test_shots_with_render_plan_attaches_model_and_lipsync_per_shot(monkeypatch)
         lipsync_enabled=True,
         happyhorse_native_talk=False, route_continuation_to_happyhorse=False,
         wan_primary=False,
+        multishot_enabled=False, multishot_max_shots=3,
     )
     monkeypatch.setattr(sb, "get_settings", lambda: fake_settings)
 

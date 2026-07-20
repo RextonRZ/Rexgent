@@ -27,7 +27,9 @@ async def _judge(args: dict) -> dict:
 
 def _token(args: dict) -> dict:
     return TokenOptimizer().allocate(args["shots"], args.get("budget_usd", 40.0),
-                                     wan_primary=args.get("wan_primary", False))
+                                     wan_primary=args.get("wan_primary", False),
+                                     multishot=args.get("multishot", False),
+                                     multishot_max_shots=args.get("multishot_max_shots", 3))
 
 
 async def _prompt(args: dict) -> dict:

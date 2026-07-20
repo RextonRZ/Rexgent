@@ -64,7 +64,8 @@ class TokenOptimizer:
         return self.HH_COST_PER_SEC * duration
 
     def allocate(self, shots: list[dict], budget_usd: float = 40.0,
-                 wan_primary: bool = False) -> dict:
+                 wan_primary: bool = False, multishot: bool = False,
+                 multishot_max_shots: int = 3) -> dict:
         available = budget_usd * (1 - self.RESERVE_PCT)
         # Hook = the first HOOK_MAX_SHOTS shots of scene 1 (by shot_number when
         # given, else list order) — the seconds that stop the scroll.
@@ -140,6 +141,33 @@ class TokenOptimizer:
                 "estimated_cost_usd": round(self._cost_of(tier, duration), 3),
                 "reasoning": f"Score {importance}/10 -> {tier}",
             })
+
+        if wan_primary and multishot and multishot_max_shots >= 2:
+            # The runner merges every >=2-shot run of silent, no-new-face shots
+            # into ONE Wan multi-shot beat (group_beats -> _process_beat), so
+            # those shots must be priced and counted as Wan here, or the
+            # receipt and the storyboard chips disagree with what renders.
+            from types import SimpleNamespace
+            from app.services.multishot import group_beats
+            by_scene: dict = {}
+            for i, shot in enumerate(shots):
+                by_scene.setdefault(shot.get("scene_number"), []).append(i)
+            for indices in by_scene.values():
+                ordered = sorted(indices, key=lambda k: shots[k].get("shot_number") or 0)
+                ns = [SimpleNamespace(
+                        dialogue=shots[k].get("dialogue"),
+                        characters_in_frame=shots[k].get("characters_in_frame") or [])
+                      for k in ordered]
+                pos = 0
+                for unit in group_beats(ns, multishot_max_shots, wan_primary=True):
+                    if len(unit) >= 2:
+                        for j in range(pos, pos + len(unit)):
+                            row = scored[ordered[j]]
+                            row["quality_tier"], row["model"] = "wan", self.WAN_MODEL
+                            row["estimated_cost_usd"] = round(
+                                self._cost_of("wan", row["duration"]), 3)
+                            row["reasoning"] += " -> wan multi-shot beat"
+                    pos += len(unit)
 
         def total() -> float:
             return sum(s["estimated_cost_usd"] for s in scored)

@@ -209,3 +209,35 @@ def test_name_outside_the_bible_is_still_not_a_newcomer():
                               anchor_ref_model="happyhorse", lipsync_enabled=True,
                               wan_primary=True)
     assert plan[1]["model"] == "wan"
+
+
+def test_multishot_silent_pair_badges_wan_under_wan_primary():
+    # Five Minutes Back scene 1: a dialogue MCU, then a silent re-orient LS and
+    # a silent MS. The runner groups the silent pair into ONE wan multi-shot
+    # beat (_process_beat), so the badges must say Wan even though role routing
+    # (a reangle on a face) would have said HappyHorse.
+    shots = [_shot(1, ["A"], stype="MCU"),
+             _shot(2, ["A"], stype="LS", dialogue=""),
+             _shot(3, ["A"], stype="MS", dialogue="")]
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True,
+                              happyhorse_native_talk=True,
+                              route_continuation_to_happyhorse=True,
+                              wan_primary=True,
+                              multishot_enabled=True, multishot_max_shots=3)
+    assert [p["model"] for p in plan] == ["happyhorse", "wan", "wan"]
+    assert plan[1]["lipsync"] is False and plan[2]["lipsync"] is False
+
+
+def test_multishot_off_keeps_reangle_on_happyhorse():
+    # same scene with multishot off: every framing change on a face re-locks
+    # identity on HappyHorse — the beat override must not fire
+    shots = [_shot(1, ["A"], stype="MCU"),
+             _shot(2, ["A"], stype="LS", dialogue=""),
+             _shot(3, ["A"], stype="MS", dialogue="")]
+    plan = predict_scene_plan(shots, BIBLE, identity_routing_v2=True,
+                              anchor_ref_model="happyhorse", lipsync_enabled=True,
+                              happyhorse_native_talk=True,
+                              route_continuation_to_happyhorse=True,
+                              wan_primary=True)
+    assert [p["model"] for p in plan] == ["happyhorse", "happyhorse", "happyhorse"]

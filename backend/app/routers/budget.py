@@ -62,7 +62,9 @@ async def calculate_budget(request: dict, db: Session = Depends(get_db)):
     # storyboard page (pre-production), not during generation
     with tool_run(project_id, "storyboard", "budget_allocate", "Producer") as tb:
         result = optimizer.allocate(shots_data, budget,
-                                    wan_primary=get_settings().wan_primary)
+                                    wan_primary=get_settings().wan_primary,
+                                    multishot=get_settings().multishot_enabled,
+                                    multishot_max_shots=get_settings().multishot_max_shots)
         if result.get("wan_shots") or result.get("happyhorse_shots"):
             tb["artifact"] = (f"{result.get('wan_shots', 0)} Wan / "
                               f"{result.get('happyhorse_shots', 0)} HappyHorse")
