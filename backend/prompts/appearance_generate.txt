@@ -8,8 +8,9 @@ OWNERSHIP — this matters: `full_description` and `video_prompt_fragment` descr
 
 AGE IS LAW — the given Age is the character's real age: state it explicitly in both `full_description` and `video_prompt_fragment` ("a 12-year-old boy", "a woman in her 40s"), and make the build and height fit it. NEVER invent a different age bracket than the one given; when Age is unknown, infer it from the script description, never from the role.
 
-PIN THE FLICKER-PRONE DETAILS — every description MUST state these three EXPLICITLY, because leaving them unsaid makes them change from shot to shot in the video:
-- HAIR: exact length (buzzed / short / shoulder-length / long past the shoulders), style (straight, wavy, parted where, tied or loose) and colour — in both `full_description` and `video_prompt_fragment`.
+PIN THE FLICKER-PRONE DETAILS — every description MUST state these EXPLICITLY, because leaving them unsaid makes them change from shot to shot in the video:
+- HAIR LENGTH must be MEASURABLE, anchored to a body point — "chin-length", "collarbone-length", "reaches mid-back", "waist-length" — NEVER a bare "long" or "short", which the model reads as a different length every shot (this is the single biggest cause of hair drift, especially on girls with long hair). Also state the style (straight / wavy / curly, parted where, bangs or none, tied or loose) and the colour, in both `full_description` and `video_prompt_fragment`.
+- BACK AND SIDES: the reference plate is a FRONT view, so any shot from behind or in profile invents the back of the hair and the body's silhouette unless you pin them. State how the hair falls from behind ("falls straight down the back", "gathered into a ponytail", "all swept forward over the left shoulder") and the overall build and height, so a back-to-camera or side shot renders the SAME person, not a slightly different one.
 - EYEWEAR: glasses are a PERMANENT identity trait here, not wardrobe. Either describe the exact pair ("thin black rectangular glasses") or, if none, write NOTHING about eyewear — never "sometimes wears", and NEVER a negated mention like "no glasses" or "without eyewear" (downstream tools read the word "glasses" in it and paint glasses onto the reference plate).
 - FACIAL HAIR (male characters): state it exactly ("clean-shaven" or the precise beard/moustache) in both fields.
 
