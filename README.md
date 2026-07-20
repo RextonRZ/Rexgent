@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="frontend/public/projectmedia/Rexgent.png" alt="Rexgent" width="360" />
+<img src="frontend/public/projectmedia/Rexgent.png" alt="Rexgent" width="230" />
 
 ### One line in. A finished short drama out.
 
 Type a premise or drop in a script, and an AI crew writes it, casts it, storyboards it, films it, voices it, and cuts it into a finished episode. English or Chinese, 22 visual styles, vertical or widescreen.
 
-**[▶ Try it live](https://rexgent.rzrexton.com)** · Built on Qwen Cloud for the Global AI Hackathon (Track 2: AI Showrunner)
+**[Try it live](https://rexgent.rzrexton.com)** · Built on Qwen Cloud for the Global AI Hackathon (Track 2: AI Showrunner)
 
 </div>
 
@@ -22,7 +22,7 @@ So Rexgent is built around those three problems, hallucination, consistency, and
 
 ## A walk through the app
 
-**The landing page.** Real drama frames, the 22 styles, and the two ways in: a premise or your own script.
+**The landing page.** Real drama frames and the 22 styles, showing what the pipeline actually makes.
 ![Landing](frontend/public/projectmedia/landing.png)
 
 **Your studio.** Every drama you have made, what each one cost, and how your account is doing, in one place.
@@ -31,10 +31,10 @@ So Rexgent is built around those three problems, hallucination, consistency, and
 **Create a drama.** Pick a title, genre, one of 22 looks, a budget, and an episode count.
 ![Create a drama](frontend/public/projectmedia/createnewdrama.png)
 
-**Write, or import.** Type one line and the agent writes the screenplay, or import a PDF, DOCX or Fountain. Either way it judges its own draft on 8 axes and rewrites the weak ones.
+**Score and refine the script.** The screenwriter writes a draft, then judges its own work on 8 axes. Rewrite any draft, run a deeper AI analysis, or check the quality score before a cent goes to video.
 ![Script editor and quality score](frontend/public/projectmedia/scripteditorpageandscriptqualityscore.png)
 
-**Cast the production bible.** Every character gets face and per-scene costume plates locked from one reference. Upload your own photo or let the agent invent a face.
+**Cast the production bible.** Every character gets face and per-scene costume plates locked from one reference, plus a voice you can preview. Upload your own photo or let the agent invent a face.
 ![Casting bible and costume plates](frontend/public/projectmedia/castingbiblecotumeplate.png)
 
 **See who connects to whom.** A relationship graph, and how those bonds change as the story moves.
