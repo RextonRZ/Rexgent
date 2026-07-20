@@ -29,6 +29,16 @@ export function LiveStageStrip({
   const startedAt = useRef<number | null>(null);
   const [fallbackIdx, setFallbackIdx] = useState(0);
 
+  // mirrors for the watchdog closure below (setTimeout captures stale state)
+  const liveRef = useRef<StageProgress | null>(null);
+  const finishedRef = useRef<StageProgress | null>(null);
+  useEffect(() => {
+    liveRef.current = live;
+  }, [live]);
+  useEffect(() => {
+    finishedRef.current = finished;
+  }, [finished]);
+
   useEffect(() => {
     const socket = getSocket();
     socket.connect();
@@ -48,6 +58,23 @@ export function LiveStageStrip({
       socket.off("stage:progress", handler);
     };
   }, [projectId, stage]);
+
+  // Self-heal a dropped terminal event: the mutation that drives `pending` is
+  // ground truth that the work finished. The WS "completed" event normally
+  // clears the strip, but if it's dropped `live` never clears and the spinner
+  // runs forever (the "Mapping character relationships" stuck-at-1m bug). When
+  // pending goes true -> false, give the real event a short grace, then stop.
+  const prevPending = useRef(pending);
+  useEffect(() => {
+    const was = prevPending.current;
+    prevPending.current = pending;
+    if (!was || pending) return; // only on the true -> false edge
+    const t = setTimeout(() => {
+      if (finishedRef.current) return; // a real terminal event already landed
+      if (liveRef.current) setLive(null); // dropped event -> stop spinning
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [pending]);
 
   // elapsed clock + fallback rotation while anything is in flight
   const active = pending || live !== null;
