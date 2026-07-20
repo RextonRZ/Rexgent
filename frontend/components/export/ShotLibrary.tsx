@@ -39,6 +39,7 @@ function TakeTile({
           loop
           playsInline
           preload="metadata"
+          lazy
           onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
           onMouseLeave={(e) => e.currentTarget.pause()}
           fitPosition="50% 22%"
