@@ -771,7 +771,7 @@ async def synth_dialogue_op(db: Session, project_id: str,
     return len(rows)
 
 
-async def clarify_op(db: Session, project_id: str) -> dict:
+async def clarify_op(db: Session, project_id: str, full_auto: bool = False) -> dict:
     from app.agents.clarification_agent import ClarificationAgent, needs_pause
     from app.agents.reporter import report_agent
     from app.models.project import Project
@@ -787,7 +787,10 @@ async def clarify_op(db: Session, project_id: str) -> dict:
             (script.structured_json if script else {}) or {},
             [{"name": c.name, "physical_description": c.physical_description} for c in chars])
     project = db.query(Project).filter(Project.id == uuid.UUID(str(project_id))).first()
-    pause = needs_pause(assessment, bool(project.auto_clarify) if project else False)
+    # Full Auto runs untouched: it NEVER pauses for clarification, it makes the
+    # agent's own best assumptions instead. Only guided runs stop to ask.
+    auto = full_auto or (bool(project.auto_clarify) if project else False)
+    pause = needs_pause(assessment, auto)
     report_agent(db, project_id, agent="clarification", stage="clarify",
                  decision=assessment,
                  rationale=("awaiting user answers" if pause else "no blocking ambiguity / auto-assumed"),

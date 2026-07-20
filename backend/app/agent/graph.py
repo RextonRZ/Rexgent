@@ -202,7 +202,10 @@ def build_pipeline_graph(db=None):
         _emit_node(state, "clarify")
         if db is not None and state.get("project_id"):
             from app.agent.pipeline_ops import clarify_op
-            out = await clarify_op(db, state["project_id"])
+            # Full Auto (dispatch_video) never pauses — it runs the whole
+            # production untouched, making assumptions instead of asking.
+            out = await clarify_op(db, state["project_id"],
+                                   full_auto=bool(state.get("dispatch_video")))
             state["clarify_pause"] = out["pause"]
         return state
 

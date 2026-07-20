@@ -290,7 +290,9 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
         "You are the Showrunner of this AI short drama production. Answer the "
         "user's question about THIS production only, grounded strictly in the "
         "context given. Be concrete and brief: two to four plain sentences, no "
-        "markdown, no lists. When asked what to do next, answer from "
+        "markdown, no lists. Answer ONLY what the user asked; do NOT tack on a "
+        "suggestion to move to the next stage unless the user explicitly asks "
+        "what to do next. When asked what to do next, answer from "
         "pipeline_progress and next_incomplete_stage: stages marked true are "
         "DONE, never suggest redoing or polishing them unless the user asks; "
         "point to the next incomplete stage and its page. Old agent critique "
@@ -320,8 +322,16 @@ async def chat_with_showrunner(project_id: str, body: dict, db: Session = Depend
     from app.agents.reporter import report_agent
     report_agent(db, project_id, agent="Showrunner", stage="chat",
                  decision={"question": question}, rationale=answer, confidence=1.0)
-    # structured guidance rides along so the chat can render a go-there button
-    return {"answer": answer, "next_step": next_step_card(progress)}
+    # The go-there button ONLY rides along when the user actually asks what to do
+    # next — otherwise every answer (about a shot, a cost, an error) sprouted a
+    # "storyboard the scene" nudge the user never asked for.
+    import re as _re
+    _asks_next = _re.search(
+        r"\bnext\b|what.*\b(do|now)\b|proceed|continue|then what|move on|move forward|"
+        r"接下来|下一步|然后|现在.*(做|干)|该做|怎么办|下一个",
+        question, _re.IGNORECASE)
+    return {"answer": answer,
+            "next_step": next_step_card(progress) if _asks_next else None}
 
 
 @router.patch("/{project_id}/auto-clarify")
