@@ -143,11 +143,7 @@ export function ShowreelGallery() {
     const key = `${shot.id}:${copy}`;
     return (
       <div key={key} className="shrink-0 snap-start pr-3">
-        <button
-          onClick={() => setLightbox(shot)}
-          aria-label={`Watch ${shot.title}`}
-          className="relative block w-[280px] max-w-[70vw] overflow-hidden rounded-sm border border-zinc-800 bg-zinc-900 transition-all duration-300 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-violet-400/60 outline-none"
-        >
+        <div className="relative block w-[280px] max-w-[70vw] overflow-hidden rounded-sm border border-zinc-800 bg-zinc-900">
           {shot.videoSrc ? (
             <CellVideo shot={shot} allowed={running && !reduced} />
           ) : (
@@ -160,7 +156,7 @@ export function ShowreelGallery() {
               className="aspect-video w-full object-cover object-[50%_22%]"
             />
           )}
-        </button>
+        </div>
       </div>
     );
   };
