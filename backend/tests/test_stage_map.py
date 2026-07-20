@@ -746,6 +746,20 @@ def test_absent_mention_is_not_a_visible_presence():
     assert mention_is_absent("Snowy", "Angeline holds Snowy close.") is False
 
 
+def test_english_absence_cues_missing_pet_drama():
+    # Snowy's Silence: the rabbit is SOLD/MISSING the whole drama, yet every
+    # action mentions it and the named-in-action rule cast the pet into shots
+    # of an empty hutch and a search. These phrasings must all read as absent.
+    from app.services.stage_map import mention_is_absent
+    assert mention_is_absent("Snowy", "the camera reveals Snowy's empty hutch in the background") is True
+    assert mention_is_absent("Snowy", "Angeline frantically searches the backyard, calling out for Snowy.") is True
+    assert mention_is_absent("Snowy", "Angeline, desperate, calls out for Snowy, her eyes scanning the yard.") is True
+    assert mention_is_absent("Snowy", "she asks if he sold Snowy.") is True
+    assert mention_is_absent("Snowy", "Angeline searches for Snowy behind the shed.") is True
+    # a real reveal still beats absence: the pet is actually there
+    assert mention_is_absent("Snowy", "she calls out for Snowy, and Snowy hops into frame.") is False
+
+
 def test_drop_absent_cast_removes_the_missing_pet():
     # the "pet is gone" shot listed 雪球 as cast — its plate would render the
     # rabbit into a scene about the EMPTY cage

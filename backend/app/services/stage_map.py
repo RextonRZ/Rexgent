@@ -693,11 +693,18 @@ def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
 _ABSENT_AFTER_RE = re.compile(
     r"^[^，。！？.!?]{0,2}?(?:不见了|不见|不在|失踪|丢了|走丢|走失|被送走|"
     r"送走|离开了|没了|死了|不知去向)"
-    r"|^\s*(?:is|was|has)\s+(?:gone|missing|lost|nowhere)"
-    r"|^\s*(?:disappeared|vanished)", re.IGNORECASE)
+    r"|^\s*(?:is|was|has|had)\s+(?:gone|missing|lost|nowhere|"
+    r"been\s+sold|been\s+given\s+away)"
+    r"|^\s*(?:was|got)\s+(?:sold|given\s+away)"
+    r"|^\s*(?:disappeared|vanished)"
+    # possessive + an empty container is the absent character's, not them:
+    # "Snowy's empty hutch", "Snowy's cage, now empty"
+    r"|^['’]s\s+(?:\w+[,\s]+){0,3}?empty\b", re.IGNORECASE)
 _ABSENT_BEFORE_RE = re.compile(
     r"(?:找不到|寻找|想念|思念|梦见|提起|提到|说起|回忆起?)$"
-    r"|(?:missing|looking\s+for|searching\s+for|dreams?\s+of|mentions?)\s*$",
+    r"|(?:missing|look(?:s|ing|ed)?\s+for|search(?:es|ing|ed)?\s+for|"
+    r"call(?:s|ing|ed)?\s+(?:out\s+)?for|cr(?:y|ies|ied)\s+(?:out\s+)?for|"
+    r"dreams?\s+of|mentions?|sold|gave\s+away)\s*$",
     re.IGNORECASE)
 
 
