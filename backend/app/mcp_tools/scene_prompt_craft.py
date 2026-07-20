@@ -175,6 +175,41 @@ def headwear_pin(fragment: str | None, outfit: str | None) -> str:
     return ""
 
 
+_HAIR_DEFER = ("hair length, cut, parting and color exactly as shown in "
+               "their reference image, never a different length")
+
+
+def _defer_hair_to_image(cdesc):
+    """THE PLATE IS THE BOSS for hair. The appearance LLM invents a textual
+    length ("chin-length") that can contradict the rendered plate (long) — and
+    the video model obeys the TEXT, so the drama's hair never matches the
+    plate the user approved. When the character's plate rides the shot as a
+    reference image, replace every textual hair-length/style segment with a
+    defer-to-image clause; accessory and facial-hair pins stay (those flicker
+    without text). Returns a copy, never mutates the bible."""
+    def _swap(text: str) -> str:
+        segs = [t.strip() for t in re.split(r"[,;.，、。；]", str(text or ""))
+                if t.strip()]
+        kept, swapped = [], False
+        for t in segs:
+            if (_HAIR_RE.search(t) and not _ACCESSORY_RE.search(t)
+                    and not _FACIAL_HAIR_RE.search(t)):
+                if not swapped:
+                    kept.append(_HAIR_DEFER)
+                    swapped = True
+                continue
+            kept.append(t)
+        return ", ".join(kept)
+    if isinstance(cdesc, dict):
+        out = dict(cdesc)
+        for key in ("video_prompt_fragment", "visual_description",
+                    "physical_description", "full_description"):
+            if out.get(key):
+                out[key] = _swap(out[key])
+        return out
+    return _swap(cdesc)
+
+
 def _pin_segments(text: str) -> list[str]:
     segs = [t.strip() for t in re.split(r"[,;.，、。；]", text) if t.strip()]
     pins: list[str] = []
@@ -315,6 +350,19 @@ class ScenePromptCraft:
             str(shot.get("notes") or ""), re.I))
         if synthetic_hold:
             next_action = None
+        # THE PLATE IS THE BOSS for hair: when a character's reference plate
+        # rides this shot (the [Image N] legend names them), textual hair
+        # length must not overrule the image — rewrite it to defer BEFORE the
+        # body, the identity pins and the negative are built, so nothing
+        # downstream re-states a conflicting length ("chin-length" text vs a
+        # long-haired plate rendered the drama's hair wrong every shot).
+        legend_up = (image_legend or "").upper()
+        if legend_up and character_visuals:
+            character_visuals = {
+                k: (_defer_hair_to_image(v)
+                    if str(k).strip().upper() in legend_up else v)
+                for k, v in character_visuals.items()
+            }
         # A location named after a character ("Bear's apartment") must not smuggle
         # the character-noun into the background — strip names from the setting text
         # before it reaches the model, or it renders the animal, not the room.

@@ -759,6 +759,16 @@ def test_zh_where_did_it_go_and_in_a_photo_are_absent():
     assert mention_is_absent("雪球", "雪球去公园玩耍。") is False        # goes somewhere named
 
 
+def test_zh_missing_pet_qualifier_and_longing_are_absent():
+    from app.services.stage_map import mention_is_absent
+    # the deployed drama's exact line: longing for the MISSING pet
+    assert mention_is_absent(
+        "雪球", "她低声哭泣，表达对失踪宠物雪球的思念。") is True
+    assert mention_is_absent("雪球", "安吉丽娜寻找走失的雪球。") is True
+    # control: the pet returns on screen
+    assert mention_is_absent("雪球", "失踪多日的雪球突然从灌木丛里跑了出来。") is False
+
+
 def test_zh_name_written_on_a_document_is_absent():
     from app.services.stage_map import mention_is_absent
     # 雪球 appears only as a NAME written on a vet bill, not the live rabbit

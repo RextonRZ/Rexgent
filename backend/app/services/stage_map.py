@@ -702,6 +702,9 @@ _ABSENT_AFTER_RE = re.compile(
     # "写着'雪球'名字的账单", "印着雪球的名字". A quote may sit between the
     # name and 名字 ('雪球'名字), so allow it.
     r"|^['’\"”]?的?(?:名字|名称|字样|这个名字|几个字)"
+    # longing/memory OF the character — talked about, not shown:
+    # "表达对雪球的思念", "陷入对雪球的回忆"
+    r"|^的(?:思念|想念|回忆|记忆)"
     r"|^\s*(?:is|was|has|had)\s+(?:gone|missing|lost|nowhere|"
     r"been\s+sold|been\s+given\s+away)"
     r"|^\s*(?:was|got)\s+(?:sold|given\s+away)"
@@ -713,6 +716,9 @@ _ABSENT_BEFORE_RE = re.compile(
     r"(?:找不到|寻找|想念|思念|梦见|提起|提到|说起|回忆起?)$"
     # the name is written/printed/labelled as text, not the live character
     r"|(?:写着|写有|写下|印着|标着|署名|记着|名叫|名为)['’\"“]?$"
+    # "the missing pet X" — 失踪/走失 qualifying the name from in front:
+    # "表达对失踪宠物雪球的思念", "寻找走失的雪球"
+    r"|(?:失踪|走失|丢失|不见了)(?:的)?(?:宠物|爱宠)?$"
     r"|(?:missing|look(?:s|ing|ed)?\s+for|search(?:es|ing|ed)?\s+for|"
     r"call(?:s|ing|ed)?\s+(?:out\s+)?for|cr(?:y|ies|ied)\s+(?:out\s+)?for|"
     r"dreams?\s+of|mentions?|sold|gave\s+away)\s*$",
