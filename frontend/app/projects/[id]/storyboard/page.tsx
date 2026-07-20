@@ -52,6 +52,24 @@ export default function StoryboardPage({
   // Budget allocates itself once shots exist — no button to remember.
   const autoBudgeted = useRef(false);
   const hasShots = scenes.some((s) => s.shots.length > 0);
+
+  // Deleting or adding a shot invalidates the allocation: the panel kept
+  // pricing the OLD board (a deleted Wan shot stayed counted, while the
+  // dissolved beat's survivor re-badged HappyHorse on the left). When the
+  // set of shot ids changes, drop the stale plan and re-allocate.
+  const shotsSig = useMemo(
+    () => scenes.map((s) => s.shots.map((sh) => sh.id).join(",")).join("|"),
+    [scenes]
+  );
+  const prevSig = useRef(shotsSig);
+  useEffect(() => {
+    if (prevSig.current === shotsSig) return;
+    prevSig.current = shotsSig;
+    if (budget) {
+      setBudget(null);
+      autoBudgeted.current = false; // the effect below re-allocates
+    }
+  }, [shotsSig, budget]);
   useEffect(() => {
     if (autoBudgeted.current || calculateBudget.isPending || !hasShots || budget)
       return;
