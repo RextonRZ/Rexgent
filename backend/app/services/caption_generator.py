@@ -1,6 +1,22 @@
+import re
+
 _WORDS_PER_SEC = 2.6    # natural delivery pace — matches the boarding fitter
+_CJK_CHARS_PER_SEC = 4.5  # spoken pace of Chinese/Japanese/Korean, per character
 _SPEECH_ONSET = 0.35    # native talk takes a breath before the first word
 _CAPTION_HOLD = 1.0     # the caption lingers this long after the line ends
+
+_CJK_RE = re.compile(r"[一-鿿぀-ヿ가-힣]")
+
+
+def _spoken_seconds(text: str) -> float:
+    """How long the line takes to say. CJK has NO spaces, so a naive
+    word-split counted a whole Chinese sentence as ONE word (~0.4s) and the
+    caption vanished instantly — count CJK by CHARACTER, Latin by word."""
+    t = str(text or "")
+    cjk = len(_CJK_RE.findall(t))
+    latin = len([w for w in re.split(r"\s+", t)
+                 if w and not all(_CJK_RE.match(c) for c in w)])
+    return cjk / _CJK_CHARS_PER_SEC + latin / _WORDS_PER_SEC
 
 
 class CaptionGenerator:
@@ -39,7 +55,7 @@ class CaptionGenerator:
             dialogue = clip.get("dialogue")
             duration = float(clip.get("duration", 5) or 5)
             if dialogue:
-                spoken = len(str(dialogue).split()) / _WORDS_PER_SEC
+                spoken = _spoken_seconds(dialogue)
                 start_s = current + min(_SPEECH_ONSET, duration)
                 end_s = min(current + duration, start_s + spoken + _CAPTION_HOLD)
                 lines.append(str(index))

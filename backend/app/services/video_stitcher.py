@@ -1,6 +1,7 @@
 import subprocess
 import tempfile
 import os
+import re
 
 
 class VideoStitcher:
@@ -294,9 +295,17 @@ class VideoStitcher:
         # Noto Sans CJK carries Chinese/Japanese/Korean glyphs AND Latin, so
         # Chinese captions stop rendering as tofu boxes without changing the
         # look for English. Requires fonts-noto-cjk in the image (see Dockerfile).
-        style = ("FontName=Noto Sans CJK SC,FontSize=7,PrimaryColour=&H00FFFFFF,"
-                 "OutlineColour=&H00000000,Outline=1,Shadow=0,Bold=1,"
-                 "Alignment=2,MarginV=40")
+        # CJK glyphs read denser than Latin, so bump the size a touch when the
+        # captions are Chinese/Japanese/Korean.
+        try:
+            with open(srt_path, encoding="utf-8") as _f:
+                _has_cjk = bool(re.search(r"[一-鿿぀-ヿ가-힣]", _f.read()))
+        except OSError:
+            _has_cjk = False
+        font_size = 8 if _has_cjk else 7
+        style = (f"FontName=Noto Sans CJK SC,FontSize={font_size},"
+                 "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+                 "Outline=1,Shadow=0,Bold=1,Alignment=2,MarginV=40")
         cmd = [
             "ffmpeg", "-y", "-i", video_path,
             "-vf", f"subtitles={os.path.basename(srt_path)}:force_style='{style}'",
