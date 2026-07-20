@@ -1,286 +1,179 @@
-# Rexgent
+<div align="center">
 
-> Give me a story idea. I'll hand you back a finished episode — or a whole season — vertical or widescreen.
+<img src="frontend/public/projectmedia/Rexgent.png" alt="Rexgent" width="360" />
 
-Rexgent is an **autonomous AI showrunner** built on **Qwen Cloud**. Type a one-line premise and an agent runs the whole production: script, self-critique and revision, casting, storyboarding with camera-executable blocking, budget allocation, video generation, dialogue, and a final cut per episode — while a live dashboard shows every token and cent it spends.
+### One line in. A finished short drama out.
 
-Underneath the pipeline sit the two systems this README is really about: a **layered anti-hallucination defense** that treats video-model failure modes as engineering problems (not prompt luck), and a **continuity engine** that makes the same face, outfit, room and screen-side geometry survive across every cut — with **Neo4j holding both the story's memory and the world's physics**.
+Type a premise or drop in a script, and an AI crew writes it, casts it, storyboards it, films it, voices it, and cuts it into a finished episode. English or Chinese, 22 visual styles, vertical or widescreen.
 
-**Built for:** [Global AI Hackathon Series with Qwen Cloud](https://qwencloud-hackathon.devpost.com/) — Track 2: AI Showrunner
+**[▶ Try it live](https://rexgent.rzrexton.com)** · Built on Qwen Cloud for the Global AI Hackathon (Track 2: AI Showrunner)
 
----
-
-## What a run looks like
-
-1. Create a drama: premise + genre + episode count + format (9:16 vertical or 16:9 widescreen) + a **spend cap** — a live panel projects the tokens and dollars this drama will cost before anything runs
-2. Flip **Full Auto** and watch the agent: write → judge (8 axes incl. hook strength) → revise with the judge's own critique → extract characters → storyboard
-3. The **beat sheet** shows the ladder: logline → scene beats, with the 3-second hook and per-episode cliffhangers tagged
-4. Casting builds the **production bible**: identity plates, per-outfit costume plates image-edited *from* one locked face, location plates, one style plate — voices aren't cast here; the video model speaks each line itself when the shot renders
-5. The **set dresser** pins each scene's props — and tracks state ("from shot 3: the vase lies shattered")
-6. An **AI Director plans the coverage first** — each shot gets a purpose, varied shot sizes, lenses and camera moves, and non-verbal reaction and insert beats so a scene isn't forty identical mediums — then the **storyboard carries camera-executable geometry**: every shot's blocking (who stands where, facing whom, in what posture) renders as an interactive top-down camera plan, and the 180° rule is enforced deterministically, not requested politely
-7. Budget allocation **fits the plan to the cap**: each shot routes to the model that fits its job (Wan for cinematic, scenery and continuation; HappyHorse for talking and new-character shots), every shot is scored for importance, and the least important defer when the plan runs over — and when the cap is too small, the agent names the exact cap that fits and offers a one-click raise
-8. Generation runs live: every clip shows its **reference provenance**, its continuity score from real ArcFace embeddings, and a **prompt engineering panel** — the exact positive prompt, the negative prompt, and which world-graph rule shaped the environment
-9. The **crew workflow graph** shows the machinery live: every stage expands into its real tools — model calls, DB writes, validators — ticking one by one
-10. Export cuts each episode: each line already in sync because the model spoke it as the shot rendered, music ducking under speech, captions burned in, held endings with fades, one video per episode plus a zip of the season
-11. **Usage & Analytics** proves the routing thesis across every drama: share of language work on cheap tiers, dollars saved vs all-premium, per-model receipts, continuity + retry reliability, and an interactive budget-runway planner
+</div>
 
 ---
 
-## The Autonomous Agent
+## Why I built it
 
-A real LangGraph state machine — not a linear script. The judge can reject a draft and the rewrite receives the judge's actual critique as revision notes.
+Writing the script was never the hard part. AI can already do that. The hard part is everything after: keeping one face the same across forty shots, getting the model to generate the action you actually wrote, and not burning your whole budget doing it.
 
-```mermaid
-flowchart LR
-    START((premise)) --> W[write script]
-    W --> J{judge<br/>8 axes}
-    J -- "weak hook / flat ending" --> R[revise with<br/>judge critique]
-    R --> W
-    J -- pass --> X[extract<br/>characters]
-    X --> C{clarify}
-    C -- "ambiguous" --> PAUSE([ask the user,<br/>resume on answer])
-    C -- clear --> SB[storyboard<br/>blocking + set dresser]
-    SB --> CAST[casting:<br/>bible plates]
-    CAST --> B[budget: fit plan<br/>to spend cap]
-    B --> V[generate video<br/>per-shot references]
-    V --> E[auto export:<br/>per-episode cuts + subtitles]
-    E --> DONE((episodes))
-```
-
-Plan-only by default (nothing is spent until you approve); **Full Auto** runs the whole graph and the finished episode renders itself the moment the last clip lands.
+So Rexgent is built around those three problems, hallucination, consistency, and cost. You bring an idea. It runs the studio.
 
 ---
 
-## Fighting Hallucination — a layered defense
+## A walk through the app
 
-Video models don't fail randomly. They fail in *predictable* ways: they fill underspecified prompts with safe priors, they can't render a state change inside one clip, they sanitize violence into hugs, they apply a location's default mood even when the story just broke it, and they paint one reference face onto two bodies. Rexgent treats each failure mode as a named engineering problem with a named defense:
+**The landing page.** Real drama frames, the 22 styles, and the two ways in: a premise or your own script.
+![Landing](frontend/public/projectmedia/landing.png)
 
-| Failure mode | What it looked like | The defense |
-|---|---|---|
-| **Safe-prior filling** | "Performer collapses on stage" rendered the audience standing and applauding | **Concrete action expansion**: the prompt crafter must translate every beat into observable physical action — body, hands, face, props — with vague intensity words ("dramatic", "shocking", "intense") banned outright |
-| **Wrong default suppressed too late** | Negatives were generated but silently discarded before dispatch | **Beat-targeted negative prompts** ride `input.negative_prompt` into both Wan and HappyHorse (with a schema-rejection fallback so an unsupported model degrades gracefully): a collapse at a concert explicitly negates "applause, clapping, cheering, smiling audience" |
-| **State changes inside one clip** | A 5-second clip cannot show before → during → after; the model picks one state and improvises the rest | **Event decomposition at boarding**: a collapse/attack/death/crash beat becomes 2-3 consecutive *single-state* shots (baseline · during · aftermath), each opening already inside its state — the words "suddenly" and "begins to" are banned from a shot's action |
-| **Violence sanitized into nothing** | A murder rendered as an awkward hug | **Violence by implication**: the storyboard never boards the act — it boards the raised weapon, the victim's face, the slumped aftermath. The cut IS the violence. (This is also how real film does it) |
-| **Location default overrides the event** | The concert crowd cheered *in the very shot* the performer collapses | **The environment-reaction graph in Neo4j** (see below): the event's behavior override outranks the location default by priority, the winner is injected into the positive prompt, and the suppressed default lands in the negative |
-| **Faces re-invented on props** | Footage "shown on a phone" rendered the on-screen character as a second physical person, face-bled from the watcher's references | **Device-screen rule**: a character who exists only inside a phone/TV/photo is never listed in the cast or blocking; the screen renders as an unreadable glow and the content reaches the audience through reaction + audio. Plus a **mandatory anti-duplicate negative** ("duplicate person, cloned face, same face on two people") on every render |
-| **Text hallucination** | Garbled captions, signs, watermarks inside footage | `PromptSanitizer` strips quotes/names/numbers from prompts and injects anti-text negatives on every single render |
-| **Name-variant identity loss** | The storyboard wrote "KERRY (ON SCREEN)" and every exact-match consumer — validator, reference stacks, continuity — lost her | **Canonical character resolution**: stage qualifiers ("(ON SCREEN)", "(V.O.)") resolve back to the cast member at boarding, in the validator, and in the blocking |
-| **LLM schema drift** | Blocking subjects arrived as bare names, flattened key:value strings, and even JSON-objects-as-strings | A **drift normalizer** un-mangles all three observed shapes (with tests locking each), and the diagram renders nothing rather than render a lie when geometry is truly absent |
+**Your studio.** Every drama you have made, what each one cost, and how your account is doing, in one place.
+![Dashboard](frontend/public/projectmedia/studiodashboard.png)
 
-And the transformation is **visible evidence**, not backend folklore: every rendered shot card carries a *prompt engineering* disclosure showing the original beat, the exact prompt sent to the video model, the negative prompt, and the environment resolution in plain words ("the event performer_collapse (priority 10) overrides the concert hall default...").
+**Create a drama.** Pick a title, genre, one of 22 looks, a budget, and an episode count.
+![Create a drama](frontend/public/projectmedia/createnewdrama.png)
 
----
+**Write, or import.** Type one line and the agent writes the screenplay, or import a PDF, DOCX or Fountain. Either way it judges its own draft on 8 axes and rewrites the weak ones.
+![Script editor and quality score](frontend/public/projectmedia/scripteditorpageandscriptqualityscore.png)
 
-## The Continuity Engine
+**Cast the production bible.** Every character gets face and per-scene costume plates locked from one reference. Upload your own photo or let the agent invent a face.
+![Casting bible and costume plates](frontend/public/projectmedia/castingbiblecotumeplate.png)
 
-The #1 quality problem in AI video is drift — faces, outfits, rooms and screen geography that change between shots. Rexgent attacks it on four axes, and makes each one **provable**:
+**See who connects to whom.** A relationship graph, and how those bonds change as the story moves.
+![Character relationship graph](frontend/public/projectmedia/characterrelationshipgraph.png)
 
-**Identity.**
-- Identity plates + per-outfit **costume plates** (image-edited *from* the same face so identity survives wardrobe changes), location plates, one style plate per drama
-- **Reference stacks** per shot in a deliberate order: identity → scene costume → previous-shot frame → scene anchor frame → location (wide shots only) → style
-- Identity plates are **verified at birth**: candidate plates are embedded with ArcFace and cosine-scored against the user's reference photo (best-of-2), so a bad plate never enters the bible
-- **Deterministic seeds** per shot — re-renders differ only by what you changed, never by RNG luck
+**Storyboard with an AI Director.** Every scene broken into shots: size, angle, lens, blocking, and the 180 degree rule enforced so the cuts actually work.
+![Storyboard generation](frontend/public/projectmedia/storyboardgeneration.png)
 
-**Geometry.**
-- Every shot carries **absolute blocking**: each character's frame depth (FG/MG/BG), screen side, facing, eyeline, and **posture** (a character lying unconscious in a hospital bed renders as lying, not as an upright pin)
-- The **180° rule is enforced deterministically** by a stage map: a character's first left/right placement establishes their side, later drift is snapped back in the data itself, and only a deliberate `reverse_angle` re-establishes the line
-- **React-then-reveal** and **dialogue coverage** rules stage entrances and spoken lines the way editors actually cut them — reaction first, reveal second, mouths hidden unless a shot is genuinely lip-driven
-- The blocking renders as an **interactive top-down camera plan**: depth-scaled tokens on a stage, facing wedges, dashed eyelines between characters who look at each other, and a camera whose position and cone follow the shot type (an OTS shoots from behind the foreground shoulder; a close-up narrows to a sliver)
+**The story map and camera plans.** A Neo4j-backed memory of everything the story has established, plus a top-down plan of exactly what each camera sees.
+![Story graph and camera plan](frontend/public/projectmedia/storyrelationshipgraphandcameraplan.png)
 
-**World state.**
-- **Set dresser**: per scene, the props every shot must render identically — with **prop state tracking** (a vase broken in shot 3 stays broken in shot 4; the pristine location plate is dropped once the state changes)
-- **Frame chaining**: each clip's true final frame is extracted and stored; Wan shots continue from the previous shot's last frame, the first wide shot's closing frame anchors the whole scene's room, and resume runs re-seed the chain from already-approved shots' stored frames
+**Render, with receipts.** Two video models, each shot sent to the one built for it, every clip scored for face and background drift.
+![Video generation](frontend/public/projectmedia/videogeneration.png)
 
-**Verification.**
-- **Continuity scoring** after every clip: real ArcFace embeddings (insightface) + a Qwen-VL outfit/background check; weak clips are flagged `NEEDS_REVIEW`, never silently shipped
-- **Resume-skip re-rendering**: reject a bad take and press generate — approved shots skip at zero cost, only the rejected shot re-renders (with the full anchor chain intact)
-- **Provenance on screen**: every clip tile shows the exact reference images that conditioned it
+**Watch the crew work.** Every stage expands into its real tools next to a cost meter that never stops counting.
+![Crew at work](frontend/public/projectmedia/crewatwork.png)
+
+**Edit and export.** Add music, burn captions, and export. The finished episode plays in a phone frame.
+![Export editor](frontend/public/projectmedia/exporteditor.png)
+
+**Prove the spend.** The cost ledger turned into charts: routing efficiency, per-model receipts, and reliability health.
+![Usage and analytics](frontend/public/projectmedia/usageanalytics.png)
 
 ---
 
-## Neo4j — the story's memory and the world's physics
+## The 22 visual styles
 
-Rexgent runs **two knowledge graphs** on one Neo4j instance, and the agent both writes and reads them:
+Pick a look when you create the drama. It becomes a text seed that primes the style plate and every face and costume plate, so the whole production stays in that world. Photoreal is the default (no seed).
 
-**1. Narrative memory.** As scenes are dressed and staged, facts land in the graph — `(Character)-[:KNOWS_ABOUT]->(Fact)-[:ESTABLISHED_IN]->(Scene)`, with `CONTRADICTS` edges and typed `RELATES_TO` relationships between characters. Before staging every scene, the Director queries *everything the story established earlier* so later shots can't contradict canon. The same graph powers the story map UI: a force graph of who appears in which scene, filtered per episode.
+| Style | Prompt seed |
+|---|---|
+| Photoreal cinematic | *(default)* cinematic realistic drama |
+| Pixar 3D | pixar style 3d animated feature look, expressive stylized characters, soft global illumination |
+| Disney | disney style animated feature look, expressive charming characters, polished fairytale lighting |
+| Ghibli | ghibli inspired hand-painted animation style, lush natural backgrounds, soft warm light |
+| Anime | anime style 2D animation, clean line art, large expressive eyes, cel shading, vivid palette |
+| Chibi | chibi anime style, tiny bodies with oversized heads, big eyes, cute rounded features |
+| Manga | manga style monochrome illustration, ink line art, screentone shading, dramatic composition |
+| Cartoon | cartoon style animated drama, bold clean outlines, flat vivid colors, exaggerated expressions |
+| Cel shaded | cel-shaded animation look, hard two-tone shadows, crisp dark outlines, saturated colors |
+| Flat 2D | 2d flat animation style, simple graphic shapes, bold color blocking, minimal shading |
+| Comic book | comic book style, inked outlines, halftone dot shading, dynamic high-contrast panels |
+| Illustrated storybook | illustrated storybook style, painterly textures, soft edges, warm picture book light |
+| Hand drawn | hand-drawn animation style, visible pencil linework, organic wobble, sketchbook charm |
+| Watercolor | watercolor painting style, soft bleeding washes, paper grain texture, gentle gradients |
+| Sketch | sketch style, rough pencil strokes, crosshatched shading, unfinished paper drawing look |
+| Claymation | claymation style, sculpted clay characters, visible fingerprint texture, handmade sets |
+| Stop motion | stop-motion puppet animation style, handcrafted miniature sets, tactile fabric and wood textures |
+| Pixel art | pixel art style, chunky visible pixels, limited color palette, retro game look |
+| 8 bit retro | 8-bit pixel art style, blocky low resolution sprites, tiny palette, retro console look |
+| 16 bit retro | 16-bit pixel art style, detailed sprites, dithered shading, golden era console look |
+| Low poly 3D | low-poly 3d style, faceted geometric surfaces, flat shaded polygons, minimalist forms |
+| Voxel | voxel art style, 3d cube blocks, isometric charm, chunky stepped geometry |
 
-**2. The environment-reaction graph** — world knowledge as data, not code:
-
-```cypher
-(Location)-[:DEFAULT_BEHAVIOR {priority: 0}]->(EnvironmentBehavior)
-(Event)-[:OVERRIDES {priority: N}]->(EnvironmentBehavior)
-```
-
-A concert hall's default is a cheering crowd. But when the shot's action contains a `performer_collapse` event (keyword-detected — zero LLM tokens), the resolver query picks the **highest-priority applicable behavior**: the crowd freezes in shock (priority 10 beats 0). The winning behavior is injected into the positive prompt; the *suppressed* default is injected verbatim into the negative prompt — so the model is simultaneously told what the room does now and forbidden from doing what it does by default. Ten locations, a dozen events, and a set of behaviors ship as seed data; **extending the world is a MERGE, not a code change**. If Neo4j is down, the pipeline degrades to exactly its old behavior — the graph is an enhancement, never a gate.
-
----
-
-## Native Audio — the model speaks its own lines
-
-Rexgent doesn't run a separate voice pipeline. On a talking shot the **character model speaks the scripted line itself and lip-syncs its own mouth as the clip renders** — voice, mouth and emotion come from one pass, so there is nothing to synthesize, clone, or re-align afterward.
-
-- **The character model owns dialogue.** HappyHorse renders every talking shot with **native-talk**: the line's text is delivered by the model, the parenthetical delivery cue ("(whispering, frantic)") is turned into a tone and stripped from the spoken words, and the mouth is driven by the model's own speech — no `driving_audio`, no external TTS, nothing to keep in sync after the fact
-- **The visual model stays diegetic.** Wan renders the silent and scenery shots, and its own sound formula fills in ambience and diegetic sound effects (a door, footsteps, rain) while being told `No dialogue.` so it never invents speech and `No background music.` so scoring stays consistent
-- **One episode score**: music is laid across the episode as a single track and sidechain-ducks under speech, rather than restarting at every cut
-- **The k-th line convention**: scene line k belongs to the scene's k-th speaking shot — one convention shared by placement, coverage and export, so the caption and the on-screen mouth can't disagree. A global no-overlap sweep guards collisions
-- **Coverage where a mouth would flap unsynced**: a spoken line that isn't rendered as a native-talk close-up gets mouth-hiding coverage framing, so an out-of-sync mouth is never front-and-center
-- **Endings land instead of stopping**: if the final line outruns the footage, the last frame holds until it finishes, then picture and sound fade out together. (And a hard-won fix: model clips' audio runs ~0.3s short of their video, so a naïve `-shortest` mix chopped seconds off every episode — measured, root-caused, removed)
-
----
-
-## Preview = Export, by construction
-
-The editor's preview isn't a hopeful approximation — it shares the export's actual algorithms:
-
-- A `preview_plan` endpoint runs the **export worker's own placement math** (cut plan + dialogue placement, pure math, no ffmpeg) on the current timeline in milliseconds
-- The player overlays each caption at its placed time, styled like the burned one, and plays each clip's own generated voice, so the preview sounds like the shipped file
-- A **CapCut-style caption lane** inside the timeline shows every line under the exact clip it plays over, reflowing live on trims and reorders
-- Once an export exists, an **Editor preview / Final render** toggle plays the true shipped file — burned captions, full mix, fades
-- Trims are exported only when the user actually trimmed (a placeholder-trim bug that silently halved 10-second clips was found by running ASR *on the shipped file* and comparing measured line positions against the placement math — the kind of verification this pipeline is built for)
+> Every style on the landing page is a real clip the pipeline rendered from the same scene, same character reference, same prompt. Only the style changed.
 
 ---
 
-## Multi-episode delivery
+## How a shot gets designed
 
-Episodes aren't a label — they're a delivery format:
+The AI Director does not point the camera at whoever is talking. It gives every shot a purpose, a size, an angle, a lens, and blocking for where each character stands. Here is the vocabulary it works in.
 
-- The screenwriter writes N episode arcs, each ending on a cliffhanger; the structurer records each scene's episode
-- The storyboard groups scenes under episode headers; the story map and scene flow filter per episode; the generation queue badges every scene
-- The export editor cuts **one episode at a time** (tabs rebuild the timeline per episode), or **Export all episodes** renders every episode in one run — each as its own captioned, mixed `final_ep{n}.mp4` — with a **Download all (.zip)** of the season
-- A one-episode drama shows none of this chrome and behaves exactly as before
+**Shot sizes**
 
----
+| Shot | Frames |
+|---|---|
+| ECU · Extreme Close-Up | eyes or a detail fill the frame |
+| CU · Close-Up | the face fills the frame |
+| MCU · Medium Close-Up | chest up, emotion readable |
+| MS · Medium Shot | waist up, gesture visible |
+| FS · Full Shot | the whole body in frame |
+| WS · Wide Shot | the whole space in view |
+| LS · Long Shot | figure small in the environment |
+| EWS · Extreme Wide Shot | establishes where we are |
+| OTS · Over the Shoulder | behind one character, looking at the other |
+| POV · Point of View | we see what the character sees |
+| INSERT | a detail cutaway, hands or an object |
 
-## Maximizing Quality Under a Token Budget
+**Camera moves**
 
-The track's core constraint, treated as an engineering problem:
+| Move | Effect |
+|---|---|
+| Static | locked frame, stillness |
+| Dolly in / out | camera physically pushes in or pulls back |
+| Pan left / right | camera swivels across the space |
+| Tilt up / down | camera pivots vertically |
+| Zoom in / out | the lens tightens or widens |
+| Tracking | camera follows a moving subject |
+| Handheld | subtle shake, documentary tension |
+| Drone | sweeping aerial move |
 
-| Lever | How Rexgent does it |
-|-------|--------------------|
-| **Model tiering** | A `ModelRouter` sends each task to the cheapest capable Qwen tier: **qwen-max only writes** (script, storyboard), **qwen-plus judges** (narrative judge, plot gaps, prompt craft), **qwen-flash does deterministic work** (structuring, extraction, wardrobe, set dressing, titles) |
-| **Attribution** | Every LLM call lands on the drama's cost ledger with its model and task — spend per stage, per tier, live |
-| **Structured output** | Native JSON mode with graceful fallback + array unwrapping; truncation retry; trailing-comma repair |
-| **Context compression** | Non-creative agents receive a scene digest, not the full script JSON |
-| **Adaptive allocation** | `TokenOptimizer` prices every shot by its *routed* model (Wan for visuals, HappyHorse for characters), scores each shot's narrative importance, and **fits the plan to the user's spend cap** by deferring the least-important shots first — never the hook, and never by downgrading a Wan shot, since its look is the point |
-| **Honest shortfalls** | An undersized cap doesn't silently amputate scenes: the allocator computes the smallest cap that renders the full plan and the UI offers a one-click "Set budget to $N" |
-| **Priced consent** | Every paid button opens an **itemized receipt** naming each model, its unit price and a live total before anything runs — "Start generation" prices the Producer's *actual fitted plan* on click (Wan × N for the visual shots, HappyHorse × M for the character shots, deferred at $0.00) |
-| **Zero-token world knowledge** | Environment events are keyword-detected and resolved by a Cypher query — the world graph costs no LLM tokens at all |
-| **Multi-shot batching** | A run of silent continuation shots in one location renders as a single Wan multi-shot generation, then slices back into per-shot clips — several shots for the price of one dispatch |
-| **Re-render economy** | Deterministic seeds + resume-skip: fixing one bad shot costs one shot |
-| **Visible** | A live token dashboard: tokens vs cap, per-model tier chips, cheap-tier share, per-stage bars |
+**A real prompt it produced** (an over-the-shoulder chase, photoreal):
 
----
+> Over-the-shoulder shot from an unseen pursuer's perspective: a delicate, oval-faced person with soft fair skin, long straight black hair parted centrally and adorned with subtle floral hairpins, a small mole near the left cheek, dashing urgently into a narrow cobblestone alley at night. Cool-toned moonlight casts sharp shadows; distant flickering gas lamp glows faintly. Background: weathered grey walls, a low wooden doorframe with faded red cloth curtain, broken pottery in the corner. Dolly-in motion intensifies urgency. Cinematic shallow depth of field, subject sharp, background softly blurred.
 
-## Architecture
+**And a reference-locked prompt** (identity pinned to plates, so the model cannot swap faces):
 
-```mermaid
-flowchart TB
-    subgraph FE[Frontend — Next.js 14]
-        UI[Script · Characters · Storyboard · Generate · Export]
-        TD[Live token + cost dashboard]
-        SM[Story map · Camera plans · Beat sheet · Bible panels]
-    end
-    FE <-- "HTTP + Socket.IO" --> API
-
-    subgraph API[FastAPI + Socket.IO]
-        AG[LangGraph agent]
-        RT[Stage routers]
-    end
-
-    subgraph TOOLS[Shared tool registry — HTTP and MCP stdio]
-        NJ[narrative_judge] & PG[plot_gap_detector] & EE[ending_engine]
-        TO[token_optimizer] & SP[scene_prompt_craft] & SD[set_dresser] & CG[consistency_guard]
-    end
-    API --> TOOLS
-
-    subgraph WK[Celery workers]
-        GEN[generation runner<br/>reference stacks · seeds · continuity · native-talk]
-        CASTW[casting worker<br/>bible plates]
-        EXP[export worker<br/>ffmpeg: stitch · duck · captions · per-episode]
-    end
-    API -- "dispatch jobs<br/>(Redis broker)" --> WK
-
-    subgraph QWEN[Qwen Cloud / DashScope intl]
-        LLM[qwen-max · qwen-plus · qwen-flash]
-        VID[wan2.7 t2v/i2v/r2v · happyhorse-1.1 t2v/i2v/r2v + native-talk]
-        IMG[wan2.6-t2i · qwen-image-edit-max]
-        VL[qwen3-vl-plus · qwen-vl-max]
-    end
-    TOOLS -- "task-routed: max writes,<br/>plus judges, flash structures" --> LLM
-    WK --> QWEN
-
-    subgraph INFRA[Infrastructure]
-        PG2[(PostgreSQL + pgvector<br/>512-d face vectors)] & RD[(Redis)] & OSS[(Alibaba OSS<br/>plates · clips · exports)] & N4J[(Neo4j<br/>narrative memory +<br/>environment-reaction graph)]
-    end
-    API --> INFRA
-    WK --> INFRA
-    WK -- "stage / tool / ledger events" --> RD
-    RD -- "Socket.IO fan-out: dock, crew<br/>graph, cost meter update live" --> FE
-```
+> Single speaker. Cinematic. Reference image guide (match each person to their OWN image, never swap faces or outfits): [Image 1] is ANGELINE (their face AND the exact outfit); [Image 2] is the scene's set, keep its furniture and props from THIS shot's camera angle; [Image 3] is the visual style. CU, 85mm lens...
 
 ---
 
-## Qwen Cloud Integration — 10 models, routed by task
+## How it works
 
-| Component | Qwen Model | Purpose |
-|-----------|-----------|---------|
-| Script + storyboard writing | Qwen-Max | The only creative-writing tier |
-| Judging, plot gaps, endings, prompt craft | Qwen-Plus | Analysis at a third of the cost |
-| Structuring, extraction, wardrobe, set dressing, titles | Qwen-Flash | Deterministic JSON work, ~15x cheaper output |
-| Cinematic / scenery / action shots | Wan 2.7 (t2v/i2v/r2v) | The **visual model**: 1080P, native 9:16/16:9, seeded, continuity by extending from the previous frame, and diegetic SFX + ambience via its sound formula |
-| Talking + new-character shots | HappyHorse 1.1 (t2v/i2v/r2v) | The **character model**: reference-to-video (up to 9 reference images) that locks face + clothing, and **native-talk** — the model speaks each line and lip-syncs its own mouth |
-| Clip surgery (regen loop) | HappyHorse 1.0 video-edit | Video-to-video fixes from user flags |
-| Bible plates | wan2.6-t2i + qwen-image-edit-max | Costume plates edited FROM the face so identity carries |
-| Continuity vision check | qwen3-vl-plus | Outfit + background scoring per clip |
-| Reference photo analysis | qwen-vl-max | Reads uploaded photos for casting + outfit swap |
+A LangGraph state machine runs the whole pipeline. Each stage is a real agent with real tools.
 
-### 7 Custom Tools — one registry, two transports
+| Stage | What happens |
+|---|---|
+| **Develop + write** | Qwen-Max invents the dramatic spine (conflict, secret, mid-story turn), then writes cliffhanger episodes and judges its own draft on 8 axes. A rewrite that scores lower is discarded for the original. |
+| **Cast** | Face and costume plates are image-edited from one locked reference, in the chosen style. Pets and creatures too, scaled to real size. Each plate is probed against the video model's own reference check before any dollar render. |
+| **Storyboard** | The AI Director plans coverage, then a deterministic staging engine threads world state across the scene: positions, held objects, barriers, and absences carry shot to shot. An LLM cast audit removes anyone only talked about, not shown. |
+| **Budget** | Every shot is scored for importance and routed to the model that fits it. Anything over the cap defers, lowest priority first. |
+| **Render** | Reference-conditioned clips, validated by real ArcFace face matching plus a vision check. Weak takes are flagged, never silently shipped. A prompt blocked by moderation is auto-rewritten and retried. |
+| **Voice + export** | HappyHorse speaks each line natively as it renders. Lines land on the exact shot, music ducks under speech, captions burn in, and each episode exports as its own video plus a season zip. |
 
-Served identically over FastAPI HTTP **and** a real MCP stdio server (official `mcp` SDK), from one shared registry ([`backend/app/mcp_tools/registry.py`](backend/app/mcp_tools/registry.py)):
+**Two video models, split by what each shot must hold.** Anything with a face or a line renders on **HappyHorse** (locks the face from reference plates, speaks natively). Silent same-angle continuations and people-free scenery render on **Wan 2.7**. The split was decided by scored head-to-head runs on real dramas, not by guesswork.
 
-| Tool | Innovation |
-|------|-----------|
-| `NarrativeJudge` | LLM-as-critic on 8 axes including **hook_strength** and **cliffhanger_pull** — a weak opening blocks generation and drives the revision loop |
-| `TokenOptimizer` | Budget fitting, not budget reporting: hook protection, per-model pricing (Wan vs HappyHorse), deferrals, and a computed "smallest cap that fits" recommendation |
-| `SetDresser` | Persistent set dressing + prop **state** tracking per scene (a broken vase stays broken) |
-| `ScenePromptCraft` | Cinematic prompt DSL: concrete-action expansion, single-state clips, violence-by-implication, blocking injection, environment-reaction injection, beat-targeted negatives, anti-text sanitization, DoF-by-framing |
-| `ConsistencyGuard` | Face verification via real ArcFace embeddings with VLM diagnosis |
-| `PlotGapDetector` | Typed narrative problem detection — like linting for scripts |
-| `EndingEngine` | Ending completeness + branching alternatives |
+**Consistency is engineered, not hoped for.** Locked reference plates, a deterministic staging engine, previous-frame handoff, ArcFace verification, and a Neo4j narrative memory that stops later scenes from contradicting earlier ones.
 
-### The AI Director
+---
 
-Behind the storyboard, a two-pass **Director → Stager** plans each scene like a human director before any prompt is compiled:
+## Qwen Cloud integration
 
-- **Pass 1 (Director)** gives every shot a *purpose* (establish, react, insert, beat, dialogue, climax) and a deliberate mix of shot sizes, lenses and camera moves — so a talk scene isn't forty identical mediums, and a quiet moment gets a non-verbal reaction or an insert instead of another talking head
-- **Pass 2 (Stager)** turns that plan into the camera-executable blocking the prompt compiler consumes, within the same budgeted shot count
-- **Coverage-invariant**: every scripted line is still covered, enforced in code, so richer coverage never silently drops a line
-- It plans *within* the plan (same shot count, redistributed), never inventing plot the writer didn't write
+Rexgent runs on **17 Qwen Cloud models** over the DashScope international API, each routed to the job it does best.
 
-### AI Guardrails
+- **Language:** Qwen-Max (writing), Qwen-Plus (judgment), Qwen-Flash (structuring)
+- **Vision:** Qwen3-VL-Plus (continuity scoring + frame handoff), Qwen-VL-Max (reads uploaded photos)
+- **Image:** Wan2.6-T2I (plates), Qwen-Image-Edit-Max (costume edits from a locked face)
+- **Video:** HappyHorse 1.1 (characters + native speech), Wan 2.7 (scenery + silent continuation), HappyHorse-Video-Edit (fix a take)
+- **Audio:** Qwen3-TTS (designed / preset / cloned voices), Fun-ASR and Qwen3-ASR-Flash (word-level timing, hallucinated-speech detection)
 
-| Guardrail | What It Prevents |
-|-----------|-----------------|
-| `PromptSanitizer` | Text/number hallucination — strips quotes, scene numbers, names; injects anti-text **and anti-duplicate-person** negatives on every render |
-| `canonical_character` | Identity loss from name variants — "KERRY (ON SCREEN)" resolves to KERRY everywhere names are matched |
-| Blocking drift normalizer | LLM schema drift — un-mangles bare-name, flattened-string and JSON-as-string subject shapes (each locked by tests) |
-| `CostCircuitBreaker` | Budget overrun — hard stop at 85% of the drama's own spend cap |
-| `InputSanitizer` | Prompt injection in user inputs |
-| `PreGenerationValidator` | Missing character visuals, empty storyboards — blocks before spending (variant-name tolerant) |
-| Continuity review queue | Weak clips flagged `NEEDS_REVIEW`, never silently shipped (and never retry-spammed) |
-| Stage map | 180° line violations — snapped back in the data, deterministically |
+Plus a two-pass Director Engine and **7 custom MCP tools** (narrative judge, plot gap detector, ending engine, token optimizer, scene prompt craft, set dresser, consistency guard) served over the real Model Context Protocol.
 
 ---
 
 ## Getting Started
 
-### Prerequisites
+**Prerequisites:** Python 3.11+ · Node.js 20+ · Docker & Docker Compose · a [Qwen Cloud](https://www.qwencloud.com/) key (dashscope-intl) · an Alibaba Cloud OSS bucket.
 
-- Python 3.11+ · Node.js 20+ · Docker & Docker Compose
-- [Qwen Cloud](https://www.qwencloud.com/) API key (international / dashscope-intl)
-- Alibaba Cloud OSS bucket
-
-### Quick Start (Docker)
+**Quick start (Docker):**
 
 ```bash
 git clone https://github.com/RextonRZ/Rexgent.git
@@ -289,32 +182,30 @@ cp backend/.env.example backend/.env   # add your keys
 docker-compose up --build              # api + worker + frontend + postgres + redis + neo4j
 ```
 
-- Frontend: http://localhost:3000 · API: http://localhost:8000 · API docs: http://localhost:8000/docs
+Frontend: http://localhost:3000 · API: http://localhost:8000 · Docs: http://localhost:8000/docs
 
-### Manual Setup
+**Manual setup:**
 
 ```bash
 # backend
 cd backend
 pip install -r requirements.txt
-cp .env.example .env                   # add your keys
+cp .env.example .env
 alembic upgrade head
 uvicorn app.main:socket_app --reload --port 8000
 
-# celery worker (separate terminal — generation/casting/export run here)
+# celery worker (separate terminal: generation / casting / export run here)
 celery -A app.workers.celery_app worker --loglevel=info
 
 # frontend
 cd frontend && npm install && npm run dev
 ```
 
-### Environment Variables
+**Key environment variables:**
 
 ```bash
 QWEN_API_KEY=your_qwen_api_key            # local-dev fallback key
-REQUIRE_USER_API_KEY=false                # true on public deploys: every user must paste
-                                          # their own DashScope key in Settings (stored
-                                          # encrypted; all their work bills their account)
+REQUIRE_USER_API_KEY=false                # true on public deploys: every user pastes their own key
 QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 OSS_ACCESS_KEY_ID=... / OSS_ACCESS_KEY_SECRET=... / OSS_BUCKET_NAME=... / OSS_ENDPOINT=...
 DATABASE_URL=postgresql://user:password@localhost:5432/rexgent
@@ -322,32 +213,26 @@ REDIS_URL=redis://localhost:6379/0
 SECRET_KEY=your_secret_key                # also encrypts stored user API keys
 ```
 
-### Deploy (Alibaba Cloud ECS)
+---
 
-One instance runs everything via the production compose base (the dev overlay
-is only loaded locally):
+## Deploy (Alibaba Cloud ECS)
+
+One instance runs everything via the production compose base (the dev overlay is local only):
 
 ```bash
-# on an Ubuntu 22.04 ECS instance (>= 2 vCPU / 8 GB, ap-southeast-1), ports 3000 + 8000 open
+# Ubuntu 22.04 ECS, >= 2 vCPU / 8 GB, ports 3000 + 8000 open
 sudo apt update && sudo apt install -y docker.io docker-compose-v2 git
 git clone https://github.com/RextonRZ/Rexgent.git && cd Rexgent
-# copy your backend/.env onto the server (scp) — never commit it
+# copy your backend/.env onto the server (scp), never commit it
 
 export PUBLIC_API_URL="http://<server-ip>:8000"      # baked into the frontend build
 export FRONTEND_ORIGIN="http://<server-ip>:3000"     # added to CORS (HTTP + websocket)
 docker compose -f docker-compose.yml up -d --build
 ```
 
-Migrations run automatically on backend start. Open `http://<server-ip>:3000`.
+Migrations run automatically on backend start. **On a public deploy set `REQUIRE_USER_API_KEY=true`** so every visitor bills their own Qwen Cloud account.
 
-**Public deploys: protect your wallet.** Set `REQUIRE_USER_API_KEY=true` in the
-server's `backend/.env` — every visitor must paste their own DashScope key in
-Settings (validated live, stored encrypted) and all their dramas bill *their*
-Qwen Cloud account. Without the flag, the server key is the fallback, which is
-what you want locally and never on the open internet.
-
-**With your own domain** — two DNS A records (`@` and `api`) pointing at the
-ECS IP, then Caddy gives you automatic HTTPS:
+**With a domain**, point two A records (`@` and `api`) at the ECS IP and let Caddy handle HTTPS:
 
 ```bash
 sudo apt install -y caddy
@@ -361,22 +246,19 @@ export FRONTEND_ORIGIN="https://yourdomain.com"
 docker compose -f docker-compose.yml up -d --build   # rebuild: the API URL is baked into the frontend
 ```
 
-What runs where — one ECS instance hosts the whole stack; media and models
-stay on managed Alibaba services:
-
 ```mermaid
 flowchart LR
     U([Browser])
     subgraph ECS["Alibaba Cloud ECS — docker compose"]
-        FE2["frontend :3000<br/>Next.js standalone"]
-        BE["backend :8000<br/>FastAPI + Socket.IO + Alembic"]
+        FE2["frontend :3000<br/>Next.js"]
+        BE["backend :8000<br/>FastAPI + Socket.IO"]
         WK2["worker<br/>Celery ×2 + ffmpeg"]
-        RD2[("Redis 7<br/>broker + event bus")]
+        RD2[("Redis 7")]
         DB[("PostgreSQL 16<br/>pgvector")]
         N4[("Neo4j 5")]
     end
-    DS["Qwen Cloud<br/>DashScope intl — 10 models"]
-    OSS2[("Alibaba OSS<br/>plates · clips · final_ep{n}.mp4")]
+    DS["Qwen Cloud<br/>DashScope intl — 17 models"]
+    OSS2[("Alibaba OSS<br/>plates · clips · episodes")]
 
     U --> FE2
     U -- "REST + WebSocket" --> BE
@@ -384,98 +266,31 @@ flowchart LR
     RD2 <--> WK2
     BE --> DB & N4
     WK2 --> DB
-    BE -- "LLM / VL calls" --> DS
+    BE -- "LLM / VL" --> DS
     WK2 -- "video · image" --> DS
     WK2 -- "persist media" --> OSS2
-    U -. "signed media URLs" .-> OSS2
 ```
 
-> **Submission note:** after `docker compose up`, capture the ECS console
-> screenshot (instance page showing the running host) plus `docker compose ps`
-> output — Devpost requires the deployment verification image.
-
-### MCP Server (real Model Context Protocol)
-
-The 7 tools are served over the **real MCP protocol** (official Python SDK, stdio), so any MCP client — Claude Desktop included — can discover and call Rexgent's showrunner tools:
+**MCP server:** the 7 tools are also served over the real Model Context Protocol (official Python SDK, stdio), so any MCP client can discover and call them:
 
 ```bash
 cd backend
-python -m venv .venv-mcp && .venv-mcp/Scripts/activate   # own venv: the mcp SDK pins starlette
+python -m venv .venv-mcp && .venv-mcp/Scripts/activate
 pip install -r mcp_requirements.txt
 python mcp_server_entry.py
 ```
 
-Claude Desktop config (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "rexgent": {
-      "command": "C:/path/to/Rexgent/backend/.venv-mcp/Scripts/python.exe",
-      "args": ["C:/path/to/Rexgent/backend/mcp_server_entry.py"]
-    }
-  }
-}
-```
-
 ---
 
-## Project Structure
+## Tech stack
 
-```
-Rexgent/
-├── backend/                    # FastAPI + Python 3.11
-│   ├── app/
-│   │   ├── agent/              # LangGraph pipeline (graph, state, ops)
-│   │   ├── director/           # AI Director: two-pass cinematic shot planning
-│   │   ├── graph/              # Neo4j: narrative memory + environment-reaction graph
-│   │   ├── models/             # 17 ORM models (bible, clips, cost events, ...)
-│   │   ├── routers/            # API endpoints per stage
-│   │   ├── services/           # model router · reference stacks · stage map · set dresser ·
-│   │   │                       # generation runner · native-talk · stitcher ·
-│   │   │                       # cost ledger · guardrails
-│   │   ├── mcp_tools/          # 7 shared tools (HTTP + MCP)
-│   │   ├── mcp_server/         # real MCP stdio server (official SDK)
-│   │   ├── workers/            # Celery: generation, casting, storyboard, export
-│   │   └── websocket/          # Socket.IO events (Redis emitter)
-│   ├── prompts/                # 17 prompt templates
-│   ├── migrations/             # Alembic (25 revisions)
-│   └── tests/                  # 635 unit tests
-├── frontend/                   # Next.js 14 + TypeScript + Tailwind
-│   └── app/projects/[id]/      # Script → Characters → Storyboard → Generate → Export
-├── docker-compose.yml          # api + worker + frontend + postgres + redis + neo4j
-└── README.md
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 14, React 18, Tailwind, Zustand, React Query, D3 force graphs, Socket.IO, Monaco |
-| Backend | FastAPI, LangGraph, SQLAlchemy 2.0, Alembic, Celery, Redis, Socket.IO |
-| AI | qwen-max / plus / flash, qwen3-vl-plus, qwen-vl-max, Wan 2.7 (t2v/i2v/r2v), HappyHorse 1.1 (+ native-talk), wan2.6-t2i, qwen-image-edit-max, insightface ArcFace |
-| Infrastructure | Alibaba Cloud OSS, PostgreSQL + pgvector, Redis, Neo4j, FFmpeg |
-
----
-
-## Highlights
-
-- **Self-correcting agent** — the judge's critique feeds the rewrite; weak hooks and flat endings never reach generation
-- **Hallucination as an engineering problem** — nine named failure modes, nine named defenses, and the receipts visible on every shot card
-- **Budget fitting, not budget reporting** — hook protection, per-model pricing (Wan vs HappyHorse), deferrals, and a computed "this cap fits" recommendation
-- **AI Director** — plans cinematic coverage before prompting: purposeful shot sizes, lenses and camera moves, and non-verbal reaction and insert beats so scenes aren't forty identical talking mediums
-- **Native audio, no TTS** — the character model speaks each line and lip-syncs its own mouth as the shot renders, so voice, mouth and emotion come from one pass and can't drift apart
-- **Two models by role, not price** — Wan renders cinematic visuals, scenery and continuity; HappyHorse locks faces, clothing and native lip-synced dialogue; the budget prices each shot by the model it routes to
-- **Two Neo4j graphs** — narrative memory the Director reads back before staging, and a priority-weighted environment-reaction graph where events override location defaults as pure data
-- **Preview = export by construction** — one placement algorithm, one stored audio verdict per clip, and a final-render toggle to audit the shipped file
-- **Multi-episode delivery** — cliffhanger-structured writing to per-episode cuts and a season zip
-- **Glass-box orchestration** — a live two-level crew graph (stages → tools), per-clip provenance and prompt-engineering panels, and a Usage & Analytics page with per-model receipts
-- **635 unit tests**, CI against Postgres, 25 migrations, graceful degradation on every external dependency
+**Frontend:** Next.js 14, React, TypeScript, Tailwind CSS, D3, Socket.IO client, Zustand, React Query.
+**Backend:** FastAPI, Celery, Socket.IO, LangGraph, SQLAlchemy, FFmpeg.
+**Data:** PostgreSQL + pgvector (ArcFace face embeddings via InsightFace), Redis, Neo4j.
+**Cloud:** Qwen Cloud (DashScope), Alibaba Cloud OSS + ECS, Docker Compose.
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+MIT
