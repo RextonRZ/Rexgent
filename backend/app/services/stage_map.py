@@ -692,7 +692,12 @@ def enforce_scene_sides(shots_blocking: list) -> tuple[list, list[str]]:
 # for the character to count as absent; one plain mention means visible.
 _ABSENT_AFTER_RE = re.compile(
     r"^[^，。！？.!?]{0,2}?(?:不见了|不见|不在|失踪|丢了|走丢|走失|被送走|"
-    r"送走|离开了|没了|死了|不知去向)"
+    # 去哪/哪去了 = "went where" (whereabouts unknown); 哪 keeps it from
+    # matching a NAMED destination like 去公园 (went to the park, present)
+    r"送走|离开了|没了|死了|不知去向|去哪|去了哪|哪去了|哪儿去了|去向不明)"
+    # in a photo, not on screen: "雪球的合影/照片". The 的 is required so a
+    # present character looking at a photo (雪球看照片) is NOT matched.
+    r"|^的(?:合影|照片|相片|画像|海报|遗像|遗照)"
     r"|^\s*(?:is|was|has|had)\s+(?:gone|missing|lost|nowhere|"
     r"been\s+sold|been\s+given\s+away)"
     r"|^\s*(?:was|got)\s+(?:sold|given\s+away)"

@@ -746,6 +746,19 @@ def test_absent_mention_is_not_a_visible_presence():
     assert mention_is_absent("Snowy", "Angeline holds Snowy close.") is False
 
 
+def test_zh_where_did_it_go_and_in_a_photo_are_absent():
+    from app.services.stage_map import mention_is_absent
+    # "asks where Snowy went" — 雪球 named because it is gone
+    assert mention_is_absent(
+        "雪球", "安吉丽娜震惊地问他是否知道雪球去哪儿了，李明沉默不语。") is True
+    # 雪球 only appears IN A PHOTO the character is holding, not on screen
+    assert mention_is_absent(
+        "雪球", "李明惊讶抬头，手中握着一张他与雪球的合影。") is True
+    # controls: 雪球 is actually present, must NOT read as absent
+    assert mention_is_absent("雪球", "雪球看着一张旧照片。") is False   # looking at a photo
+    assert mention_is_absent("雪球", "雪球去公园玩耍。") is False        # goes somewhere named
+
+
 def test_english_absence_cues_missing_pet_drama():
     # Snowy's Silence: the rabbit is SOLD/MISSING the whole drama, yet every
     # action mentions it and the named-in-action rule cast the pet into shots
