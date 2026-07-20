@@ -7,6 +7,13 @@ from app.config import get_settings
 
 # Identity-pin vocabularies (rule 22): what a character wears on the face and
 # hair must be stated in EVERY shot's prompt, or the render coin-flips it.
+# EN "hair" plus Chinese hair terms — a 中文 character's description never says
+# "hair" (it says 长发/黑发/卷发/马尾...), so without these the hairstyle went
+# completely unpinned on Chinese dramas and drifted every shot.
+_HAIR_RE = re.compile(
+    r"\bhair\b|头发|頭髮|发型|髮型|长发|長髮|短发|短髮|卷发|捲髮|直发|直髮|"
+    r"披肩发|马尾|馬尾|辫子|辮子|刘海|瀏海|盘发|盤髮|黑发|黑髮|金发|金髮|"
+    r"棕发|棕髮|波浪|发丝|髮絲|寸头|平头", re.I)
 _EYEWEAR_RE = re.compile(
     r"glasses|spectacles|eyewear|sunglasses|眼镜|墨镜|太阳镜", re.I)
 _ACCESSORY_RE = re.compile(
@@ -171,10 +178,13 @@ def headwear_pin(fragment: str | None, outfit: str | None) -> str:
 def _pin_segments(text: str) -> list[str]:
     segs = [t.strip() for t in re.split(r"[,;.，、。；]", text) if t.strip()]
     pins: list[str] = []
-    hair = next((t for t in segs if re.search(r"\bhair\b", t, re.I)
-                 and not _ACCESSORY_RE.search(t)), None)
-    if hair:
-        pins.append(hair)
+    # every hair segment (length, colour, style, parting), not just the first —
+    # matched in EN and Chinese so 长发/中分/波浪 all get pinned, capped so the
+    # pin can't run away
+    hairs = [t for t in segs if _HAIR_RE.search(t) and not _ACCESSORY_RE.search(t)]
+    if hairs:
+        joiner = "，" if re.search(r"[一-鿿]", " ".join(hairs)) else ", "
+        pins.append(joiner.join(hairs[:3]))
     eye = next((t for t in segs if _EYEWEAR_RE.search(t)), None)
     pins.append(eye or "no eyewear")
     face = next((t for t in segs if _FACIAL_HAIR_RE.search(t)), None)
