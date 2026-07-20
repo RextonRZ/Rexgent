@@ -698,6 +698,10 @@ _ABSENT_AFTER_RE = re.compile(
     # in a photo, not on screen: "雪球的合影/照片". The 的 is required so a
     # present character looking at a photo (雪球看照片) is NOT matched.
     r"|^的(?:合影|照片|相片|画像|海报|遗像|遗照)"
+    # the name written AS TEXT on a prop, not the live character:
+    # "写着'雪球'名字的账单", "印着雪球的名字". A quote may sit between the
+    # name and 名字 ('雪球'名字), so allow it.
+    r"|^['’\"”]?的?(?:名字|名称|字样|这个名字|几个字)"
     r"|^\s*(?:is|was|has|had)\s+(?:gone|missing|lost|nowhere|"
     r"been\s+sold|been\s+given\s+away)"
     r"|^\s*(?:was|got)\s+(?:sold|given\s+away)"
@@ -707,6 +711,8 @@ _ABSENT_AFTER_RE = re.compile(
     r"|^['’]s\s+(?:\w+[,\s]+){0,3}?empty\b", re.IGNORECASE)
 _ABSENT_BEFORE_RE = re.compile(
     r"(?:找不到|寻找|想念|思念|梦见|提起|提到|说起|回忆起?)$"
+    # the name is written/printed/labelled as text, not the live character
+    r"|(?:写着|写有|写下|印着|标着|署名|记着|名叫|名为)['’\"“]?$"
     r"|(?:missing|look(?:s|ing|ed)?\s+for|search(?:es|ing|ed)?\s+for|"
     r"call(?:s|ing|ed)?\s+(?:out\s+)?for|cr(?:y|ies|ied)\s+(?:out\s+)?for|"
     r"dreams?\s+of|mentions?|sold|gave\s+away)\s*$",

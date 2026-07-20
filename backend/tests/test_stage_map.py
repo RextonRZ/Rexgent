@@ -759,6 +759,16 @@ def test_zh_where_did_it_go_and_in_a_photo_are_absent():
     assert mention_is_absent("雪球", "雪球去公园玩耍。") is False        # goes somewhere named
 
 
+def test_zh_name_written_on_a_document_is_absent():
+    from app.services.stage_map import mention_is_absent
+    # 雪球 appears only as a NAME written on a vet bill, not the live rabbit
+    assert mention_is_absent(
+        "雪球", "安吉丽娜抽出一张写着'雪球'名字的兽医账单。") is True
+    assert mention_is_absent("雪球", "账单上印着雪球的名字。") is True
+    # control: the real rabbit is present
+    assert mention_is_absent("雪球", "雪球在院子里蹦跳。") is False
+
+
 def test_english_absence_cues_missing_pet_drama():
     # Snowy's Silence: the rabbit is SOLD/MISSING the whole drama, yet every
     # action mentions it and the named-in-action rule cast the pet into shots
