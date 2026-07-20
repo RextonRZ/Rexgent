@@ -82,7 +82,8 @@ const ROSTER: {
     icon: Film,
     tint: "text-fuchsia-300/60",
     models: [
-      { name: "happyhorse-1.1-t2v / i2v / r2v", role: "HappyHorse · faces, dialogue, lip-sync", match: ["happyhorse-1.1"] },
+      { name: "happyhorse-1.1-r2v", role: "HappyHorse · faces, dialogue, native speech", match: ["happyhorse-1.1", "happyhorse_fast"] },
+      { name: "wan2.7-i2v", role: "Wan · silent continuations, scenery, silent multishot beats", match: ["wan2.7"] },
       { name: "happyhorse-1.0-video-edit", role: "Fix a take, the regen loop", match: ["happyhorse-1.0-video-edit"] },
     ],
   },
@@ -731,7 +732,7 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
       {/* ── 4 · reliability ── */}
       <Rise index={3}>
         <SectionTitle>Reliability</SectionTitle>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <HealthCard
             label="Continuity pass"
             value={rel.continuity_pass_rate != null ? fmtPct(rel.continuity_pass_rate) : null}
@@ -749,6 +750,14 @@ function Dashboard({ data, reduced }: { data: UsageAnalytics; reduced: boolean }
               value={fmtPct(hh.retry_rate)}
               health={retryHealth(hh)}
               note={`${hh.retried} of ${hh.clips} clips retried`}
+            />
+          )}
+          {wan && (
+            <HealthCard
+              label="Wan retries"
+              value={fmtPct(wan.retry_rate)}
+              health={retryHealth(wan)}
+              note={`${wan.retried} of ${wan.clips} clips retried`}
             />
           )}
           <HealthCard

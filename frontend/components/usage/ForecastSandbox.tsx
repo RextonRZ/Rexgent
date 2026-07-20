@@ -49,7 +49,9 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
   // ── baseline from real usage (rolling, clamped) ──
   const base = useMemo(() => {
     const totalUsd = Object.values(data.categories).reduce((s, c) => s + c.usd, 0);
-    const produced = data.dramas.filter((d) => d.clips > 0);
+    // an "episode" needs a real shot count — 1-2 clip dramas are probes and
+    // test runs, and counting them pegged the inferred pace at the slider cap
+    const produced = data.dramas.filter((d) => d.clips >= 3);
     const costPerEpisode = Math.max(
       0.05,
       produced.length ? totalUsd / produced.length : totalUsd || 1.5
@@ -66,10 +68,9 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
       )
     );
     const spanDays = Math.max(1, data.trend.length);
-    const pace = Math.min(
-      10,
-      Math.max(0.25, produced.length ? (produced.length / spanDays) * 7 : 1)
-    );
+    // no ceiling: the slider grows headroom above the real pace instead of
+    // clamping it, so a heavy production week never pegs the marker at the end
+    const pace = Math.max(0.25, produced.length ? (produced.length / spanDays) * 7 : 1);
     // pace direction: rolling average of recent ACTIVE days vs earlier ones
     const active = data.trend.filter((d) => d.usd > 0);
     let direction: "accelerating" | "stable" | "slowing" = "stable";
@@ -84,6 +85,10 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
     }
     return { costPerEpisode, videoShare, shotsPerEp, pace, direction };
   }, [data]);
+
+  // slider ceiling: a clean step above the real pace, never below 10, so the
+  // green marker sits inside the track instead of pegged at its end
+  const paceMax = Math.max(10, Math.ceil((base.pace * 1.4) / 5) * 5);
 
   // ── the levers ──
   const [pace, setPace] = useState(base.pace);
@@ -348,7 +353,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
               id="pace"
               type="range"
               min={0.25}
-              max={10}
+              max={paceMax}
               step={0.25}
               value={pace}
               onChange={(e) => setPace(Number(e.target.value))}
@@ -357,7 +362,7 @@ export function ForecastSandbox({ data }: { data: UsageAnalytics }) {
             <span
               title="your current pace"
               className="absolute top-0 h-full w-[3px] cursor-help rounded-full bg-ok/80"
-              style={{ left: `${((base.pace - 0.25) / 9.75) * 100}%` }}
+              style={{ left: `${((base.pace - 0.25) / (paceMax - 0.25)) * 100}%` }}
             />
           </div>
         </div>
