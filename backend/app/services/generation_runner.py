@@ -1070,11 +1070,16 @@ class GenerationRunner:
                 native_speaker = canonical_character(
                     str((lipsync_line or {}).get("character_name") or "").strip(),
                     bible["characters"])
+                # native talk stays ON across retries: it used to die at
+                # attempt 1 (attempt == 0 gate), so any moderation/API retry
+                # silently shipped the shot WITHOUT its scripted line — the
+                # crafter even hid the mouth. The sanitize path already re-adds
+                # the verbatim line after a moderation rewrite, so a retry can
+                # keep its voice.
                 native_talk = (
                     getattr(get_settings(), "happyhorse_native_talk", False)
                     and settings_v2
                     and to_happyhorse
-                    and attempt == 0
                     and get_settings().lipsync_enabled
                     and lipsync_line
                     and bool(native_speaker)

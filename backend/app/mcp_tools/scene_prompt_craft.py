@@ -747,13 +747,27 @@ class ScenePromptCraft:
         # occluder) must not rotate to camera mid-shot — continuation models
         # love turning them around, and the revealed face never matches the
         # cast. Stated positively AND banned in the negative below.
+        # a CREATURE must never be staged as a human back-to-camera occluder:
+        # 雪球 the rabbit landed in foreground_characters of an OTS and the
+        # body LLM invented "a small girl in a pale pink hoodie" as its back —
+        # a whole hallucinated person. Creatures are excluded from the backs
+        # treatment entirely; their size is pinned by creature_scale_clause.
+        from app.services.character_traits import species_of
+        _creature_names = {
+            str(n).strip().upper()
+            for n, v in (character_visuals or {}).items()
+            if species_of(str((v.get("video_prompt_fragment")
+                               if isinstance(v, dict) else v) or ""))}
         backs = [str(s.get("character"))
                  for s in (subs or [])
                  if isinstance(s, dict) and s.get("character")
                  and str(s.get("facing") or "") == "away-from-camera"
-                 and str(s.get("character")).strip().upper() in in_frame_upper]
+                 and str(s.get("character")).strip().upper() in in_frame_upper
+                 and str(s.get("character")).strip().upper() not in _creature_names]
         for fgc in (foreground_characters or []):
-            if str(fgc).strip().upper() in in_frame_upper and str(fgc) not in backs:
+            if (str(fgc).strip().upper() in in_frame_upper
+                    and str(fgc) not in backs
+                    and str(fgc).strip().upper() not in _creature_names):
                 backs.append(str(fgc))
         # an exiting character recedes to the last frame - back to camera,
         # never turning around (the clip-tail lens turn on "runs away")
