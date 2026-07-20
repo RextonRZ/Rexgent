@@ -746,24 +746,8 @@ def drop_absent_cast(shots: list,
     dropped (same pairing convention as the other passes). Mutates in place,
     returns (shots, notes)."""
     notes: list[str] = []
-    speakers = iter([str(l.get("character") or "").strip()
-                     for l in (dialogue_lines or [])])
-    for i, sd in enumerate(shots):
-        if not isinstance(sd, dict):
-            continue
-        speaker = ""
-        if str(sd.get("dialogue") or "").strip():
-            speaker = next(speakers, "")
-        action = str(sd.get("action") or "")
-        cast = [str(c) for c in (sd.get("characters_in_frame") or [])]
-        if not cast or not action:
-            continue
-        gone = [c for c in cast
-                if c.strip().upper() != speaker.strip().upper()
-                and mention_is_absent(c, action)]
-        if not gone:
-            continue
-        keep = [c for c in cast if c not in gone]
+
+    def _apply_keep(sd: dict, keep: list) -> None:
         sd["characters_in_frame"] = keep
         keep_up = {c.strip().upper() for c in keep}
         sd["subjects"] = [s for s in (sd.get("subjects") or [])
@@ -772,8 +756,57 @@ def drop_absent_cast(shots: list,
         sd["foreground_characters"] = [
             c for c in (sd.get("foreground_characters") or [])
             if str(c).strip().upper() in keep_up]
+
+    # speaker per shot (dialogue lines are consumed in shot order)
+    _sp = iter([str(l.get("character") or "").strip() for l in (dialogue_lines or [])])
+    speaker_by_shot = [
+        (next(_sp, "") if isinstance(sd, dict) and str(sd.get("dialogue") or "").strip()
+         else "")
+        for sd in shots]
+
+    dropped_ever: set[str] = set()
+    present_ever: set[str] = set()
+    for i, sd in enumerate(shots):
+        if not isinstance(sd, dict):
+            continue
+        speaker = speaker_by_shot[i]
+        action = str(sd.get("action") or "")
+        cast = [str(c) for c in (sd.get("characters_in_frame") or [])]
+        # who is shown PRESENT somewhere: a plain, non-absent mention in an action
+        for c in cast:
+            if _name_in_text(c, action) and not mention_is_absent(c, action):
+                present_ever.add(c.strip().upper())
+        if not cast or not action:
+            continue
+        gone = [c for c in cast
+                if c.strip().upper() != speaker.strip().upper()
+                and mention_is_absent(c, action)]
+        if not gone:
+            continue
+        dropped_ever.update(g.strip().upper() for g in gone)
+        _apply_keep(sd, [c for c in cast if c not in gone])
         notes.append(f"shot {i + 1}: {', '.join(gone)} only spoken of as "
                      f"absent - removed from the frame")
+
+    # scene-level: a character marked absent somewhere and shown present NOWHERE
+    # is gone for the whole scene — pull them from every shot, including
+    # re-orient wides whose generic action ("everyone where they were") never
+    # names them and so the per-shot pass above could not catch.
+    scene_absent = {c for c in dropped_ever if c not in present_ever}
+    if scene_absent:
+        for i, sd in enumerate(shots):
+            if not isinstance(sd, dict):
+                continue
+            speaker_up = speaker_by_shot[i].strip().upper()
+            cast = [str(c) for c in (sd.get("characters_in_frame") or [])]
+            keep = [c for c in cast
+                    if c.strip().upper() not in scene_absent
+                    or c.strip().upper() == speaker_up]
+            if keep != cast:
+                _apply_keep(sd, keep)
+                dropped = [c for c in cast if c not in keep]
+                notes.append(f"shot {i + 1}: {', '.join(dropped)} absent across "
+                             f"the scene - removed from the frame")
     return shots, notes
 
 

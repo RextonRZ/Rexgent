@@ -799,6 +799,27 @@ def test_drop_absent_cast_removes_the_missing_pet():
     assert notes
 
 
+def test_drop_absent_cast_scene_level_reorient_wide():
+    # shot 1: 雪球 only as a name on a bill -> absent. shot 2: a re-orient wide
+    # that inherited 雪球 in its cast but whose generic action never mentions it.
+    # 雪球 is present NOWHERE, so it must leave BOTH shots, not just shot 1.
+    from app.services.stage_map import drop_absent_cast
+    shots = [
+        {"shot_type": "INSERT",
+         "action": "安吉丽娜抽出一张写着'雪球'名字的兽医账单。",
+         "characters_in_frame": ["安吉丽娜", "雪球", "杰克"],
+         "subjects": [{"character": "安吉丽娜"}, {"character": "雪球"}, {"character": "杰克"}]},
+        {"shot_type": "LS",
+         "action": "全景，众人保持原位，气氛凝固。",
+         "characters_in_frame": ["安吉丽娜", "雪球", "杰克"],
+         "subjects": [{"character": "安吉丽娜"}, {"character": "雪球"}, {"character": "杰克"}]},
+    ]
+    _, notes = drop_absent_cast(shots)
+    assert shots[0]["characters_in_frame"] == ["安吉丽娜", "杰克"]
+    assert shots[1]["characters_in_frame"] == ["安吉丽娜", "杰克"]   # scene-level drop
+    assert notes
+
+
 def test_drop_absent_cast_never_drops_the_speaker_or_present_cast():
     from app.services.stage_map import drop_absent_cast
     shots = [{
