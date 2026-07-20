@@ -486,23 +486,22 @@ def test_patch_visual_style_photoreal_clears_it():
     assert project.visual_style is None
 
 
-def test_overview_fronts_featured_demo_dramas():
-    # the recap shelf window is 6 clips by recency — the frontend sorted
-    # WITHIN that window, so featured dramas older than 3 recent projects
-    # never appeared at all. The pin must happen where the window is built.
-    featured = _project(USER_ID, title="The Last Call")
+def test_overview_recap_shelf_is_recency_ordered():
+    # the recap shelf window is 6 clips by recency, at most 2 per drama, so the
+    # three newest dramas fill it and an older drama never appears
     recent_a = _project(USER_ID, title="Newer Drama A")
     recent_b = _project(USER_ID, title="Newer Drama B")
     recent_c = _project(USER_ID, title="Newer Drama C")
+    older = _project(USER_ID, title="Older Drama")
     jobs, clips = [], []
-    # newest clips first (the query orders desc): three recent dramas fill
-    # the window before the featured one's older clips
-    for p in (recent_a, recent_b, recent_c, featured):
+    # insertion order is recency here (FakeDB.order_by is a no-op): the three
+    # recent dramas' clips come before the older drama's
+    for p in (recent_a, recent_b, recent_c, older):
         j = SimpleNamespace(id=uuid.uuid4(), project_id=p.id, status="COMPLETE")
         jobs.append(j)
         clips += [SimpleNamespace(job_id=j.id, url=f"https://oss/{p.title}-{i}.mp4")
                   for i in range(2)]
-    db = FakeDB([featured, recent_a, recent_b, recent_c], jobs=jobs, clips=clips)
+    db = FakeDB([recent_a, recent_b, recent_c, older], jobs=jobs, clips=clips)
     _override(db)
     try:
         r = client.get("/api/projects/overview")
@@ -510,7 +509,7 @@ def test_overview_fronts_featured_demo_dramas():
         _clear()
     assert r.status_code == 200
     shelf = r.json()["recent_clips"]
-    # DEMO MODE: the shelf is EXCLUSIVELY the featured dramas when any of
-    # them has clips — recents don't share it
-    assert len(shelf) == 2
-    assert all(c["project_title"] == "The Last Call" for c in shelf)
+    assert len(shelf) == 6  # 2 each from the three newest dramas
+    titles = {c["project_title"] for c in shelf}
+    assert titles == {"Newer Drama A", "Newer Drama B", "Newer Drama C"}
+    assert "Older Drama" not in titles

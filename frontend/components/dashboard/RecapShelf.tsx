@@ -18,22 +18,6 @@ const CLIP_MS = 5000; // per clip on the montage
 const STILL_MS = 8000; // per poster still (matches the Ken Burns drift)
 const FADE_MS = 500;
 
-// Demo day pinning: clips from these dramas front the recap reel, in this
-// order, because their frames present best. Absent titles cost nothing and
-// the shelf falls back to the normal recency order.
-const FEATURED_TITLES = [
-  "Echoes of Tomorrow",
-  "Winter Shadow of Loyalty",
-  "The Last Call",
-];
-
-function featuredRank(title: string): number {
-  const i = FEATURED_TITLES.findIndex(
-    (f) => f.toLowerCase() === (title || "").trim().toLowerCase()
-  );
-  return i === -1 ? FEATURED_TITLES.length : i;
-}
-
 function greeting(): string {
   const h = new Date().getHours();
   if (h < 12) return "Good morning";
@@ -155,10 +139,7 @@ export function RecapShelf({
   // What the screen can play: real clips first; expired/absent clips fall
   // back to recent poster stills with a slow Ken Burns drift — never a dead
   // still, never a broken player.
-  // featured demo dramas play first (stable sort keeps recency within groups)
-  const clips = [...(overview?.recent_clips ?? [])].sort(
-    (a, b) => featuredRank(a.project_title) - featuredRank(b.project_title)
-  );
+  const clips = overview?.recent_clips ?? [];
   const slides: Slide[] =
     clips.length > 0
       ? clips.map((c) => ({
